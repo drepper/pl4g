@@ -486,6 +486,10 @@ is why a call can stand in a type in a signature as well as anywhere else.  A fu
 answer could differ from call to call, or the call could do something -- nor one taking a type parameter.  What the evaluator
 cannot work out it names (7000), and one that does not finish is given up on (7001).
 
+**The top level has no order, and neither do its constants.**  A constant may be named above where it is defined -- in a type in a
+signature, or in another constant -- and is then worked out from what was written for it when it is first asked for, as the
+compile-time evaluator works out a variable.  One that reaches itself that way, directly or through others, has no value (4666).
+
 **The arithmetic is the program's.**  A literal with a suffix keeps its type, and both sides of an operator have the same type as
 anywhere; a literal without a suffix is a number of no width until something gives it one.  An answer that does not fit its type
 is an error (4214), which is what it would be in the program where both sides were written down, and so is a shift by the width
@@ -3085,8 +3089,8 @@ every index (4457): what it writes is one element, and copying a whole row is no
 **`T⟦N⟧` says how many elements there are**, and carries everything about the array but the elements themselves.  A value of one
 needs no room beyond theirs, and what a value of one *is*, is where the elements are.  `N` is a constant (4447) -- a number
 written down, or a constant expression, `u8⟦2 × 3⟧` or `u8⟦square(2)⟧`: how many elements there are is part of the type, so it is
-something the compiler works out rather than something the program does.  A name in it is not yet one, for a reason the to-do list
-gives: a type is settled before every constant at the top level is.
+something the compiler works out rather than something the program does.  A constant named at the top level is one wherever it is
+written, `u8⟦ROWS⟧` in a signature above `let ROWS: u64 = 3` included: the section on constant expressions says how.
 
 **`T⟦⟧` does not**, and is where the elements are together with how many there are.  It owns nothing: the elements are an array's,
 or part of one.  For an array of more than one dimension it carries one count per dimension, so `T⟦,⟧` is a table of no stated

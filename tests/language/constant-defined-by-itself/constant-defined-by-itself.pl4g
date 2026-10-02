@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4666
+※ pl4g-test: expect-diag 4666 LANG_CONSTANT_DEFINED_BY_ITSELF
+※ pl4g-test: expect-diag 4447 LANG_ARRAY_LENGTH_NOT_A_NUMBER
+
+※ A constant at the top level is worked out from what it names when it is
+※ first asked for, wherever that is written -- and one that reaches itself
+※ that way has no value to answer with.
+
+let A: u64 = B + 1
+let B: u64 = A + 1
+
+@[startup]
+fn main() → u6:
+    let v: u8⟦A⟧ = ⟦1u8⟧ in ⎕static
+    0u6

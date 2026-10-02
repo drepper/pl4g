@@ -4238,3 +4238,7 @@ Where a constant is only welcome -- an array's index -- `_welcome_constant` asks
 reporting, and the expression is lowered as written and says what is wrong where the program would.  An index that comes to a
 number of no width is replaced by the literal it comes to (`_index_written_down`), so everything that already treats a literal
 specially -- the check against the length while compiling, the exemption from `¤idx` -- treats it the same way.
+
+A constant at the top level named before its definition has been reached is not a `GlobalVar` yet.  `_constant_not_yet_defined`
+works it out from the definition as written (`self._top_written`), quietly, with `self._constants_asked` holding the ones being
+worked out so that a cycle ends; `_reaches_itself` is what tells the definition, when its turn comes, that it found one.

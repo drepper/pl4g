@@ -1,4 +1,5 @@
 ※ pl4g-test: compile=error diag=4659
+※ pl4g-test: expect-diag 4659 LANG_EACH_SHAPE_UNSTATED
 
 ※ What a walk read through '¨' answers with is an array in room enough for
 ※ all of it, and how much room that is, is what the dimensions walked say.

@@ -1,4 +1,5 @@
 ※ pl4g-test: compile=error diag=4450
+※ pl4g-test: expect-diag 4450 LANG_ARRAY_INDEX_OUTSIDE
 
 ※ An index worked out while compiling is checked against the length while
 ※ compiling, as a number written down is.

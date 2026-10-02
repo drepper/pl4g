@@ -1,0 +1,24 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ An array's length may be a constant named at the top level, wherever the
+※ constant is written: the top level has no order, so a type in a signature
+※ may name one defined below it, and one constant may be worked out from
+※ another defined below it.  A constant asked for before its turn is worked
+※ out from what was written for it.
+
+fn first(v: u8⟦ROWS⟧) → u8:
+    v⟦0⟧
+
+fn last(v: u8⟦COLS⟧) → u8:
+    v⟦3⟧
+
+let ROWS: u64 = 3
+
+@[startup, impure]
+fn main() → u6:
+    let a: u8⟦ROWS⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
+    let b: u8⟦COLS⟧ = ⟦4u8, 5u8, 6u8, 7u8⟧ in ⎕static
+    let m: u8⟦ROWS, COLS⟧ = 〈ROWS, COLS〉 ⍴ 1u8
+    if first(a) + last(b) + m⟦2, 3⟧ = 9u8: 0u6 else: 1u6
+
+let COLS: u64 = ROWS + 1

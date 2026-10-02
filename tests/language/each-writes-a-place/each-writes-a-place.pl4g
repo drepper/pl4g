@@ -1,4 +1,5 @@
 ※ pl4g-test: compile=error diag=4661
+※ pl4g-test: expect-diag 4661 LANG_EACH_WRITES_A_PLACE
 
 ※ A write through '¨' names what it writes to once for each element, so that
 ※ has to be something that does nothing when it is named.

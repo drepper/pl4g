@@ -1,4 +1,5 @@
 ※ pl4g-test: compile=error diag=7000
+※ pl4g-test: expect-diag 7000 LANG_COMPTIME_CANNOT
 
 ※ A call in a constant is run while compiling, and what the compiler cannot
 ※ run there is reported, naming what it could not do.

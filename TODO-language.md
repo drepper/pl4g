@@ -355,11 +355,11 @@ To Do List for the PL4g language
     `?` or `??` takes apart (4663).  An array's index is worked out the same way where it can be and is then checked against the
     length while compiling.  The evaluator divided as Python does, toward minus infinity, and now truncates as the program does.
 
-[ ] let an array's length be a name.  `u8⟦SIZE⟧` is refused (4447) where `t⟦FIRST⟧` is accepted, and the difference is
-    only when the question is asked: a tuple's index is settled while a body is being lowered, by which time every definition has
-    been collected, and a type is resolved while they still are being.  Accepting a name there today would accept the ones written
-    above and refuse the ones written below, which is order-dependence in a language that has none elsewhere.  What it wants is the
-    constant value of every top-level variable settled in a pass of its own before any type is resolved.
+[x] let an array's length be a name.  Done on 2026-10-03, without the pass of its own this entry expected: a constant asked
+    for before its definition has been reached is worked out from what was written for it there and then, as the compile-time
+    evaluator works out a variable on first ask.  So `u8⟦SIZE⟧` in a signature names a `SIZE` written anywhere, and a constant may
+    be defined in terms of one below it; one that reaches itself is refused (4666).  Folding constant expressions had briefly
+    accepted only the names written above, which is the order-dependence this entry warned of.
 
 [ ] assign to one member of a tuple.  Refused (4462), because a tuple is registers and not a place.  What it would mean is binding
     the name to a tuple made of the other members and the new value, which the language can already be told to do by writing that

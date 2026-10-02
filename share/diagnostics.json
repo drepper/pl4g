@@ -5866,6 +5866,28 @@
       "option": null
     },
     {
+      "number": 4666,
+      "name": "LANG_CONSTANT_DEFINED_BY_ITSELF",
+      "severity": "error",
+      "message": "'{name}' is worked out from itself, so it has no value",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the constant"
+        }
+      ],
+      "cause": "A constant at the top level may name one written anywhere, above or below it, and is worked out from it when it is first asked for.  One that reaches itself that way -- directly, or through others that name it -- is asked for while it is being worked out, and there is no value to answer with.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Constant Expressions",
+        "requirement": "A constant is not worked out from itself."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

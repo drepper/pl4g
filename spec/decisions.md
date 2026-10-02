@@ -9371,6 +9371,18 @@ running code.  Inside a function the evaluator runs, numbers have no width, as b
 
 Found on the way and fixed: the evaluator divided toward minus infinity, as Python does, where the language truncates.
 
+## 2026-10-03T18:00+02:00 — compiler
+
+**A constant at the top level is worked out on first ask**
+
+Constant expressions made `u8⟦SIZE⟧` work where `SIZE` was defined above the type and not where it was defined below -- the
+order-dependence the to-do entry about array lengths had warned of.  The entry proposed a pass settling every top-level constant
+before any type is resolved; what was done instead is the evaluator's own approach: a constant asked for before its turn is
+worked out from its initializer there and then, quietly, and its own definition reports what is wrong with it when its turn
+comes.  A constant that reaches itself is reported as such (4666) rather than as the unimplemented initializer it used to fall
+through to.  Comparable: Go and Rust, whose constants and statics may be used before they are declared and whose compilers resolve
+them on demand with a cycle check; C, where a name must be declared above its use.
+
 
 Open questions
 --------------

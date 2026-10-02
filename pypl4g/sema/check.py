@@ -2686,6 +2686,12 @@ class Checker:
         #: left to be said where the program would say it.
         self._constant_quiet = False
         self._definitions: dict[str, ast.FuncDef] = {}
+        #: The variables at the top level as written, so that a constant named
+        #: before its definition is reached can be worked out from it.
+        self._top_written: dict[str, ast.VarDef] = {}
+        #: The constants being worked out that way just now, which is what
+        #: keeps one defined in terms of itself from being asked forever.
+        self._constants_asked: set[str] = set()
         #: How many names `¨` has made up, so that each one is new.
         self._each_count = 0
         self._pick_in: ast.Expr | None = None
@@ -2853,6 +2859,9 @@ class Checker:
         self._definitions = {item.name: item for unit in units
                              for item in unit.items
                              if isinstance(item, ast.FuncDef)}
+        self._top_written = {item.name: item for unit in units
+                             for item in unit.items
+                             if isinstance(item, ast.VarDef)}
         # Three passes over the definitions, because each needs what the one
         # before it settled.  The imports come first, since a type may be one
         # another module defines; then every type name, so that a definition may
@@ -3564,6 +3573,11 @@ class Checker:
             # is: arithmetic over constants, and calls to pure functions.
             folded = self._constant(node.value)
             if folded is _REFUSED:
+                return None
+            if folded is None and self._reaches_itself(node.name, node.value,
+                                                       set()):
+                self._diags.emit(D.LANG_CONSTANT_DEFINED_BY_ITSELF,
+                                 node.value.span, name=node.name)
                 return None
             if folded is not None and not folded.failed:
                 if folded.ty is not None and folded.ty != ty:
@@ -9089,12 +9103,14 @@ class Checker:
                 if self._find_local(expr.name) is not None:
                     return None
                 found = self._top.get(expr.name)
-                if not isinstance(found, GlobalVar) or found.mutable \
-                        or not isinstance(found.initializer, IntConst):
-                    return None
-                held = found.initializer.ty
-                return _Folded(found.initializer.value,
-                               held if isinstance(held, IntType) else None)
+                if isinstance(found, GlobalVar):
+                    if found.mutable or not isinstance(found.initializer,
+                                                       IntConst):
+                        return None
+                    held = found.initializer.ty
+                    return _Folded(found.initializer.value,
+                                   held if isinstance(held, IntType) else None)
+                return self._constant_not_yet_defined(expr.name)
             case ast.Unary(op=ast.UnaryOp.LENGTH):
                 return self._folded_length(expr)
             case ast.Unary(op=ast.UnaryOp.BIT_NOT):
@@ -9119,6 +9135,58 @@ class Checker:
                 return self._folded_call(expr)
             case _:
                 return None
+
+    def _reaches_itself(self, name: str, written: object,
+                        seen: set[str]) -> bool:
+        """Whether *written*, or a constant at the top level it names, names
+        *name*."""
+        if isinstance(written, ast.NameRef):
+            if written.name == name:
+                return True
+            other = self._top_written.get(written.name)
+            if other is None or written.name in seen \
+                    or self._find_local(written.name) is not None:
+                return False
+            seen.add(written.name)
+            return self._reaches_itself(name, other.value, seen)
+        if isinstance(written, ast.Node):
+            return any(self._reaches_itself(name, getattr(written, one.name),
+                                            seen)
+                       for one in fields_of(written))
+        if isinstance(written, tuple):
+            return any(self._reaches_itself(name, one, seen) for one in written)
+        return False
+
+    def _constant_not_yet_defined(self, name: str) -> _Folded | None:
+        """A constant at the top level that has not been defined yet, worked
+        out from what was written.
+
+        The top level has no order: a definition may name one written below
+        it, and so may a type -- `u8⟦SIZE⟧` in a signature collected before
+        `SIZE` is.  So a constant asked for before its turn is worked out from
+        its initializer there and then, as the compile-time evaluator works out
+        a variable on first ask.  Where it is wrong, its own definition says so
+        when its turn comes; asked here, it is only not a constant.  A constant
+        defined in terms of itself is not one either.
+        """
+        written = self._top_written.get(name)
+        if written is None or written.mutable or written.type is None \
+                or name in self._constants_asked:
+            return None
+        ty = self._resolve_type(written.type)
+        if not isinstance(ty, IntType):
+            return None
+        self._constants_asked.add(name)
+        outer, self._constant_quiet = self._constant_quiet, True
+        try:
+            found = self._constant(written.value)
+        finally:
+            self._constant_quiet = outer
+            self._constants_asked.discard(name)
+        if found is None or found.failed or not ty.holds(found.value) \
+                or (found.ty is not None and found.ty != ty):
+            return None
+        return _Folded(found.value, ty)
 
     def _refuse(self, ident: DiagID, span: Span, **args: object) -> _Folded | None:
         """Report what is wrong with a constant, where one was needed.

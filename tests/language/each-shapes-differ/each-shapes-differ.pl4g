@@ -1,4 +1,5 @@
 ※ pl4g-test: compile=error diag=4660
+※ pl4g-test: expect-diag 4660 LANG_EACH_SHAPES_DIFFER
 
 ※ Arrays walked together are walked in step, and there is no third of one to go
 ※ with a third the other does not have.
