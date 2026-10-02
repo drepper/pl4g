@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4655
+
+※ The types are given by position, one for each parameter the definition lists.
+
+type Pair(T') = first: T' ; second: T'
+
+@[startup]
+fn main() → u6:
+    let p: Pair(u8, u16) = Pair(.first ← 1u8, .second ← 2u8)
+    0u6

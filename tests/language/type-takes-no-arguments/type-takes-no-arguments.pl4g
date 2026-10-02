@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4654
+
+※ Only a definition that lists type parameters is named with types after it.
+
+type Point = x: u8 ; y: u8
+
+@[startup]
+fn main() → u6:
+    let p: Point(u8) = Point(.x ← 1u8, .y ← 2u8)
+    0u6

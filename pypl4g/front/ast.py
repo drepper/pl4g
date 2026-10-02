@@ -102,6 +102,8 @@ class TypeRef(Node):
     #: is written where it belongs: `u8 \N{CURRENCY SIGN}meter?E` is a result whose answer is
     #: a length.
     unit: UnitRef | None = None
+    #: `Pair(u8)`: the types given to a type that takes type parameters.
+    args: tuple["TypeExpr", ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -1380,6 +1382,14 @@ class TypeDef(Node):
     kind: TypeKind
     fields: tuple[Field, ...]
     attrs: tuple[Attribute, ...] = ()
+    #: `type Pair(T') = ...`: the type parameters, in the order a reference to
+    #: the type gives them, and where each is written.  Nothing for a type that
+    #: takes none.
+    params: tuple[str, ...] = ()
+    param_spans: tuple[Span, ...] = ()
+    #: `type Sorted(T') pre(T' < T' → bool) = ...`: what the types given to it
+    #: must support, checked wherever it is named with them.
+    clauses: tuple["Clause", ...] = ()
     doc: str | None = None
     #: Where each line of that comment is, so that something reading the
     #: comment apart -- a `\param` that names nothing, say -- can point at the

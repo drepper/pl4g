@@ -1,0 +1,17 @@
+※ pl4g-test: module
+
+※ A type with a type parameter, exported: its parts mean what they mean here,
+※ in whatever file names it with types.
+
+type Inner = n: u8
+
+@[export]
+type Box(T') = held: T' ; tag: Inner
+
+@[export]
+fn open(b: Box(T')) → T':
+    b.held
+
+@[export]
+fn boxed(v: T') → Box(T'):
+    Box(.held ← v, .tag ← Inner(.n ← 1u8))

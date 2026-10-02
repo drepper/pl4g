@@ -53,6 +53,9 @@ module.exports = grammar({
   // condition is that name and whose body begins there.  The compiler's parser
   // asks the same question by looking one token further.
   conflicts: $ => [
+    // A name followed by `(` in a `match` arm is a variant taking its value
+    // apart or a type given its arguments; which it is, is what follows.
+    [$._plain_type],
     [$._binding_names, $._non_range],
     // How far a range's last end reaches.  An operator that binds tighter than
     // the range belongs to the end, which is what the compiler's precedence
@@ -103,6 +106,9 @@ module.exports = grammar({
       optional($.attribute_list),
       'type',
       field('name', $.identifier),
+      // the type parameters, in the order a reference gives the types
+      optional(seq('(', sepBy1(',', field('parameter', $.identifier)), ')')),
+      repeat($.clause),
       '=',
       field('parts', $._type_parts),
     ),
@@ -406,6 +412,8 @@ module.exports = grammar({
       seq(
         field('module', optional(seq($.identifier, '.'))),
         $.identifier,
+        // the types given to a type that takes type parameters: `Pair(u8)`
+        optional(seq('(', sepBy1(',', field('argument', $.type)), ')')),
         // The unit comes before the mark that makes it a result, because it
         // belongs to the answer: a result of a length is a result whose answer
         // is a length, and there is nothing about a result for a unit to say.
@@ -672,9 +680,13 @@ module.exports = grammar({
     // name follows it.  It is an ordinary identifier to the scanner; what makes
     // it the wildcard is where it is written, which the compiler is where that
     // is said.
+    // One name in parentheses after the type is the name bound, which is the
+    // reading preferred over a type given that name: a type with type
+    // parameters is written with its own before it -- `Maybe(u8)(v)`.
     pattern: $ => choice(
-      seq(choice('\u22a5', field('type', $.type)),
-          optional(seq('(', field('name', $.identifier), ')'))),
+      prec.dynamic(1, seq(choice('\u22a5', field('type', $.type)),
+                          '(', field('name', $.identifier), ')')),
+      choice('\u22a5', field('type', $.type)),
     ),
 
     // A `let` inside a block, whose terminator the block supplies.

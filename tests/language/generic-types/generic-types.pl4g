@@ -1,0 +1,57 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A type definition may take type parameters**, listed after its name in the
+※ order a reference gives the types: `type Pair(T') = first: T' ; second: T'`
+※ is a type once it is given one, `Pair(u8)`.  A record and a sum alike.
+※
+※ Written out, a value of one takes its types from what is wanted where it
+※ stands, or else from what its fields are given -- read the way a generic
+※ call reads its arguments, so a literal with no suffix takes a type an earlier
+※ field settled.  A generic function reads its own type parameters out of one
+※ the same way, and may build one.
+※
+※ **A requirement on a type** is checked wherever it is named with types, as a
+※ generic call's are -- and in a generic function, has to follow from what the
+※ function requires.  One per set of types: two references naming the same types
+※ name one type.  In a pattern, one name in parentheses after a type is the name
+※ bound, so a type with type parameters is written with its own before it.
+
+let boxes := ⎕import("boxes")
+
+type Pair(T') = first: T' ; second: T'
+type Maybe(T') = some: T' | none: void
+type Sorted(T') pre(T' < T' → bool) = low: T' ; high: T'
+type Node(T') = value: T' ; next: &Node(T')
+
+fn swap(p: Pair(T')) → Pair(T'):
+    Pair(.first ← p.second, .second ← p.first)
+
+fn ordered(a: T', b: T') → Sorted(T') pre(T' < T' → bool):
+    if a < b: Sorted(.low ← a, .high ← b) else: Sorted(.low ← b, .high ← a)
+
+fn get(m: Maybe(T'), fallback: T') → T':
+    match m:
+        T'(v): v
+        void: fallback
+
+fn depth(m: Maybe(Maybe(u8))) → u8:
+    match m:
+        Maybe(u8)(inner): get(inner, 9u8)
+        void: 0u8
+
+@[startup]
+fn main() → u6:
+    let p: Pair(u8) = Pair(.first ← 1u8, .second ← 2u8)
+    let q := swap(Pair(.first ← 3u16, .second ← 4))
+    let w: Pair(u16) = Pair(.first ← 5, .second ← 6)
+    let m: Maybe(u8) = Maybe(.some ← 7u8)
+    let n: Maybe(u8) = Maybe(.none ← true)
+    let s := ordered(9u8, 1u8)
+    let deep: Maybe(Maybe(u8)) = Maybe(.some ← n)
+    let b: boxes.Box(u16) = boxes.boxed(7u16)
+    let c := boxes.Box(.held ← 3u8, .tag ← b.tag)
+    if p.second ≠ 2u8 ∨ q.first ≠ 4u16 ∨ w.first ≠ 5u16: return 1u6
+    if get(m, 0u8) ≠ 7u8 ∨ get(n, 4u8) ≠ 4u8 ∨ depth(deep) ≠ 9u8: return 2u6
+    if s.low ≠ 1u8 ∨ s.high ≠ 9u8: return 3u6
+    if boxes.open(b) ≠ 7u16 ∨ boxes.open(c) ≠ 3u8: return 4u6
+    0u6

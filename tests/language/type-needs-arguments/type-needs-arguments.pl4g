@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4653
+
+※ A type with type parameters is a type only once it is given them, except
+※ where a value of it is written out and its fields say them.
+
+type Pair(T') = first: T' ; second: T'
+
+@[startup]
+fn main() → u6:
+    let p: Pair = Pair(.first ← 1u8, .second ← 2u8)
+    0u6

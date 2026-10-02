@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4646
+
+※ Named with a type parameter of a generic function, a type's requirements have
+※ to follow from what the function requires, as a generic callee's do.
+
+type Sorted(T') pre(T' < T' → bool) = low: T' ; high: T'
+
+fn same(a: T') → Sorted(T'):
+    Sorted(.low ← a, .high ← a)
+
+@[startup]
+fn main() → u6:
+    0u6

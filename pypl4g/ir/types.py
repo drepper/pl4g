@@ -546,6 +546,11 @@ class ProductType(Type):
     #: `@[impure]` mean "changes something global" rather than "touches a device
     #: somebody handed over".
     device: bool = False
+    #: For a record of a type that takes type parameters, the definition it was
+    #: made from and the types it was given -- what a generic function reads its
+    #: own type parameters out of.  Nothing for any other.
+    family: object | None = None
+    args: tuple[Type, ...] = ()
 
     def __eq__(self, other: object) -> bool:
         """Nominal, so one of these is the same type only as itself.
@@ -952,6 +957,9 @@ class SumType(Type):
     name: str = ""
     #: The file the definition is in, which is part of which type this is.
     origin: str = ""
+    #: As for a record: the definition and the types it was given.
+    family: object | None = None
+    args: tuple[Type, ...] = ()
 
     def __eq__(self, other: object) -> bool:
         """Nominal, so one of these is the same type only as itself.

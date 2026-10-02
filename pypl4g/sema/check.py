@@ -10,7 +10,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field, fields as fields_of, replace
 from fractions import Fraction
-from typing import Callable, Final, Sequence
+from contextlib import contextmanager
+from typing import Callable, Final, Iterator, Sequence
 
 from ..diag import ids as D
 from ..target import statuses
@@ -274,6 +275,27 @@ class _NamedType:
     ty: Type | None = None
     resolving: bool = False
     shell: Type | None = None
+    #: For a type that takes type parameters: nothing here, its instances being
+    #: what a reference names.  For one of those instances: what each parameter
+    #: was given, and the definition it came from.
+    bound: dict[str, Type] | None = None
+    template: "_NamedType | None" = None
+    #: The instances made so far, by the types they were given.
+    instances: dict[tuple[Type, ...], "_NamedType"] = field(default_factory=dict)
+    #: The names the file that wrote it could see, and its bundles: an instance
+    #: made for another file means what it meant where it was written.
+    scope: dict[str, object] | None = None
+    siblings: dict[str, "_Bundle"] | None = None
+    #: Whether checking it where it is written found it wanting.
+    refused: bool = False
+    #: The types its requirements were not met for, which is said once.
+    unmet: set[tuple[Type, ...]] = field(default_factory=set)
+
+    @property
+    def takes_types(self) -> bool:
+        """Whether this is a definition with type parameters, not yet given any."""
+        return isinstance(self.node, ast.TypeDef) and bool(self.node.params) \
+            and self.bound is None
 
 
 @dataclass(slots=True)
@@ -408,11 +430,13 @@ def _shell_for(defined: _NamedType) -> Type | None:
     """
     if not isinstance(defined.node, ast.TypeDef):
         return None
+    args = tuple(defined.bound.values()) if defined.bound is not None else ()
     if defined.node.kind is ast.TypeKind.SUM:
-        return SumType((), name=defined.name, origin=defined.origin)
+        return SumType((), name=defined.name, origin=defined.origin,
+                       family=defined.template, args=args)
     return ProductType((), name=defined.name, origin=defined.origin,
                        abi=defined.abi, unique=defined.unique,
-                       device=defined.device)
+                       device=defined.device, family=defined.template, args=args)
 
 
 def _filled_in(shell: Type | None, made: Type) -> Type:
@@ -2690,7 +2714,10 @@ class Checker:
                     self._collect_bundle(item, unit.path)
         self._check_bundle_cycles()
         for defined in self._named_types:
-            self._resolved(defined)
+            if defined.takes_types:
+                self._check_generic_type(defined)
+            else:
+                self._resolved(defined)
         for unit in units:
             for item in unit.items:
                 match item:
@@ -5075,7 +5102,21 @@ class Checker:
                              exported=self._is_export(attrs),
                              abi=any(one.name == "abi" for one in attrs),
                              unique=any(one.name == "unique" for one in attrs),
-                             device=any(one.name == "device" for one in attrs))
+                             device=any(one.name == "device" for one in attrs),
+                             scope=self._top, siblings=self._bundles)
+        if isinstance(node, ast.TypeDef) and node.params:
+            seen: set[str] = set()
+            for name, where in zip(node.params, node.param_spans):
+                if not _is_generic(name):
+                    self._diags.emit(D.LANG_TYPE_PARAMETER_NOT_MARKED, where,
+                                     name=name, type=node.name)
+                    defined.refused = True
+                elif name in seen:
+                    self._diags.emit(D.LANG_TYPE_PARAMETER_TWICE, where,
+                                     name=name, type=node.name)
+                    defined.refused = True
+                seen.add(name)
+            self._check_clause_shapes(node.clauses)
         self._top[node.name] = defined
         self._named_types.append(defined)
 
@@ -5095,14 +5136,26 @@ class Checker:
             # known to point at it.  The object being built is what is handed
             # back, and its parts are filled in before anything reads them.
             return defined.shell
+        if defined.takes_types:
+            # Named without the types it takes, which the place that named it
+            # has said (`_defined_type`); nothing is made of it.
+            return ERROR
         defined.resolving = True
         defined.shell = _shell_for(defined)
+        kept = (self._bound, self._top, self._bundles)
+        if defined.bound is not None:
+            # An instance: its parameters stand for what it was given, and its
+            # parts mean what they meant in the file that wrote them.
+            self._bound = defined.bound
+            if defined.scope is not None and defined.siblings is not None:
+                self._top, self._bundles = defined.scope, defined.siblings
         try:
             made = (self._values_of(defined)
                     if isinstance(defined.node, ast.EnumDef)
                     else self._parts_of(defined))
         finally:
             defined.resolving = False
+            self._bound, self._top, self._bundles = kept
         defined.ty = _filled_in(defined.shell, made)
         return defined.ty
 
@@ -5286,13 +5339,110 @@ class Checker:
                                  name=ref.name, module=ref.module)
                 return ERROR
             if isinstance(found, _NamedType):
+                if found.takes_types or ref.args:
+                    return self._named_with(found, ref)
                 # Already worked out: the module was checked whole before this
                 # file was allowed to name anything in it.
                 return found.ty if found.ty is not None else ERROR
             self._diags.emit(D.LANG_TYPE_UNKNOWN, ref.span, name=ref.name)
             return ERROR
         held = self._top.get(ref.name)
+        if isinstance(held, _NamedType) and (held.takes_types or ref.args):
+            return self._named_with(held, ref)
         return self._resolved(held) if isinstance(held, _NamedType) else None
+
+    def _named_with(self, defined: _NamedType, ref: ast.TypeRef) -> Type:
+        """A defined type named with the types it is given, or without them."""
+        node = defined.node
+        params = node.params if isinstance(node, ast.TypeDef) else ()
+        if not params:
+            self._diags.emit(D.LANG_TYPE_TAKES_NO_ARGUMENTS, ref.span,
+                             type=defined.name)
+            return ERROR
+        if not ref.args:
+            self._diags.emit(D.LANG_TYPE_NEEDS_ARGUMENTS, ref.span,
+                             type=defined.name, count=len(params))
+            return ERROR
+        if len(ref.args) != len(params):
+            self._diags.emit(D.LANG_TYPE_WRONG_ARGUMENT_COUNT, ref.span,
+                             type=defined.name, expected=len(params),
+                             found=len(ref.args))
+            return ERROR
+        given = tuple(self._resolve_type(one) for one in ref.args)
+        if any(one is ERROR for one in given):
+            return ERROR
+        return self._instance_type(defined, given, ref.span)
+
+    def _instance_type(self, template: _NamedType, given: tuple[Type, ...],
+                       span: Span) -> Type:
+        """The type a definition with type parameters comes to for *given*.
+
+        One per set of types, as a generic function makes one function: two
+        references naming the same types name one type.  What the definition
+        requires of its types is checked first, as a generic call's are; a
+        reference that cannot meet it names nothing.
+        """
+        node = template.node
+        assert isinstance(node, ast.TypeDef)
+        if template.refused:
+            return ERROR
+        found = template.instances.get(given)
+        if found is not None:
+            return self._resolved(found)
+        if given in template.unmet:
+            # Its requirements were not met for these, which was said once.
+            return ERROR
+        bound = dict(zip(node.params, given))
+        kept = (self._top, self._bundles)
+        if template.scope is not None and template.siblings is not None:
+            self._top, self._bundles = template.scope, template.siblings
+        mark = self._diags.because(
+            D.LANG_CLAUSE_ASKED_HERE, span, function=template.name,
+            types=", ".join("".join((one, " = ", ty.written()))
+                            for one, ty in bound.items()))
+        try:
+            met = self._check_clauses(node.clauses, dict(bound), template.name,
+                                      span)
+        finally:
+            self._diags.and_no_longer(mark)
+            self._top, self._bundles = kept
+        if not met:
+            template.unmet.add(given)
+            return ERROR
+        made = _NamedType(
+            name="".join((template.name, "(",
+                          ", ".join(one.written() for one in given), ")")),
+            node=node, origin=template.origin, exported=template.exported,
+            abi=template.abi, unique=template.unique, device=template.device,
+            bound=bound, template=template, scope=template.scope,
+            siblings=template.siblings)
+        template.instances[given] = made
+        return self._resolved(made)
+
+    def _check_generic_type(self, template: _NamedType) -> None:
+        """Check a definition with type parameters where it is written.
+
+        Its parts are resolved once with every parameter a type nothing is known
+        of, so that a mistake in one is reported whether or not anything names
+        the type with arguments -- and no instance has anything left to find.
+        """
+        node = template.node
+        assert isinstance(node, ast.TypeDef)
+        if template.refused:
+            return
+        told = self._diags.error_count
+        probe = _NamedType(
+            name=template.name, node=node, origin=template.origin,
+            bound={name: OpaqueType(name) for name in node.params},
+            template=template, scope=template.scope,
+            siblings=template.siblings)
+        quiet, self._diags.errors_only = self._diags.errors_only, True
+        try:
+            self._resolved(probe)
+        finally:
+            self._diags.errors_only = quiet
+        if self._diags.error_count > told:
+            template.refused = True
 
     def _resolve_type(self, ref: ast.TypeExpr) -> Type:
         """Resolve a type written down, collection or name."""
@@ -8090,6 +8240,8 @@ class Checker:
                 or not isinstance(expr.callee, ast.NameRef):
             return False
         named = self._top.get(expr.callee.name)
+        if isinstance(named, _NamedType) and named.takes_types:
+            return ty.family is named
         return isinstance(named, _NamedType) and self._resolved(named) is ty
 
     def _fields_given(self, expr: ast.Call, ty: ProductType
@@ -9463,7 +9615,10 @@ class Checker:
         bound: dict[str, Type] = {}
         args: list[Value] = []
         for at, (one, param) in enumerate(zip(expr.args, written.node.params)):
-            wanted = self._worked_out(param.type, bound)
+            # A parameter's type is read where the function is written, and the
+            # argument where the call is.
+            with self._in_scope_of(written):
+                wanted = self._worked_out(param.type, bound)
             outer = self._handing_over
             self._handing_over = (written.node.name, at + 1)
             try:
@@ -9475,9 +9630,12 @@ class Checker:
             found = self._value_type_of(value)
             if found is ERROR:
                 return UndefConst(ERROR)
-            if wanted is None and not self._reading(param.type, found, bound,
-                                                   one.span, param.name):
-                return UndefConst(ERROR)
+            if wanted is None:
+                with self._in_scope_of(written):
+                    read = self._reading(param.type, found, bound, one.span,
+                                         param.name)
+                if not read:
+                    return UndefConst(ERROR)
             args.append(value)
         # The requirements come between the arguments and the instance: they are
         # what the types must satisfy, and an arrow in one of them may settle a
@@ -9591,6 +9749,15 @@ class Checker:
                     and len(param.members) == len(found.members):
                 return all(self._reading(one, other, bound, span, name)
                            for one, other in zip(param.members, found.members))
+            case ast.TypeRef() if param.args \
+                    and isinstance(found, (ProductType, SumType)) \
+                    and found.family is not None \
+                    and found.family is self._template_of(param) \
+                    and len(param.args) == len(found.args):
+                # A type with type parameters, given types: what it was given
+                # is read as the arguments are.
+                return all(self._reading(one, other, bound, span, name)
+                           for one, other in zip(param.args, found.args))
             case ast.FuncTypeRef() if isinstance(found, FuncType) \
                     and len(param.params) == len(found.params):
                 if not all(self._reading(one, other, bound, span, name)
@@ -9602,6 +9769,16 @@ class Checker:
             case _:
                 self._diags.emit(D.LANG_GENERIC_NOT_MATCHED, span, name=name)
                 return False
+
+    def _template_of(self, ref: ast.TypeRef) -> _NamedType | None:
+        """The definition with type parameters a type written down names."""
+        if ref.module is None:
+            found = self._top.get(ref.name)
+        else:
+            held = self._top.get(ref.module)
+            found = held.exports.get(ref.name) \
+                if isinstance(held, LoadedModule) else None
+        return found if isinstance(found, _NamedType) else None
 
     def _as_wanted(self, builder: IRBuilder, value: Value, wanted: Type,
                    span: Span) -> Value:
@@ -16246,6 +16423,9 @@ class Checker:
                 # program's own operator be written between two of them.
                 named = self._top.get(expr.callee.name)
                 if isinstance(named, _NamedType):
+                    if named.takes_types:
+                        # Which types it is given is what lowering it settles.
+                        return None
                     found = self._resolved(named)
                     return None if found is ERROR else found
                 return named.ty.ret if isinstance(named, Function) else None
@@ -16715,6 +16895,9 @@ class Checker:
                 # it.
                 self._diags.emit(D.LANG_TYPEOF_OUTSIDE_COMPTIME, expr.span)
                 return UndefConst(ERROR)
+        template = self._template_named(expr.callee)
+        if template is not None:
+            return self._lower_generic_value(builder, expr, template, expected)
         if isinstance(expr.callee, ast.NameRef):
             named = self._top.get(expr.callee.name)
             if isinstance(named, _NamedType) \
@@ -16746,6 +16929,104 @@ class Checker:
         if func is None:
             return UndefConst(ERROR)
         return self._through(builder, expr, func, expected)
+
+    @contextmanager
+    def _in_scope_of(self, defined: "_NamedType | _Generic") -> Iterator[None]:
+        """With the names the file that wrote *defined* could see in force."""
+        kept = (self._top, self._bundles)
+        if defined.scope is not None and defined.siblings is not None:
+            self._top, self._bundles = defined.scope, defined.siblings
+        try:
+            yield
+        finally:
+            self._top, self._bundles = kept
+
+    def _template_named(self, callee: ast.Expr) -> _NamedType | None:
+        """The definition with type parameters a call names, where it names one:
+        by a bare name, or through the module that exports it."""
+        if isinstance(callee, ast.NameRef):
+            found = self._top.get(callee.name)
+        elif isinstance(callee, ast.Member) and isinstance(callee.base, ast.NameRef):
+            held = self._top.get(callee.base.name)
+            found = held.exports.get(callee.name) \
+                if isinstance(held, LoadedModule) else None
+        else:
+            return None
+        return found if isinstance(found, _NamedType) and found.takes_types \
+            else None
+
+    def _lower_generic_value(self, builder: IRBuilder, expr: ast.Call,
+                             template: _NamedType,
+                             expected: Type | None) -> Value:
+        """Lower a record or a variant of a type with type parameters, written out.
+
+        What the types are is what is wanted, where something says it -- `let p:
+        Pair(u8) = Pair(…)` -- and otherwise what the values given to the fields
+        turn out to be, read the way a generic call reads its arguments: a field
+        whose type is settled already is lowered into it, so a literal with no
+        suffix takes it.  Then it is a value of that instance like any other.
+        """
+        node = template.node
+        assert isinstance(node, ast.TypeDef)
+        if template.refused:
+            return UndefConst(ERROR)
+        aim = self._aiming_at(expected)
+        bound: dict[str, Type] = {}
+        if isinstance(aim, (ProductType, SumType)) and aim.family is template:
+            bound = dict(zip(node.params, aim.args))
+        fields = {one.name: one for one in node.fields}
+        rebuilt: list[ast.Expr] = []
+        for at, one in enumerate(expr.args):
+            written = one.value if isinstance(one, ast.Named) else one
+            field = fields.get(one.name) if isinstance(one, ast.Named) \
+                else node.fields[at] if at < len(node.fields) else None
+            if field is None:
+                # The record's own lowering says what is wrong with it.
+                rebuilt.append(one)
+                continue
+            # The field's type is read where the definition is written, and the
+            # value where the call is.
+            with self._in_scope_of(template):
+                wanted = self._worked_out(field.type, bound)
+            if wanted is VOID:
+                # A variant that carries nothing, written `.none ← true`: the
+                # sum's own lowering says what may be written there.
+                rebuilt.append(one)
+                continue
+            outer = (self._handing_over, self._initializing)
+            self._handing_over, self._initializing = (template.name, at + 1), None
+            try:
+                value = (self._lower_into(builder, written, wanted, written.span)
+                         if wanted is not None
+                         else self._lower_expr(builder, written, None))
+            finally:
+                self._handing_over, self._initializing = outer
+            found = self._value_type_of(value)
+            if found is ERROR:
+                return UndefConst(ERROR)
+            if wanted is None:
+                with self._in_scope_of(template):
+                    read = self._reading(field.type, found, bound, written.span,
+                                         field.name)
+                if not read:
+                    return UndefConst(ERROR)
+            ready = _Ready(span=written.span, value=value)
+            rebuilt.append(replace(one, value=ready)
+                           if isinstance(one, ast.Named) else ready)
+        missing = [name for name in node.params if name not in bound]
+        if missing:
+            self._diags.emit(D.LANG_GENERIC_NOT_DETERMINED, expr.span,
+                             name=missing[0])
+            return UndefConst(ERROR)
+        made = self._instance_type(template,
+                                   tuple(bound[name] for name in node.params),
+                                   expr.span)
+        call = replace(expr, args=tuple(rebuilt))
+        if isinstance(made, ProductType):
+            return self._lower_record(builder, call, made, expected)
+        if isinstance(made, SumType):
+            return self._lower_sum(builder, call, made, expected)
+        return UndefConst(ERROR)
 
     def _through(self, builder: IRBuilder, expr: ast.Call, func: Function,
                  expected: Type | None) -> Value:

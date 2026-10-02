@@ -2257,6 +2257,45 @@ sum is its largest variant with a one-byte tag after it, the tag last rather tha
 eight bytes is seven bytes of padding and behind it is often none.  The whole of either is rounded up to its own alignment, which
 is the largest of its parts'.
 
+##### Type parameters
+
+**A type definition may take type parameters**, listed after its name in the order a reference gives the types:
+
+```
+type Pair(T') = first: T' ; second: T'
+type Maybe(T') = some: T' | none: void
+type Sorted(T') pre(T' < T' → bool) = low: T' ; high: T'
+
+let p: Pair(u8) = Pair(.first ← 1u8, .second ← 2u8)
+```
+
+A product and a sum alike.  **It is a type once it is given its types** -- `Pair(u8)`, `Maybe(Pair(u16))` -- and named without them
+it is refused (4653), as is a type with none named with some (4654) and the wrong number (4655).  A parameter is written with the
+mark after it in the list as everywhere else (4651), and once (4652).  The list is written out, where a generic function's
+parameters are declared by being used, because a reference gives the types by position and that needs an order.
+
+**Written out, a value of one takes its types** from what is wanted where it stands, or else from what its fields are given, read
+the way a generic call reads its arguments: a field whose type is already settled is lowered into it, so a literal with no suffix
+takes a type an earlier field settled.  `Pair(.first ← 3u16, .second ← 4)` is a `Pair(u16)`.
+
+**One type per set of types**: two references naming the same types name the same type, as one generic function is made once per
+set of types.  A generic function reads its own type parameters out of one -- `fn swap(p: Pair(T')) → Pair(T')` -- and may build
+one.  A type may reach itself through a reference, `type Node(T') = value: T' ; next: &Node(T')`.
+
+**What a type requires of its types** is written between the list and the `=`, a `pre` clause or a bundle as a generic function
+writes one, and checked wherever the type is named with types (4900) -- in a generic function, against what that function
+requires (4646).  The definition is checked where it is written, with every parameter a type nothing is known of, so a mistake
+in its parts is reported whether or not anything names it with types.  An exported one means what it means in its own file,
+whatever file names it.
+
+**In a pattern, one name in parentheses after a type is the name the value is bound to**, as it always was: `u8(v)`.  A type with
+type parameters is written with its own before that -- `Maybe(u8)(inner)` -- and one with neither binding nor anything after it
+would read its single type as a binding, so it takes `(_)`.
+
+Compare Haskell's `data Pair a = Pair a a`, Rust's `struct Pair<T>` with `where` bounds, C++ class templates with `requires`
+clauses, Go's `type Pair[T any] struct`, and Zig, where a function returning a type is how a type takes parameters.  The
+parentheses are this language's own brackets for what is handed over, as a bundle's are.
+
 #### Units
 
 **A number may say what it counts**, written after its type:

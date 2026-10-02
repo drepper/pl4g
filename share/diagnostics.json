@@ -5509,6 +5509,141 @@
       "option": null
     },
     {
+      "number": 4651,
+      "name": "LANG_TYPE_PARAMETER_NOT_MARKED",
+      "severity": "error",
+      "message": "a type parameter of '{type}' is a name with a mark after it, and '{name}' has none",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "what was written"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        }
+      ],
+      "cause": "`type Pair(T') = …` lists the type parameters, and a type parameter is written with the mark after it everywhere it stands -- which is what keeps a type named in the definition from being taken for one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types / Type parameters",
+        "requirement": "A type definition may take type parameters, and is named with the types it is given."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4652,
+      "name": "LANG_TYPE_PARAMETER_TWICE",
+      "severity": "error",
+      "message": "'{name}' is listed twice among the type parameters of '{type}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the parameter"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        }
+      ],
+      "cause": "A reference gives the types by position, so each parameter has one place in the list.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types / Type parameters",
+        "requirement": "A type definition may take type parameters, and is named with the types it is given."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4653,
+      "name": "LANG_TYPE_NEEDS_ARGUMENTS",
+      "severity": "error",
+      "message": "'{type}' takes {count} type argument(s), written after its name: '{type}(…)'",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "description": "how many it takes"
+        }
+      ],
+      "cause": "A type with type parameters is a type only once it is given them -- `Pair(u8)` -- except where a value of it is written out, whose fields say them.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types / Type parameters",
+        "requirement": "A type definition may take type parameters, and is named with the types it is given."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4654,
+      "name": "LANG_TYPE_TAKES_NO_ARGUMENTS",
+      "severity": "error",
+      "message": "'{type}' takes no type arguments",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        }
+      ],
+      "cause": "Only a definition that lists type parameters, `type Pair(T') = …`, is named with types after it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types / Type parameters",
+        "requirement": "A type definition may take type parameters, and is named with the types it is given."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4655,
+      "name": "LANG_TYPE_WRONG_ARGUMENT_COUNT",
+      "severity": "error",
+      "message": "'{type}' takes {expected} type argument(s), and {found} are given",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        },
+        {
+          "name": "expected",
+          "type": "integer",
+          "description": "how many it takes"
+        },
+        {
+          "name": "found",
+          "type": "integer",
+          "description": "how many were given"
+        }
+      ],
+      "cause": "The types are given by position, one for each parameter the definition lists.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types / Type parameters",
+        "requirement": "A type definition may take type parameters, and is named with the types it is given."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

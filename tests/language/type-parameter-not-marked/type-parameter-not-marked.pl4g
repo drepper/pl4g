@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4651
+
+※ A type parameter is written with the mark after it, in the list as everywhere
+※ else -- which keeps a type named in the definition from being taken for one.
+
+type Pair(t) = first: t ; second: t
+
+@[startup]
+fn main() → u6:
+    0u6

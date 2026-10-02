@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4900
+
+※ A type's requirements are checked wherever it is named with types, and a
+※ reference that cannot meet them names nothing.
+
+type Sorted(T') pre(T' < T' → bool) = low: T' ; high: T'
+
+@[startup]
+fn main() → u6:
+    let s: Sorted(bool) = Sorted(.low ← false, .high ← true)
+    0u6

@@ -1,0 +1,9 @@
+※ pl4g-test: compile=error diag=4652
+
+※ A reference gives the types by position, so each parameter has one place.
+
+type Pair(T', T') = first: T' ; second: T'
+
+@[startup]
+fn main() → u6:
+    0u6

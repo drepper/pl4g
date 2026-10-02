@@ -9250,6 +9250,32 @@ compiler never finished.  Decided here: at most eight instances of one generic i
 once, then 4650.  Eight because the types such a recursion builds tend to grow geometrically, and
 the note naming each instance's types is part of the message.
 
+## 2026-10-03T12:00+02:00 — language
+
+**Type definitions with type parameters**
+
+    type Pair(T') = first: T' ; second: T'
+    let p: Pair(u8) = Pair(.first ← 1u8, .second ← 2u8)
+
+Decided by the user: the parameters are **listed**, `type Pair(T')`, as a bundle's are, a
+reference giving the types by position and needing an order -- against declaring them by use as
+a function does; a type is named **`Pair(u8)`**; a value written out takes its types **from its
+fields** (or from what is wanted), against writing them always; and the first step takes in
+**records, sums and requirements on them**.
+
+Decided here: an instance is made once per set of types and is nominal like any defined type,
+remembering the definition and the types (`family`, `args`) so that a generic function reads its
+own parameters out of one.  Requirements are checked where the type is named with types, once
+per set, and inside a generic function against its own requirements.  The definition is checked
+where it is written with opaque parameters.  A type named with types means what it means in its
+own file, and so -- a fix found on the way -- does a generic function's parameter type, which was
+read in the calling file.  In a pattern, one name in parentheses after a type stays the binding:
+`Maybe(u8)(v)`.  A sum whose variants turn out to be of one type for some set of types is refused
+for that set (4410), as it would be written out.
+
+Compare Haskell (`data`), Rust (`struct Pair<T>` with `where`), C++ (class templates with
+`requires`), Go (`type Pair[T any]`), Zig (a function answering a type).
+
 Open questions
 --------------
 

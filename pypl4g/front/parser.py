@@ -1264,6 +1264,16 @@ class Parser:
             self._advance()
             module = name_token.text
             name_token = self._expect(TokKind.IDENT, D.LANG_SYNTAX_EXPECTED_MEMBER)
+        args: list[ast.TypeExpr] = []
+        if self._check(TokKind.LPAREN) and self._type_arguments_follow():
+            # The types a type that takes type parameters is given: `Pair(u8)`.
+            self._advance()
+            args.append(self._parse_type_ref())
+            while self._accept(TokKind.COMMA) is not None:
+                args.append(self._parse_type_ref())
+            name_token = replace(name_token, span=name_token.span.to(
+                self._expect(TokKind.RPAREN,
+                             D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN).span))
         # The unit comes before the mark because it belongs to the answer: a
         # result of a length is a result whose answer is a length, and there is
         # nothing about a result for a unit to say.
@@ -1272,14 +1282,51 @@ class Parser:
         mark = self._accept(TokKind.QUESTION)
         if mark is None:
             return ast.TypeRef(span=first.span.to(last_name),
-                               name=name_token.text, module=module, unit=unit)
+                               name=name_token.text, module=module, unit=unit,
+                               args=tuple(args))
         error: str | None = None
         last = mark
         if self._check(TokKind.IDENT):
             last = self._advance()
             error = last.text
         return ast.TypeRef(span=first.span.to(last.span), name=name_token.text,
-                           module=module, result=True, error=error, unit=unit)
+                           module=module, result=True, error=error, unit=unit,
+                           args=tuple(args))
+
+    #: What may stand between the parentheses after a type's name, where they
+    #: hold the types it is given rather than anything else.
+    _IN_A_TYPE: Final[frozenset[TokKind]] = frozenset({
+        TokKind.IDENT, TokKind.INT, TokKind.STRING, TokKind.DOT, TokKind.COMMA,
+        TokKind.QUESTION, TokKind.AMPERSAND, TokKind.KW_MUT, TokKind.KW_FN,
+        TokKind.KW_IN, TokKind.ARROW, TokKind.COLON, TokKind.LIFETIME,
+        TokKind.UNIT, TokKind.TIMES, TokKind.DIVIDE, TokKind.EXPONENT,
+        TokKind.ARRAY_OPEN, TokKind.ARRAY_CLOSE, TokKind.SET_OPEN,
+        TokKind.SET_CLOSE, TokKind.TUPLE_OPEN, TokKind.TUPLE_CLOSE,
+        TokKind.LBRACKET, TokKind.RBRACKET, TokKind.AT_LBRACKET,
+        TokKind.LPAREN, TokKind.RPAREN})
+
+    def _type_arguments_follow(self) -> bool:
+        """Whether the parentheses here hold the types a type is given.
+
+        A name followed by parentheses is also a call, and a type is tried before
+        an expression between the lifting marks -- so the parentheses are looked
+        through first: not empty, and holding nothing a type could not be made of.
+        """
+        if self._peek().kind is TokKind.RPAREN:
+            return False
+        depth = 0
+        ahead = 1
+        while True:
+            kind = self._peek(ahead).kind
+            if kind is TokKind.LPAREN:
+                depth += 1
+            elif kind is TokKind.RPAREN:
+                if depth == 0:
+                    return True
+                depth -= 1
+            elif kind not in self._IN_A_TYPE:
+                return False
+            ahead += 1
 
     #: Which kind of definition each separator makes.
     _TYPE_SEPARATORS: Final[dict[TokKind, ast.TypeKind]] = {
@@ -1305,6 +1352,18 @@ class Parser:
         """
         start = self._expect(TokKind.KW_TYPE).span
         name_token = self._expect(TokKind.IDENT)
+        params: list[str] = []
+        places: list[Span] = []
+        if self._accept(TokKind.LPAREN) is not None:
+            # The type parameters, in the order a reference gives the types.
+            while True:
+                written = self._expect(TokKind.IDENT)
+                params.append(written.text)
+                places.append(written.span)
+                if self._accept(TokKind.COMMA) is None:
+                    break
+            self._expect(TokKind.RPAREN, D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN)
+        clauses = self._parse_clauses()
         self._expect(TokKind.EQUALS, D.LANG_TYPEDEF_EXPECTED_EQUALS)
         braced = self._accept(TokKind.LBRACE) is not None
         indented = False
@@ -1354,7 +1413,9 @@ class Parser:
         return ast.TypeDef(span=start.to(end), name=name_token.text,
                            name_span=name_token.span,
                            kind=kind if kind is not None else ast.TypeKind.PRODUCT,
-                           fields=tuple(fields), attrs=attrs, doc=doc, doc_lines=doc_lines)
+                           fields=tuple(fields), attrs=attrs, params=tuple(params),
+                           param_spans=tuple(places), clauses=clauses, doc=doc,
+                           doc_lines=doc_lines)
 
     def _ends_the_parts(self, braced: bool, indented: bool) -> bool:
         """Whether what comes next closes a type definition rather than opening
@@ -1944,6 +2005,19 @@ class Parser:
         bottom = self._accept(TokKind.BOTTOM)
         written = None if bottom is not None else self._parse_type_ref()
         start = bottom.span if bottom is not None else written.span  # pyright: ignore
+        if isinstance(written, ast.TypeRef) and len(written.args) == 1 \
+                and not self._check(TokKind.LPAREN):
+            # `u8(v)` reads as a type given `v` until nothing follows it: in a
+            # pattern one name in parentheses is the name the value is bound
+            # to, and a type with type parameters is written with its own
+            # before that -- `Maybe(u8)(v)`.
+            (inner,) = written.args
+            if isinstance(inner, ast.TypeRef) and inner.module is None \
+                    and not inner.args and not inner.result and inner.unit is None:
+                bare = replace(written, args=(),
+                               span=written.span.to(written.span))
+                return ast.Pattern(span=written.span, type=bare, name=inner.name,
+                                   name_span=inner.span)
         if self._accept(TokKind.LPAREN) is None:
             return ast.Pattern(span=start, type=written)
         name_token = self._expect(TokKind.IDENT)

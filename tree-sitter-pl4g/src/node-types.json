@@ -9569,6 +9569,16 @@
     "type": "type",
     "named": true,
     "fields": {
+      "argument": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "type",
+            "named": true
+          }
+        ]
+      },
       "element": {
         "multiple": false,
         "required": false,
@@ -9867,6 +9877,16 @@
           }
         ]
       },
+      "parameter": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "parts": {
         "multiple": true,
         "required": true,
@@ -9895,11 +9915,15 @@
       }
     },
     "children": {
-      "multiple": false,
+      "multiple": true,
       "required": false,
       "types": [
         {
           "type": "attribute_list",
+          "named": true
+        },
+        {
+          "type": "clause",
           "named": true
         }
       ]

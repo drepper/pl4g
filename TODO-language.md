@@ -964,8 +964,8 @@ Runtime
     finished, so it is refused; what it needs is the function to be registered before its body is lowered, which is a
     rearrangement of the instantiation and nothing deeper.
 
-[ ] let a type definition take type parameters.  Only functions have them, so a `type Pair T’ = first : T’ ; second : T’` cannot
-    be written -- which matters less than it would elsewhere, products having no values yet.
+[x] let a type definition take type parameters.  `type Pair(T') = first: T' ; second: T'`, named `Pair(u8)`, records and sums,
+    with requirements between the list and the `=`; a value written out takes its types from its fields or from what is wanted.
 
 [ ] let a variable at the top level be *given* a lasting reference.  The type is now allowed -- `let kept: &mut static u8` --
     but the value would be an address worked out at load time, and a top-level variable whose value is not a literal is not
