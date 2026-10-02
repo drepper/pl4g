@@ -5422,6 +5422,28 @@
       "option": null
     },
     {
+      "number": 4647,
+      "name": "LANG_REQUIREMENT_NOT_GENERIC",
+      "severity": "error",
+      "message": "'{name}' has no type parameters, so a pre-condition of it is a condition: an expression answering 'bool', not a question over types",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "A requirement -- a clause over types, or one with an arrow -- constrains what a call gives a type parameter.  A function with none takes the types its signature writes down, so there is nothing for one to constrain and its answer is known where it is written.  What a pre-condition of such a function can say is a truth value: about its parameters, checked as the call is made, or a question the compiler answers, such as comparing two types.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "Only a generic function has requirements."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

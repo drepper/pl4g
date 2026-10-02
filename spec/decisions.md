@@ -9188,6 +9188,23 @@ warning is left unsaid where the function is written, being said again for each 
 Compare: Rust, Swift and Haskell (bounds, body checked once), C++ (concepts at the call, body
 per instantiation, SFINAE), Go (constraints with type sets), Zig and D (per instantiation).
 
+## 2026-10-02T23:00+02:00 — language
+
+**Only a generic function has requirements; an arrow settles an answer's type parameter**
+
+Asked for by the user, on a program with `fn f(a: u6) → u6 pre(⌜u6⌝ + ⌜u6⌝ → ⌜u6⌝)` and
+`fn g(a: T') → E' pre(⌜u6⌝ + ⌜u6⌝ → E')`:
+
+- **A function with no type parameters has no requirements** (4647, replacing "settled where it
+  is written, checked once").  Its pre-conditions are real conditions: a truth value, about its
+  parameters or answered by the compiler.  A comparison of two types (`⌜u6⌝ = ⌜u6⌝`) is such a
+  condition, which it was not before -- `⌜u6⌝ + ⌜u6⌝` was read as one too, and is now a
+  requirement as it should be.
+- **A type parameter only in the answer may be settled by a requirement's arrow** -- `pre(T' + T'
+  → E')`, and `pre(⌜u6⌝ + ⌜u6⌝ → E')`, which settles `E'` where the function is written.  4555 was
+  refusing both, though the specification already said an arrow reaches past it.
+- **The arrow's type may be written in the lifting marks**, `→ ⌜u6⌝`, as the operands are.
+
 Open questions
 --------------
 

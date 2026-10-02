@@ -4609,8 +4609,14 @@ class Checker:
         """
         answered: list[str] = []
         _parameters_in(node.ret_type, answered)
+        # A requirement's arrow settles what it names, which is how a type no
+        # argument mentions is said: `pre(T' + T' → E')`.
+        settled: list[str] = list(written)
+        for clause in node.clauses:
+            if clause.answers is not None:
+                _parameters_in(clause.answers, settled)
         for one in answered:
-            if one not in written:
+            if one not in settled:
                 self._diags.emit(D.LANG_GENERIC_NOT_DETERMINED, node.name_span,
                                  name=one)
                 return None
@@ -5956,8 +5962,12 @@ class Checker:
                     and expr.callee.name == TYPEOF_NAME:
                 into.add(False)
                 return
-            case ast.Binary() if self._type_stood_for(expr.left) is not None \
-                    or self._type_stood_for(expr.right) is not None:
+            case ast.Binary() if expr.op in (ast.BinaryOp.EQUAL,
+                                             ast.BinaryOp.NOT_EQUAL) \
+                    and (self._type_stood_for(expr.left) is not None
+                         or self._type_stood_for(expr.right) is not None):
+                # Two types compared, which the compiler answers with a truth
+                # value: a condition, settled while compiling.
                 into.add(False)
                 return
             case ast.Lifted():
@@ -5997,6 +6007,23 @@ class Checker:
         if True in levels:
             return None if clause.kind is not ast.ClauseKind.PRE else True
         return None if clause.answers is not None else False
+
+    def _no_requirement_here(self, node: ast.FuncDef) -> bool:
+        """Refuse a clause over types on a function with no type parameters (4647).
+
+        Answers whether one was refused, so that what else is wrong with the
+        clause is not said on top of it.
+        """
+        refused = False
+        for clause in node.clauses:
+            if True not in self._levels_of(clause.expr):
+                # Over values: a condition, or -- with an arrow -- the mistake
+                # 4902 says.
+                continue
+            refused = True
+            self._diags.emit(D.LANG_REQUIREMENT_NOT_GENERIC, clause.span,
+                             name=node.name)
+        return refused
 
     def _check_clause_shapes(self, clauses: Sequence[ast.Clause]) -> bool:
         """Whether every clause is of a shape that has a reading.
@@ -7428,11 +7455,13 @@ class Checker:
         outer_made_from, self._made_from = self._made_from, {}
         outer_kinds = (self._answer_kinds, self._thin_to)
         self._params_made_in(node, func)
-        # A function with no type parameters has requirements that are settled
-        # where it is written, so they are checked once and here rather than at
-        # every call.
-        self._check_clause_shapes(node.clauses)
-        self._check_clauses(node.clauses, {}, func.name, node.name_span)
+        # A function with no type parameters has nothing a requirement could
+        # constrain: what it takes is written down, so a question over types has
+        # one answer, known here.  Its pre-conditions are conditions -- a truth
+        # value, settled while compiling where it can be -- and nothing else.
+        if not self._no_requirement_here(node):
+            self._check_clause_shapes(node.clauses)
+            self._check_clauses(node.clauses, {}, func.name, node.name_span)
         # Before the first statement: a condition is about what the function was
         # called with, so it is checked where nothing of the body has run yet.
         self._lower_conditions(builder, node, func)
@@ -8986,7 +9015,7 @@ class Checker:
         bound: dict[str, Type] = {name: OpaqueType(name)
                                   for name in written.parameters}
         shapes: dict[tuple[str, str, tuple[Type, ...]], Type] = {}
-        self._requirement_shapes(node.clauses, bound, shapes)
+        self._requirement_shapes(node.clauses, bound, shapes, node.name)
         told_before = self._diags.error_count
         logged = len(self._module.reports.entries)
         saved = (self._bound, self._abstract, self._discard_function,
@@ -9055,8 +9084,8 @@ class Checker:
 
     def _requirement_shapes(self, clauses: Sequence[ast.Clause],
                             bound: dict[str, Type],
-                            shapes: dict[tuple[str, str, tuple[Type, ...]], Type]
-                            ) -> None:
+                            shapes: dict[tuple[str, str, tuple[Type, ...]], Type],
+                            name: str = "") -> None:
         """Write down every operation the requirements name, a bundle's lines
         with its arguments put in, settling what each arrow names."""
         for clause in clauses:
@@ -9077,12 +9106,20 @@ class Checker:
                 if bundle.scope is not None and bundle.siblings is not None:
                     self._top, self._bundles = bundle.scope, bundle.siblings
                 try:
-                    self._requirement_shapes(bundle.node.clauses, inner, shapes)
+                    self._requirement_shapes(bundle.node.clauses, inner, shapes,
+                                             name)
                 finally:
                     self._top, self._bundles = kept
                     bundle.opening = False
                 continue
             answers: Type | None = None
+            over: list[str] = []
+            _type_names_in(clause.expr, over)
+            if not over:
+                # Over types written down: the answer is known here, and what
+                # the arrow names is that -- `pre(⌜u6⌝ + ⌜u6⌝ → E')` is `u6`.
+                self._met(clause, bound, name, clause.span)
+                continue
             if clause.answers is not None:
                 written = clause.answers
                 if isinstance(written, ast.TypeRef) and written.module is None \

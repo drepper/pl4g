@@ -1601,12 +1601,20 @@
     "named": true,
     "fields": {
       "answers": {
-        "multiple": false,
+        "multiple": true,
         "required": false,
         "types": [
           {
             "type": "type",
             "named": true
+          },
+          {
+            "type": "⌜",
+            "named": false
+          },
+          {
+            "type": "⌝",
+            "named": false
           }
         ]
       },

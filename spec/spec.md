@@ -5994,7 +5994,18 @@ their meaning inside a clause:
 **The arrow says what a requirement answers.**  A name nothing has settled is settled by it, which is how a requirement reaches a
 type no argument mentions; a name already settled is compared, and a requirement answering something else is not met (4901).  The
 arrow may be written only on a requirement (4902): on a clause over values the call happens and the parameter list is where a
-type is read off a value, so there is nothing for it to name.
+type is read off a value, so there is nothing for it to name.  What follows it is a type, written bare or in the lifting marks the
+operands use -- `→ u8` and `→ ⌜u8⌝` say the same.
+
+**A type parameter written only in the answer is settled by an arrow**, so what an operation answers is what the function does:
+
+```
+fn doubled(a: T') → E' pre(T' + T' → E'):        ※ E' is what T' + T' answers, call by call
+    a + a
+
+fn sized(a: T') → E' pre(⌜u6⌝ + ⌜u6⌝ → E'):      ※ over types written down: E' is u6, known here
+    0u6
+```
 
 **A type parameter standing in an operand is read and never written** (4904).  It must already be settled -- by an argument or by
 the arrow of an earlier clause -- which is why the clauses are read in the order they are written.
@@ -6013,8 +6024,12 @@ note: 'total' is asked for T' = bool here
 ```
 
 That is what a bound buys at the call: the message is about the signature, which is the part a caller can read.  What it buys
-in the body is under Generic Functions, "What a body may do".  A requirement of a function with no type parameters is settled where it is written, so it is checked there and
-once.
+in the body is under Generic Functions, "What a body may do".
+
+**Only a generic function has requirements** (4647).  One with no type parameters takes the types its signature writes down, so a
+question over types has nothing to constrain and one answer, known where it is written.  Its pre-conditions are conditions: an
+expression answering `bool`, about its parameters and checked as the call is made, or one the compiler answers -- two types
+compared, `pre(⌜u6⌝ = ⌜u6⌝)`.  A comparison of two types is a condition and not a requirement, whatever function it is on.
 
 ###### A bundle
 

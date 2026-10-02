@@ -1,0 +1,33 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A type parameter written only in what a function answers is settled by a
+※ requirement's arrow: what the operation answers is what the function does.
+※ Over a type parameter it is settled at each call, and where the requirement
+※ is over types written down it is known where the function is written.  The
+※ arrow's type may be written bare or in the lifting marks the operands use.
+※
+※ A function with no type parameters says what it needs as a condition: a
+※ comparison of two types is one the compiler answers.
+
+fn g(a: T') → E' pre(T' + ⌜u6⌝ → E'):
+    a + 1u6
+
+fn h(a: T') → E' pre(T' + T' → E'):
+    a + a
+
+fn k(a: T') → E' pre(⌜u6⌝ + ⌜u6⌝ → E'):
+    0u6
+
+fn same(a: T') → T' pre(T' + T' → ⌜u8⌝):
+    a
+
+fn plain(a: u6) → u6 pre(a < 10u6) pre(⌜u6⌝ = ⌜u6⌝):
+    a
+
+@[startup]
+fn main() → u6:
+    if g(2u6) ≠ 3u6: return 1u6
+    if h(4u6) ≠ 8u6: return 2u6
+    if k(true) ≠ 0u6: return 3u6
+    if same(5u8) ≠ 5u8: return 4u6
+    plain(0u6)

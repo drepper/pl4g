@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4647
+
+※ A requirement constrains what a call gives a type parameter.  A function with
+※ none takes the types its signature writes down, so there is nothing for one to
+※ constrain: a pre-condition of it is a condition, an expression answering
+※ `bool` -- about its parameters, or one the compiler answers, such as two types
+※ compared.
+
+fn f(a: u6) → u6 pre(⌜u6⌝ + ⌜u6⌝ → ⌜u6⌝):
+    a
+
+@[startup]
+fn main() → u6:
+    f(0u6)

@@ -683,6 +683,12 @@ class Parser:
         expr = self._parse_expression()
         if self._accept(TokKind.ARROW) is None:
             return expr, None
+        if self._accept(TokKind.LIFT_OPEN) is not None:
+            # A type in the lifting marks, as the operands are written: the
+            # same type, said the way the rest of the clause says one.
+            written = self._parse_type_ref()
+            self._expect(TokKind.LIFT_CLOSE, D.LANG_SYNTAX_EXPECTED_CLOSING_LIFT)
+            return expr, written
         return expr, self._parse_type_ref()
 
     def _parse_bundle(self, attrs: tuple[ast.Attribute, ...],

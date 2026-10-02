@@ -209,7 +209,10 @@ module.exports = grammar({
     // operands, which is the same division of labour the lifting marks have.
     clause: $ => seq(
       choice('pre', 'post'), '(', field('expression', $._expression),
-      optional(seq($._return_arrow, field('answers', $.type))), ')',
+      optional(seq($._return_arrow,
+                   // a type, bare or in the lifting marks the operands use
+                   field('answers', choice($.type, seq('\u231c', $.type, '\u231d'))))),
+      ')',
     ),
 
     // `bundle NAME(T', ...)`: a name for a set of requirements.  Its lines carry
