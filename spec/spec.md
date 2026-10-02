@@ -5249,8 +5249,22 @@ call.
 emitted a call and cannot find it in the output is told where it went, and told that what let it go was the absence of
 `@[impure]` -- which is a property of a function the generator wrote and can change.
 
-More will follow from it -- a call made twice with the same arguments worked out once, a call moved out of a loop -- and none of
-it needs the language to say anything further.
+**And where a pure function reads no memory but its own frame, what it answers depends on its arguments alone**, so optimizing
+(`-O1`) uses that three ways more, none of which the language has to say anything about:
+
+- **A call made twice with the same arguments is worked out once** (`pure-call-reused`): the second stands for the first, which is
+  already where it is.
+- **A call whose arguments do not change round a loop is moved out of it** (`pure-call-hoisted`), into the block that enters the
+  loop -- from the loop's head, which runs every time the loop is entered, and only from before anything there that could stop the
+  program.
+- **A call whose arguments are all constants is worked out while compiling** (`pure-call-folded`), by the machine that runs the
+  macros, on the function's own intermediate representation and within a small budget.  Where it stops -- a check that does not
+  hold, a step too many -- the call stays, so the program stops where it would have and says what it would have said.
+
+Only an answer that is a value is worked out once: a number, a truth value, a code point.  Text the heap made is a new object for
+every call, and two holders of one object would give it back twice.  A pure function may still stop the program, and that is
+preserved: a call worked out once stops it at the first, where it would have stopped anyway, and one moved out of a loop is moved
+only past what cannot.
 
 Compare: Rust, whose `const fn` is a different question (what may run while compiling) and whose purity is otherwise carried by
 `&mut` in the type system, so that the compiler knows what may be changed without anything being declared; Haskell, where purity

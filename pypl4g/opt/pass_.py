@@ -109,7 +109,7 @@ def pipeline_for(level: int) -> Sequence[str]:
     # after that pass -- and a bitcast of a constant is a value the back end has
     # nowhere to read, a bitcast emitting no instruction of its own.
     return ("dropignored", "tailcalls", "largeanswers", "inline", "leanvalues",
-            "constfold",
+            "constfold", "purecalls",
             "simplifycfg",
             "constfold", "dce", "dropunreached", "splitedges")
 
@@ -123,12 +123,14 @@ def build_manager(level: int) -> PassManager:
     from .passes.inline import Inlining
     from .passes.largeanswers import LargeAnswers
     from .passes.leanvalues import LeanValues
+    from .passes.purecalls import PureCalls
     from .passes.simplifycfg import SimplifyCFG
     from .passes.splitedges import SplitEdges
     from .passes.tailcalls import TailCalls
 
     available: dict[str, Pass] = {
         "constfold": ConstantFolding(),
+        "purecalls": PureCalls(),
         "dce": DeadCodeElimination(),
         "dropignored": DropIgnoredCalls(),
         "dropunreached": DropUnreached(),

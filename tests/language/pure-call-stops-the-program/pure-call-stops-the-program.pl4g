@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=80 diag=none
+
+※ A pure function may still stop the program.  Worked out while compiling, a call
+※ whose answer would not fit is left where it is, so the program stops where it
+※ would have and says what it would have said.
+
+@[inline(never)]
+fn boom(x: u8) → u8:
+    x + 250u8
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(boom(10u8), ⌜u6⌝) ?? 2u6

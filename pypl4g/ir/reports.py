@@ -88,6 +88,13 @@ class ReportKind(StrEnum):
     #: once and said nothing about which types; which ones it was built for is
     #: what the calls turned out to ask for.
     INSTANTIATE = "instantiate"
+    #: A call of a pure function that reads no memory, made where an earlier one
+    #: with the same arguments was: it stands for that one.
+    PURE_CALL_REUSED = "pure-call-reused"
+    #: One moved out of a loop, nothing it is handed changing round the loop.
+    PURE_CALL_HOISTED = "pure-call-hoisted"
+    #: One worked out while compiling, every argument being a constant.
+    PURE_CALL_FOLDED = "pure-call-folded"
     #: A generic function checked where it is written, against its requirements
     #: alone, so that no instantiation has anything left to find.
     GENERIC_CHECKED = "generic-checked"

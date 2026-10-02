@@ -873,9 +873,14 @@ To Do List for the PL4g language
     needed was that whatever lowers one to learn its type hands the value back.
 
 
-[ ] use purity for more than dropping a call nothing reads.  A call made twice with the same arguments may be worked out once, a
-    call whose arguments do not change may be moved out of a loop, and a pure function whose arguments are all constants may be
-    worked out while compiling.  None of them needs the language to say anything further; each is a pass.
+[x] use purity for more than dropping a call nothing reads.  The `purecalls` pass, at `-O1`: for a pure function reading no
+    memory but its own frame and answering a value, a call made twice with the same arguments is worked out once, one whose
+    arguments do not change is moved out of a loop's head, and one whose arguments are constants is worked out while compiling
+    by the macros' machine.
+
+[ ] widen what `purecalls` reaches: a pure function that reads memory it was handed, reused where nothing between the two calls
+    writes; a call moved out of a loop from a block other than the head that runs on every turn; floating point worked out while
+    compiling, with the target's rounding.
 
 [ ] consider whether a pure function may write through an array it was handed.  It may not today (4479), there being no way to
     say that a parameter is not shared with anything the caller can still see.  A type that said so -- the parameter is this

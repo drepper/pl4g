@@ -1,0 +1,38 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **What a pure function answers depends on its arguments alone**, where it reads
+※ no memory but its own frame -- so, optimizing, a call made twice with the same
+※ arguments is worked out once, a call whose arguments do not change round a loop
+※ is moved out of it, and a call whose arguments are all constants is worked out
+※ while compiling.  None of it changes what the program does, which is what this
+※ checks at both levels; the report log says which was done where.
+
+@[inline(never)]
+fn square(x: u32) → u32:
+    x × x
+
+@[inline(never)]
+fn fib(n: u32) → u32:
+    if n < 2u32: n else: fib(n - 1u32) + fib(n - 2u32)
+
+@[impure, inline(never)]
+fn seed() → u32:
+    3u32
+
+@[impure, inline(never)]
+fn looped(a: u32, k: u32) → u32:
+    let n: mut u32 = 0u32
+    let total: mut u32 = 0u32
+    while square(a) > n:
+        total ← total + 1u32
+        n ← n + k
+    total
+
+@[startup, impure]
+fn main() → u6:
+    let s: u32 = seed()
+    let twice: u32 = square(s) + square(s)
+    if fib(20u32) ≠ 6765u32: return 1u6
+    if twice ≠ 18u32: return 2u6
+    if looped(s, 1u32) ≠ 9u32: return 3u6
+    0u6

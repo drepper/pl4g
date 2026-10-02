@@ -9293,6 +9293,26 @@ string's bytes, a table's entries -- is now kept by `dropunreached`, which follo
 named.  A position-independent image is a to-do: the same words, as relative relocations applied
 at startup.
 
+## 2026-10-03T14:00+02:00 — compiler
+
+**What purity buys beyond a dropped call: the `purecalls` pass**
+
+The to-do entry, implemented as one pass at `-O1`, after the first constant folding.  It acts on
+a call to a pure function whose body reads no memory but its own frame, transitively, and whose
+answer is a value -- the two conditions under which the answer depends on the arguments alone
+and two answers are interchangeable.  Three uses: a call dominated by one to the same callee with
+the same operands stands for it; a call in a loop's head, with operands defined outside the loop
+and nothing before it in the head that could stop the program, moves to the one block entering
+the loop; a call with constant arguments is run by the macros' machine (`front/interpret.py`)
+with a budget of twenty thousand steps, and replaced by what it answered unless it stopped or
+touched floating point, whose rounding the machine does not share with the target.  Each is in
+the report log.  The machine read an enumeration's constant wrongly, which folding found.
+
+Compare GCC's `__attribute__((const))` -- what "reads no memory" is here, inferred rather than
+promised -- with its CSE, LICM and constant folding of such calls; LLVM's `readnone` inference and
+the same passes; and C++'s `constexpr`, which works out at compile time only what the program
+asked to.
+
 Open questions
 --------------
 

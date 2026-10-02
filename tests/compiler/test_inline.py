@@ -126,16 +126,26 @@ def test_nothing_is_inlined_where_nothing_was_asked_for(compile_source) -> None:
     assert "call" in text and "fn @add" in text
 
 
+#: An answer the optimizer cannot know, so that a pure function handed it is not
+#: worked out while compiling -- which would leave no call to inline or keep.
+SEED = """\
+@[impure, inline(never)]
+fn seed() \N{RIGHTWARDS ARROW} u8:
+    1u8
+
+"""
+
+
 def test_the_program_may_say_never(compile_source) -> None:  # noqa: ANN001
     """`@[inline(never)]` is a thing the program said, so nothing argues."""
-    text = emitted(compile_source, """\
+    text = emitted(compile_source, SEED + """\
 @[inline(never)]
 fn add(a: u8, b: u8) \N{RIGHTWARDS ARROW} u8:
     a + b
 
-@[startup]
+@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u6:
-    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(add(1u8, 2u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
+    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(add(seed(), 2u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """, "-O1")
     assert "call" in text and "fn @add" in text
 
@@ -179,14 +189,14 @@ def test_one_several_call_and_nobody_says_to_stays(compile_source) -> None:  # n
     """A long one called twice is two copies, which is what the budget is for."""
     body = "\n".join("    let n{0}: u8 = a + {0}u8".format(at)
                      for at in range(1, 20))
-    text = emitted(compile_source, "".join(("""\
+    text = emitted(compile_source, "".join((SEED, """\
 fn wide(a: u8) \N{RIGHTWARDS ARROW} u8:
 """, body, """
     n1
 
-@[startup]
+@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u6:
-    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(wide(1u8) + wide(2u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
+    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(wide(seed()) + wide(seed()), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """)), "-O1")
     assert "call" in text and "fn @wide" in text
 
@@ -196,13 +206,13 @@ def test_a_function_that_calls_itself_is_left_alone(compile_source) -> None:  # 
 
     The call is not in tail position -- a tail call to itself is a loop, and a
     loop is inlined like anything else (below)."""
-    text = emitted(compile_source, """\
+    text = emitted(compile_source, SEED + """\
 fn down(n: u8) \N{RIGHTWARDS ARROW} u8:
     if n = 0u8: 0u8 else: n + down(n - 1u8)
 
-@[startup]
+@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u6:
-    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(down(3u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
+    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(down(seed()), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """, "-O1")
     assert "fn @down" in text
 

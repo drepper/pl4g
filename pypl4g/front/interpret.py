@@ -134,7 +134,8 @@ class Machine:
     running out of room.
     """
 
-    def __init__(self, builtins: dict[str, Callable[..., object]]) -> None:
+    def __init__(self, builtins: dict[str, Callable[..., object]],
+                 steps: int = STEPS) -> None:
         #: What a call to a function with no body means.  The questions about a
         #: piece of the program are these, and the expander puts them here: the
         #: machine knows that a handle is a number and nothing else about one.
@@ -145,6 +146,8 @@ class Machine:
         #: read one twice.
         self._placed: dict[str, int] = {}
         self._steps = 0
+        #: How many steps it may take before it is stopped.
+        self._limit = steps
 
     def knows(self, builtins: dict[str, Callable[..., object]]) -> None:
         """Say what the functions with no body do.
@@ -181,7 +184,7 @@ class Machine:
         """Run one block, answering what it returned or where it goes next."""
         for inst in block.insts:
             self._steps += 1
-            if self._steps > STEPS:
+            if self._steps > self._limit:
                 raise Stopped("it ran for too long")
             if isinstance(inst, RetInst):
                 return _Returned(self._operand(inst.operands[0], values)
@@ -525,7 +528,7 @@ class Machine:
             case CharConst():
                 return value.value
             case EnumConst():
-                return value.value
+                return value.number
             case UndefConst():
                 # Nothing read it in a program that compiled; a macro that does
                 # read one is asking what was never written, and nought is the
