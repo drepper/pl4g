@@ -939,11 +939,11 @@ Runtime
 [ ] give a lambda's environment back.  One kept in `⎕heap` stays there, as a string a name held does; the third word says which
     allocator it came from, and a sized free needs the size, which a header word before the environment would carry.
 
-[ ] let `std.text` answer `"true"` and `"false"` from the image.  Under `→ str in a` they are copied into `a`; `→ str in a,
-    ⎕static` would let them through as they are, the answer carrying its allocator -- proposed with `⎕static` and not taken.
+[x] let `std.text` answer `"true"` and `"false"` from the image.  `→ str in a, ⎕static` lets them through as they are, the answer
+    carrying its allocator; `std.text` and both `⍕` say it.
 
-[ ] let a parameter say it holds what is in the image, `s: str in ⎕static`, so that a body may keep it anywhere without copying
-    -- proposed with `⎕static` and not taken.
+[x] let a parameter say it holds what is in the image, `s: str in ⎕static`, so that a body may keep it anywhere without copying.
+    A caller hands it only what is in the image (4649).
 
 [ ] say in a function type which parameters write the arrays they are handed, so that a function that writes one can be a value
     (4641).

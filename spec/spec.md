@@ -3496,8 +3496,18 @@ written down has always carried.
 
 **`→ T in ⎕static` says every answer is in the image.**  The answer then travels without its allocator, the caller adding none
 (`answer-thin` in the report log).  Nothing is copied into the image while the program runs, so an answer made anywhere else is
-refused (4635), and `⎕static` is named alone (4634).  A body whose every answer is text written down is held to be answering in the
-image without saying so, as one answering only what the heap just made is held to answer in the heap.
+refused (4635).  A body whose every answer is text written down is held to be answering in the image without saying so, as one
+answering only what the heap just made is held to answer in the heap.
+
+**`→ T in a, ⎕static` says an answer is in the arena `a` or in the image**, and `→ T in ⎕heap, ⎕static` the same of the heap.  Text
+written down is answered as it is rather than copied into `a`, and the answer carries its allocator to say which of the two it is
+-- nought for the image -- so it never travels thin.  A caller takes it to be made in what it handed `a`, or in the image, which
+lasts longer: emptying `a` kills it all the same, the compiler not knowing which.  `std.text` and both `⍕` say this, so the text of
+a truth value is never copied.
+
+**`s: T in ⎕static` says a parameter holds what is in the image**, and a caller hands it only that (4649): text written down, or a
+value of a parameter or an answer that says it is in the image.  The body may then keep it anywhere as it is -- answer it under
+`→ str in ⎕static`, put it in a record of the caller's, hold it past any arena -- since nothing ever gives it back.
 
 ```
 fn digit(d: u64) → str in ⎕static:

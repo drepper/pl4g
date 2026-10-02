@@ -201,7 +201,8 @@ GROUPS: tuple[Group, ...] = (
            "lambda-answered": "lambdas answered, boxed, listed and written through a reference",
            "static-data": "arrays, lists, sets and dictionaries laid out in the image",
            "lambda-handed-on": "lambdas that last, composed, handed on and kept in a field",
-           "generic-requirements-suffice": "generic bodies checked against their requirements where written"}),
+           "generic-requirements-suffice": "generic bodies checked against their requirements where written",
+           "static-parameter": "parameters and answers in the image, beside an arena"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "

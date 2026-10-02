@@ -1,0 +1,38 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **`s: str in ⎕static` says a parameter holds what is in the image**: made
+※ while compiling, lasting as long as the program, never given back.  So the
+※ body may keep it anywhere as it is -- answer it from the image, put it in a
+※ record of the caller's, keep it past an arena -- with nothing copied.
+※
+※ **`→ str in a, ⎕static` says an answer is in the arena or in the image**, and
+※ the answer carries its allocator to say which: `std.text` answers `"true"`
+※ and `"false"` from the image rather than copying them into the arena.
+
+let std := ⎕import("std")
+
+type Label = text: str
+
+fn named(s: str in ⎕static) → str in ⎕static:
+    s
+
+@[impure]
+fn keep(into: &mut Label, s: str in ⎕static):
+    into⌖.text ← s
+
+fn either(c: bool, a: &mut arena, s: str in ⎕static) → str in a, ⎕static:
+    if c: s else: "made" ⧺ "" in a
+
+@[startup, impure]
+fn main() → u6:
+    let label: mut Label = Label(.text ← "")
+    keep(&mut label, "kept")
+    let pool: mut arena = ⎕arena
+    let from: str = either(true, &mut pool, "image")
+    let made: str = either(false, &mut pool, "image")
+    let same: bool = from = "image" ∧ made = "made"
+    ⎕empty(pool)
+    if named("x") ≠ "x" ∨ label.text ≠ "kept" ∨ ¬same: return 1u6
+    let truth: str = std.text(true, &mut pool)
+    if truth ≠ "true" ∨ ⍕false ≠ "false" ∨ ⍕12u8 ≠ "12": return 2u6
+    0u6

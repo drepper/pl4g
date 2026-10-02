@@ -316,7 +316,7 @@ fn Io.println(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
 ※※ \param v what to write
 ※※ \return what a program would have written to mean it
 @[export]
-fn text(v: T', a: &mut arena) → str in a:
+fn text(v: T', a: &mut arena) → str in a, ⎕static:
     comptime if ⎕typeof(⌜v⌝) = ⌜str⌝:
         ※ Copied, so that what comes back is made in `a` as the signature says:
         ※ the text handed over may be made in an arena that goes first.
@@ -385,7 +385,7 @@ fn digit(d: u64) → str in ⎕static:
 ※※ \param v what to write
 ※※ \return what a program would have written to mean it
 @[export]
-fn `⍕`(v: T', a: &mut arena) → str in a:
+fn `⍕`(v: T', a: &mut arena) → str in a, ⎕static:
     text(v, a)
 
 ※※ The same with no arena named, which is the one the compiler provides.
@@ -398,7 +398,7 @@ fn `⍕`(v: T', a: &mut arena) → str in a:
 ※※ \param v what to write
 ※※ \return what a program would have written to mean it
 @[export]
-fn `⍕`(v: T') → str:
+fn `⍕`(v: T') → str in ⎕heap, ⎕static:
     text(v, &mut ⎕heap)
 
 ※ -- formatting ---------------------------------------------------------------

@@ -9218,6 +9218,25 @@ continues a line only inside brackets or after a backslash; Haskell, whose layou
 line that is indented further than the one it belongs to, which is this rule without the
 restriction to four openings; and Go, whose semicolon insertion is the other way round.
 
+## 2026-10-03T10:00+02:00 — language
+
+**`⎕static` beside an allocator, and on a parameter**
+
+The two forms proposed with `⎕static` and not taken then, taken now at the user's request:
+
+- **`→ T in a, ⎕static`**, and `in ⎕heap, ⎕static`: an answer in the allocator or in the image,
+  carrying its allocator to say which, so it never travels thin.  4634, which refused naming the
+  image beside anything, is retired.  A caller takes such an answer to be made in what it handed
+  `a` and to perhaps be in the image -- a provenance key that lasts everywhere and names no
+  allocator -- so it is copied wherever a plain `→ T in a` would have to vouch for it.  `std.text`
+  and both `⍕` say it, so `"true"` and `"false"` are answered from the image.
+- **`s: T in ⎕static`**: the parameter's provenance is the image, so the body keeps it anywhere
+  without copying; a caller hands it only what is in the image (4649), nothing being copied
+  there while the program runs.
+
+Compare Rust's `Cow<'static, str>` -- borrowed from the image or owned, and saying which -- and its
+`&'static str` parameter.
+
 Open questions
 --------------
 

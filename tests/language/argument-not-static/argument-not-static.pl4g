@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4649
+
+※ A parameter in the image is handed what is in the image: nothing can be
+※ copied there while the program runs, so text worked out at run time is
+※ refused.
+
+fn named(s: str in ⎕static) → str in ⎕static:
+    s
+
+@[startup]
+fn main() → u6:
+    if named("a" ⧺ "b") = "ab": 0u6 else: 1u6

@@ -5119,22 +5119,6 @@
       "option": null
     },
     {
-      "number": 4634,
-      "name": "LANG_STATIC_SAID_ALONE",
-      "severity": "error",
-      "message": "'⎕static' is said alone after '→ T in'",
-      "args": [],
-      "cause": "`→ T in ⎕static` says every answer is in the image, which is what lets the answer travel without its allocator.  An answer that may also be made in an arena carries one, so naming both would say less than either.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Types / Arenas / What is in the image",
-        "requirement": "An answer said to be in the image is in the image and nowhere else."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 4635,
       "name": "LANG_ANSWER_NOT_STATIC",
       "severity": "error",
@@ -5460,6 +5444,38 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Generic Functions / What a body may do",
         "requirement": "A generic function's body uses nothing its requirements do not name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4649,
+      "name": "LANG_ARGUMENT_NOT_STATIC",
+      "severity": "error",
+      "message": "'{param}' of '{func}' takes what is in the image, and this may be made in {found}",
+      "args": [
+        {
+          "name": "param",
+          "type": "string",
+          "description": "the parameter"
+        },
+        {
+          "name": "func",
+          "type": "string",
+          "description": "the function"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "where the argument may have been made"
+        }
+      ],
+      "cause": "`s: str in ⎕static` says the parameter holds what is in the image: made while compiling, lasting as long as the program, never given back -- which is what lets the body keep it anywhere as it is.  Nothing can be copied into the image while the program runs, so an argument made anywhere else is refused rather than copied.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / What is in the image",
+        "requirement": "What a parameter in the image is handed is in the image."
       },
       "since": "0.1",
       "default_enabled": true,

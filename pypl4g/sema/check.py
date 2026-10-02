@@ -2205,6 +2205,10 @@ class _Deferred:
 #: may be made with all the same -- so what it made has to be told from what was
 #: made in nothing, a literal or a number, which is the empty set.
 _HEAP: Final[int] = -1
+#: What a value carries that may be in the image or in an allocator the call
+#: named -- an answer of `→ T in a, ⎕static`.  It lasts as long as the program
+#: wherever anything asks, and is never an allocator anything gives back to.
+_IMAGE: Final[int] = id(object())
 
 
 def _container_key(local: object) -> int:
@@ -4308,16 +4312,12 @@ class Checker:
             # the allocator.  It is `HEAP_AT` among the places.
             if _hands_out_of(node) is not None:
                 made = (HANDS_AT,)
-            elif any(name == STATIC_NAME for name, _ in node.made_in):
-                # The image is said alone: an answer that may be made in an
-                # arena as well carries its allocator, which is what saying the
-                # image is there to spare it.
-                if len(node.made_in) > 1:
-                    self._diags.emit(D.LANG_STATIC_SAID_ALONE,
-                                     node.made_in[0][1])
-                made = (STATIC_AT,)
             else:
-                found = (HEAP_AT if name == HEAP_NAME else arena(name, span)
+                # The image may be named beside an arena or the heap: the answer
+                # is in one or the other, and carries its allocator to say which.
+                found = (HEAP_AT if name == HEAP_NAME
+                         else STATIC_AT if name == STATIC_NAME
+                         else arena(name, span)
                          for name, span in node.made_in)
                 made = tuple(sorted({at for at in found if at is not None}))
         given: list[int | None] = []
@@ -4326,7 +4326,9 @@ class Checker:
                 given.append(None)
                 continue
             pointless(ty, param.made_in[1])
-            given.append(arena(*param.made_in))
+            # `s: str in ⎕static`: what the caller hands over is in the image.
+            given.append(STATIC_AT if param.made_in[0] == STATIC_NAME
+                         else arena(*param.made_in))
         return made, tuple(given)
 
     def _params_made_in(self, node: ast.FuncDef, func: Function) -> None:
@@ -4349,6 +4351,11 @@ class Checker:
                 continue
             arena_at = (func.param_made_in[at]
                         if at < len(func.param_made_in) else None)
+            if arena_at == STATIC_AT:
+                # In the image: made in nothing, lasting as long as the program,
+                # and never given back -- so kept anywhere as it is.
+                local.arenas = frozenset()
+                continue
             arena = local_of(arena_at) if arena_at is not None else None
             if _is_owning(func.ty.params[at]):
                 if arena is not None and self._is_arena(arena):
@@ -4383,14 +4390,19 @@ class Checker:
             if at == HEAP_AT:
                 allowed.add(_HEAP)
                 continue
+            if at == STATIC_AT:
+                continue
             arena = local_of(at)
             if arena is not None and self._is_arena(arena):
                 allowed.add(id(arena))
         self._answer_made_in = (
             frozenset(allowed),
-            _one_of([HEAP_NAME if at == HEAP_AT else node.params[at].name
+            _one_of([HEAP_NAME if at == HEAP_AT
+                     else STATIC_NAME if at == STATIC_AT
+                     else node.params[at].name
                      for at in func.made_in]))
-        if allowed == {_HEAP} and _thin_able(func.ty.ret):
+        if allowed == {_HEAP} and STATIC_AT not in func.made_in \
+                and _thin_able(func.ty.ret):
             # `⎕heap` named: every answer is put in it, text in the image
             # included, which is what naming it says -- so the caller can add it
             # to what comes back.  An arena named lets text in the image through
@@ -4489,6 +4501,15 @@ class Checker:
         for at, arena_at in enumerate(func.param_made_in):
             if at not in written:
                 continue
+            if arena_at == STATIC_AT:
+                stray = sorted({self._reach_written(one)
+                                for one in self._arenas_in(written[at])})
+                if stray:
+                    # Nothing is copied into the image while the program runs.
+                    self._diags.emit(D.LANG_ARGUMENT_NOT_STATIC, written[at].span,
+                                     param=func.param_names[at], func=func.name,
+                                     found=", ".join(stray))
+                continue
             param_ty = func.ty.params[at]
             if _is_owning(param_ty):
                 # Where its elements are kept matters only to a body that may
@@ -4530,6 +4551,10 @@ class Checker:
             for at in func.made_in:
                 if at == HEAP_AT:
                     made.add(_HEAP)
+                elif at == STATIC_AT:
+                    # Perhaps in the image: lasting, and not an allocator's.
+                    if len(func.made_in) > 1:
+                        made.add(_IMAGE)
                 elif at == HANDS_AT:
                     if self._received is not None:
                         made.add(id(self._received))
@@ -6829,7 +6854,7 @@ class Checker:
         container.  Nothing else is provably long enough: an arena bound beside the
         container may be given back while the container is still read.
         """
-        if key == holder:
+        if key in (holder, _IMAGE):
             return True
         arena = self._arena_by_id.get(key)
         if arena is None:
@@ -6951,6 +6976,16 @@ class Checker:
                 return UndefConst(ERROR)
             self._answer_kinds.append("static")
             return value
+        if func.made_in is not None and STATIC_AT in func.made_in:
+            # The image beside something else: what is in the image goes as it is,
+            # and so does what may be -- the answer carries its allocator, which
+            # says which of the two it is.
+            if not made:
+                self._answer_kinds.append("static")
+                return value
+            if _IMAGE in made and made - {_IMAGE} <= allowed:
+                self._answer_kinds.append("maybe")
+                return value
         if not allowed and func.made_in == (HANDS_AT,):
             # Answering before the arena it hands out is made: there is nowhere
             # the answer could be, the arena being the body's own.  Said once.
@@ -7019,7 +7054,8 @@ class Checker:
         parameter was handed -- is refused rather than copied.
         """
         made = self._arenas_in(written)
-        stays = sorted(one for one in made if one not in lasting)
+        stays = sorted(one for one in made if one not in lasting
+                       and one != _IMAGE)
         if not stays:
             return True
         self._diags.emit(D.LANG_LAMBDA_REACHES_THE_CALL, span, name=name,
@@ -7032,6 +7068,8 @@ class Checker:
         reaching = self._stand_ins.get(key)
         if reaching is not None:
             return "".join(("'", reaching.name, "'"))
+        if key == _IMAGE:
+            return "the image"
         if key == _HEAP or key in self._arena_by_id:
             return self._owner_written(key)
         unknown = self._unknown_by_id.get(key)
@@ -8819,7 +8857,7 @@ class Checker:
                     written, frozenset({_HEAP}),
                     func.name if func is not None else "", span) else None
             made = self._arenas_in(written)
-            stays = sorted(one for one in made if one != _HEAP)
+            stays = sorted(one for one in made if one not in (_HEAP, _IMAGE))
             if not stays:
                 return value
             if not owned.can_own(ty):
@@ -9080,10 +9118,14 @@ class Checker:
             # What the check made -- a lambda's function, a string's bytes --
             # is no part of the program.
             self._owned[:] = owned
+            # A variable the compiler provides and keeps a name for -- `⎕heap`,
+            # made on its first mention -- is the program's whoever mentioned it.
+            provided = {id(one) for one in self._top.values()}
             for table, kept in ((self._module.functions, functions),
                                 (self._module.globals, globals_),
                                 (self._module.texts, texts)):
-                for key in [one for one in table if one not in kept]:
+                for key in [one for one in table if one not in kept
+                            and id(table[one]) not in provided]:
                     del table[key]
         if self._diags.error_count > told_before:
             written.refused = True
@@ -9738,7 +9780,7 @@ class Checker:
             # Its type says it lasts, so everything it reaches has to: the heap,
             # the image, and lambdas whose own type says the same.
             short = sorted({self._reach_written(one) for one in reaches
-                            if one != _HEAP})
+                            if one not in (_HEAP, _IMAGE)})
             if short:
                 self._diags.emit(D.LANG_LASTING_LAMBDA_REACHES, expr.kept_in[1]
                                  if expr.kept_in is not None else expr.span,
