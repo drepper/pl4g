@@ -9276,6 +9276,23 @@ for that set (4410), as it would be written out.
 Compare Haskell (`data`), Rust (`struct Pair<T>` with `where`), C++ (class templates with
 `requires`), Go (`type Pair[T any]`), Zig (a function answering a type).
 
+## 2026-10-03T13:00+02:00 — compiler
+
+**A variable at the top level given a lasting reference**
+
+    let count: mut u8 = 5u8
+    let kept: &mut static u8 = &mut count
+
+Asked for by the user, with the reasoning that a fixed load address lets the address be computed
+rather than worked out at startup, and that position-independent code would need a relative
+relocation.  The compiler writes only images loaded at a fixed address (`ET_EXEC`), so the address
+is an absolute relocation the linker settles: `AddressConst` gained an offset, so a field or an
+element at an index written down is reached too, and `target/globals.py` writes the word as
+`ABS64` of the symbol plus that offset.  What is named only by such a word -- another variable, a
+string's bytes, a table's entries -- is now kept by `dropunreached`, which followed only what code
+named.  A position-independent image is a to-do: the same words, as relative relocations applied
+at startup.
+
 Open questions
 --------------
 

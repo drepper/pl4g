@@ -967,9 +967,15 @@ Runtime
 [x] let a type definition take type parameters.  `type Pair(T') = first: T' ; second: T'`, named `Pair(u8)`, records and sums,
     with requirements between the list and the `=`; a value written out takes its types from its fields or from what is wanted.
 
-[ ] let a variable at the top level be *given* a lasting reference.  The type is now allowed -- `let kept: &mut static u8` --
-    but the value would be an address worked out at load time, and a top-level variable whose value is not a literal is not
-    implemented yet (9902).  What it needs is a relocation in the initializer, which is a compiler job and no language question.
+[x] let a variable at the top level be *given* a lasting reference.  `&g`, `&g.field` and `&g⟦2⟧` of another variable at the
+    top level are addresses known once the image is laid out, written into it as a relocation the linker settles (4656 for
+    anything else).
+
+[ ] produce a position-independent image.  The image is loaded at the address the linker chose, which is what lets every address
+    written into it -- a reference at the top level, a string's bytes, a table's entries -- be settled while linking.  A
+    position-independent one would carry each such word as a relative relocation (`R_X86_64_RELATIVE`, `R_AARCH64_RELATIVE`,
+    `R_RISCV_RELATIVE`) and apply them itself at startup, there being no dynamic loader: the words are already collected per
+    variable (`target/globals.py`), so what is missing is the dynamic section and the code that walks it.
 
 [ ] say how long a reference held in a product lives.  A function may not answer with one inside anything else (4531) because
     `static` belongs to one reference and a tuple may hold several, so a name on the whole answer would say nothing about

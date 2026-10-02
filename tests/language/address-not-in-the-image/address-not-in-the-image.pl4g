@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4656
+
+※ What a reference at the top level holds is known before the program runs, so
+※ an element is named at an index written down -- not one a name holds.
+
+let at: u8 = 1u8
+let table: mut u16⟦4⟧ = ⟦10u16, 20u16, 30u16, 40u16⟧
+let some: &mut static u16 = &mut table⟦at⟧
+
+@[startup]
+fn main() → u6:
+    0u6

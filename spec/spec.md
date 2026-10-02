@@ -2662,7 +2662,11 @@ name stands on several parameters the log says which of the arguments the answer
 that one call.
 
 **A variable at the top level holds a reference only where it says `static`** (4532), which is that rule asked at the other place
-a value escapes to.  A reference inside something else -- a tuple, a product, a collection -- may not be answered with at all
+a value escapes to.  What it is given is the address of another variable at the top level, of a field of one, or of an element
+at an index written down (4656) -- `let kept: &mut static u8 = &mut count`, `&origin.y`, `&table⟦2⟧` -- and `&mut` needs one that
+may be written (4537).  The image is loaded where the linker put it, so such an address is known before the program runs: it is
+written into the image as a relocation the linker settles, and nothing is worked out at startup.  A variable named only that way is
+kept.  A reference inside something else -- a tuple, a product, a collection -- may not be answered with at all
 (4531): `static` belongs to one reference and a tuple may hold several, and a name written on the whole answer would say nothing
 about which of them it was about.
 

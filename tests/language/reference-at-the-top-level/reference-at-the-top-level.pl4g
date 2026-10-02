@@ -1,0 +1,30 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A variable at the top level may be given a reference that lasts as long as
+※ the program**: the address of another variable at the top level, of a field
+※ of one, or of an element at an index written down.  The image is loaded where
+※ the linker put it, so the address is known before the program runs and is
+※ written into the image as a relocation the linker settles -- nothing is
+※ worked out at startup.  A variable named only by such a reference is kept.
+
+type Point = x: u32 ; y: u32
+
+let count: mut u8 = 5u8
+let origin: mut Point = Point(.x ← 1u32, .y ← 2u32)
+let table: mut u16⟦4⟧ = ⟦10u16, 20u16, 30u16, 40u16⟧
+let fixed: u8 = 9u8
+
+let kept: &mut static u8 = &mut count
+let wy: &mut static u32 = &mut origin.y
+let third: &mut static u16 = &mut table⟦2⟧
+let seen: &static u8 = &fixed
+let pointed: &static Point = &origin
+
+@[startup, impure]
+fn main() → u6:
+    kept⌖ ← kept⌖ + 1u8
+    wy⌖ ← 7u32
+    third⌖ ← third⌖ + 3u16
+    if count ≠ 6u8 ∨ origin.y ≠ 7u32 ∨ table⟦2⟧ ≠ 33u16: return 1u6
+    if seen⌖ ≠ 9u8 ∨ pointed⌖.x ≠ 1u32: return 2u6
+    0u6

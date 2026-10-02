@@ -5644,6 +5644,22 @@
       "option": null
     },
     {
+      "number": 4656,
+      "name": "LANG_ADDRESS_NOT_IN_THE_IMAGE",
+      "severity": "error",
+      "message": "a reference given to a variable at the top level names another one, a field of one or an element at an index written down",
+      "args": [],
+      "cause": "A variable at the top level is given its value before the program runs, so a reference it holds has to be an address known then: another variable at the top level, or a part of one at an offset the compiler can work out.  The address goes into the image as a relocation the linker settles, which is why nothing worked out while the program runs -- a variable inside a function, an index held in a name -- can stand there.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A variable at the top level may be given a reference that lasts as long as the program."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

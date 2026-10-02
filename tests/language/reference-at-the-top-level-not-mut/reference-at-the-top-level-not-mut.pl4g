@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4537
+
+※ A reference that may write names a variable that may be written, at the top
+※ level as anywhere else.
+
+let fixed: u8 = 9u8
+let kept: &mut static u8 = &mut fixed
+
+@[startup]
+fn main() → u6:
+    0u6

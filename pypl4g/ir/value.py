@@ -176,11 +176,13 @@ class AddressConst(Const):
     relocation, the address being the linker's to settle.
     """
 
-    __slots__ = ("target",)
+    __slots__ = ("target", "offset")
 
-    def __init__(self, ty: Type, target: object | None) -> None:
+    def __init__(self, ty: Type, target: object | None, offset: int = 0) -> None:
         super().__init__(ty)
         self.target = target
+        #: How far into the variable the address is: a field, an element.
+        self.offset = offset
 
 
 class PartsConst(Const):

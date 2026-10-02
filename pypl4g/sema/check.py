@@ -3486,6 +3486,8 @@ class Checker:
                 if found.ty is not ty:
                     return self._wrong_initializer(node, ty, found.ty.written())
                 return found
+            case ast.AddressOf() if isinstance(ty, PtrType):
+                return self._address_in_the_image(node.value, ty)
             case ast.StringLit():
                 return self._wrong_initializer(node, ty, STR.written())
             case ast.ListLit() | ast.SetLit() | ast.DictLit() | ast.ArrayLit() \
@@ -3599,6 +3601,75 @@ class Checker:
             else:
                 found.append(self._static_type(one))
         return found
+
+    def _address_in_the_image(self, expr: ast.AddressOf,
+                              ty: PtrType) -> Const | None:
+        """`&g`, `&g.field`, `&g⟦2⟧` given to a variable at the top level.
+
+        What it names is another variable at the top level, or a part of one at
+        an offset the compiler knows, so the address is known as soon as the
+        image is laid out: it is written into the image as a relocation the
+        linker settles, and nothing is worked out when the program starts.
+        """
+        found = self._place_in_the_image(expr.operand)
+        if found is None:
+            self._diags.emit(D.LANG_ADDRESS_NOT_IN_THE_IMAGE, expr.operand.span)
+            return None
+        var, held, offset, writable, what = found
+        if not _can_be_referred_to(held):
+            self._diags.emit(D.LANG_REF_TYPE_NOT_ALLOWED, expr.span,
+                             found=held.written())
+            return None
+        if (expr.mutable or ty.mutable) and not writable:
+            self._diags.emit(D.LANG_REF_PLACE_NOT_MUTABLE, expr.span, name=what)
+            return None
+        if held is not ty.pointee:
+            self._report_mismatch(expr.span, self._module.types.ptr_type(
+                held, ty.mutable, True), ty)
+            return None
+        return AddressConst(ty, var, offset)
+
+    def _place_in_the_image(self, expr: ast.Expr
+                            ) -> tuple[GlobalVar, Type, int, bool, str] | None:
+        """The variable at the top level *expr* names a part of, what is there,
+        how far in, whether it may be written, and what to call it -- or nothing
+        where it is not such a place at an offset known while compiling."""
+        match expr:
+            case ast.NameRef():
+                var = self._provided(expr.name)
+                if not isinstance(var, GlobalVar) or var.value_type is ERROR:
+                    return None
+                return var, var.value_type, 0, var.mutable, expr.name
+            case ast.Member():
+                base = self._place_in_the_image(expr.base)
+                if base is None or not isinstance(base[1], ProductType):
+                    return None
+                var, record, offset, writable, _ = base
+                at = _field_index(record, expr.name)
+                if at is None:
+                    return None
+                layout = DataLayout(pointer_size=8, system=var.system_layout)
+                return (var, record.fields[at][1],
+                        offset + offsets_of(record, layout)[at], writable,
+                        "".join((_written_as(expr.base), ".", expr.name)))
+            case ast.Element():
+                base = self._place_in_the_image(expr.base)
+                if base is None or not isinstance(base[1], ArrayType) \
+                        or not base[1].fixed \
+                        or len(expr.indices) != base[1].rank:
+                    return None
+                var, array, offset, writable, _ = base
+                flat = 0
+                for index, length in zip(expr.indices, array.shape):
+                    if not isinstance(index, ast.IntLit) \
+                            or not 0 <= index.value < (length or 0):
+                        return None
+                    flat = flat * (length or 0) + index.value
+                layout = DataLayout(pointer_size=8, system=var.system_layout)
+                return (var, array.element,
+                        offset + flat * stride_of(array.element, layout),
+                        writable, "an element")
+        return None
 
     def _names_an_enum(self, expr: ast.Member) -> bool:
         """Whether `T.NAME` is a value of an enumeration, asked quietly."""

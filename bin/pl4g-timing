@@ -204,7 +204,8 @@ GROUPS: tuple[Group, ...] = (
            "generic-requirements-suffice": "generic bodies checked against their requirements where written",
            "static-parameter": "parameters and answers in the image, beside an arena",
            "generic-calls-itself": "generic functions calling themselves and each other",
-           "generic-types": "records and sums with type parameters, built, matched and imported"}),
+           "generic-types": "records and sums with type parameters, built, matched and imported",
+           "reference-at-the-top-level": "variables at the top level holding addresses of others"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "

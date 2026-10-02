@@ -435,7 +435,7 @@ class Machine:
             case AddressConst():
                 # Another variable of the image, placed in turn; nought for none.
                 self._write(at, U64, 0 if held.target is None
-                            else self._at(held.target))
+                            else self._at(held.target) + held.offset)
             case PartsConst():
                 pieces = parts_of(held.ty)
                 for offset, piece, part in zip(

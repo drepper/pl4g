@@ -32,7 +32,7 @@ from ..ir.value import (AddressConst, ArrayConst, BoolConst, CharConst,
                         EnumConst, FloatConst, IntConst, PartsConst, RecordConst,
                         ResultConst)
 from ..mc.fixup import ABS64, MCFixup
-from ..mc.operand import SymExpr
+from ..mc.operand import BinExpr, ConstExpr, MCExpr, SymExpr
 from ..mc.asmbuilder import Assembler
 from ..mc.symbol import SymBinding, SymKind, SymVisibility
 
@@ -83,13 +83,21 @@ def _emit_group(asm: Assembler, variables: Sequence[GlobalVar], name: str,
                            kind=SymKind.OBJECT,
                            visibility=(SymVisibility.DEFAULT if visible
                                        else SymVisibility.HIDDEN))
-        addresses: list[tuple[int, GlobalVar]] = []
+        addresses: list[tuple[int, GlobalVar, int]] = []
         data = initial_bytes(var, layout_for(var, layout), addresses)
+        # The image is loaded where the linker put it, so each address is worked
+        # out now and written as the number it is: nothing is done at startup.
         asm.bytes(data, tuple(
             MCFixup(offset=offset, kind=ABS64,
-                    target=SymExpr(asm.symbol_named(symbol_of(target))))
-            for offset, target in addresses))
+                    target=_at(SymExpr(asm.symbol_named(symbol_of(target))),
+                               inside))
+            for offset, target, inside in addresses))
         asm.end_label(symbol)
+
+
+def _at(where: SymExpr, offset: int) -> MCExpr:
+    """An address *offset* bytes into a symbol."""
+    return where if offset == 0 else BinExpr("+", where, ConstExpr(offset))
 
 
 def symbol_of(var: GlobalVar) -> str:
@@ -105,7 +113,8 @@ def symbol_of(var: GlobalVar) -> str:
 
 
 def initial_bytes(var: GlobalVar, layout: DataLayout,
-                  addresses: list[tuple[int, GlobalVar]] | None = None) -> bytes:
+                  addresses: list[tuple[int, GlobalVar, int]] | None = None
+                  ) -> bytes:
     """The bytes a variable starts out holding.
 
     A value too large for the variable's type is refused, never stored with its
@@ -119,7 +128,7 @@ def initial_bytes(var: GlobalVar, layout: DataLayout,
 
 
 def _encoded(initializer: object, ty: Type, layout: DataLayout,
-             addresses: list[tuple[int, GlobalVar]], at: int) -> bytes:
+             addresses: list[tuple[int, GlobalVar, int]], at: int) -> bytes:
     """The bytes a constant occupies, laid out as its type says.
 
     *at* is where in the variable they go, which is what an address inside them
@@ -128,7 +137,7 @@ def _encoded(initializer: object, ty: Type, layout: DataLayout,
     match initializer:
         case AddressConst():
             if initializer.target is not None:
-                addresses.append((at, initializer.target))
+                addresses.append((at, initializer.target, initializer.offset))
             return bytes(layout.pointer_size)
         case PartsConst():
             # Each part where it is whenever such a value is in memory: laid out

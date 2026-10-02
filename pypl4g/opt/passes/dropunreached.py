@@ -40,6 +40,8 @@ from ...ir.function import Function, SpecialKind, Linkage
 from typing import Final
 
 from ...ir.module import GlobalVar, Module
+from ...ir.value import (AddressConst, ArrayConst, PartsConst, RecordConst,
+                         ResultConst)
 from ...source.location import Span
 
 
@@ -174,7 +176,32 @@ class DropUnreached:
                     for place in (*inst.operands, *inst.reads(), *inst.writes()):
                         if isinstance(place, GlobalVar):
                             named.add(id(place))
+        # What a kept variable holds the address of is kept as well: a string's
+        # bytes, a table's entries, a variable another one refers to.
+        waiting = [var for var in module.globals.values() if id(var) in named
+                   or var.linkage is Linkage.VISIBLE]
+        while waiting:
+            for target in _addresses_in(waiting.pop().initializer):
+                if id(target) not in named:
+                    named.add(id(target))
+                    waiting.append(target)
         return named
+
+
+def _addresses_in(held: object) -> list[GlobalVar]:
+    """Every variable a constant holds the address of, however deep."""
+    match held:
+        case AddressConst():
+            return [held.target] if isinstance(held.target, GlobalVar) else []
+        case PartsConst():
+            return [one for part in held.parts for one in _addresses_in(part)]
+        case ArrayConst():
+            return [one for part in held.elements for one in _addresses_in(part)]
+        case RecordConst():
+            return [one for part in held.fields for one in _addresses_in(part)]
+        case ResultConst():
+            return _addresses_in(held.answer)
+    return []
 
 
 def _where(name: Span, whole: Span) -> Span:
