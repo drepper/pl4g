@@ -132,6 +132,10 @@ class DiagEngine:
         self.warning_count: int = 0
         #: The expectations in force, innermost last.
         self._expectations: list[Expectation] = []
+        #: Whether warnings are being left unsaid for now: a generic function is
+        #: checked where it is written and again for each set of types, and a
+        #: warning is about what was compiled, which is the second.
+        self.errors_only: bool = False
 
     @property
     def catalog(self) -> Catalog:
@@ -215,7 +219,8 @@ class DiagEngine:
                     continue
                 note = self.make(ident_of, span_of, **args_of)
                 diag.notes.append(note)
-        if info.severity == "warning" and not self._control.is_enabled(info):
+        if info.severity == "warning" and (self.errors_only
+                                           or not self._control.is_enabled(info)):
             return diag
         if info.is_error or (info.severity == "warning" and self._control.warnings_are_errors):
             self.error_count += 1

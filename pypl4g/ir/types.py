@@ -443,6 +443,40 @@ class FuncType(Type):
                         " in" if self.hands_out else ""))
 
 
+@dataclass(frozen=True, slots=True, eq=False)
+class OpaqueType(Type):
+    """A type parameter while its generic function is checked where it is written.
+
+    Nothing is known of it but what the function's requirements say, so nothing
+    may be done to a value of it but what they name.  One per parameter per
+    check, told apart by identity: two parameters with one spelling in two
+    functions are two types.  It never reaches code -- what is lowered with it
+    is checked and thrown away.
+    """
+
+    name: str
+
+    def __eq__(self, other: object) -> bool:
+        """The same type only as itself, whatever it is called."""
+        return self is other
+
+    def __hash__(self) -> int:
+        """By identity, since that is what equality is."""
+        return id(self)
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return self.name
+
+    def written(self) -> str:
+        """The name of this type as a program writes it."""
+        return self.name
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name."""
+        return self.name
+
+
 @dataclass(frozen=True, slots=True)
 class MemType(Type):
     """The token type that threads memory effects through the dataflow graph.

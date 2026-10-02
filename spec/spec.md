@@ -6012,8 +6012,8 @@ note: 'total' is asked for T' = bool here
     total(true, false)
 ```
 
-That is what a bound buys over checking the body per instantiation: the message is about the signature, which is the part a
-caller can read.  A requirement of a function with no type parameters is settled where it is written, so it is checked there and
+That is what a bound buys at the call: the message is about the signature, which is the part a caller can read.  What it buys
+in the body is under Generic Functions, "What a body may do".  A requirement of a function with no type parameters is settled where it is written, so it is checked there and
 once.
 
 ###### A bundle
@@ -6392,29 +6392,54 @@ they cannot both be right (4557).
 could settle, and a call that wrote its types outright would be a second way of saying what the arguments already say everywhere
 else.
 
-**The body is checked for each set of types.**  What may be done to a value of a type parameter is what may be done to the type
-it turned out to be, and nothing before the call knows what that is -- so an operation the types do not admit is reported where
-it is written, in the definition, with a note saying which call asked for those types:
-
-```
-error: ⌈ is defined on integers, not on ⸨u8⸩
-    a ⌈ b
-note: largest was compiled for ⸨u8⸩ because of this call
-    let n: ⸨u8⸩ = largest(s, t)
-```
-
-That is C++'s bargain and not Rust's, and it is what a generic without a requirement gets: what it costs is that a generic
-function nobody calls is never checked at all -- not loosely but not at all, down to a name no program defined -- and that a
-mistake in one is found by whoever calls it.  What it buys is that nothing has to be said twice, a generator emitting a function
-knowing what it will call it with.
-
 **A requirement moves the message to the signature.**  `pre(T' ⊞ T' → T')` says what a type parameter must support, and a
 call whose types do not is refused at the requirement with a note naming the call -- so the part a caller can read is the part
 that says what went wrong.  A requirement is checked *before* the function is made for those types, and its arrow may settle a
 type parameter no argument mentions, which is the one thing that reaches past 4555.  Conditions above says what a requirement is
-and how one is written; [constraining-generics.md](constraining-generics.md) is the reasoning that chose the notation.  The body
-is still checked per instantiation: a requirement is what a *caller* is told, and nothing yet says that a body may use only what
-it asked for.
+and how one is written; [constraining-generics.md](constraining-generics.md) is the reasoning that chose the notation.  It is
+also the whole of what the body may do with the type (below).
+
+##### What a body may do
+
+**A generic function is checked where it is written, against its requirements alone.**  Nothing is known of a type parameter but
+what the function's `pre` clauses say, so an operator or a function applied to a value of one is allowed exactly where a
+requirement names it -- the requirement itself, or a line of a bundle it applies, with the operands' types as written -- and
+answers what the requirement's arrow says (4645).  Where a requirement has no arrow its answer is a type nothing more may be done
+to.
+
+```
+fn largest(a: T', b: T') → T':
+    a ⌈ b                          ※ 4645: nothing says T' admits ⌈
+
+fn largest(a: T', b: T') → T' pre(T' ⌈ T' → T'):
+    a ⌈ b                          ※ and now something does
+```
+
+**It is checked whether or not anything calls it**, so a mistake in one is found by whoever wrote it rather than whoever first
+calls it, and a name no program defined is reported in a generic nobody calls.  **There is no substitution failure**: what a type
+must support is read off the requirements and checked at the call (4900), before anything is made for those types, and nothing an
+instantiation finds can quietly make a call mean something else.
+
+**A generic function calling another with its own type parameters hands on what it was given**, and all it knows of those types
+is what its own requirements say -- so every requirement of the one called has to follow from the caller's (4646).  What a type
+must support reaches the signature a call reads, up the whole chain.  `std.⍕` calling `std.text` asks nothing, because `text`
+asks nothing.
+
+**Some things ask nothing of the type.**  A value of a type parameter may be bound, handed on and answered, and taken apart by
+the shape its parameter is written with -- an element of `T'⟦⟧`, what `&T'` names, a member of `〈T', U'〉` -- and a lambda the
+function was handed may be called.  A literal with no suffix beside one has no type to take from it, and is refused as any other
+operation the requirements do not name is.
+
+**A `comptime` construct is the exception, and the one place the old rule stays.**  `comptime if` and `comptime foreach` ask
+what the types *are*, which nothing knows where the function is written: their arms are checked where a call says, for the types
+it gives, what the arm was chosen for being what licenses what it does.  That is how `std.text` takes a value of any type apart.
+The report log says which functions are checked where they are written (`generic-checked`) and which leave `comptime` arms to the
+call (`generic-deferred`); the definition is kept as written, so that the rest of the check is made then, once per set of types.
+
+Compare: **Rust**, **Swift** and **Haskell**, which check a generic body once against its bounds, and where this comes from;
+**C++**, whose concepts constrain the call and still check the body per instantiation, unconstrained operations and all -- and
+whose substitution failure is the thing not inherited; **Go**, which checks the body against the constraint's methods and type
+sets; **Zig** and **D**, which check per instantiation, compile-time code being their whole mechanism -- the one corner kept here.
 
 **One function is made per set of types**, not one per call: a second call saying what an earlier one said gets that same
 function.  The two are told apart by their symbols on their own, a symbol being the signature written out.  Which sets of types a

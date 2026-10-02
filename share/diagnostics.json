@@ -5358,6 +5358,70 @@
       "option": null
     },
     {
+      "number": 4645,
+      "name": "LANG_GENERIC_NOT_REQUIRED",
+      "severity": "error",
+      "message": "'{what}' is applied to a value of '{type}' here, and no requirement of '{function}' says it may be",
+      "args": [
+        {
+          "name": "what",
+          "type": "string",
+          "description": "the operator or function applied"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type parameter"
+        },
+        {
+          "name": "function",
+          "type": "string",
+          "description": "the generic function"
+        }
+      ],
+      "cause": "A generic function is checked where it is written, with nothing known of its type parameters but what its requirements say.  An operator or a function applied to a value of one has to be named by a `pre` clause -- `pre(T' ⌈ T' → T')`, or a bundle holding it -- so that every call is told in the signature what its types must support, and no instantiation can fail on something the signature did not say.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Generic Functions / What a body may do",
+        "requirement": "A generic function's body uses nothing its requirements do not name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4646,
+      "name": "LANG_REQUIREMENT_NOT_PASSED_ON",
+      "severity": "error",
+      "message": "'{function}' requires '{written}', and nothing '{caller}' requires says it holds",
+      "args": [
+        {
+          "name": "function",
+          "type": "string",
+          "description": "the generic function called"
+        },
+        {
+          "name": "written",
+          "type": "string",
+          "description": "its requirement"
+        },
+        {
+          "name": "caller",
+          "type": "string",
+          "description": "the generic function calling it"
+        }
+      ],
+      "cause": "A generic function calling another with its own type parameters hands on what it was given, and all it knows of those types is what its own requirements say.  So every requirement of the one called has to follow from the caller's: the caller asks for it too, in a `pre` clause or a bundle -- which is how what a type must support reaches the signature a call reads.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Generic Functions / What a body may do",
+        "requirement": "A generic function's body uses nothing its requirements do not name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

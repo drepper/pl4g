@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4646
+
+※ A generic function calling another with its own type parameters knows of
+※ those types only what its own requirements say, so every requirement of the
+※ one it calls has to follow from them.  What a type must support reaches the
+※ signature a caller reads, up the whole chain.
+
+fn bigger(a: T', b: T') → T' pre(T' ⌈ T' → T'):
+    a ⌈ b
+
+fn either(a: T', b: T') → T':
+    bigger(a, b)
+
+@[startup]
+fn main() → u6:
+    0u6

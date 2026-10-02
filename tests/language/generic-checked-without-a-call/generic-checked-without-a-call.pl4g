@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4003
+
+※ Checked where it is written, a generic function nothing calls is checked all
+※ the same: a name no program defined is reported in its body, which before was
+※ never looked at without a call to say what the types were.
+
+fn broken(a: T', b: T') → T' pre(T' ⌈ T' → T'):
+    a ⌈ b ⌈ nonsense
+
+@[startup]
+fn main() → u6:
+    0u6

@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4645
+
+※ A generic function is checked where it is written, with nothing known of a
+※ type parameter but what the requirements say: an operator applied to a value
+※ of one has to be named by a `pre` clause.  So the message is about the
+※ definition, before any call -- and a call is told in the signature what its
+※ types must support, rather than finding out from an instantiation.
+
+fn largest(a: T', b: T') → T':
+    a ⌈ b
+
+@[startup]
+fn main() → u6:
+    0u6

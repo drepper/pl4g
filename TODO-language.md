@@ -951,7 +951,9 @@ Runtime
 [ ] answer a lambda in an arena a parameter names.  `→ fn(u8) → u8 in a` reads as the lambda's own handing out of an arena, so
     the signature cannot say it; a type of the answer written in parentheses, or a name for a function type, would.
 
-[ ] decide whether a type parameter may say what it must support.  The body of a generic function is checked for each set of
+[x] decide whether a type parameter may say what it must support.  It does, in `pre` clauses and bundles, and since 2026-10-02
+    the body is checked against them where it is written (4645, 4646), `comptime` arms being left to the call.  What follows was
+    the question.  The body of a generic function is checked for each set of
     types, so a mistake in one is found by whoever calls it and a generic function nobody calls is never checked at all.  What
     would change that is a language for constraints -- a name for "can be added", "can be ordered" -- which is a design of its
     own and is what Rust, Swift and Go each spend one on.

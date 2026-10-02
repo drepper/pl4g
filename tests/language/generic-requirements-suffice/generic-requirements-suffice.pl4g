@@ -1,0 +1,47 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ What a generic body does to a value of a type parameter is what its
+※ requirements name -- an operator, a function, an element, a bundle of them --
+※ and answers what their arrows say.  A generic function calling another hands
+※ on requirements it has itself.  Taking a value apart by the shape a parameter
+※ is written with asks nothing of the type, and neither does calling a lambda
+※ the function was handed.
+
+bundle number(T'):
+    T' ⊞ T' → T'
+    T' < T' → bool
+
+fn count(s: T') → u64 pre(#T' → u64 ¤size):
+    ⎕drop(#s)
+
+fn pick(xs: A', i: I', e: E') → E' pre(A'⟦I'⟧ → E'):
+    xs⟦i⟧
+
+fn sum3(a: T', b: T', c: T') → T' pre(number(T')):
+    if a < b: a ⊞ b ⊞ c else: b ⊞ c
+
+fn passes(a: T', b: T') → T' pre(number(T')):
+    sum3(a, b, a)
+
+@[impure]
+fn twice(f: fn(T') → T', x: T') → T':
+    f(f(x))
+
+fn named(a: T') → u8 pre(conv(T') → u8):
+    conv(a)
+
+fn conv(x: u16) → u8:
+    ⎕narrow(x, ⌜u8⌝) ?? 0u8
+
+fn bump(x: u8) → u8:
+    x + 1u8
+
+@[startup, impure]
+fn main() → u6:
+    let s: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
+    let i: u64 ¤idx = 1
+    if sum3(1u8, 2u8, 3u8) ≠ 6u8 ∨ passes(1u8, 2u8) ≠ 4u8: return 1u6
+    if pick(s, i, 0u8) ≠ 2u8: return 2u6
+    if named(300u16) ≠ 0u8 ∨ named(7u16) ≠ 7u8: return 3u6
+    if twice(bump, 1u8) ≠ 3u8 ∨ count("four") ≠ 4u64: return 4u6
+    0u6

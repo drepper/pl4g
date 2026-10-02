@@ -67,7 +67,7 @@ from ..ir.types import (ARENA, ARENA_NAME, StrType, ArrayType, BOOL, BoolType, B
                         FloatType, IntType, MEM, ProductType, PtrType,
                         ResultType,
                         ListType, SetType, STR, SumType, TupleType, Type,
-                        NARROWING, NO_UNIT, Unit, VecType, VOID,
+                        NARROWING, NO_UNIT, OpaqueType, Unit, VecType, VOID,
                         parts_within,
                         without_units,
                         CHAR, MAX_CODE_POINT, U8, made_of_parts, parts_of,
@@ -678,6 +678,9 @@ class _Generic:
     #: Whether it is being made just now, so that a function that calls itself
     #: with the types it already has does not do so for ever.
     making: set[tuple[Type, ...]] = field(default_factory=set)
+    #: Whether checking it where it is written found it wanting: an instance
+    #: would only say the same again, so none is made.
+    refused: bool = False
 
 
 @dataclass(slots=True)
@@ -859,8 +862,10 @@ def _can_be_referred_to(ty: Type) -> bool:
     result -- because a reference to one of those would be a second way of
     writing what a value of it already is.
     """
+    # A type parameter checked where it is written may be any of these: what it
+    # turns out to be is asked of the argument a call hands over.
     return (isinstance(ty, (IntType, FloatType, EnumType, PtrType, ProductType,
-                            SumType))
+                            SumType, OpaqueType))
             or ty is BOOL or ty is CHAR)
 
 
@@ -1886,6 +1891,50 @@ def _writes_arrays(node: object, params: Sequence[Type]) -> tuple[int, ...]:
                  if param.mutable and isinstance(ty, ArrayType))
 
 
+def _applied(expr: object) -> tuple[str, str, tuple[ast.Expr, ...]] | None:
+    """What an application is -- its kind, which operation, and its operands --
+    as a requirement and a body both write it."""
+    match expr:
+        case ast.Binary():
+            return ("binary", expr.op.value, (expr.left, expr.right))
+        case ast.Unary():
+            return ("unary", expr.op.value, (expr.operand,))
+        case ast.Fresh():
+            return ("fresh", expr.glyph, tuple(expr.operands))
+        case ast.Call() if isinstance(expr.callee, ast.NameRef):
+            return ("call", expr.callee.name, tuple(
+                one.value if isinstance(one, ast.Named) else one
+                for one in expr.args))
+        case ast.Element():
+            return ("element", "\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}",
+                    (expr.base, *expr.indices))
+        case ast.Index():
+            return ("index", "\N{LEFT DOUBLE PARENTHESIS}\N{RIGHT DOUBLE PARENTHESIS}", (expr.base, expr.key))
+    return None
+
+
+def _with_operands(expr: ast.Expr, operands: Sequence[ast.Expr]) -> ast.Expr:
+    """*expr* with its operands replaced, in the order `_applied` gives them."""
+    match expr:
+        case ast.Binary():
+            return replace(expr, left=operands[0], right=operands[1])
+        case ast.Unary():
+            return replace(expr, operand=operands[0])
+        case ast.Fresh():
+            return replace(expr, operands=tuple(operands))
+        case ast.Call():
+            args = []
+            for one, value in zip(expr.args, operands):
+                args.append(replace(one, value=value)
+                            if isinstance(one, ast.Named) else value)
+            return replace(expr, args=tuple(args))
+        case ast.Element():
+            return replace(expr, base=operands[0], indices=tuple(operands[1:]))
+        case ast.Index():
+            return replace(expr, base=operands[0], key=operands[1])
+    return expr
+
+
 def _in_the_image(expr: ast.Expr) -> bool:
     """Whether *expr* is written `… in ⎕static`."""
     where = expr.arena if isinstance(expr, (ast.Allocated, ast.SetLit,
@@ -2053,6 +2102,66 @@ class _Ready(ast.Expr):
     """
 
     value: Value
+
+
+@dataclass(slots=True)
+class _Abstract:
+    """A generic function being checked where it is written.
+
+    Its type parameters are `OpaqueType`s, so nothing may be done to a value of
+    one but what *shapes* holds: every operation the requirements name, with the
+    operands' types and what it answers.
+    """
+
+    name: str
+    shapes: dict[tuple[str, str, tuple[Type, ...]], Type]
+    #: Where a `comptime` construct was left for the instantiation to check.
+    deferred: list[Span] = field(default_factory=list)
+
+
+#: The kinds of report that are what the compiler said rather than chose.
+_SAID: Final = frozenset({ReportKind.FATAL, ReportKind.ERROR, ReportKind.WARNING,
+                          ReportKind.NOTE})
+
+#: What the definition of an operation an `_Abstract` check looks up is keyed by.
+_APPLYING: Final = (ast.Binary, ast.Unary, ast.Fresh, ast.Call, ast.Element,
+                    ast.Index)
+
+
+def _lowered_first(expr: object) -> bool:
+    """Whether an operand may be lowered before what it is an operand of is.
+
+    One that takes its type from where it stands -- a literal with no suffix, a
+    lambda, a container written down -- has to be lowered by what it stands in.
+    """
+    return isinstance(expr, (ast.NameRef, ast.Binary, ast.Unary, ast.Call,
+                             ast.Element, ast.Index, ast.Member, ast.Deref,
+                             ast.Fresh))
+
+
+def _holds_opaque(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
+    """Whether *ty* is, or is made of, a type parameter being checked abstractly."""
+    if isinstance(ty, OpaqueType):
+        return True
+    if id(ty) in seen:
+        return False
+    deeper = seen | {id(ty)}
+    match ty:
+        case TupleType():
+            return any(_holds_opaque(m, deeper) for m in ty.members)
+        case ResultType():
+            return _holds_opaque(ty.ok, deeper) or (
+                ty.err is not None and _holds_opaque(ty.err, deeper))
+        case ArrayType() | ListType() | SetType() | VecType():
+            return _holds_opaque(ty.element, deeper)
+        case DictType():
+            return _holds_opaque(ty.key, deeper) or _holds_opaque(ty.value, deeper)
+        case PtrType():
+            return _holds_opaque(ty.pointee, deeper)
+        case FuncType():
+            return _holds_opaque(ty.ret, deeper) or any(
+                _holds_opaque(one, deeper) for one in ty.params)
+    return False
 
 
 @dataclass(slots=True)
@@ -2318,6 +2427,10 @@ class Checker:
         #: How many lambdas have been given a name, so that the next gets one
         #: nothing else has.
         self._lambdas: int = 0
+        #: The generic function being checked where it is written, if one is.
+        self._abstract: _Abstract | None = None
+        #: The generic functions this file defined, checked once its bodies are.
+        self._generics_here: list[_Generic] = []
         #: Whether what is being made into a constant was written `in ⎕static`,
         #: which is what a value that is not one is then told about.
         self._for_the_image: bool = False
@@ -2573,6 +2686,8 @@ class Checker:
         # a caller checked after it relies on it.
         for entry in _callees_first(collected):
             self._lower_function(entry)
+        for one in self._generics_here:
+            self._check_generic(one)
         self._build_the_tables()
         if whole_program:
             self._check_program()
@@ -4513,6 +4628,7 @@ class Checker:
                         scope=self._top, siblings=self._bundles)
         self._top[node.name] = made
         self._an_operator(node, made)
+        self._generics_here.append(made)
         return None
 
     def _register_special(self, func: Function, node: ast.FuncDef) -> None:
@@ -5967,6 +6083,14 @@ class Checker:
             return None
         written, values = dummies
         found = self._written_over(values, written)
+        if found is None and self._abstract is not None \
+                and any(_holds_opaque(one) for _, one in values):
+            # Asked of a type parameter of a body checked where it is written:
+            # what that body's requirements say is all that is known of it.
+            self._diags.emit(D.LANG_REQUIREMENT_NOT_PASSED_ON, clause.span,
+                             function=name, written=self._as_written(clause),
+                             caller=self._abstract.name)
+            return None
         if found is None:
             self._diags.emit(D.LANG_CLAUSE_NOT_MET, clause.span, function=name,
                              written=self._as_written(clause),
@@ -8838,6 +8962,231 @@ class Checker:
 
     # -- lambdas ---------------------------------------------------------------
 
+    # -- a generic function checked where it is written -------------------------
+
+    def _check_generic(self, written: _Generic) -> None:
+        """Check a generic function's body once, against its requirements alone.
+
+        Every type parameter is a type nothing is known of (`OpaqueType`), so an
+        operation on a value of one is allowed exactly where a requirement names
+        it, and answers what the requirement says (4645).  A call of another
+        generic function is allowed where that function's requirements follow
+        from these.  So a body that uses more than it asked for is refused where
+        it is written, whether or not anything calls it -- and an instantiation
+        has nothing left to find.
+
+        Except a `comptime` construct: it asks what the types *are*, which is
+        what nothing here knows, so its arms are checked where a call says
+        (`generic-deferred` in the report log).  What is lowered here is thrown
+        away; the instances are made, as before, per set of types.
+        """
+        node = written.node
+        if node.body is None:
+            return
+        bound: dict[str, Type] = {name: OpaqueType(name)
+                                  for name in written.parameters}
+        shapes: dict[tuple[str, str, tuple[Type, ...]], Type] = {}
+        self._requirement_shapes(node.clauses, bound, shapes)
+        told_before = self._diags.error_count
+        logged = len(self._module.reports.entries)
+        saved = (self._bound, self._abstract, self._discard_function,
+                 self._lambdas, list(self._owned),
+                 dict(self._module.functions), dict(self._module.globals),
+                 dict(self._module.texts))
+        self._bound = dict(bound)
+        self._abstract = _Abstract(name=node.name, shapes=shapes)
+        self._discard_function = False
+        quiet, self._diags.errors_only = self._diags.errors_only, True
+        try:
+            params = tuple(self._resolve_type(one.type) for one in node.params)
+            answer = self._return_type(node.ret_type)
+            if answer is ERROR or any(one is ERROR for one in params):
+                return
+            attrs, _ = self._function_attrs(written.attrs)
+            func = Function(name=node.name,
+                            ty=self._module.types.func_type(params, answer,
+                                                            attrs.listable),
+                            attrs=attrs,
+                            span=node.span, name_span=node.name_span,
+                            source_path=written.path,
+                            param_names=tuple(one.name for one in node.params),
+                            made_in=self._made_in_of(node, params, answer)[0])
+            outer_demanding, self._demanding = self._demanding, (node, func)
+            try:
+                self._lower_instance(func, node, node.span)
+            finally:
+                self._demanding = outer_demanding
+            deferred = list(self._abstract.deferred)
+        finally:
+            (self._bound, self._abstract, self._discard_function,
+             self._lambdas, owned, functions, globals_, texts) = saved
+            self._diags.errors_only = quiet
+            # What it chose is nothing the program will be: only what it said
+            # stays in the log.
+            entries = self._module.reports.entries
+            entries[logged:] = [one for one in entries[logged:]
+                                if one.kind in _SAID]
+            # What the check made -- a lambda's function, a string's bytes --
+            # is no part of the program.
+            self._owned[:] = owned
+            for table, kept in ((self._module.functions, functions),
+                                (self._module.globals, globals_),
+                                (self._module.texts, texts)):
+                for key in [one for one in table if one not in kept]:
+                    del table[key]
+        if self._diags.error_count > told_before:
+            written.refused = True
+            return
+        if deferred:
+            self._module.reports.record(
+                ReportKind.GENERIC_DEFERRED, node.name,
+                "".join(("checked against its requirements where it is written, "
+                         "except ", str(len(deferred)), " 'comptime' "
+                         "construct", "" if len(deferred) == 1 else "s",
+                         " asking what the types are, checked where a call "
+                         "says")),
+                node.name_span)
+        else:
+            self._module.reports.record(
+                ReportKind.GENERIC_CHECKED, node.name,
+                "checked against its requirements where it is written, "
+                "whether or not anything calls it",
+                node.name_span)
+
+    def _requirement_shapes(self, clauses: Sequence[ast.Clause],
+                            bound: dict[str, Type],
+                            shapes: dict[tuple[str, str, tuple[Type, ...]], Type]
+                            ) -> None:
+        """Write down every operation the requirements name, a bundle's lines
+        with its arguments put in, settling what each arrow names."""
+        for clause in clauses:
+            if self._reading_of(clause) is not True:
+                continue
+            bundle = self._bundle_named(clause.expr)
+            if bundle is not None:
+                assert isinstance(clause.expr, ast.Call)
+                inner: dict[str, Type] = {}
+                for arg, param in zip(clause.expr.args, bundle.node.params):
+                    given = self._type_operand(arg, bound)
+                    if given is not None:
+                        inner[param] = given
+                if bundle.opening or len(inner) != len(bundle.node.params):
+                    continue
+                bundle.opening = True
+                kept = (self._top, self._bundles)
+                if bundle.scope is not None and bundle.siblings is not None:
+                    self._top, self._bundles = bundle.scope, bundle.siblings
+                try:
+                    self._requirement_shapes(bundle.node.clauses, inner, shapes)
+                finally:
+                    self._top, self._bundles = kept
+                    bundle.opening = False
+                continue
+            answers: Type | None = None
+            if clause.answers is not None:
+                written = clause.answers
+                if isinstance(written, ast.TypeRef) and written.module is None \
+                        and not written.result and _is_generic(written.name) \
+                        and written.name not in bound:
+                    bound[written.name] = OpaqueType(written.name)
+                outer, self._bound = self._bound, bound
+                try:
+                    answers = self._resolve_type(written)
+                finally:
+                    self._bound = outer
+                if answers is ERROR:
+                    continue
+            self._requirement_shape(clause.expr, bound, shapes, answers)
+
+    def _requirement_shape(self, expr: ast.Expr, bound: dict[str, Type],
+                           shapes: dict[tuple[str, str, tuple[Type, ...]], Type],
+                           answers: Type | None = None) -> Type | None:
+        """The type a requirement's expression stands for, writing down every
+        operation in it on the way: what it answers is the arrow's, or -- where
+        none says -- a type nothing more may be done to."""
+        found = self._type_operand(expr, bound)
+        if found is not None:
+            return found
+        if isinstance(expr, ast.AddressOf):
+            inner = self._requirement_shape(expr.operand, bound, shapes)
+            return None if inner is None else \
+                self._module.types.ptr_type(inner, expr.mutable)
+        applied = _applied(expr)
+        if applied is None:
+            return None
+        kind, what, operands = applied
+        types = tuple(self._requirement_shape(one, bound, shapes)
+                      for one in operands)
+        if any(one is None for one in types):
+            return None
+        key = (kind, what, tuple(one for one in types if one is not None))
+        result = answers if answers is not None else shapes.get(key) \
+            or OpaqueType("".join(("what ", what, " answers")))
+        shapes[key] = result
+        return result
+
+    def _abstractly(self, builder: IRBuilder, expr: ast.Expr) -> object:
+        """An operation in a body checked where it is written: answered by the
+        requirements where it applies to a type parameter, and handed on --
+        operands lowered already -- where it does not."""
+        assert self._abstract is not None
+        if isinstance(expr, ast.Call) and not self._calls_named(expr):
+            return expr
+        if isinstance(expr, (ast.Binary, ast.Unary, ast.Fresh)):
+            glyph = expr.glyph if isinstance(expr, ast.Fresh) else expr.op.value
+            arity = len(expr.operands) if isinstance(expr, ast.Fresh) \
+                else 1 if isinstance(expr, ast.Unary) else 2
+            if isinstance(self._operator_written(glyph, arity), _Generic):
+                # A generic operator is a generic call, held to its own.
+                return expr
+        applied = _applied(expr)
+        if applied is None:
+            return expr
+        kind, what, operands = applied
+        hints = [self._hint_of(one) if isinstance(one, ast.Expr) else None
+                 for one in operands]
+        if not any(isinstance(one, OpaqueType) for one in hints) \
+                and all(one is not None or not _lowered_first(written)
+                        for one, written in zip(hints, operands)):
+            return expr
+        lowered: list[ast.Expr] = []
+        types: list[Type | None] = []
+        for one in operands:
+            if _lowered_first(one):
+                value = self._lower_expr(builder, one, None)
+                if self._value_type_of(value) is ERROR:
+                    # Reported where it went wrong.
+                    return UndefConst(ERROR)
+                lowered.append(_Ready(span=one.span, value=value))
+                types.append(self._value_type_of(value))
+            else:
+                # A literal with no suffix, a lambda: it takes its type from
+                # where it stands, which beside a type parameter is nowhere.
+                lowered.append(one)
+                types.append(self._hint_of(one))
+        if not any(isinstance(one, OpaqueType) for one in types):
+            return _with_operands(expr, lowered)
+        found = None if any(one is None for one in types) else \
+            self._abstract.shapes.get((kind, what, tuple(
+                one for one in types if one is not None)))
+        if found is not None:
+            return UndefConst(found)
+        opaque = next(one for one in types if isinstance(one, OpaqueType))
+        self._diags.emit(D.LANG_GENERIC_NOT_REQUIRED, expr.span, what=what,
+                         type=opaque.written(), function=self._abstract.name)
+        return UndefConst(ERROR)
+
+    def _calls_named(self, expr: ast.Call) -> bool:
+        """Whether a call names a function that is no generic, no type and none of
+        the compiler's -- one a requirement can name."""
+        callee = expr.callee
+        if isinstance(callee, ast.NameRef):
+            if callee.name.startswith(BUILTIN_GLYPH) \
+                    or self._find_local(callee.name) is not None:
+                return False
+            return isinstance(self._top.get(callee.name), Function)
+        return False
+
     def _make_instance(self, written: _Generic, bound: dict[str, Type],
                        key: tuple[Type, ...], span: Span) -> Function | None:
         """Compile the generic function for one set of types.
@@ -8854,6 +9203,8 @@ class Checker:
         is the signature written out, and two instantiations have two.
         """
         node = written.node
+        if written.refused:
+            return None
         outer_bound, self._bound = self._bound, dict(bound)
         outer_discard = self._discard_function
         self._discard_function = False
@@ -9049,6 +9400,17 @@ class Checker:
                 self._diags.emit(D.LANG_GENERIC_NOT_DETERMINED, expr.span,
                                  name=missing[0])
                 return UndefConst(ERROR)
+            if self._abstract is not None \
+                    and any(_holds_opaque(one) for one in bound.values()):
+                # Called from a body checked where it is written, with its types:
+                # its requirements followed from that body's, which is all there
+                # is to ask -- what it does with them is its own check.
+                outer, self._bound = self._bound, bound
+                try:
+                    answer = self._return_type(written.node.ret_type)
+                finally:
+                    self._bound = outer
+                return UndefConst(answer)
             func = self._instance_of(written, bound, expr.span)
         finally:
             self._top, self._bundles = kept
@@ -11357,6 +11719,11 @@ class Checker:
         has nowhere to get.
         """
         if any(arm.comptime for arm in stmt.arms):
+            if self._abstract is not None:
+                # It asks what the types are, which a body checked where it is
+                # written does not know: its arms are checked where a call says.
+                self._abstract.deferred.append(stmt.span)
+                return UndefConst(ERROR)
             arms = self._chosen_arms(stmt)
             if arms is None:
                 return UndefConst(ERROR)
@@ -11570,6 +11937,10 @@ class Checker:
         if builder.block is None:
             return UndefConst(ERROR)
         if stmt.comptime:
+            if self._abstract is not None:
+                # What it walks is what the types are: checked where a call says.
+                self._abstract.deferred.append(stmt.span)
+                return UndefConst(ERROR)
             return self._written_out(builder, stmt, func, expected, produces)
         found = self._iteration_over(builder, stmt)
         if found is None:
@@ -13323,6 +13694,11 @@ class Checker:
         not twice at once.  An answer that may hold a reference keeps what it was
         handed until the statement ends, or until the name it is bound to goes.
         """
+        if self._abstract is not None and isinstance(expr, _APPLYING):
+            handled = self._abstractly(builder, expr)
+            if isinstance(handled, Value):
+                return handled
+            expr = handled
         if isinstance(expr, (ast.Member, ast.Element, ast.Index)) \
                 and self._read_through_the_dead(expr):
             return UndefConst(ERROR)
@@ -15714,6 +16090,8 @@ class Checker:
             if found is not None:
                 return found
         match expr:
+            case _Ready():
+                return self._value_type_of(expr.value)
             case ast.Fresh():
                 # It has no meaning but the definition's, so what it answers is
                 # what the definition answers -- and nothing where the definition

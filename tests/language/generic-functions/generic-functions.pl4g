@@ -10,16 +10,17 @@
 ※ types -- so an argument is lowered knowing what the ones to its left said,
 ※ and a literal with no suffix takes the type an earlier argument settled.
 ※
-※ **The body is checked for each set of types.**  What may be done to a value
-※ of a type parameter is what may be done to the type it turned out to be, so
-※ an operation the types do not admit is reported where it is written, with a
-※ note saying which call asked for it.  That is C++'s bargain, and it is what
-※ this language can promise without a language for constraints.
+※ **The body is checked where it is written**, against its requirements alone:
+※ an operator or a function applied to a value of a type parameter is one a
+※ `pre` clause names (4645), so a call is told in the signature what its types
+※ must support.  Taking a value apart by the shape the parameter is written
+※ with -- an element of `T'⟦⟧`, what `&T'` names, a member of a tuple -- and
+※ calling a lambda the function was handed ask nothing of the type.
 ※
 ※ One function is made per set of types and not one per call: a second call
 ※ saying what an earlier one said gets that same function.
 
-fn largest(a: T', b: T') → T':
+fn largest(a: T', b: T') → T' pre(T' ⌈ T' → T'):
     a ⌈ b
 
 ※ The mark may stand inside a type rather than as the whole of it, and what

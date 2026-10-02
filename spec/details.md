@@ -4170,3 +4170,25 @@ come from.
 parameters; `_where_made` refuses handing them anything `_may_write` says no to, and only those parameters are asked where their
 elements are kept (4625) -- a body that cannot replace an element cannot give one back.
 
+
+A generic function checked where it is written
+----------------------------------------------
+
+**`_check_generic` lowers the body once more, with every type parameter an `OpaqueType`** -- a type equal only to itself, laid
+out as a word so that nothing on the way trips -- into a `Function` the module never sees.  What the check makes on the way (a
+lambda's function, a string's bytes, an entry in `_owned`, what the report log was told it chose) is taken out again afterwards;
+what it said stays.  `DiagEngine.errors_only` keeps its warnings unsaid, an instance saying them for what was compiled.  A function
+the check refuses is marked `refused`, and no instance of it is made.
+
+**`_requirement_shapes` turns the requirements into a table** keyed by kind, operator or function name, and operand types, each
+naming what it answers: the arrow's type, settling a fresh name as a new `OpaqueType`, or an `OpaqueType` nothing more may be done
+to.  A bundle's lines are read with its arguments put in, in its own file.
+
+**`_abstractly` stands in front of `_lower_expr` for every application** -- an operator, a fresh operator, a call of a named
+function, an element, an entry.  Operands that can be lowered on their own are lowered first; where none turns out opaque, the
+expression goes on to the ordinary path with those as `_Ready` values, so nothing is lowered twice.  Where one is opaque, the table
+answers (`UndefConst` of what it says) or 4645 is reported.  A generic operator and a generic call go the ordinary way, and
+`_lower_generic`, its callee's requirements met against the caller's table by `_check_clauses` as for any call, answers what the
+callee's signature says without making an instance -- 4646 where a requirement does not follow.  `comptime if` and `comptime
+foreach` are not lowered at all, and counted for the report log.
+

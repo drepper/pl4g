@@ -3,7 +3,9 @@ Constraining Generics
 
 **Decided and implemented**, on 2026-09-30, in the notation of
 [conditions.md](conditions.md): layer 1 is a `pre` clause over types, layer 2's
-bundles are applied inside one, and layer 3 is not in yet.  See
+bundles are applied inside one, and layer 3 -- the body checked against the
+requirements where it is written -- is in since 2026-10-02, an error from the
+start rather than a warning first, and with `comptime` arms left to the call.  See
 [decisions.md](decisions.md) and [the specification](spec.md).  What follows is
 the reasoning, which is what makes the notation the one that was chosen.
 

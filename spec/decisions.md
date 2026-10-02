@@ -9156,6 +9156,38 @@ Compare: Swift's `@escaping`, on the parameter and checked at the call; Rust's `
 `std::function`, which copies the closure and says nothing about what it captured by reference;
 Go and Java, which collect and so have nothing to say.
 
+## 2026-10-02T22:00+02:00 — language
+
+**A generic body may use nothing its requirements do not name (layer 3)**
+
+    fn largest(a: T', b: T') → T' pre(T' ⌈ T' → T'):
+        a ⌈ b
+
+Layer 3 of [constraining-generics.md](constraining-generics.md), asked for by the user as a
+rule from the start: every operator and function a generic body applies to a value of a type
+parameter needs a `pre` clause (4645); no substitution failure; every requirement read off the
+pre-conditions.  Decided with the user:
+
+1. **As much as possible where the function is written.**  The body is checked once with each
+   type parameter a type nothing is known of, so a generic nobody calls is checked too.
+   Proposed against: refusing unnamed operations per instantiation, which leaves an uncalled
+   generic unchecked.
+2. **`comptime` arms are checked where a call says.**  They ask what the types are; the report
+   log says so (`generic-deferred`), and the definition is kept so the rest of the check is
+   made per set of types.  Proposed against: the signature's requirements licensing every arm,
+   which `std.text`'s dispatch over every type cannot meet.
+3. **A generic calling another hands on what it requires** (4646): the callee's requirements,
+   the caller's types put in, have to hold of what the caller's requirements say.
+
+Decided here: what the requirements say is held as the operations they name -- kind,
+operator or function, operand types -- with what each answers; an operation in the body is
+looked up there by the types its operands turned out to have.  Things that take a value apart
+by the shape its parameter is written with, and calling a lambda handed over, ask nothing.  A
+warning is left unsaid where the function is written, being said again for each instance.
+
+Compare: Rust, Swift and Haskell (bounds, body checked once), C++ (concepts at the call, body
+per instantiation, SFINAE), Go (constraints with type sets), Zig and D (per instantiation).
+
 Open questions
 --------------
 

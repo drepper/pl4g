@@ -88,6 +88,12 @@ class ReportKind(StrEnum):
     #: once and said nothing about which types; which ones it was built for is
     #: what the calls turned out to ask for.
     INSTANTIATE = "instantiate"
+    #: A generic function checked where it is written, against its requirements
+    #: alone, so that no instantiation has anything left to find.
+    GENERIC_CHECKED = "generic-checked"
+    #: One checked there except for what asks what its types are -- a `comptime`
+    #: construct -- which is checked where a call says.
+    GENERIC_DEFERRED = "generic-deferred"
     #: A callee put where a caller called it.  What the log says is which
     #: function went where, and why it was worth it: a reader asking "where did
     #: my function go" is asking this and the drop below it.
