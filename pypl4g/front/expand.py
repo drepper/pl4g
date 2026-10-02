@@ -1018,6 +1018,17 @@ def _head_of(node: object) -> object:
         return node.callee
     if isinstance(node, ast.IntLit):
         return ast.NameRef(span=node.span, name=node.type_name or "int")
+    # A literal of any other kind is made by its type, as a number is: what a
+    # macro asks it is whether a piece is text, a character, a truth value.
+    if isinstance(node, ast.StringLit):
+        return ast.NameRef(span=node.span, name="str")
+    if isinstance(node, ast.CharLit):
+        return ast.NameRef(span=node.span, name="char")
+    if isinstance(node, ast.BoolLit):
+        return ast.NameRef(span=node.span, name="bool")
+    if isinstance(node, ast.FloatLit):
+        return ast.NameRef(span=node.span,
+                           name=getattr(node, "type_name", None) or "float")
     if isinstance(node, ast.NameRef):
         return node
     return ast.NameRef(span=getattr(node, "span", INVALID_SPAN),

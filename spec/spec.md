@@ -356,7 +356,10 @@ the definition that program wrote.
 
 **The room comes from an arena the formatting is told about.**  `std.text` takes a reference to one and every join inside it goes
 there; `⍕v in a` is the operator form of the same thing, and it is what `format` writes into the code it generates.  `format` itself
-names `⎕heap`, so what it answers lasts.  **`print` and `println` make a pool of their own** at every invocation and give it back
+names `⎕heap`, so what it answers lasts -- or **the arena named before the template**, `std.format⌜scratch, "{} and {}", a, b⌝`,
+whose joins and `⍕`s are all `in scratch`, so that what it answers goes when `scratch` is given back and a function may answer it
+under `→ str in a`.  Which form is meant is read off the first piece: a template is text written out, and anything else names the
+arena.  **`print` and `println` make a pool of their own** at every invocation and give it back
 when the write has finished -- the expansion is
 
 ```
@@ -5326,7 +5329,8 @@ function that names it exists for the macros and is not in the program: nothing 
 there being nothing at run time for it to be a handle into.  It is one value wide and compares with `=`, which asks whether the same
 thing is written in both, wherever each was written.
 
-**Three questions take a piece apart.**  `⎕head(e)` is what it is made by, `⎕parts(e)` how many pieces it applies its head to, and
+**Three questions take a piece apart.**  `⎕head(e)` is what it is made by -- for a literal, its type: `str`, `char`, `bool`, the
+number's own type -- `⎕parts(e)` how many pieces it applies its head to, and
 `⎕part(e, n)` which one.  An operator alone between the marks is the operator itself rather than an expression using it, which is
 what `⎕head` of a sum answers -- so nothing about any particular operator is built in, and finding a sum is a macro asking whether
 the head is `⌜+⌝`.  `⎕part` names which part it wants rather than answering them all, which is what keeps an array out of the

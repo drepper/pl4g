@@ -448,12 +448,14 @@ comptime fn after(answer: syntax, started: bool, run: str, piece: syntax,
 ※※
 ※※ \param template the text, with `{}` where an argument goes
 ※※ \param args the arguments, as the one piece several of them are
+※※ \param where the arena the joins take room from
+※※ \param skipped how many of the pieces of *args* come before the arguments
 ※※ \return the piece the two come to
 @[impure]
 comptime fn formatted(template: syntax, args: syntax,
-                      where: syntax) → syntax:
+                      where: syntax, skipped: u64) → syntax:
     let said: str = ⎕name(template)
-    let holes: u64 = ⎕parts(args)
+    let holes: u64 = ⎕parts(args) - skipped
     let answer: mut syntax = ⌜""⌝
     let started: mut bool = false
     let run: mut str = ""
@@ -469,7 +471,7 @@ comptime fn formatted(template: syntax, args: syntax,
             elif c = '}':
                 if taken ≥ holes:
                     return ⎕refuse("the template has more holes than there are arguments")
-                let next: syntax = ⎕part(args, taken)
+                let next: syntax = ⎕part(args, taken + skipped)
                 answer ← after(answer, started, run,
                                ⌜⍕$next in $where⌝, where)
                 started ← true
@@ -515,14 +517,23 @@ comptime fn formatted(template: syntax, args: syntax,
 ※※ been written out -- and `⍕` is what a program may say its own type's text with.
 ※※
 ※※ The joins it writes take room from `⎕heap`, so what it answers lasts as long as the
-※※ program and a pure function may answer it.
+※※ program and a pure function may answer it -- or from an arena named before the
+※※ template, `std.format⌜scratch, "{} and {}", a, b⌝`, so that what it answers is made
+※※ there and goes when the arena is given back.  Which of the two is asked of the first
+※※ piece: a template is text written out, and anything else names the arena.
 ※※
-※※ \param template the text, with `{}` where an argument goes
+※※ \param first the template, with `{}` where an argument goes; or the arena, and the
+※※ template the first of the rest
 ※※ \param args what the holes stand for
 ※※ \return the text they come to
 @[export, impure]
-macro format(template: syntax, ⁂args: syntax) → syntax:
-    formatted(template, args, ⌜⎕heap⌝)
+macro format(first: syntax, ⁂args: syntax) → syntax:
+    if ⎕name(⎕head(first)) = "str":
+        formatted(first, args, ⌜⎕heap⌝, 0u64)
+    elif ⎕parts(args) = 0u64:
+        ⎕refuse("an arena is named, and no template follows it")
+    else:
+        formatted(⎕part(args, 0u64), args, first, 1u64)
 
 ※※ Write a template and its arguments to a device, and answer how many bytes went.
 ※※
@@ -544,7 +555,7 @@ macro format(template: syntax, ⁂args: syntax) → syntax:
 ※※ \return how many bytes went
 @[export, impure]
 macro print(to: syntax, template: syntax, ⁂args: syntax) → syntax:
-    let said: syntax = formatted(template, args, ⌜pool⌝)
+    let said: syntax = formatted(template, args, ⌜pool⌝, 0u64)
     ⌜
         let pool: mut arena = ⎕arena
         defer ⎕empty(pool)
@@ -563,7 +574,7 @@ macro print(to: syntax, template: syntax, ⁂args: syntax) → syntax:
 ※※ \return how many bytes went, which is one more than the text
 @[export, impure]
 macro println(to: syntax, template: syntax, ⁂args: syntax) → syntax:
-    let said: syntax = formatted(template, args, ⌜pool⌝)
+    let said: syntax = formatted(template, args, ⌜pool⌝, 0u64)
     ⌜
         let pool: mut arena = ⎕arena
         defer ⎕empty(pool)

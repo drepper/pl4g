@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `std.format⌜a, TEMPLATE, args…⌝` builds the text in the arena named first rather than in
+※ `⎕heap`: every join it writes is `in a`, and so is `⍕` of each argument.  So the text goes when
+※ the arena is given back, and a function may answer it under `→ str in a`.  Which form is meant is
+※ read off the first piece: a template is text written out, and anything else names the arena.
+※
+※ Compare: **C++**'s `std::format_to` with an iterator into a `pmr::string`, and **Zig**'s
+※ `std.fmt.allocPrint(allocator, …)`, whose first argument is the allocator in the same place.
+
+let std := ⎕import("std")
+fn label(a: &mut arena, n: u16) → str in a:
+    std.format⌜a, "#{}:{}", n, true⌝
+@[startup]
+fn main() → u6:
+    let scratch: mut arena = ⎕arena
+    defer ⎕empty(scratch)
+    let s: str = std.format⌜scratch, "{} and {}", 1u8, "two"⌝
+    let plain: str = std.format⌜scratch, "no holes"⌝
+    let t: str = label(&mut scratch, 7u16)
+    if s = "1 and two" ∧ plain = "no holes" ∧ t = "#7:true": 0u6 else: 1u6
