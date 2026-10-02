@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from typing import Callable, Protocol, Sequence
 
 from ..ir.function import BasicBlock, Function
-from ..ir.inst import (BlockTarget, BrInst, CmpInst, CmpPred, CondBrInst,
+from ..ir.inst import (AssertInst, BlockTarget, BrInst, CmpInst, CmpPred, CondBrInst,
                        Instruction, SwitchInst, Terminator)
 from ..ir.rewrite import carried_values, incoming_edges
 from ..ir.types import FloatType, made_of_parts, parts_of
@@ -152,7 +152,10 @@ def folded_into_branch(func: Function, value: Instruction) -> bool:
     for block in func.blocks:
         for inst in block.insts:
             if value in inst.operands:
-                return isinstance(inst, CondBrInst) and inst.operands[0] is value
+                # A check is a branch too: where what it checks holds the
+                # program goes on, and where not it jumps to the stop.
+                return isinstance(inst, (CondBrInst, AssertInst)) \
+                    and inst.operands[0] is value
     return False
 
 
@@ -333,7 +336,7 @@ def _lower_conditional(asm: Assembler, func: Function, labels: Sequence[str],
     span = terminator.span
     when_true = _target_label(func, labels, terminator.true_target.block)
     when_false = _target_label(func, labels, terminator.false_target.block)
-    condition, lhs, rhs = _condition_of(func, terminator, operands, zero, span)
+    condition, lhs, rhs = condition_of(func, terminator, operands, zero, span)
     if when_true == following:
         asm.branch(condition.inverted(), lhs, rhs, when_false, span)
         asm.falls_through(when_true)
@@ -372,9 +375,15 @@ def _lower_switch(asm: Assembler, func: Function, labels: Sequence[str],
         asm.jump(default, span)
 
 
-def _condition_of(func: Function, terminator: CondBrInst, operands: Operands,
-                  zero: MCImm, span: Span) -> tuple[Condition, MCOperand, MCOperand]:
-    """What the branch tests, and the two things it tests."""
+def condition_of(func: Function, terminator: CondBrInst | AssertInst,
+                 operands: Operands, zero: MCImm,
+                 span: Span) -> tuple[Condition, MCOperand, MCOperand]:
+    """What a branch, or a check, tests, and the two things it tests.
+
+    A comparison only it reads is tested where it stands, `cmp` and a
+    conditional jump, rather than made into a truth value in a register and
+    that register tested against nought.
+    """
     value = terminator.operands[0]
     if isinstance(value, CmpInst) and folded_into_branch(func, value):
         return (CONDITIONS[value.pred],

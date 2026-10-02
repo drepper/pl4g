@@ -292,7 +292,7 @@ DROPPED_LOCAL = """let g: u6 = 3u6
 @[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u6:
     @[ignore(4006)]
-    let unread: u6 = g
+    let unread: u6 = g ⊞ 1u6
     let kept: u6 = g
     kept
 """

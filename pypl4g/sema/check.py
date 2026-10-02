@@ -12873,6 +12873,9 @@ class Checker:
         handing = self._wanted_of_a_loop(stmt, expected, produces)
         carried = self._loop_locals(stmt.body, stmt.alternative)
         header = builder.new_block("loop")
+        # A place asked whether it is picked is asked before its turn, so it is
+        # laid out before the body: what it read is then what the body reads.
+        picks = builder.new_block("pick") if found.wanted is not None else None
         body = builder.new_block("body")
         # A loop with a name is a loop something may leave, and where the
         # exit takes what a jump hands over it has to take it before there is
@@ -12899,7 +12902,7 @@ class Checker:
             local.value_span = stmt.span
             local.read = False
         builder.set_memory(token)
-        asks = builder.new_block("pick") if found.wanted is not None else body
+        asks = picks if picks is not None else body
         builder.condbr(found.more(builder, state), asks,
                        leave if leave is not None else after, span=stmt.span)
         ran_out = builder.memory()

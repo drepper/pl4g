@@ -1,0 +1,25 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ A value read twice from one place is read once where nothing can have
+※ written the place between the two reads -- and only there.  A call may write
+※ what it was handed, and a body inlined in place of a call writes what the
+※ call would have; either one between two reads makes them two reads.
+
+let counter: mut u8 = 1u8
+
+@[impure, inline(never)]
+fn bump():
+    counter ← counter + 1u8
+
+@[impure]
+fn inlined(at: &mut u8):
+    at⌖ ← at⌖ + 10u8
+
+@[startup, impure]
+fn main() → u6:
+    let first: u8 = counter
+    bump()
+    let second: u8 = counter
+    inlined(&mut counter)
+    let third: u8 = counter
+    if first = 1u8 ∧ second = 2u8 ∧ third = 12u8: 0u6 else: 1u6

@@ -108,10 +108,15 @@ def pipeline_for(level: int) -> Sequence[str]:
     # carries, so a body inlined with a constant argument only *becomes* constant
     # after that pass -- and a bitcast of a constant is a value the back end has
     # nowhere to read, a bitcast emitting no instruction of its own.
+    # Values worked out twice are shared after the first folding, which is
+    # what makes two of them the same -- an address at an index times one is
+    # the index once the one is gone -- and before the second, which then sees
+    # a length compared with itself.  What a branch settled is used after that,
+    # once the values it compares are the ones the checks compare.
     return ("dropignored", "tailcalls", "largeanswers", "inline", "leanvalues",
-            "constfold", "purecalls",
+            "constfold", "samevalues", "purecalls",
             "simplifycfg",
-            "constfold", "dce", "dropunreached", "splitedges")
+            "constfold", "facts", "dce", "dropunreached", "splitedges")
 
 
 def build_manager(level: int) -> PassManager:
@@ -120,10 +125,12 @@ def build_manager(level: int) -> PassManager:
     from .passes.dce import DeadCodeElimination
     from .passes.dropignored import DropIgnoredCalls
     from .passes.dropunreached import DropUnreached
+    from .passes.facts import Facts
     from .passes.inline import Inlining
     from .passes.largeanswers import LargeAnswers
     from .passes.leanvalues import LeanValues
     from .passes.purecalls import PureCalls
+    from .passes.samevalues import SameValues
     from .passes.simplifycfg import SimplifyCFG
     from .passes.splitedges import SplitEdges
     from .passes.tailcalls import TailCalls
@@ -134,6 +141,8 @@ def build_manager(level: int) -> PassManager:
         "dce": DeadCodeElimination(),
         "dropignored": DropIgnoredCalls(),
         "dropunreached": DropUnreached(),
+        "facts": Facts(),
+        "samevalues": SameValues(),
         "inline": Inlining(),
         "largeanswers": LargeAnswers(),
         "leanvalues": LeanValues(),

@@ -26,7 +26,7 @@ fn unreached() \N{RIGHTWARDS ARROW} u6:
 @[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u6:
     @[ignore(4006)]
-    let unread: u6 = used
+    let unread: u6 = used ⊞ 1u6
     used
 """
 

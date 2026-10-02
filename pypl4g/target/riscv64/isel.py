@@ -27,7 +27,7 @@ from ...mc.reg import Reg, VirtReg
 from ...mc.operand import SymExpr
 from ...source.location import Span
 from ..branches import (CONDITIONS, Move, UnsupportedBranch,
-                        folded_into_branch, sequenced,
+                        condition_of, folded_into_branch, sequenced,
                         labels_of,
                         lower_branch, lower_comparison)
 from .. import statuses
@@ -1164,9 +1164,9 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     # that failing is the case that jumps, since it is the case
                     # that does not come back.
                     holds = asm.reserve_label("holds")
-                    asm.branch(Condition.NE,
-                               operands.in_register(inst.operands[0], inst.span),
-                               ZERO_IMMEDIATE, holds, inst.span)
+                    condition, lhs, rhs = condition_of(
+                        func, inst, operands, ZERO_IMMEDIATE, inst.span)
+                    asm.branch(condition, lhs, rhs, holds, inst.span)
                     told = _Fault(inst.what, inst.span, inst.status)
                     if inst.observing:
                         told.observed(asm, span)

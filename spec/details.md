@@ -1906,6 +1906,24 @@ the call.  A call handing over anything made from a `frame` instruction is left 
 need into its allocator inside each arm of an `if` or a `match` that is the answer (`_answer_arms`), and answers a call of the
 function to itself as it is, so that the call stays last.
 
+**What the checker writes once per mention is worked out once** (`opt/passes/samevalues.py`, at `-O1` after the first folding).
+Value numbering down the dominator tree (`opt/flow.py`, Cooper, Harvey and Kennedy's immediate dominators): an instruction with no
+effect that computes what a dominating one computed -- the same opcode, type, operands and attributes -- stands for it.  A frame
+and the memory chain's start are never shared; a call is left to `purecalls`.  A load is shared only where no call, store or
+request to the kernel lies on a way between the two, since the chain cannot be trusted yet: a call is not in it, and a body
+inlined in place of a call keeps its own.  A value is shared only from a block laid out before the one reading it, because the
+three instruction selectors read the blocks in order and want a value worked out before it is read; a `foreach` over a pick lays
+its `pick` block out before its body for that reason.  `constfold` drops what leaves a number unchanged (`x × 1`, `x + 0`, `x | 0`,
+`x & ~0`, a bitcast to the type it has) and answers a comparison of a value with itself for integers, truth values, characters and
+pointers -- not for floating point.
+
+**What a branch settled is used where it holds** (`opt/passes/facts.py`, after the second folding).  The edge into a block that
+it is the only way into says which way its conditional branch went, and that comparison -- with the unit-only casts between
+`u64 ¤idx`, `u64` and `u64 ¤size` looked through -- holds in every block it dominates.  A check of a comparison known to hold goes,
+which is an index into the array whose length the loop counts to; and a saturating step of one over a value known to be below (or
+above) something cannot reach an end of its type, so it is the plain add (or subtraction).  A check whose condition is a
+comparison only it reads is a `cmp` and a conditional jump, as a branch's is (`branches.condition_of`).
+
 **An answer whose allocator is fixed travels as two words** (`opt/passes/thinanswers.py`, run as the first half of `largeanswers` at
 every level, so the module is verified once for both).
 The checker writes `Function.answer_from` -- `("heap", -1)` or `("param", i)` -- from `→ T in ⎕heap` or `→ T in a`, or from the body

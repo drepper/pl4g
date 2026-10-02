@@ -20,12 +20,12 @@ has no channel for.
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Final, Sequence
 
 from ...ir.inst import (AssertInst, BinaryInst, BinOp, CastInst, CastKind,
                         CmpInst, CmpPred, ExtractInst, Instruction, TupleInst)
 from ...ir.module import Module
-from ...ir.types import BOOL, CHAR, IntType
+from ...ir.types import BOOL, CHAR, BoolType, CharType, IntType, PtrType
 from ...ir.value import BoolConst, CharConst, IntConst, Value
 
 #: What each comparison asks, as a question about two numbers.  The signed and
@@ -154,6 +154,10 @@ class ConstantFolding:
         """Return the constant *inst* computes, if it computes one."""
         if isinstance(inst, CmpInst):
             return self._fold_comparison(module, inst)
+        if isinstance(inst, CastInst) and inst.kind is CastKind.BITCAST \
+                and inst.operands[0].ty is inst.ty:
+            # Read as what it already is, which is reading it.
+            return inst.operands[0]
         if isinstance(inst, CastInst) and inst.kind is CastKind.BITCAST:
             # The same bits read as something else, which for something written
             # down is the same thing written down.  It matters beyond saving an
@@ -177,6 +181,9 @@ class ConstantFolding:
         if folder is None:
             return None
         lhs, rhs = inst.operands
+        same = _unchanged(inst)
+        if same is not None:
+            return same
         if inst.op in _DIVISIONS and isinstance(rhs, IntConst) and rhs.value == 0:
             # Nothing to fold and nothing to report from here: the program
             # stops when it runs, and saying so is the checker's business.
@@ -213,6 +220,14 @@ class ConstantFolding:
         is what the backends do with them and what makes `true = true` answer
         the same here as it would have at run time.
         """
+        lhs, rhs = inst.operands
+        if lhs is rhs and isinstance(lhs.ty, (IntType, BoolType, CharType,
+                                               PtrType)):
+            # A value compared with itself, which is what an array's length
+            # checked against the length of the array it picks from comes to
+            # when the two are one array.  Not for floating point, where a
+            # value that is not a number is not equal to itself.
+            return module.bool_const(BOOL, inst.pred in _REFLEXIVE)
         numbers = [_as_number(operand) for operand in inst.operands]
         if any(number is None for number in numbers):
             return None
@@ -249,6 +264,54 @@ class ConstantFolding:
             gone = set(settled)
             block.insts = [i for i in block.insts
                            if id(i) not in replacements and id(i) not in gone]
+
+
+#: The comparisons a value passes against itself.
+_REFLEXIVE = frozenset((CmpPred.EQ, CmpPred.SLE, CmpPred.SGE, CmpPred.ULE,
+                        CmpPred.UGE))
+
+#: What leaves a number as it is, on the right of each operation: adding,
+#: taking away, or-ing and exclusive-or-ing nought, and multiplying by one.
+#: None of them can go past an end of the type, checked or not, so the checked,
+#: the wrapping and the saturating forms are all the operand itself.
+_NEUTRAL_RIGHT: Final = {
+    BinOp.ADD: 0, BinOp.SUB: 0, BinOp.WRAP_ADD: 0, BinOp.WRAP_SUB: 0,
+    BinOp.SAT_ADD: 0, BinOp.SAT_SUB: 0, BinOp.OR: 0, BinOp.XOR: 0,
+    BinOp.MUL: 1, BinOp.WRAP_MUL: 1, BinOp.SAT_MUL: 1,
+}
+
+#: And on the left, for the ones where the two sides may change places.
+_NEUTRAL_LEFT: Final = {
+    BinOp.ADD: 0, BinOp.WRAP_ADD: 0, BinOp.SAT_ADD: 0, BinOp.OR: 0,
+    BinOp.XOR: 0, BinOp.MUL: 1, BinOp.WRAP_MUL: 1, BinOp.SAT_MUL: 1,
+}
+
+
+def _unchanged(inst: BinaryInst) -> Value | None:
+    """The operand *inst* leaves as it is, where the other one is neutral.
+
+    The element of an array of bytes is at its index times one, and that
+    multiplication was in every turn of every loop over bytes.  A truth value is
+    left alone: the logical operators are these instructions too, and what
+    leaves one as it is, is a question about truth values and not about one
+    and nought.
+    """
+    if inst.ty is BOOL:
+        return None
+    lhs, rhs = inst.operands
+    if isinstance(rhs, IntConst) and _NEUTRAL_RIGHT.get(inst.op) == rhs.value \
+            and lhs.ty is inst.ty:
+        return lhs
+    if isinstance(lhs, IntConst) and _NEUTRAL_LEFT.get(inst.op) == lhs.value \
+            and rhs.ty is inst.ty:
+        return rhs
+    if inst.op is BinOp.AND and isinstance(inst.ty, IntType):
+        every = -1 if inst.ty.signed else (1 << inst.ty.bits) - 1
+        if isinstance(rhs, IntConst) and rhs.value == every and lhs.ty is inst.ty:
+            return lhs
+        if isinstance(lhs, IntConst) and lhs.value == every and rhs.ty is inst.ty:
+            return rhs
+    return None
 
 
 def _as_number(value: Value) -> int | None:

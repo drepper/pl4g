@@ -476,6 +476,11 @@ a few instructions of A, which is what *D written into the loop* promises.  The 
 a multiplication by one for every element address, a length compared with itself, and the element of `v⟦v > k⟧` read twice
 (once for the mask, once for the turn) -- all now in `TODO-pypl4g.md`.
 
+**After those six were done** (2026-10-03: `samevalues`, `facts`, two folds and a check that branches on its comparison), A is
+**11 instructions for a place not picked and 20 for one picked**, and D is **17 and 25**.  What D still pays over A is the check of
+`m⟦i⟧` against the mask's own length, which nothing in the loop settles -- A compared the two lengths once, before it, where the
+coroutine's body does not -- and the join after its `if`.  A `pre(#m = #v)` on the generator, used as a fact, would take the first.
+
 
 The order to build it in
 ------------------------
