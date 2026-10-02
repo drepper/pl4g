@@ -196,7 +196,8 @@ GROUPS: tuple[Group, ...] = (
            "answer-in-heap": "answers fixed in the heap and an arena, travelling as two words",
            "lean-values": "strings joined and carried round a loop as two words, and one that cannot be",
            "tail-call-is-a-loop": "five functions calling themselves last, ten million turns each",
-           "arena-handed-out": "an arena handed out by a function, a lambda and a function value"}),
+           "arena-handed-out": "an arena handed out by a function, a lambda and a function value",
+           "format-into-an-arena": "templates formatted into an arena named before them"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "
