@@ -9237,6 +9237,19 @@ The two forms proposed with `⎕static` and not taken then, taken now at the use
 Compare Rust's `Cow<'static, str>` -- borrowed from the image or owned, and saying which -- and its
 `&'static str` parameter.
 
+## 2026-10-03T11:00+02:00 — compiler
+
+**A generic function calling itself**
+
+Asked to implement the to-do entry, the measurement came first: a generic function calling itself
+with the types it was given already compiled and ran -- the instance is registered before its body
+is lowered, so the call finds it -- as did two generics calling each other, and a call last is a
+loop.  What did not work was a call with *other* types: `deeper(〈x, x〉, …)` inside
+`deeper(x: T', …)` asked for a new instance at every level, each type twice the last, and the
+compiler never finished.  Decided here: at most eight instances of one generic in the making at
+once, then 4650.  Eight because the types such a recursion builds tend to grow geometrically, and
+the note naming each instance's types is part of the message.
+
 Open questions
 --------------
 

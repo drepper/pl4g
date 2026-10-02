@@ -6483,6 +6483,13 @@ sets; **Zig** and **D**, which check per instantiation, compile-time code being 
 function.  The two are told apart by their symbols on their own, a symbol being the signature written out.  Which sets of types a
 generic function was compiled for is written to the report log (`instantiate`), since the program said nothing about them.
 
+**A generic function may call itself with the types it was given**, and two may call each other: what the call names is the
+function being made for those types, which is registered before its body is checked, so the call is an ordinary one -- and called
+last, a loop (Calling itself last).  **One calling itself with other types** -- `f(〈x, x〉)` inside `f(x: T')` -- asks for another
+function, which asks for another; the compiler makes eight such in a row and then refuses (4650), the types going on changing.
+C++ stops a template instantiation the same way, at a depth it names; Haskell and Rust compile polymorphic recursion without making
+a function per type, which is what dictionary passing and type erasure buy and what one function per set of types gives up.
+
 **A generic function is not the runtime's entry point, a constructor or a test** (4558): each of those is one thing the program
 has, and something written once per set of types is none of them.
 

@@ -2145,6 +2145,10 @@ class _Abstract:
 _SAID: Final = frozenset({ReportKind.FATAL, ReportKind.ERROR, ReportKind.WARNING,
                           ReportKind.NOTE})
 
+#: How many instances of one generic function may be in the making at once, each
+#: asked for by the one before it with other types.
+_INSTANCES_DEEP: Final[int] = 8
+
 #: What the definition of an operation an `_Abstract` check looks up is keyed by.
 _APPLYING: Final = (ast.Binary, ast.Unary, ast.Fresh, ast.Call, ast.Element,
                     ast.Index)
@@ -9639,6 +9643,14 @@ class Checker:
             self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, span,
                              feature="a generic function that calls itself "
                                      "with the types it was given")
+            return None
+        if len(written.making) >= _INSTANCES_DEEP:
+            # Each instance asks for one with other types, which asks for
+            # another: the types grow with every call, and there would be no end
+            # to the functions to make.  A call whose types repeat is the
+            # function calling itself, and needs none of this.
+            self._diags.emit(D.LANG_GENERIC_TYPES_GROW, span,
+                             name=written.node.name, count=_INSTANCES_DEEP)
             return None
         written.making.add(key)
         try:

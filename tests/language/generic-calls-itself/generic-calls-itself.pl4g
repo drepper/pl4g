@@ -1,0 +1,25 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A generic function may call itself with the types it was given**, and two
+※ may call each other: what the call names is the function being made for those
+※ types, which is registered before its body is checked.  Called last, it is a
+※ loop like any function's call of itself.
+
+fn countdown(n: T', step: T', zero: T') → T' pre(T' - T' → T') pre(T' > T' → bool):
+    if n > zero: countdown(n - step, step, zero) else: n
+
+fn fact(n: T', one: T') → T' pre(T' × T' → T') pre(T' - T' → T') pre(T' ≤ T' → bool):
+    if n ≤ one: one else: n × fact(n - one, one)
+
+fn ping(x: T', n: u8) → u8:
+    if n = 0u8: 0u8 else: pong(x, n - 1u8)
+
+fn pong(x: T', n: u8) → u8:
+    if n = 0u8: 1u8 else: ping(x, n - 1u8)
+
+@[startup]
+fn main() → u6:
+    if countdown(100000u32, 1u32, 0u32) ≠ 0u32: return 1u6
+    if fact(5u32, 1u32) ≠ 120u32 ∨ fact(4u8, 1u8) ≠ 24u8: return 2u6
+    if ping(1u8, 5u8) ≠ 1u8 ∨ ping(true, 4u8) ≠ 0u8: return 3u6
+    0u6

@@ -5482,6 +5482,33 @@
       "option": null
     },
     {
+      "number": 4650,
+      "name": "LANG_GENERIC_TYPES_GROW",
+      "severity": "error",
+      "message": "'{name}' calls itself with other types than it was given, {count} deep, and they would go on changing",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the generic function"
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "description": "how deep the instances went"
+        }
+      ],
+      "cause": "A generic function is compiled once per set of types.  One calling itself with the types it was given calls the function being made, which is a loop like any other; one calling itself with other types -- a pair of what it was given, say -- asks for another function, which asks for another, without end.  The compiler stops after a fixed number and says so rather than running out of memory.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Generic Functions",
+        "requirement": "A generic function may call itself with the types it was given."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

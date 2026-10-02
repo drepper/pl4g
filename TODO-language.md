@@ -958,7 +958,9 @@ Runtime
     would change that is a language for constraints -- a name for "can be added", "can be ordered" -- which is a design of its
     own and is what Rust, Swift and Go each spend one on.
 
-[ ] let a generic function call itself with the types it was given.  What it would call is the instance being made, which is not
+[x] let a generic function call itself with the types it was given.  It could already, the instance being registered before its
+    body is lowered; what was missing was a bound on one calling itself with types that keep changing (4650), which compiled for
+    ever.  What it would call is the instance being made, which is not
     finished, so it is refused; what it needs is the function to be registered before its body is lowered, which is a
     rearrangement of the instantiation and nothing deeper.
 

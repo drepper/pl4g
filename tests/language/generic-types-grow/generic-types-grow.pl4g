@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4650
+
+※ A generic function calling itself with other types than it was given asks for
+※ another function, which asks for another: here a pair of what it was given,
+※ then a pair of pairs, without end.  The compiler stops a fixed number deep and
+※ says so.
+
+fn deeper(x: T', n: u8) → u8:
+    if n = 0u8: 0u8 else: deeper(〈x, x〉, n - 1u8)
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(deeper(1u8, 3u8), ⌜u6⌝) ?? 2u6
