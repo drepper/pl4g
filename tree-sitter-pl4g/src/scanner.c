@@ -141,6 +141,36 @@ static bool closes_one_line(TSLexer *lexer, bool saw_newline) {
   }
 }
 
+// Whether the line here goes on with a function's first line: `pre(`, `post(`,
+// or the colon or brace a body begins with.  The compiler's lexer asks the same.
+static bool continues_a_header(TSLexer *lexer) {
+  if (lexer->lookahead == ':' || lexer->lookahead == '{') {
+    return true;
+  }
+  if (lexer->lookahead != 'p') {
+    return false;
+  }
+  lexer->advance(lexer, false);
+  const char *rest;
+  if (lexer->lookahead == 'r') {
+    rest = "re";
+  } else if (lexer->lookahead == 'o') {
+    rest = "ost";
+  } else {
+    return false;
+  }
+  for (; *rest; rest++) {
+    if (lexer->lookahead != (int32_t)*rest) {
+      return false;
+    }
+    lexer->advance(lexer, false);
+  }
+  while (lexer->lookahead == ' ') {
+    lexer->advance(lexer, false);
+  }
+  return lexer->lookahead == '(';
+}
+
 bool tree_sitter_pl4g_external_scanner_scan(void *payload, TSLexer *lexer,
                                             const bool *valid_symbols) {
   Scanner *scanner = (Scanner *)payload;
@@ -239,6 +269,17 @@ bool tree_sitter_pl4g_external_scanner_scan(void *payload, TSLexer *lexer,
   // the same place over again rather than what is left of the line.
   uint32_t column = lexer->get_column(lexer);
   uint16_t current = scanner->columns[scanner->depth - 1];
+
+  // A function's clauses, and the colon or brace its body begins with, may stand
+  // on lines of their own below its first: such a line goes on with the one
+  // before it, so no token is given out and the break is read as an extra.  What
+  // is looked at is not consumed: the token's end is marked first.
+  if (saw_newline && column > current && !one_line) {
+    lexer->mark_end(lexer);
+    if (continues_a_header(lexer)) {
+      return false;
+    }
+  }
 
   if (valid_symbols[INDENT] && column > current && scanner->depth < MAX_DEPTH) {
     scanner->inline_[scanner->depth] = false;

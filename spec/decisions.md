@@ -9205,6 +9205,19 @@ Asked for by the user, on a program with `fn f(a: u6) → u6 pre(⌜u6⌝ + ⌜u
   refusing both, though the specification already said an arrow reaches past it.
 - **The arrow's type may be written in the lifting marks**, `→ ⌜u6⌝`, as the operands are.
 
+## 2026-10-03T09:00+02:00 — language
+
+**A function's clauses, and the colon or brace before its body, may stand on lines of their own**
+
+Asked for by the user: a long list of `pre` and `post` clauses no longer has to fit the header's
+line.  A line indented further than the block it is in, beginning with `pre(`, `post(`, `:` or `{`,
+goes on with the line before it -- the compiler's lexer drops the newline, and the tree-sitter
+scanner gives out no token so that the break is read as an extra.  None of the four can begin
+anything else at that place, so the rule needs no knowledge of the parse.  Compare Python, which
+continues a line only inside brackets or after a backslash; Haskell, whose layout rule continues a
+line that is indented further than the one it belongs to, which is this rule without the
+restriction to four openings; and Go, whose semicolon insertion is the other way round.
+
 Open questions
 --------------
 

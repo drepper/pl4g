@@ -312,6 +312,14 @@ class Lexer:
             self._skip_to_end_of_line()
             return False
         self._at_line_start = False
+        if width > self._indents[-1] and self._tokens \
+                and self._tokens[-1].kind is TokKind.NEWLINE \
+                and self._continues_a_header():
+            # A function's clauses, and the colon or brace its body begins with,
+            # may stand on lines of their own below its first: such a line goes
+            # on with the one before it, and opens nothing.
+            self._tokens.pop()
+            return True
         if width > self._indents[-1]:
             self._indents.append(width)
             self._tokens.append(Token(TokKind.INDENT, self._span(start, self._pos)))
@@ -324,6 +332,21 @@ class Lexer:
                                  self._span(start, self._pos))
                 self._indents.append(width)
         return True
+
+    def _continues_a_header(self) -> bool:
+        """Whether the line starting here goes on with a function's first line.
+
+        `pre(` and `post(` begin nothing else, and neither does a colon or a
+        brace standing first on an indented line -- each is what a definition
+        writes before its body.  The tree-sitter scanner asks the same.
+        """
+        rest = self._text[self._pos:self._pos + 6]
+        for word in ("pre", "post"):
+            if rest.startswith(word):
+                after = rest[len(word):].lstrip(" ")
+                if after.startswith("("):
+                    return True
+        return rest[:1] in (":", "{")
 
     def _skip_to_end_of_line(self) -> None:
         """Advance past the rest of the line, including its newline."""

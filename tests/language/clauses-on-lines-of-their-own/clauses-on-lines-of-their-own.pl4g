@@ -1,0 +1,32 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A function's clauses may stand on lines of their own**, below its first
+※ line and indented further, and so may the colon or the brace its body begins
+※ with.  Such a line goes on with the one before it -- `pre(` and `post(` begin
+※ nothing else, and neither does a colon or a brace standing first on a line --
+※ so it opens no block, and the body is indented against the definition's first
+※ line as always.
+
+fn g(a: T') → E'
+    pre(T' + ⌜u6⌝ → E'):
+    a + 1u6
+
+fn h(a: u8) → u8
+    pre(a < 10u8)
+    post(⎕answer > a)
+    :
+    a + 1u8
+
+fn k(a: u8, b: u8) → u8
+        pre(a < 10u8)
+        pre(b < 10u8)
+    {
+        a + b
+    }
+
+@[startup]
+fn main() → u6:
+    if g(2u6) ≠ 3u6: return 1u6
+    if h(4u8) ≠ 5u8: return 2u6
+    if k(1u8, 2u8) ≠ 3u8: return 3u6
+    0u6

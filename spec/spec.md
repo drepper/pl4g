@@ -5874,9 +5874,20 @@ kinds is refused (4905) rather than given a reading: the reading that makes the 
 the half that is about values, and a condition quietly becoming a requirement is the one mistake this notation could make.  Two
 clauses say it.
 
-**One expression per clause, and the clauses stand between the header and the body.**  A newline after a header is what says a
-function has no body, so the clauses are written on the header's line; each has a span of its own, which is what lets a failure
-point at the clause that failed rather than at a list holding it.
+**One expression per clause, and the clauses stand between the header and the body**, each with a span of its own, which is what
+lets a failure point at the clause that failed rather than at a list holding it.  **They may stand on lines of their own**, below
+the header and indented further than it, and so may the colon or the brace the body begins with:
+
+```
+fn take(xs: A', i: I') → E'
+    pre(A'⟦I'⟧ → E')
+    pre(i < ⍴xs):
+    xs⟦i⟧
+```
+
+Such a line goes on with the one before it and opens no block: `pre(` and `post(` begin nothing else, and neither does a colon or
+a brace standing first on a line, so reading one there is never a guess.  The body is indented against the header's first line, as
+it always is.  A newline followed by anything else still says the function has no body.
 
 ###### A condition
 
