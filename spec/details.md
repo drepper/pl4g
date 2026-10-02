@@ -2420,8 +2420,15 @@ lambdas inside lambdas included -- and records, by identity, every lambda writte
 body only calls or hands to such a call.  One walk, `_lambdas_handed_on`, collects both and every name mentioned any other way --
 a macro invocation that mentions a name counts as taking it anywhere -- and a name bound twice is judged by every mention of
 either: telling the two apart would be a second walk, and the cautious answer costs an allocation.  Those keep the environment in a frame slot and carry no allocator; every other one takes room from `⎕heap` through
-`tables.allocate` and carries `⎕heap`'s address; `λ … in a` is lowered by `_lower_allocated` handing the arena's place to
-`_lower_lambda`, and the room comes from the arena.  The report log says which (`allocator`).
+`tables.allocate` and carries `⎕heap`'s address; `Lambda.kept_in`, written after the capture list, forces `⎕heap` or names an
+arena whose place `_arena_named` finds, and the room comes from there.
+
+**A lasting lambda is a type**, `FuncType.lasting`, which `_promises_as_much` lets stand where a plain one is wanted and
+`_shorter_life` carries across by retupling.  `[n] in ⎕heap` makes one after asking `_reached_by` for nothing but `_HEAP`
+(4644); a lambda bringing nothing in, and `_function_as_a_value`, take the lasting type when that is what is wanted.  Because
+the type is checked wherever such a value is made, what holds one never asks where it came from: `_reached_by` skips captured
+values of a lasting type, and `_answered` and `_into_a_place` skip the lambda question for types whose every function lasts
+(`_lambdas_last`).  The report log says which (`allocator`).
 
 **What a lambda reaches is provenance, in the keys an arena's are.**  `_lower_lambda` writes into `_made_from` the room's key
 (`_HEAP`, the arena's, or a stand-in for the frame) and what `_reached_by` finds: every captured value's own provenance, a

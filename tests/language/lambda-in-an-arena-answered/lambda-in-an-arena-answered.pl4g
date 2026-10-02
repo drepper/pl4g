@@ -1,13 +1,13 @@
 ※ pl4g-test: compile=error diag=4632
 
-※ `λ … in pool` keeps what the lambda brought in in the arena, which is given
+※ `λ … [n] in pool` keeps what the lambda brought in in the arena, which is given
 ※ back with everything else it made -- here on the way out of the call, so the
 ※ lambda may not be answered.
 
 fn adding(n: u8) → fn(u8) → u8:
     let pool: mut arena = ⎕arena
     defer ⎕empty(pool)
-    λ a: u8 [n] → u8 { a + n } in pool
+    λ a: u8 [n] in pool → u8 { a + n }
 
 @[startup]
 fn main() → u6:

@@ -802,8 +802,11 @@ and is from then on only called or handed to a call of a function -- a function 
 let it leave that call.  Anything else may take it further: another name, a field, a list, a capture, an answer.  Which of the
 three each lambda got is in the report log (`allocator`).
 
-**`λ … in a` keeps it in the arena `a`**, which then gives it back with everything else it made: the lambda is made in `a` as a
-string written `in a` is, and is dead once `a` is emptied (4615).
+**`in` after the capture list says where it is kept**, before the arrow -- `in` after the answer's type says where the *answer* is
+made, as it does for a function.  `λ a: u8 [n] in pool → u8 { … }` keeps it in the arena `pool`, which then gives it back with
+everything else it made: the lambda is made in `pool` as a string written `in pool` is, and is dead once `pool` is emptied (4615).
+`[n] in ⎕heap` keeps it in the heap and says so in the lambda's type (below).  A lambda that brings nothing in has nothing to keep,
+and `in` is not written for it (4643).
 
 **What a lambda reaches is held to the rule a string made in an arena is.**  It reaches the room it keeps what it brought in in,
 what everything it brought in by value was made in, and every variable it brought in by reference -- or reaches through a
@@ -826,6 +829,26 @@ fn twice(g: fn(u8) → u8) → fn(u8) → u8:
     λ a: u8 [g] → u8 { g(g(a)) }         ※ 4632: g may be in the caller's frame
 ```
 
+**`fn(u8) in ⎕heap → u8` is the type of a lambda whose environment lasts**: kept in `⎕heap`, or none at all.  A value of it reaches
+nothing that is gone before the program is, so it may be answered, kept in a field of the caller's, and brought into a lambda that
+leaves -- whatever it was handed in as.  Its type promises more than `fn(u8) → u8` does and stands where that is wanted; the other
+way is refused (4213), the program saying where it wants the promise kept rather than the compiler guessing.
+
+```
+fn compose(f: fn(u8) in ⎕heap → u8, g: fn(u8) in ⎕heap → u8) → fn(u8) in ⎕heap → u8:
+    λ x: u8 [f, g] in ⎕heap → u8 { g(f(x)) }
+
+let n: u8 = 10u8
+let add: fn(u8) in ⎕heap → u8 = λ x: u8 [n] in ⎕heap → u8 { x + n }
+let double: fn(u8) in ⎕heap → u8 = λ x: u8 → u8 { x × 2u8 }    ※ brings nothing in: lasts as it is
+let both: fn(u8) in ⎕heap → u8 = compose(add, double)
+```
+
+`[n] in ⎕heap` makes one, and what it brings in has to last too (4644): made in `⎕heap` or the image, or a lambda whose own type
+says it lasts -- not a variable of the call, an arena, or whatever a parameter that says nothing was handed.  A lambda that brings
+nothing in, and a function named where a value is wanted, stand where one is wanted as they are, kept nowhere.  Only `⎕heap` is
+written in a type (4642): an arena lasts as long as its maker keeps it, which a type cannot say.
+
 **An environment is never given back.**  What a lambda kept in `⎕heap` stays there, as a string a name held does; one kept in an
 arena goes with the arena.  The third word says which allocator it is, so that giving it back can come later without changing what
 a lambda is.
@@ -844,7 +867,8 @@ infer what they capture and sort themselves into three traits by what they do wi
 capture by reference and keep the variables alive by garbage collection; **Java**'s, which capture by value and require what they
 capture to be effectively final.  The lifetime question every one of those answers somehow is answered here the way it is for a
 string made in an arena: the compiler knows where the environment is and what it reaches, puts it in the heap where it may leave,
-and refuses what would reach something gone.  **C++** leaves the same question to the programmer, a `[&]` lambda returned being a
+and refuses what would reach something gone; where a lambda crosses a call, its type says whether it lasts, as Swift's
+`@escaping` and Rust's `'static` bound on an `Fn` do.  **C++** leaves the same question to the programmer, a `[&]` lambda returned being a
 dangling reference nothing reports; **Rust** answers it with `move` and lifetimes on `impl Fn`, and boxes the closure (`Box<dyn
 Fn>`) where the caller cannot know its size -- which is where every escaping lambda here is; **Swift** marks the escaping parameter
 (`@escaping`) and heap-allocates the context of every closure that may escape; **Go** decides by escape analysis, as this does,

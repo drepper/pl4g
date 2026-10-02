@@ -922,14 +922,16 @@ Runtime
     of them is a second spelling of one thing.
 
 [x] let a lambda leave the call that made it.  Where what it brought in is kept is the compiler's choice -- the frame where the
-    lambda provably stays, `⎕heap` otherwise, the arena `λ … in a` names -- and the value is three words.  What it reaches is
+    lambda provably stays, `⎕heap` otherwise, the arena `λ … [n] in a →` names -- and the value is three words.  What it reaches is
     provenance in the arena machinery's keys, so one leaving the call reaches only what lasts (4632); writing through a place
     from outside the call is checked the same way for everything (4633).  4549 is retired.
 
-[ ] let a lambda a function was handed leave it.  A parameter's lambda may keep what it brought in in the caller's frame, so it
-    is not answered and not brought into a lambda that is: `compose(f, g)` cannot be written.  What would lift it is the type
-    saying where the environment is -- `fn(u8) → u8 in ⎕heap`, as `str in ⎕heap` says of an answer -- with a caller handing a
-    frame lambda there refused or moved to the heap.
+[x] let a lambda a function was handed leave it.  `fn(u8) in ⎕heap → u8` is the type of one whose environment lasts, made with
+    `λ … [n] in ⎕heap → T` -- `in` before the arrow saying where what was brought in is kept, after it where the answer is made
+    -- or by a lambda that brings nothing in; a plain value where it is wanted is refused.  `compose(f, g)` can be written.
+
+[ ] let a function type say its lambda is kept in an arena a parameter names, `fn(u8) in a → u8`, as `→ str in a` says of an
+    answer; only `⎕heap` may be written there now (4642).
 
 [ ] let a variable at the top level hold a lambda (4550).  It needs the image to hold an address of code, which is what a string
     at the top level needs as well (9902).

@@ -353,6 +353,8 @@ module.exports = grammar({
       // and takes what follows it.
       prec.right(seq(optional($.attribute_list),
                      'fn', '(', sepBy(',', field('parameter', $.type)), ')',
+                     // where what the lambda brought in is kept
+                     optional(seq('in', field('kept_in', $.identifier))),
                      optional(seq($._return_arrow,
                                   field('return_type', $.type),
                                   // a function handing its own arena out
@@ -887,6 +889,8 @@ module.exports = grammar({
       '\u03bb',
       sepBy(',', field('parameter', $.lambda_parameter)),
       optional(field('captures', $.capture_list)),
+      // where what it brought in is kept
+      optional(seq('in', field('kept_in', $.identifier))),
       optional(seq($._return_arrow, field('return_type', $.type),
                    // `in pool`: an arena of the body's own, handed out
                    optional(seq('in', field('made_in', $.identifier))))),
@@ -1046,8 +1050,6 @@ module.exports = grammar({
       field('value', choice($.binary_expression, $.unary_expression,
                             $.set_literal, $.dictionary_literal,
                             $.list_literal, $.array_literal,
-                            // what it brings in is kept in the arena
-                            $.lambda_expression,
                             // which the compiler reads and refuses where the
                             // call hands out an arena of its own
                             $.call_expression)),

@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4213
+
+※ A lambda that does not say it lasts is not given where one that does is
+※ wanted, even where the compiler could have kept it in `⎕heap`: the program
+※ says so, `[n] in ⎕heap`, and a value already made may be in a frame.
+
+fn keep(f: fn(u8) in ⎕heap → u8) → fn(u8) in ⎕heap → u8:
+    f
+
+@[startup, impure]
+fn main() → u6:
+    let n: u8 = 1u8
+    let p: fn(u8) → u8 = λ x: u8 [n] → u8 { x + n }
+    let q: fn(u8) in ⎕heap → u8 = keep(p)
+    if q(1u8) = 2u8: 0u6 else: 1u6

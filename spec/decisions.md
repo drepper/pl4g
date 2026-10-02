@@ -9126,6 +9126,36 @@ Decided here, under those:
 Compare: C and C++ (`static const`, by convention), Rust (`'static`, `static`, `phf`), D
 (`immutable`), Zig (comptime-known slices in read-only data), Go (run-time composite literals).
 
+## 2026-10-02T21:00+02:00 — language
+
+**A lambda that lasts: `fn(u8) in ⎕heap → u8`**
+
+    fn compose(f: fn(u8) in ⎕heap → u8, g: fn(u8) in ⎕heap → u8) → fn(u8) in ⎕heap → u8:
+        λ x: u8 [f, g] in ⎕heap → u8 { g(f(x)) }
+
+A lambda a function was handed could not leave it: it may keep what it brought in in the
+caller's frame, and nothing said otherwise, so `compose` could not be written.  Decided by
+the user:
+
+1. **Where the environment is kept is written before the arrow**, on the lambda and on its
+   type: `λ a: u8 [n] in ⎕heap → str`, `fn(u8) in ⎕heap → u8`.  `in` at the end keeps the
+   meaning it has for every answer -- where the value answered is made.  This replaces
+   `λ … in a` written after the body, which read as the answer's allocator.
+2. **`in` on a lambda that brings nothing in is refused** (4643); such a lambda, given where a
+   lasting one is wanted, takes the lasting type, the compiler supplying no environment at all.
+3. **A value that does not say it lasts is refused where one that does is wanted** (4213) --
+   always, even a lambda the compiler could have moved to the heap: the program says it.
+
+Decided here: the promise is part of the type (`FuncType.lasting`), as a reference's `lasting`
+is, so it travels with the value through parameters, fields and answers; a lasting type stands
+where a plain one is wanted.  A lambda kept in `⎕heap` reaches only what lasts (4644).  A type
+names only `⎕heap` (4642).
+
+Compare: Swift's `@escaping`, on the parameter and checked at the call; Rust's `F: Fn(u8) -> u8 +
+'static` and `Box<dyn Fn>`, the bound on the type and the box saying where; C++'s
+`std::function`, which copies the closure and says nothing about what it captured by reference;
+Go and Java, which collect and so have nothing to say.
+
 Open questions
 --------------
 

@@ -199,7 +199,8 @@ GROUPS: tuple[Group, ...] = (
            "arena-handed-out": "an arena handed out by a function, a lambda and a function value",
            "format-into-an-arena": "templates formatted into an arena named before them",
            "lambda-answered": "lambdas answered, boxed, listed and written through a reference",
-           "static-data": "arrays, lists, sets and dictionaries laid out in the image"}),
+           "static-data": "arrays, lists, sets and dictionaries laid out in the image",
+           "lambda-handed-on": "lambdas that last, composed, handed on and kept in a field"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "

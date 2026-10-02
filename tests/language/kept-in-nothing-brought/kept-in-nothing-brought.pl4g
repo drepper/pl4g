@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4643
+
+※ `in` after the capture list says where what the lambda brought in is kept; one
+※ that brings nothing in has nothing to keep, and lasts as it is.
+
+fn same() → fn(u8) in ⎕heap → u8:
+    λ x: u8 in ⎕heap → u8 { x }
+
+@[startup]
+fn main() → u6:
+    0u6

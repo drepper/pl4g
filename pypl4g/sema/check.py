@@ -885,6 +885,31 @@ def _holds_a_lambda(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
             return False
 
 
+def _lambdas_last(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
+    """Whether every function a value of *ty* holds says what it brought in lasts
+    (`fn(…) in ⎕heap → T`): such a value reaches nothing that is gone before the
+    program is, whatever it was made from, its type having been checked where it
+    was made."""
+    if isinstance(ty, FuncType):
+        return ty.lasting
+    if id(ty) in seen:
+        return True
+    deeper = seen | {id(ty)}
+    match ty:
+        case TupleType():
+            return all(_lambdas_last(m, deeper) for m in ty.members)
+        case ResultType():
+            return (_lambdas_last(ty.ok, deeper)
+                    and (ty.err is None or _lambdas_last(ty.err, deeper)))
+        case ProductType():
+            return all(_lambdas_last(t, deeper) for _, t in ty.fields)
+        case ArrayType() | ListType() | SetType() | VecType():
+            return _lambdas_last(ty.element, deeper)
+        case DictType():
+            return _lambdas_last(ty.key, deeper) and _lambdas_last(ty.value, deeper)
+    return True
+
+
 def _lifetimes_of(node: object, found: set[str] | None = None) -> set[str]:
     """Every lifetime name written anywhere in a type, however deep.
 
@@ -934,7 +959,10 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
         # A function that walks what it is given does everything one that does
         # not does, and the walk is the caller's business: a name that does not
         # ask for it simply does not do it.
-        return (found.listable and not expected.listable
+        # And one whose environment lasts does everything one that may not does.
+        return ((found.listable or not expected.listable)
+                and (found.lasting or not expected.lasting)
+                and found.hands_out == expected.hands_out
                 and found.params == expected.params
                 and found.ret is expected.ret)
     if not isinstance(expected, PtrType) or not isinstance(found, PtrType) \
@@ -1513,12 +1541,11 @@ def _operands_of(expr: ast.Expr) -> tuple[ast.Expr, ...]:
 def _takes_room(expr: ast.Expr) -> bool:
     """Whether what the expression does takes room from an arena.
 
-    A join of two, a collection written out, and a lambda, which keeps what it
-    brings in somewhere.  Everything else is worked out in registers, so saying
-    which arena it comes from would be saying nothing.
+    A join of two, and a collection written out.  Everything else is worked out in
+    registers, so saying which arena it comes from would be saying nothing -- a
+    lambda says where what it brings in is kept after its capture list.
     """
-    if isinstance(expr, (ast.SetLit, ast.DictLit, ast.ListLit, ast.ArrayLit,
-                         ast.Lambda)):
+    if isinstance(expr, (ast.SetLit, ast.DictLit, ast.ListLit, ast.ArrayLit)):
         return True
     return isinstance(expr, ast.Binary) and expr.op is ast.BinaryOp.CONCAT
 
@@ -5131,9 +5158,17 @@ class Checker:
             ret = self._return_type(ref.ret)
             if ret is ERROR or any(one is ERROR for one in params):
                 return ERROR
+            if ref.kept_in is not None and ref.kept_in[0] != HEAP_NAME:
+                # A type says only that what was brought in lasts, and `⎕heap` is
+                # the one place that says so: an arena's lambda lasts as long as
+                # the arena, which nothing in a type can name.
+                self._diags.emit(D.LANG_KEPT_IN_NOT_HEAP, ref.kept_in[1],
+                                 name=ref.kept_in[0])
+                return ERROR
             return self._module.types.func_type(
                 params, ret, self._walks_what_it_is_given(ref.attrs),
-                hands_out=ref.made_in is not None)
+                hands_out=ref.made_in is not None,
+                lasting=ref.kept_in is not None)
         return self._named_type(ref)
 
     # -- units -----------------------------------------------------------------
@@ -6724,7 +6759,7 @@ class Checker:
         said = self._answer_made_in
         if said is None or self._value_type_of(value) is ERROR:
             return value
-        if _holds_a_lambda(ty) \
+        if _holds_a_lambda(ty) and not _lambdas_last(ty) \
                 and not self._lambda_may_leave(written, said[0] | {_HEAP},
                                                func.name, span):
             return UndefConst(ERROR)
@@ -8603,6 +8638,8 @@ class Checker:
         func = self._demanding[1]
         if not self._made_here(where):
             if _holds_a_lambda(ty):
+                if _lambdas_last(ty):
+                    return value
                 return value if self._lambda_may_leave(
                     written, frozenset({_HEAP}),
                     func.name if func is not None else "", span) else None
@@ -9183,8 +9220,7 @@ class Checker:
                    for one in self._bind_attributes(attrs, AttrTarget.CALLABLE))
 
     def _lower_lambda(self, builder: IRBuilder, expr: ast.Lambda,
-                      expected: Type | None,
-                      arena: tuple[Value, frozenset[int]] | None = None) -> Value:
+                      expected: Type | None) -> Value:
         """Lower `\N{GREEK SMALL LETTER LAMDA} \N{HORIZONTAL ELLIPSIS}`: a function written where a value is wanted.
 
         What it comes to is three words -- where its code is, where what it
@@ -9199,11 +9235,14 @@ class Checker:
         else, which is what makes the capture list the list of what it depends
         on rather than something a reader works out by reading the body.
 
-        Where what it brought in is kept is the compiler's choice: this call's
-        frame for a lambda that provably stays in it, `\N{APL FUNCTIONAL SYMBOL QUAD}heap` for every other,
-        and the arena *arena* names where the program wrote `in`.  What the
-        lambda then reaches is written down as where it was made, so that every
-        place it may go asks the question a string made in an arena is asked.
+        Where what it brought in is kept is the compiler's choice -- this call's
+        frame for a lambda that provably stays in it, `\N{APL FUNCTIONAL SYMBOL QUAD}heap` for every other --
+        unless `in` after the capture list says: `\N{APL FUNCTIONAL SYMBOL QUAD}heap`, which makes the
+        lambda's type say it lasts (`fn(\N{HORIZONTAL ELLIPSIS}) in \N{APL FUNCTIONAL SYMBOL QUAD}heap \N{RIGHTWARDS ARROW} T`), or an arena.  What
+        the lambda then reaches is written down as where it was made, so that
+        every place it may go asks the question a string made in an arena is
+        asked.  A lambda that brings nothing in lasts whatever is said, and may
+        be given where one that lasts is wanted.
         """
         # The name comes first so that everything recorded about this lambda
         # can say which one it was: a lambda is written with none, so the log
@@ -9227,8 +9266,30 @@ class Checker:
             self._diags.emit(D.LANG_WRITES_ARRAYS_AS_A_VALUE, expr.span, name=name)
             return UndefConst(ERROR)
         walks = self._walks_what_it_is_given(expr.attrs)
+        arena: tuple[Value, frozenset[int]] | None = None
+        lasting = False
+        if expr.kept_in is not None:
+            where, at = expr.kept_in
+            if not taken and expr.brings_in is None:
+                # Nothing brought in is kept nowhere: there is nothing to say.
+                self._diags.emit(D.LANG_KEPT_IN_NOTHING_BROUGHT, at)
+                return UndefConst(ERROR)
+            if where == HEAP_NAME:
+                lasting = True
+            else:
+                written = ast.NameRef(span=at, name=where)
+                found = self._arena_named(builder, written)
+                if found is None:
+                    return UndefConst(ERROR)
+                arena = (found, self._arenas_in(written))
+        elif not taken:
+            # Brings nothing in, so it lasts as long as the program: where that
+            # is asked for, it is what is given.
+            wanted = self._aiming_at(expected)
+            lasting = isinstance(wanted, FuncType) and wanted.lasting
         ty = self._module.types.func_type(
-            params, answer, walks, hands_out=_hands_out_of(expr) is not None)
+            params, answer, walks, hands_out=_hands_out_of(expr) is not None,
+            lasting=lasting)
         if walks and not params:
             # Named the way the report log names it, that being the one name
             # this function has and the one a reader can look up.
@@ -9240,10 +9301,21 @@ class Checker:
         if self._unscanned is not None:
             self._lambdas_that_stay(self._unscanned)
             self._unscanned = None
-        stays = arena is None and self._stays.get(id(expr)) is expr
+        stays = arena is None and expr.kept_in is None \
+            and self._stays.get(id(expr)) is expr
         # What it reaches is worked out before the body is lowered and the
         # environment filled, from the names as they stand where it is written.
         reaches = self._reached_by(builder, taken)
+        if lasting and taken:
+            # Its type says it lasts, so everything it reaches has to: the heap,
+            # the image, and lambdas whose own type says the same.
+            short = sorted({self._reach_written(one) for one in reaches
+                            if one != _HEAP})
+            if short:
+                self._diags.emit(D.LANG_LASTING_LAMBDA_REACHES, expr.kept_in[1]
+                                 if expr.kept_in is not None else expr.span,
+                                 name=name, found=", ".join(short))
+                return UndefConst(ERROR)
         place, offsets, allocator, kept = self._environment(
             builder, taken, held, expr.span, stays, arena)
         func = self._function_of_a_lambda(expr, params, answer, held, offsets,
@@ -9294,6 +9366,9 @@ class Checker:
                 continue
             what = self._held_by(local)
             if not _points_somewhere(what) or local.gone_at is not None:
+                continue
+            if isinstance(what, FuncType) and what.lasting:
+                # Its type says what it reaches lasts, wherever it came from.
                 continue
             found.update(local.arenas)
             if _holds_a_reference(what) and not local.placed:
@@ -9410,15 +9485,21 @@ class Checker:
         if shim is None:
             return UndefConst(ERROR)
         # It brought nothing in, so it carries no environment and no allocator,
-        # and lasts as long as the program.
+        # and lasts as long as the program -- which its type says where that
+        # is what is wanted.
+        wanted = self._aiming_at(expected)
+        ty = func.ty
+        if isinstance(wanted, FuncType) and wanted.lasting:
+            ty = self._module.types.func_type(ty.params, ty.ret, ty.listable,
+                                              ty.hands_out, lasting=True)
         made = builder.make_tuple(
             (builder.code_address(shim, ref.span),
              builder.cast(CastKind.BITCAST, builder.int_const(U64, 0),
                           _ENVIRONMENT, ref.span),
              tables.no_allocator(builder)),
-            func.ty, ref.span)
-        if not self._accepts(expected, func.ty):
-            self._report_mismatch(ref.span, func.ty, expected)
+            ty, ref.span)
+        if not self._accepts(expected, ty):
+            self._report_mismatch(ref.span, ty, expected)
             return UndefConst(ERROR)
         return made
 
@@ -17073,11 +17154,6 @@ class Checker:
             self._diags.emit(D.LANG_HANDED_OUT_IN_AFTER_CALL, expr.span,
                              name=handing)
             return UndefConst(ERROR)
-        if isinstance(inside, ast.Lambda):
-            # What the lambda brings in is kept in the arena, and lasts as long
-            # as the arena does rather than as long as this call.
-            return self._lower_lambda(builder, inside, expected,
-                                      (place, self._arenas_in(expr.arena)))
         if not _takes_room(inside):
             self._diags.emit(D.LANG_ALLOCATED_NOT_A_PLACE, expr.span,
                              found=_about_the_shape(inside))

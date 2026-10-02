@@ -28,7 +28,7 @@ fn main() \N{RIGHTWARDS ARROW} u6:
     let other: fn(u8) \N{RIGHTWARDS ARROW} u8 = renamed
     let pool: mut arena = \N{APL FUNCTIONAL SYMBOL QUAD}arena
     defer \N{APL FUNCTIONAL SYMBOL QUAD}empty(pool)
-    let pooled: fn(u8) \N{RIGHTWARDS ARROW} u8 = \N{GREEK SMALL LETTER LAMDA} a: u8 [n] \N{RIGHTWARDS ARROW} u8 { a - n } in pool
+    let pooled: fn(u8) \N{RIGHTWARDS ARROW} u8 = \N{GREEK SMALL LETTER LAMDA} a: u8 [n] in pool \N{RIGHTWARDS ARROW} u8 { a - n }
     let plain: fn(u8) \N{RIGHTWARDS ARROW} u8 = \N{GREEK SMALL LETTER LAMDA} a: u8 \N{RIGHTWARDS ARROW} u8 { a }
     let added: fn(u8) \N{RIGHTWARDS ARROW} u8 = adding(1u8)
     let r: u8 = apply(\N{GREEK SMALL LETTER LAMDA} a: u8 [n] \N{RIGHTWARDS ARROW} u8 { a - n }, called(1u8)) + other(1u8)

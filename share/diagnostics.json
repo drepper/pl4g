@@ -5293,6 +5293,71 @@
       "option": null
     },
     {
+      "number": 4642,
+      "name": "LANG_KEPT_IN_NOT_HEAP",
+      "severity": "error",
+      "message": "a function type says what its lambda brought in is kept in '⎕heap' or says nothing, and '{name}' is not '⎕heap'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "what was named"
+        }
+      ],
+      "cause": "`fn(u8) in ⎕heap → u8` is the type of a lambda whose environment lasts as long as the program, so a value of it may be answered and kept anywhere.  An arena lasts as long as its maker keeps it, which nothing in a type can say.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Lambdas / Where a lambda keeps what it brought in",
+        "requirement": "A function type says only that what its lambda brought in lasts."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4643,
+      "name": "LANG_KEPT_IN_NOTHING_BROUGHT",
+      "severity": "error",
+      "message": "a lambda that brings nothing in has nothing to keep, so 'in' is not written",
+      "args": [],
+      "cause": "`in` after the capture list says where what the lambda brought in is kept.  One that brings nothing in has no environment; it lasts as long as the program, and stands where `fn(…) in ⎕heap → T` is wanted as it is.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Lambdas / Where a lambda keeps what it brought in",
+        "requirement": "Where what a lambda brought in is kept is said only of one that brings something in."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4644,
+      "name": "LANG_LASTING_LAMBDA_REACHES",
+      "severity": "error",
+      "message": "'{name}' is kept in '⎕heap', and what it brought in reaches {found}, which does not last that long",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the lambda"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "what it reaches that does not last"
+        }
+      ],
+      "cause": "A lambda whose environment is in `⎕heap` has a type saying it lasts as long as the program, so a value of it may go anywhere.  What it brought in has to last as well: made in `⎕heap` or the image, or a lambda whose own type says it lasts -- not a variable of the call, an arena, or whatever a parameter that says nothing was handed.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Lambdas / Where a lambda keeps what it brought in",
+        "requirement": "A lambda whose type says it lasts reaches only what lasts."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

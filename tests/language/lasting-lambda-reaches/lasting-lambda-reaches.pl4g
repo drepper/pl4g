@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4644
+
+※ A lambda kept in `⎕heap` has a type saying it lasts as long as the program,
+※ so what it brought in has to last as well.  A lambda a parameter that says
+※ nothing was handed may keep what it brought in in the caller's frame.
+
+fn wrapped(g: fn(u8) → u8) → fn(u8) in ⎕heap → u8:
+    λ x: u8 [g] in ⎕heap → u8 { g(x) }
+
+@[startup]
+fn main() → u6:
+    0u6

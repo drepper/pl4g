@@ -1238,6 +1238,9 @@ class Lambda(Expr):
     #: `→ T in pool`: the arena of the body's own the answer is made in, handed
     #: out to the caller with it.
     made_in: tuple[str, Span] | None = None
+    #: `[n] in ⎕heap`: where what it brought in is kept, written after the
+    #: capture list.  Nothing where the compiler chooses.
+    kept_in: tuple[str, Span] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1257,6 +1260,9 @@ class FuncTypeRef(Node):
     #: `→ T in NAME`: a function that hands its own arena out with its answer.
     #: The name is the reader's; what the type says is that it does.
     made_in: tuple[str, Span] | None = None
+    #: `fn(…) in ⎕heap → T`: what a lambda of this type brought in is kept
+    #: where it lasts, so a value of it may go anywhere.
+    kept_in: tuple[str, Span] | None = None
 
 
 class ClauseKind(StrEnum):

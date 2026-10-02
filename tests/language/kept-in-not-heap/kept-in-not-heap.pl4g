@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4642
+
+※ A function type says only that what its lambda brought in lasts, which is
+※ `⎕heap`; how long an arena lasts is nothing a type can say.
+
+fn run(f: fn(u8) in pool → u8) → u8:
+    1u8
+
+@[startup]
+fn main() → u6:
+    0u6

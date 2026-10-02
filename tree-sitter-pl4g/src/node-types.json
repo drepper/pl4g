@@ -204,10 +204,6 @@
             "named": true
           },
           {
-            "type": "lambda_expression",
-            "named": true
-          },
-          {
             "type": "list_literal",
             "named": true
           },
@@ -4859,6 +4855,16 @@
         "types": [
           {
             "type": "capture_list",
+            "named": true
+          }
+        ]
+      },
+      "kept_in": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
             "named": true
           }
         ]
@@ -9561,6 +9567,16 @@
         "types": [
           {
             "type": "type",
+            "named": true
+          }
+        ]
+      },
+      "kept_in": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
             "named": true
           }
         ]

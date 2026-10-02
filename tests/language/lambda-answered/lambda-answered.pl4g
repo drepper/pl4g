@@ -11,7 +11,7 @@
 ※ What it reaches is held to the rule a string made in an arena is: an answer
 ※ reaches nothing the call gives back.  A lambda reaching a variable of the
 ※ call by reference, or what a parameter was handed, may not leave (4632).
-※ `λ … in a` keeps what the lambda brought in in the arena `a`, which then
+※ `λ … [n] in a` keeps what the lambda brought in in the arena `a`, which then
 ※ gives it back with everything else it made.
 
 type Box = f: fn(u8) → u8
@@ -61,7 +61,7 @@ fn main() → u6:
         total ← total + one(10u8)
     let n: fn(u8) → u8 = named(1u8)
     let pool: mut arena = ⎕arena
-    let k: fn(u8) → u8 = λ x: u8 [n] → u8 { n(x) + 2u8 } in pool
+    let k: fn(u8) → u8 = λ x: u8 [n] in pool → u8 { n(x) + 2u8 }
     let got: u8 = k(1u8)
     ⎕empty(pool)
     let into: mut Box = Box(.f ← λ x: u8 → u8 { x })

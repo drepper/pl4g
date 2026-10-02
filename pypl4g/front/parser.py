@@ -1062,6 +1062,13 @@ class Parser:
             while self._accept(TokKind.COMMA) is not None:
                 params.append(self._parse_type_ref())
         end = self._expect(TokKind.RPAREN).span
+        kept_in: tuple[str, Span] | None = None
+        if self._accept(TokKind.KW_IN) is not None:
+            # Where what a lambda of this type brought in is kept: before the
+            # arrow, `in` after the answer saying where the answer is made.
+            kept = self._expect(TokKind.IDENT)
+            kept_in = (kept.text, kept.span)
+            end = kept.span
         ret: ast.TypeExpr | None = None
         made_in: tuple[str, Span] | None = None
         if self._accept(TokKind.ARROW) is not None:
@@ -1072,7 +1079,8 @@ class Parser:
                 made_in = (arena.text, arena.span)
                 end = arena.span
         return ast.FuncTypeRef(span=start.to(end), params=tuple(params),
-                               ret=ret, attrs=attrs, made_in=made_in)
+                               ret=ret, attrs=attrs, made_in=made_in,
+                               kept_in=kept_in)
 
     def _parse_lambda(self, attrs: tuple[ast.Attribute, ...] = ()
                       ) -> ast.Lambda:
@@ -1093,6 +1101,12 @@ class Parser:
         brings_in: ast.CaptureAll | None = None
         if self._check(TokKind.LBRACKET):
             captures, brings_in = self._parse_captures()
+        kept_in: tuple[str, Span] | None = None
+        if self._accept(TokKind.KW_IN) is not None:
+            # Where what it brought in is kept, said before the arrow: `in`
+            # after the answer's type says where the answer is made.
+            kept = self._expect(TokKind.IDENT)
+            kept_in = (kept.text, kept.span)
         ret: ast.TypeExpr | None = None
         made_in: tuple[str, Span] | None = None
         if self._accept(TokKind.ARROW) is not None:
@@ -1105,7 +1119,8 @@ class Parser:
         body = self._parse_body()
         return ast.Lambda(span=start.to(body.span), params=tuple(params),
                           body=body, captures=captures, ret_type=ret,
-                          brings_in=brings_in, attrs=attrs, made_in=made_in)
+                          brings_in=brings_in, attrs=attrs, made_in=made_in,
+                          kept_in=kept_in)
 
     def _parse_lambda_param(self) -> ast.Param:
         """Parse one parameter of a lambda, which is one of a function without

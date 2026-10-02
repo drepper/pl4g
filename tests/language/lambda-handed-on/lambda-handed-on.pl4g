@@ -1,0 +1,44 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A lambda a function was handed may leave it when its type says it lasts.**
+※ `fn(u8) in ⎕heap → u8` is the type of one whose environment is in `⎕heap`, or
+※ that has none: it reaches nothing that is gone before the program is, so it
+※ may be answered, kept, and brought into a lambda that leaves -- which is what
+※ `compose` needs.  `λ … [n] in ⎕heap → T` makes one, `in` before the arrow
+※ saying where what was brought in is kept, as `in` after the answer says where
+※ the answer is made.  A lambda that brings nothing in, and a function named
+※ where a value is wanted, stand where one is wanted as they are.  One that
+※ lasts stands where a plain `fn(u8) → u8` is wanted; the other way is refused.
+
+fn compose(f: fn(u8) in ⎕heap → u8, g: fn(u8) in ⎕heap → u8) → fn(u8) in ⎕heap → u8:
+    λ x: u8 [f, g] in ⎕heap → u8 { g(f(x)) }
+
+fn twice(g: fn(u8) in ⎕heap → u8) → fn(u8) → u8:
+    λ x: u8 [g] → u8 { g(g(x)) }
+
+fn inc(x: u8) → u8:
+    x + 1u8
+
+type Hook = run: fn(u8) in ⎕heap → u8
+
+@[impure]
+fn install(h: &mut Hook, f: fn(u8) in ⎕heap → u8):
+    h⌖.run ← f
+
+@[startup, impure]
+fn main() → u6:
+    let n: u8 = 10u8
+    let add: fn(u8) in ⎕heap → u8 = λ x: u8 [n] in ⎕heap → u8 { x + n }
+    let double: fn(u8) in ⎕heap → u8 = λ x: u8 → u8 { x × 2u8 }
+    let both: fn(u8) in ⎕heap → u8 = compose(add, double)
+    let more: fn(u8) in ⎕heap → u8 = compose(both, inc)
+    let plain: fn(u8) → u8 = more
+    let four: fn(u8) → u8 = twice(double)
+    let hook: mut Hook = Hook(.run ← inc)
+    install(&mut hook, add)
+    let installed: fn(u8) in ⎕heap → u8 = hook.run
+    if both(1u8) ≠ 22u8: return 1u6
+    if plain(1u8) ≠ 23u8: return 2u6
+    if four(3u8) ≠ 12u8: return 3u6
+    if installed(5u8) ≠ 15u8: return 4u6
+    0u6
