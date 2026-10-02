@@ -5444,6 +5444,28 @@
       "option": null
     },
     {
+      "number": 4648,
+      "name": "LANG_GENERIC_REQUIREMENT_WANTED",
+      "severity": "note",
+      "message": "the requirement that would allow it is 'pre({written})'",
+      "args": [
+        {
+          "name": "written",
+          "type": "string",
+          "description": "the requirement, written over the operands' types"
+        }
+      ],
+      "cause": "A requirement allows an operation exactly as it is written: the same operator or function over the same types, a type parameter standing where a value of it is.  One over other types -- `⌜u6⌝ + ⌜u6⌝` where the body adds a `T'` to a `u6` -- holds of every call whatever `T'` is, so it says nothing about the operation the body performs.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Generic Functions / What a body may do",
+        "requirement": "A generic function's body uses nothing its requirements do not name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

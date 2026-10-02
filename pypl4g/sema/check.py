@@ -1913,6 +1913,28 @@ def _applied(expr: object) -> tuple[str, str, tuple[ast.Expr, ...]] | None:
     return None
 
 
+def _requirement_written(kind: str, what: str, types: Sequence[Type]) -> str:
+    """A requirement for one operation, as a program would write it."""
+    said = [one.written() if isinstance(one, OpaqueType)
+            else "".join(("\N{TOP LEFT CORNER}", one.written(), "\N{TOP RIGHT CORNER}"))
+            for one in types]
+    match kind:
+        case "binary":
+            return " ".join((said[0], what, said[1]))
+        case "unary":
+            return "".join((what, said[0]))
+        case "fresh":
+            return (what + said[0]) if len(said) == 1 \
+                else " ".join((said[0], what, *said[1:]))
+        case "call":
+            return "".join((what, "(", ", ".join(said), ")"))
+        case "element":
+            return "".join((said[0], "\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}",
+                            ", ".join(said[1:]), "\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}"))
+    return "".join((said[0], "\N{LEFT DOUBLE PARENTHESIS}", ", ".join(said[1:]),
+                    "\N{RIGHT DOUBLE PARENTHESIS}"))
+
+
 def _with_operands(expr: ast.Expr, operands: Sequence[ast.Expr]) -> ast.Expr:
     """*expr* with its operands replaced, in the order `_applied` gives them."""
     match expr:
@@ -9209,8 +9231,15 @@ class Checker:
         if found is not None:
             return UndefConst(found)
         opaque = next(one for one in types if isinstance(one, OpaqueType))
-        self._diags.emit(D.LANG_GENERIC_NOT_REQUIRED, expr.span, what=what,
-                         type=opaque.written(), function=self._abstract.name)
+        told = self._diags.emit(D.LANG_GENERIC_NOT_REQUIRED, expr.span, what=what,
+                                type=opaque.written(),
+                                function=self._abstract.name)
+        if all(one is not None for one in types):
+            # What to write: the operation over the types it was applied to,
+            # which is the one thing a requirement over other types is not.
+            told.note(D.LANG_GENERIC_REQUIREMENT_WANTED, expr.span,
+                      written=_requirement_written(
+                          kind, what, [one for one in types if one is not None]))
         return UndefConst(ERROR)
 
     def _calls_named(self, expr: ast.Call) -> bool:

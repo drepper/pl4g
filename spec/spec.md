@@ -6420,7 +6420,9 @@ also the whole of what the body may do with the type (below).
 what the function's `pre` clauses say, so an operator or a function applied to a value of one is allowed exactly where a
 requirement names it -- the requirement itself, or a line of a bundle it applies, with the operands' types as written -- and
 answers what the requirement's arrow says (4645).  Where a requirement has no arrow its answer is a type nothing more may be done
-to.
+to.  **The operation has to be the one the requirement writes, over the same types**: `pre(⌜u6⌝ + ⌜u6⌝ → E')` holds of every call
+whatever `T'` is, so it says nothing of `a + 1u6` with `a` a `T'` -- that needs `pre(T' + ⌜u6⌝ → E')`, which a note under the
+message spells out (4648).
 
 ```
 fn largest(a: T', b: T') → T':
