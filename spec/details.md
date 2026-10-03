@@ -4415,3 +4415,8 @@ assembly dump is laid out, the sections are laid out and every conditional branc
 ±4 KiB reach becomes the opposite branch over eight bytes and `jal zero, target` with a `riscv_jal` fixup; repeated until a round
 grows nothing.
 
+**A borrow of a field** (`_Borrow.path`).  `_borrowed_name` answers the name and the fields down to the part `&` reaches, an element
+cutting the path back to the array; `_lend` and `_lent_out` refuse only where the two paths overlap -- one is the other or begins
+it (`_overlap`).  `_record_at` and `_field_of` carry the fields being read down to the name (`below`), so reading one field while
+another is lent is not reading the name.
+

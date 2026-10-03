@@ -9541,6 +9541,17 @@ a result was taken apart by position where its answer is more than one word; a r
 offset nought, so that every read of a file started at its top; and a conditional branch on RISC-V further than four kilobytes was
 refused rather than grown into a branch and a jump.
 
+## 2026-10-04T00:30+02:00 — language
+
+**Two fields are two places for a borrow; `cat` as an example**
+
+Writing `cat` with `-b` and `-n` (`examples/cat`) found that `&mut init.io.input` and `&mut init.io.output` could not be handed to
+one call: a borrow lent the whole of the name.  Asked, the user chose to let distinct fields be lent at once, as Rust's borrow
+checker does for a local or a parameter, against keeping the rule and reaching the streams through `std.io`.  A field and the record
+holding it still clash; an element still lends its whole array.  `cat` also found that an error number has no text a program can
+print: the user chose printing the `Error` enumeration's name, which needs an enumeration's names at run time -- not there yet, and
+asked about rather than added.
+
 
 Open questions
 --------------

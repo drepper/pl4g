@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4563
+※ pl4g-test: expect-diag 4563 LANG_BORROW_ALIASED
+
+※ A field is part of the record holding it: a `&mut` to the record and one to
+※ a field of it are two ways to one place.
+
+type In = a : u8 ; b : u8
+type Out = x : In ; y : In
+
+@[impure]
+fn both(p: &mut Out, q: &mut In) → u8:
+    q⌖.a
+
+@[startup, impure]
+fn main() → u6:
+    let o: mut Out = Out(.x ← In(.a ← 0u8, .b ← 0u8), .y ← In(.a ← 0u8, .b ← 0u8))
+    if both(&mut o, &mut o.y) = 0u8: 0u6 else: 1u6

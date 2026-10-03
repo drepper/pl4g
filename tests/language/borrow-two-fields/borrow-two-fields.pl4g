@@ -1,0 +1,29 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ Two fields of a record are two places, so a `&mut` to each may be out at
+※ once -- `&mut init.io.input` and `&mut init.io.output` handed to one call --
+※ and a third field may be read while they are.  An element is not told from
+※ another and lends the whole array.
+※
+※ Compare: **Rust**, whose borrow checker splits a borrow by field the same way
+※ for a local or a parameter and not through a method call; **C** and **C++**,
+※ which have no such rule at all.
+
+type In = a : u8 ; b : u8
+type Out = x : In ; y : In ; z : u8
+
+@[impure]
+fn two(p: &mut In, q: &mut In) → u8:
+    p⌖.a ← 1u8
+    q⌖.a ← 2u8
+    p⌖.a + q⌖.a
+
+@[startup, impure]
+fn main() → u6:
+    let o: mut Out = Out(.x ← In(.a ← 0u8, .b ← 0u8), .y ← In(.a ← 0u8, .b ← 0u8),
+                         .z ← 5u8)
+    let n := two(&mut o.x, &mut o.y)
+    let r: &mut In = &mut o.x
+    let z := o.z
+    r⌖.b ← 7u8
+    if n = 3u8 ∧ z = 5u8 ∧ r⌖.b = 7u8 ∧ o.y.a = 2u8: 0u6 else: 1u6

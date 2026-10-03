@@ -1,0 +1,123 @@
+※※ cat: copy files, or the standard input, to the standard output.
+※※
+※※ `-n` numbers every line and `-b` every line that is not empty, `-b` winning
+※※ where both are given, as GNU and BSD cat both have it.  The number is six
+※※ columns wide and a tab follows it.  A file named `-`, or none at all, is the
+※※ standard input; `--` ends the options.  Numbering goes on from one file to
+※※ the next, and a line that runs on from the end of one file into the next is
+※※ one line.
+※※
+※※ The bytes are copied as they come -- a chunk read is a chunk written -- and a
+※※ number is written in front of a line only where one begins, so a file with no
+※※ end of line at its end, or with bytes no text has, comes out as it went in.
+
+let std := ⎕import("std")
+
+※※ How much one read asks for.
+let CHUNK: u64 ¤idx = 1024
+
+※※ What the options asked for, and where numbering has got to.
+type State = numbered : bool ; blank_too : bool ; count : u64 ; at_start : bool
+
+※※ Write `n` six columns wide and a tab after it.
+@[io]
+fn number(out: &mut std.Writer, n: u64) → bool:
+    let text: mut u8⟦7⟧ = 7 ⍴ 32u8
+    text⟦6⟧ ← 9u8
+    let left: mut u64 = n
+    let at: mut u64 ¤idx = 6
+    while at > 0 ∧ (left > 0u64 ∨ at = 6):
+        at ← at - 1
+        text⟦at⟧ ← 48u8 + (⎕narrow(left % 10u64 ?? 0u64, ⌜u8⌝) ?? 0u8)
+        left ← left ÷ 10u64 ?? 0u64
+    (std.Io.print(out, text) ?? 0) = 7
+
+※※ Copy everything `from` holds to `out`, numbering as `state` says.
+@[io]
+fn copied(from: &mut std.Reader, out: &mut std.Writer, state: &mut State) → i32:
+    let buf: mut u8⟦1024⟧ = 1024 ⍴ 0u8
+    while true:
+        match std.read(from, buf):
+            u64 ¤size(got):
+                if got = 0:
+                    return 0i32
+                let n: u64 ¤idx = ⎕unit(⎕drop(got), ⌜idx⌝)
+                let start: mut u64 ¤idx = 0
+                let i: mut u64 ¤idx = 0
+                while i < n:
+                    if state⌖.at_start:
+                        if state⌖.numbered ∧ (state⌖.blank_too ∨ buf⟦i⟧ ≠ 10u8):
+                            if (std.Io.print(out, buf⟦start…i⟧) ?? 0) ≠ ⎕unit(⎕drop(i - start), ⌜size⌝):
+                                return 0i32 - 1i32
+                            start ← i
+                            state⌖.count ← state⌖.count + 1u64
+                            if ¬number(out, state⌖.count):
+                                return 0i32 - 1i32
+                        state⌖.at_start ← false
+                    if buf⟦i⟧ = 10u8:
+                        state⌖.at_start ← true
+                    i ← i + 1
+                if (std.Io.print(out, buf⟦start…n⟧) ?? 0) ≠ ⎕unit(⎕drop(n - start), ⌜size⌝):
+                    return 0i32 - 1i32
+            ⊥(code):
+                return code
+    0i32
+
+@[startup, impure]
+fn main(init: mut std.Init) → u6:
+    let state: mut State = State(.numbered ← false, .blank_too ← true, .count ← 0u64,
+                                 .at_start ← true)
+    let files: mut u64 = 0u64
+    let options: mut bool = true
+    let failed: mut bool = false
+    foreach arg: str = init.args⟦1…#init.args⟧:
+        let bytes: u8⟦⟧ = ⎕bytes(arg)
+        if options ∧ arg = "--":
+            options ← false
+        elif options ∧ #bytes > 1 ∧ bytes⟦0⟧ = 45u8:
+            foreach c: u8 = bytes⟦1…#bytes⟧:
+                if c = 110u8:
+                    state.numbered ← true
+                elif c = 98u8:
+                    state.numbered ← true
+                    state.blank_too ← false
+                else:
+                    ⎕drop(std.println⌜&mut init.io.error, "cat: invalid option -- '{}'",
+                                       ⎕chr(⎕widen(c, ⌜u32⌝))⌝ ?? 0)
+                    return 1u6
+        else:
+            files ← files + 1u64
+    if files = 0u64:
+        return reported(copied(&mut init.io.input, &mut init.io.output, &mut state), "-",
+                        &mut init.io.error)
+    options ← true
+    foreach arg: str = init.args⟦1…#init.args⟧:
+        let bytes: u8⟦⟧ = ⎕bytes(arg)
+        if options ∧ arg = "--":
+            options ← false
+        elif ¬(options ∧ #bytes > 1 ∧ bytes⟦0⟧ = 45u8):
+            if arg = "-":
+                if reported(copied(&mut init.io.input, &mut init.io.output, &mut state),
+                            arg, &mut init.io.error) ≠ 0u6:
+                    failed ← true
+            else:
+                match std.Io.open(arg, ⌜std.Reader⌝):
+                    std.Reader(r):
+                        let from: mut std.Reader = r
+                        defer std.Reader.close(from)
+                        if reported(copied(&mut from, &mut init.io.output, &mut state), arg,
+                                    &mut init.io.error) ≠ 0u6:
+                            failed ← true
+                    ⊥(code):
+                        _ ← reported(code, arg, &mut init.io.error)
+                        failed ← true
+    if failed: 1u6 else: 0u6
+
+※※ Say what went wrong with `name`, where `code` says something did, and answer the
+※※ status that comes to.
+@[io]
+fn reported(code: i32, name: str, err: &mut std.Writer) → u6:
+    if code = 0i32:
+        return 0u6
+    ⎕drop(std.println⌜err, "cat: {}: error {}", name, code⌝ ?? 0)
+    1u6

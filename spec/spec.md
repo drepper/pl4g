@@ -2839,9 +2839,12 @@ bump(&mut p) + bump(&mut p)    ※ and twice more, one after the other
 That is the lexical rule, and it is Rust's before non-lexical lifetimes, with the one refinement that an argument's borrow ends
 with the call where the answer has nowhere to keep it.  Rust now ends a borrow at its last use, which reads more
 programs at the price of a liveness analysis to say where a reference stops existing; here a generator that wants the place back
-opens a scope or writes the statement, and the rule can be read off the source with nothing computed.  **An element is part of its
-array**, so lending one lends the array: two elements are two places, but telling one index from another is arithmetic, and a
-promise that depends on arithmetic is no promise.  **A variable at the top level is not tracked** -- it is reachable from every
+opens a scope or writes the statement, and the rule can be read off the source with nothing computed.  **Two fields are two
+places**: a `&mut` to one and a reference to another may be out at once -- `copy(&mut init.io.input, &mut init.io.output)` -- and a
+third field may be read or written beside them; a field and the record holding it, or a record holding it in turn, are one place
+(4563).  Which field is written down, so nothing is computed to tell them apart; Rust's borrow checker splits a borrow by field the
+same way.  **An element is part of its array**, so lending one lends the array: two elements are two places, but telling one index
+from another is arithmetic, and a promise that depends on arithmetic is no promise.  **A variable at the top level is not tracked** -- it is reachable from every
 function and no one of them can see what the others do -- so the rule is about names a body binds.
 
 **The rule is about taking a reference, not about copying one.**  A reference is a value like any other, so binding a second

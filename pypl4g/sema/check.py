@@ -226,6 +226,17 @@ class _Borrow:
     #: when the call is, so `bump(&mut n); bump(&mut n)` is two turns and not
     #: two references at once.
     depth: int
+    #: The fields, outermost first, of the part of the name's place it reaches:
+    #: nothing for the whole of it.  Two fields are two places, so references to
+    #: two may both be out; a field and the record holding it are not.
+    path: tuple[str, ...] = ()
+
+
+def _overlap(one: tuple[str, ...], other: tuple[str, ...]) -> bool:
+    """Whether two parts of one place, as field paths, share anything: one of
+    them is the other or inside it."""
+    shorter = min(len(one), len(other))
+    return one[:shorter] == other[:shorter]
 
 
 #: A reference nothing has bound yet, which lives to the end of the statement.
@@ -3895,7 +3906,7 @@ class Checker:
         difference between the two being that one of them named its parts, and
         that is a question here and nowhere below.
         """
-        somewhere = self._record_at(builder, expr.base)
+        somewhere = self._record_at(builder, expr.base, below=(expr.name,))
         if somewhere is not None:
             # The record is somewhere, so only the field is read: reading the
             # whole of it to take one part out would read what nothing asked
@@ -3946,7 +3957,8 @@ class Checker:
         return found
 
     def _record_at(self, builder: IRBuilder, expr: ast.Expr,
-                   writing: bool = False) -> tuple[Value, ProductType] | None:
+                   writing: bool = False, below: tuple[str, ...] = ()
+                   ) -> tuple[Value, ProductType] | None:
         """Where the record *expr* names is, where it is somewhere.
 
         Four things are: a name given storage of its own, which every record
@@ -3965,7 +3977,8 @@ class Checker:
                         self._told_ended(local, expr.span)
                         return None
                     if expr.name != self._taking_a_reference \
-                            and self._lent_out(expr.name, expr.span, writing):
+                            and self._lent_out(expr.name, expr.span, writing,
+                                               below):
                         return None
                     local.read = True
                     if self._notes is not None:
@@ -4011,7 +4024,8 @@ class Checker:
                         and isinstance(shared.value_type, ProductType):
                     return (builder.address(shared, expr.span),
                             shared.value_type)
-                found = self._record_at(builder, expr.base, writing)
+                found = self._record_at(builder, expr.base, writing,
+                                        (expr.name, *below))
                 if found is None:
                     return None
                 where, ty = found
@@ -12298,30 +12312,40 @@ class Checker:
             if one.depth == _UNTIL_THE_STATEMENT_ENDS:
                 one.depth = depth
 
-    def _borrowed_name(self, expr: ast.Expr) -> str | None:
-        """Which local's place `&expr` reaches, where it reaches one.
+    def _borrowed_name(self, expr: ast.Expr) -> tuple[str, tuple[str, ...]] | None:
+        """Which local's place `&expr` reaches, where it reaches one, and which
+        part of it, as the fields down to it.
 
-        An element is part of the array and a field is part of the record, so
-        lending one lends the whole: two elements are two places, but nothing
-        here tells one index from another and a promise that depends on
-        arithmetic is no promise.  Two fields really are two places and could be
-        told apart, which is a finer rule than this one and is written down
-        rather than guessed at.  A reference reached through another reference
-        belongs to whoever owns that one, and there is nothing here to hold to
-        it.
+        A field is a place of its own, so lending one lends that field and what
+        is inside it, and a reference to another field may be out beside it --
+        `&mut init.io.input` and `&mut init.io.output` together, as Rust's
+        borrows of two fields are.  An element is part of the array, so lending
+        one lends the whole array: two elements are two places, but nothing here
+        tells one index from another and a promise that depends on arithmetic is
+        no promise.  A reference reached through another reference belongs to
+        whoever owns that one, and there is nothing here to hold to it.
         """
         seen = expr
+        fields: list[str] = []
         while True:
             match seen:
                 case ast.NameRef():
-                    return (seen.name if self._find_local(seen.name) is not None
-                            else None)
-                case ast.Element() | ast.Member():
+                    if self._find_local(seen.name) is None:
+                        return None
+                    return (seen.name, tuple(reversed(fields)))
+                case ast.Member():
+                    fields.append(seen.name)
+                    seen = seen.base
+                case ast.Element():
+                    # The whole array, whichever element: what was below it
+                    # is part of that.
+                    fields.clear()
                     seen = seen.base
                 case _:
                     return None
 
-    def _lend(self, name: str | None, mutable: bool, span: Span) -> None:
+    def _lend(self, name: str | None, mutable: bool, span: Span,
+              path: tuple[str, ...] = ()) -> None:
         """Take a reference of *name*'s place, refusing one that clashes.
 
         A `&mut` is the only reference to its place while it lives and a `&`
@@ -12331,15 +12355,17 @@ class Checker:
         if name is None:
             return
         for one in self._borrows:
-            if one.name != name or not (one.mutable or mutable):
+            if one.name != name or not (one.mutable or mutable) \
+                    or not _overlap(one.path, path):
                 continue
             self._diags.emit(D.LANG_BORROW_ALIASED, span, name=name) \
                 .note(D.LANG_BORROW_LENT_HERE, one.span, name=name)
             return
         self._borrows.append(_Borrow(name, mutable, span,
-                                     _UNTIL_THE_STATEMENT_ENDS))
+                                     _UNTIL_THE_STATEMENT_ENDS, path))
 
-    def _lent_out(self, name: str, span: Span, writing: bool) -> bool:
+    def _lent_out(self, name: str, span: Span, writing: bool,
+                  path: tuple[str, ...] = ()) -> bool:
         """Report using *name*'s own name while a reference to it is out.
 
         Whoever holds the reference was promised that nothing else changes the
@@ -12348,7 +12374,8 @@ class Checker:
         its place while it lives; a `&` shares, and the name is another sharer.
         """
         for one in self._borrows:
-            if one.name != name or not (writing or one.mutable):
+            if one.name != name or not (writing or one.mutable) \
+                    or not _overlap(one.path, path):
                 continue
             self._diags.emit(D.LANG_BORROW_NAME_WRITTEN if writing
                              else D.LANG_BORROW_NAME_READ, span, name=name) \
@@ -12372,8 +12399,10 @@ class Checker:
         writes = expr.mutable or (isinstance(wanted, PtrType) and wanted.mutable)
         # Asked before the place is worked out: working it out reads the name,
         # and a name being lent out is what is being asked about.
-        lent = self._borrowed_name(expr.operand)
-        self._lend(lent, writes, expr.span)
+        borrowed = self._borrowed_name(expr.operand)
+        lent = borrowed[0] if borrowed is not None else None
+        self._lend(lent, writes, expr.span,
+                   borrowed[1] if borrowed is not None else ())
         outer, self._taking_a_reference = self._taking_a_reference, lent
         try:
             found = self._place_written(builder, expr.operand)
