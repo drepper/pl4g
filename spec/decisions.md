@@ -9623,6 +9623,16 @@ Taken without asking: a body with a line at the margin inside an open pair is le
 the bracket count on the way says; the bodies of anything but a function -- an enumeration's values, a bundle's lines -- are lexed as
 before.
 
+## 2026-10-04T05:00+02:00 — compiler
+
+**A field is writable where its record is**
+
+Asked how `&mut init.io.output` could be taken from a startup function written `init: std.Init`, the answer was that it should not:
+the checker answered every field of a record as a place that may be written, whatever the record was.  Now a field may be written
+exactly where the record holding it may -- a variable or a parameter written `mut`, a variable at the top level written `mut`, or what
+a `&mut` names (4537), the message naming the whole path.  The startup function's parameter is the record the process was started
+with, not a copy; `init: mut std.Init` is what lets a program hand its streams out by `&mut`.
+
 
 Open questions
 --------------

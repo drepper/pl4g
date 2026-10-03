@@ -1064,6 +1064,15 @@ def _lifts_a_parameter(expr: ast.Expr) -> bool:
         and _is_generic(expr.written.name)
 
 
+def _path_of(expr: ast.Expr) -> str:
+    """A field written as the path to it, `init.io.output`, for a message."""
+    if isinstance(expr, ast.Member):
+        return ".".join((_path_of(expr.base), expr.name))
+    if isinstance(expr, ast.NameRef):
+        return expr.name
+    return "what this names"
+
+
 def _one_turn(iterable: ast.Expr) -> bool:
     """Whether a loop over *iterable* takes one turn and no more, which a range
     from a number written down to the one after it does -- the loop a generator
@@ -12877,9 +12886,34 @@ class Checker:
                              type=ty.written(), name=expr.name)
             return None
         # A field lives as long as the record does, which is what says how long
-        # a reference to it may be held.
+        # a reference to it may be held -- and may be written where the record
+        # may: `&mut init.io.output` asks the `mut` of `init`.
         return (self._field_place(builder, where, ty, at, expr.span),
-                ty.fields[at][1], True, expr.name, self._lasting(where))
+                ty.fields[at][1], self._may_write(expr.base), _path_of(expr),
+                self._lasting(where))
+
+    def _may_write(self, expr: ast.Expr) -> bool:
+        """Whether the record *expr* names is one the program may write: a name
+        written `mut`, a variable at the top level written `mut`, a field of one
+        of those, or what a `&mut` names."""
+        match expr:
+            case ast.NameRef():
+                local = self._find_local(expr.name)
+                if local is not None:
+                    return local.mutable
+                found = self._provided(expr.name)
+                return found.mutable if isinstance(found, GlobalVar) else True
+            case ast.Member():
+                shared = self._exported_variable(expr)
+                if shared is not None:
+                    return shared.mutable
+                return self._may_write(expr.base)
+            case ast.Deref():
+                held = self._type_of(expr.operand)
+                return held.mutable if isinstance(held, PtrType) else True
+        # An element is the array's, which asks its own question where the
+        # element is reached.
+        return True
 
     def _place_of_an_element(self, builder: IRBuilder, expr: ast.Element
                              ) -> tuple[Value, Type, bool, str, bool] | None:
