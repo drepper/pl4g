@@ -36,7 +36,7 @@ let std := ⎕import("std")
 fn main(init: std.Init) → u6:
     ※ started, waited for, and the count read back
     match std.write(&mut init.io.error, ⎕bytes("one\n")):
-        std.fs.Pending(h):
+        std.io.Pending(h):
             match std.flush(h):
                 u64 ¤size(n):
                     if n ≠ 4:
@@ -49,7 +49,7 @@ fn main(init: std.Init) → u6:
             3u6
 
 @[impure]
-fn rest(err: &mut std.fs.Writer) → u6:
+fn rest(err: &mut std.io.Writer) → u6:
     ※ the two in one
     match std.write_sync(err, ⎕bytes("two\n")):
         u64 ¤size(n):
@@ -61,10 +61,10 @@ fn rest(err: &mut std.fs.Writer) → u6:
             5u6
 
 @[impure]
-fn refused(err: &mut std.fs.Writer) → u6:
+fn refused(err: &mut std.io.Writer) → u6:
     ※ a descriptor nothing opened: the number comes back as the kernel gave it
-    let nowhere: mut std.fs.Writer = std.fs.Writer(.fd ← 77i32, .ring ← err⌖.ring)
-    defer std.fs.Writer.close(nowhere)
+    let nowhere: mut std.io.Writer = std.io.Writer(.fd ← 77i32, .ring ← err⌖.ring)
+    defer std.io.Writer.close(nowhere)
     match std.write_sync(&mut nowhere, ⎕bytes("three\n")):
         u64 ¤size:
             6u6
@@ -77,7 +77,7 @@ fn refused(err: &mut std.fs.Writer) → u6:
                 ※ started and never waited for: the drain before the program
                 ※ ends is what makes it happen
                 match std.write(err, ⎕bytes("four\n")):
-                    std.fs.Pending:
+                    std.io.Pending:
                         0u6
                     ⊥:
                         9u6

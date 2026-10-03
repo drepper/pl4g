@@ -33,10 +33,10 @@ fn main(init: std.Init) → u6:
     if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
         1u6
     else:
-        let sink: mut std.fs.Writer = std.fs.Writer(.fd ← ends⟦1⟧, .ring ← init.io.error.ring)
-        defer std.fs.Writer.close(sink)
-        let source: mut std.fs.Reader = std.fs.Reader(.fd ← ends⟦0⟧, .ring ← init.io.error.ring)
-        defer std.fs.Reader.close(source)
+        let sink: mut std.io.Writer = std.io.Writer(.fd ← ends⟦1⟧, .ring ← init.io.error.ring)
+        defer std.io.Writer.close(sink)
+        let source: mut std.io.Reader = std.io.Reader(.fd ← ends⟦0⟧, .ring ← init.io.error.ring)
+        defer std.io.Reader.close(source)
         let sent: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧ in ⎕static
         let back: mut u8⟦4⟧ = ⟦0u8, 0u8, 0u8, 0u8⟧
         ※ how many bytes went, or why none did
@@ -51,8 +51,8 @@ fn main(init: std.Init) → u6:
         ※ a descriptor nothing opened, which the kernel refuses and which comes
         ※ back named rather than as a number
         else:
-            let nowhere: mut std.fs.Writer = std.fs.Writer(.fd ← 77i32, .ring ← init.io.error.ring)
-            defer std.fs.Writer.close(nowhere)
+            let nowhere: mut std.io.Writer = std.io.Writer(.fd ← 77i32, .ring ← init.io.error.ring)
+            defer std.io.Writer.close(nowhere)
             match std.write_sync(&mut nowhere, sent):
                 u64 ¤size:
                     5u6

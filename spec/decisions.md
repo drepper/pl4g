@@ -9719,6 +9719,18 @@ the three streams is written into the image as a relocation; `cwd()` is `State.c
 `value.f()`.  Two code-generator limits came up and were lifted rather than worked round: a result whose answer is several values
 (`Reader ? i32`), and a coroutine holding one.
 
+## 2026-10-04T10:00+02:00 — std
+
+**`std.io`: the devices, apart from files and directories**
+
+The user asked for a module `std.io` holding `Reader` and `Writer`, moved out of `std.fs`.  `fs.Dir.open` makes them, so `fs`
+imports `io` and `io` cannot import `fs` back; what the devices' own functions need -- the `Ring` record, `Pending`, `Answer` and
+the runtime's submit, wait, ready and close -- has to be on `io`'s side.  Asked, the user decided that **that whole layer moves to
+`io`** -- against a third module holding the ring, and against moving `Dir.open` out of `fs` -- and that **`ReadWriter` moves with
+the other two**.  `fs` keeps `State`, `Dir`, `cwd`, `Dir.open` and the task record; `std` hands on both.  Compare **Zig**, whose
+`std.Io` holds the reader and writer interfaces and the I/O implementation and whose `std.fs` builds files and directories on
+it; **Rust**'s `std::io` (`Read`, `Write`) beside `std::fs` (`File`, `OpenOptions`); **Go**'s `io` and `os`.
+
 Open questions
 --------------
 

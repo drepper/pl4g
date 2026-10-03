@@ -229,38 +229,43 @@ work with nothing configured.
 #### The `std` module
 
 One module the installation provides, holding what a program is started with and the devices it is started with open, and
-handing on a second, `std.fs`, which holds the devices themselves and the ring every request to them goes through:
+handing on two more: `std.io`, which holds the devices themselves and the ring every request to them goes through, and `std.fs`,
+which holds files, directories and the `State` a program does its I/O with.  `fs` imports `io`, since what it opens are devices:
 
 ```
 let std := ⎕import("std")
 
-※ std.fs: what does I/O, and the ring
-type State      = ring : Ring ; tasks : [Task]          ※ init.fs: the ring, and what std.run drives
-type Dir        = fd : i32 ; ring : u64                 ※ a directory files are opened in
+※ std.io: the devices, and the ring their requests go through
+type Ring                                               ※ the runtime's, laid out as the C reads it
 type Reader     = fd : i32 ; ring : u64                 ※ a device that can be read
 type Writer     = fd : i32 ; ring : u64                 ※ a device that can be written
 type ReadWriter = fd : i32 ; ring : u64                 ※ both, which is what a socket and a file opened either way are
 type Pending    = slot : i64 ; ring : u64               ※ a request that has been started
 type Answer     = got : i64                             ※ what a task is handed back
 
-fn State.cwd(s: &State) → Dir                           ※ the directory the process is in: AT_FDCWD
-fn Dir.open(d: Dir, name: str, kind: ⌜T'⌝) → T' ? i32  ※ T' is Reader, Writer or ReadWriter
 fn Reader.close(r: Reader)
 fn Writer.close(w: Writer)
 fn ReadWriter.close(rw: ReadWriter)
 
+※ std.fs: files and directories, and what a program does its I/O with
+type State      = ring : io.Ring ; tasks : [Task]       ※ init.fs: the ring, and what std.run drives
+type Dir        = fd : i32 ; ring : u64                 ※ a directory files are opened in
+
+fn State.cwd(s: &State) → Dir                           ※ the directory the process is in: AT_FDCWD
+fn Dir.open(d: Dir, name: str, kind: ⌜T'⌝) → T' ? i32  ※ T' is io.Reader, io.Writer or io.ReadWriter
+
 ※ std
-type Io   = mut input : fs.Reader ; mut output : fs.Writer ; mut error : fs.Writer
+type Io   = mut input : io.Reader ; mut output : io.Writer ; mut error : io.Writer
 type Init = io : Io ; mut fs : fs.State ; args : str⟦⟧
 enum Error   ※ what the kernel said, where it refused, by name
 
-fn write(to: &mut fs.Writer, what: u8⟦⟧) → fs.Pending ? i32
-fn flush(of: fs.Pending)                 → u64 ¤size ? i32
-fn write_sync(to: &mut fs.Writer, what: u8⟦⟧) → u64 ¤size ? i32
-fn read(from: &mut fs.Reader, into: u8⟦⟧)     → u64 ¤size ? i32
-fn read_lines(from: &mut fs.Reader) ⇉ u8⟦⟧ ? i32
+fn write(to: &mut io.Writer, what: u8⟦⟧) → io.Pending ? i32
+fn flush(of: io.Pending)                 → u64 ¤size ? i32
+fn write_sync(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32
+fn read(from: &mut io.Reader, into: u8⟦⟧)     → u64 ¤size ? i32
+fn read_lines(from: &mut io.Reader) ⇉ u8⟦⟧ ? i32
 fn drain(s: &mut fs.State)
-fn spawn(s: &mut fs.State, walk: ⌖⇉fs.Pending ⇇ fs.Answer in ⎕heap)
+fn spawn(s: &mut fs.State, walk: ⌖⇉io.Pending ⇇ io.Answer in ⎕heap)
 fn run(s: &mut fs.State) → u64
 fn as_error(n: i32) → Error
 fn error_name(code: i32) → str       ※ "not_found" for 2; "other" for one Error does not name
@@ -269,7 +274,7 @@ fn error_name(code: i32) → str       ※ "not_found" for 2; "other" for one Er
 **Every device carries where the ring is.**  The ring is a field of `init.fs`, which is in the image, so where it is does not
 change; `State.cwd(&init.fs)` hands out a directory carrying that address, every file opened in it carries it on, and the three a
 process inherits carry it from the start -- the address is written into the image, not worked out at run time.  So whatever reads
-or writes reaches the ring through what it was handed, and **nothing in `std` or `std.fs` names a variable at the top level** to
+or writes reaches the ring through what it was handed, and **nothing in `std`, `std.io` or `std.fs` names a variable at the top level** to
 do I/O: a function holding a device may do I/O through it and says neither `@[io]` nor `@[impure]` to.  What the runtime is
 handed is the address, read as a reference to the ring with `⎕at`.
 
@@ -2964,10 +2969,10 @@ exists.  That is Rust's arrangement and C++'s intent, and it is what lets `r⌖`
 back -- a file, a socket, a lock.  `std`'s `Reader`, `Writer` and `ReadWriter` are marked `@[closed_by(close)]`:
 
 ```
-match std.fs.Dir.open(std.fs.State.cwd(&init.fs), "notes.txt", ⌜std.fs.Reader⌝):
-    std.fs.Reader(r):
-        let from: mut std.fs.Reader = r
-        defer std.fs.Reader.close(from)
+match std.fs.Dir.open(std.fs.State.cwd(&init.fs), "notes.txt", ⌜std.io.Reader⌝):
+    std.io.Reader(r):
+        let from: mut std.io.Reader = r
+        defer std.io.Reader.close(from)
         …
     ⊥(code):
         …
@@ -2994,7 +2999,7 @@ any arm still owes it, and a lifetime has ended where any arm ended it.
 | `〈h, 1u8〉`, `R(.f ← h)`, a list of it, `g ← h`, a lambda bringing it in | nothing whose scope ends would hold it, so nothing would ask whether it was closed | 4687 |
 
 **The standard streams are never moved and never closed.**  They are fields of `Init` and are handed along by
-reference: `std.write(&mut init.io.error, …)`.  A value written out where it stands, `std.fs.Writer(.fd ← 2i32, .ring ←
+reference: `std.write(&mut init.io.error, …)`.  A value written out where it stands, `std.io.Writer(.fd ← 2i32, .ring ←
 init.io.error.ring)`, may be put into a record's field, which is how those are made; a variable's value or a call's answer may not.
 
 **`T.f` is checked where the attribute is written** (4686): a function of the type's own file, taking exactly one `T` by value.
@@ -5131,7 +5136,7 @@ driver is a function in a module.
 
 ##### Tasks: `std.spawn` and `std.run`
 
-**A task is a coroutine `⇉ std.fs.Pending ⇇ std.fs.Answer`**: it hands out each request it starts and is handed back what the
+**A task is a coroutine `⇉ std.io.Pending ⇇ std.io.Answer`**: it hands out each request it starts and is handed back what the
 kernel said about it.  `std.spawn(&mut init.fs, w)` takes one started `in ⎕heap`; `std.run(&mut init.fs)` drives every task handed
 to it until each has run to its end, and answers how many did.  The tasks are kept in `init.fs` beside the ring they wait on, so
 nothing of the scheduler is at the top level either.  `std.done(a)` reads an answer as `std.flush` reads a request: how many bytes went, or the error.
@@ -5139,14 +5144,14 @@ nothing of the scheduler is at the top level either.  `std.done(a)` reads an ans
 ```
 let std := ⎕import("std")
 
-fn say(dir: std.fs.Dir, name: str, what: u8⟦⟧) ⇉ std.fs.Pending ⇇ std.fs.Answer:
-    match std.fs.Dir.open(dir, name, ⌜std.fs.Writer⌝):
-        std.fs.Writer(to):
-            let out: mut std.fs.Writer = to
-            defer std.fs.Writer.close(out)
+fn say(dir: std.fs.Dir, name: str, what: u8⟦⟧) ⇉ std.io.Pending ⇇ std.io.Answer:
+    match std.fs.Dir.open(dir, name, ⌜std.io.Writer⌝):
+        std.io.Writer(to):
+            let out: mut std.io.Writer = to
+            defer std.io.Writer.close(out)
             foreach _ := 0u8…3u8:
                 match std.write(&mut out, what):
-                    std.fs.Pending(p):
+                    std.io.Pending(p):
                         let sent := std.done(⎕await(p))
                     ⊥:
                         return
@@ -5812,7 +5817,7 @@ travels with the device** (4538):
 
 ```
 ※ No attribute of any kind: the `&mut Writer` is the permission.
-fn quiet(to: &mut std.fs.Writer) → u64 ¤size ? i32:
+fn quiet(to: &mut std.io.Writer) → u64 ¤size ? i32:
     std.Io.print(to, ⎕bytes(""))
 ```
 
@@ -6944,7 +6949,7 @@ program uses.
 
 **What is handed over is where it is.**  The record is an object the image carries, in the writable data; the entry point fills it
 in and passes its address.  That is what lets the record *grow* without this signature changing, and what lets a program **change
-what it was started with** -- `init.io.output ← std.fs.Writer(.fd ← 2i32, .ring ← init.io.error.ring)` makes what it writes go
+what it was started with** -- `init.io.output ← std.io.Writer(.fd ← 2i32, .ring ← init.io.error.ring)` makes what it writes go
 where it reports.
 
 **The entry point reads the arguments into it.**  What the kernel leaves at the stack pointer is the count, then that many
@@ -7098,7 +7103,7 @@ those functions -- a body nobody read was never lexed, and is in the hash of the
 **A parameter may be handed a type**, written `name: ⌜T'⌝` and given `⌜u8⌝` at the call, which settles the type parameter inside
 it where nothing else the call hands does.  Nothing is handed at run time: the parameter is gone from every function the definition
 becomes, and the body asks about the type with `comptime if`.  It is what lets one function answer a different type for each of
-several -- `std.fs.Dir.open(dir, name, ⌜std.fs.Reader⌝)` answers a `Reader`.  Its argument is a lifted type (4688), and only a parameter of a
+several -- `std.fs.Dir.open(dir, name, ⌜std.io.Reader⌝)` answers a `Reader`.  Its argument is a lifted type (4688), and only a parameter of a
 generic function is handed one (4689).  **A condition comparing types** -- `pre(⌜T'⌝ = ⌜Reader⌝ ∨ …)` -- **is settled at the
 call**, before the function is made, so a type it was not meant for is refused there (4918) rather than wherever its body first goes
 wrong.  Compare **Zig**'s `comptime T: type`, which this is; **C++**'s explicit template arguments, `make<A>(3)`; **Rust**'s

@@ -4517,13 +4517,16 @@ lies on the path (`_behind_a_reader`), the types along the path read off the def
 variable any more.
 
 
-What `std.fs` is built from
----------------------------
+What `std.io` and `std.fs` are built from
+-----------------------------------------
 
-**`modules/fs.pl4g` is the ring and the devices**, and `std` imports it with `@[export]` so a program reaches it as `std.fs`.
-Every device record -- `Dir`, `Reader`, `Writer`, `ReadWriter`, and `Pending` for a request -- is its number and `ring : u64`,
-the address of the `Ring` record inside the program's `init.fs`.  A function of `fs` hands the runtime `⎕at(x.ring, ⌜&mut
-Ring⌝)`, so the C sees the same `struct pl4g_ring *` it always did and nothing in the language names a variable at the top level.
+**`modules/io.pl4g` is the ring and the devices; `modules/fs.pl4g` is directories and the `State`**, and `std` imports both with
+`@[export]` so a program reaches them as `std.io` and `std.fs`.  `fs` imports `io` -- `Dir.open` makes `io`'s devices and `State`
+holds an `io.Ring` -- and `io` imports nothing, which is what keeps the two from being a ring of imports: everything a device's
+own functions need, the `Ring` record, `Pending` and the runtime's submit, wait, ready and close, is `io`'s, and `fs` declares
+only the runtime functions it calls itself (open, drain, step).  Every device record -- `io`'s `Reader`, `Writer`,
+`ReadWriter` and `Pending`, and `fs`'s `Dir` -- is its number and `ring : u64`, the address of the `Ring` record inside the
+program's `init.fs`.  A function of either hands the runtime `⎕at(x.ring, ⌜&mut Ring⌝)`, so the C sees the same `struct pl4g_ring *` it always did and nothing in the language names a variable at the top level.
 `State` is `@[device]`, so `std.run`, `std.spawn` and `std.drain`, which are handed one, need no `@[io]`; they still say
 `@[impure]` where they write the task list through the reference.
 

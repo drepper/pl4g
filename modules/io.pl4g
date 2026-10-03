@@ -1,0 +1,128 @@
+※※ The devices a program reads and writes, and the ring every request goes through.
+※
+※ Imported by `std` and handed on, so a program knows it as `std.io`; `fs`
+※ imports it too, opening files makes the devices here.  Nothing here is at
+※ the top level but definitions: the ring is a field of `fs.State`, the one a
+※ program is started with is `init.fs`, and every device carries where that
+※ ring is.  So what reads and writes reaches the ring through what it was
+※ handed, and no function here names a variable at the top level.
+
+※※ The ring, as the runtime keeps it.
+※
+※ The runtime's and not the language's: the queues the kernel shares, the
+※ request each slot holds and what came back for it.  `state` says whether the
+※ ring has been made yet, and whether it could be -- where it could not, the
+※ runtime goes to the kernel directly and the same slots hold the answers.
+※
+※ The layout is the C one, because the C reads it.  The two sides are separate
+※ and nothing makes them one thing, so the C says how big the record is, how it
+※ is aligned and where each field lies and how wide, and a test compares.
+@[export, abi]
+type Ring =
+    state : u64 ; fd : u64 ;
+    sq_head : u64 ; sq_tail : u64 ; sq_mask : u64 ; sq_array : u64 ;
+    sqes : u64 ;
+    cq_head : u64 ; cq_tail : u64 ; cq_mask : u64 ; cqes : u64 ;
+    held : u64⟦8⟧ ; answer : i64⟦8⟧
+
+@[external("pl4g_io_submit"), io]
+fn io_submit(r: &mut Ring, which: i32, fd: i32, at: u64, len: u64) → i64
+
+@[external("pl4g_io_wait"), io]
+fn io_wait(r: &mut Ring, slot: i64) → i64
+
+@[external("pl4g_io_ready"), io]
+fn io_ready(r: &mut Ring, slot: i64) → i64
+
+@[external("pl4g_io_close"), io]
+fn io_close(r: &mut Ring, fd: i32) → i64
+
+※※ A request that has been started, and may not have been answered yet.
+※
+※ What it holds is where the runtime is keeping the request and which ring
+※ that is, and nothing else: what the kernel said goes there too, so a request
+※ the ring is still working on and one that was done on the spot are the same
+※ handle read the same way.  A program that never flushes one loses nothing --
+※ the drain before it ends reads every one that is left.
+@[export, device]
+type Pending = slot : i64 ; ring : u64
+
+※※ What a task is handed back when it is resumed: what the kernel said about the
+※※ request it waited for, as the kernel said it.  `std.done` reads it.
+@[export]
+type Answer = got : i64
+
+※※ A device that can be read.
+※
+※ Moved and never copied, and closed with `Reader.close` -- by whatever variable
+※ holds one when its scope ends, or by what it was moved on to.  The one a
+※ process starts with is a field of `std.Init`, which nothing moves out of: it is
+※ handed along by reference and never closed.
+@[export, device, closed_by(close)]
+type Reader = fd : i32 ; ring : u64
+
+※※ A device that can be written.  Closed with `Writer.close`.
+@[export, device, closed_by(close)]
+type Writer = fd : i32 ; ring : u64
+
+※※ A device that can be both, which is what a socket and a file opened either
+※※ way are.  Closed with `ReadWriter.close`.
+@[export, device, closed_by(close)]
+type ReadWriter = fd : i32 ; ring : u64
+
+※※ Close a device that was read, once every request in flight is answered.
+@[export]
+fn Reader.close(r: Reader):
+    _ ← io_close(⎕at(r.ring, ⌜&mut Ring⌝), r.fd)
+
+※※ Close a device that was written, once every request in flight is answered:
+※※ one may be a write to it, and what it answers is still read with `std.flush`.
+@[export]
+fn Writer.close(w: Writer):
+    _ ← io_close(⎕at(w.ring, ⌜&mut Ring⌝), w.fd)
+
+※※ Close a device that was both.
+@[export]
+fn ReadWriter.close(rw: ReadWriter):
+    _ ← io_close(⎕at(rw.ring, ⌜&mut Ring⌝), rw.fd)
+
+※※ Start reading into the `len` bytes at `at`, answering the request.
+※※
+※※ \raises `EAGAIN` where every slot holds an answer nobody has read
+@[export]
+fn Reader.start(r: &mut Reader, at: u64, len: u64) → Pending ? i32:
+    ※ 0 is reading, as the runtime numbers the directions
+    started(io_submit(⎕at(r⌖.ring, ⌜&mut Ring⌝), 0i32, r⌖.fd, at, len), r⌖.ring)
+
+※※ Start writing the `len` bytes at `at`, answering the request.
+※※
+※※ \raises `EAGAIN` where every slot holds an answer nobody has read
+@[export]
+fn Writer.start(w: &mut Writer, at: u64, len: u64) → Pending ? i32:
+    ※ 1 is writing
+    started(io_submit(⎕at(w⌖.ring, ⌜&mut Ring⌝), 1i32, w⌖.fd, at, len), w⌖.ring)
+
+※※ Start writing the `count` runs of bytes the kernel's `iovec`s at `at` say,
+※※ as one request.
+※※
+※※ \raises `EAGAIN` where every slot holds an answer nobody has read
+@[export]
+fn Writer.start_several(w: &mut Writer, at: u64, count: u64) → Pending ? i32:
+    ※ 2 is several runs written as one request
+    started(io_submit(⎕at(w⌖.ring, ⌜&mut Ring⌝), 2i32, w⌖.fd, at, count), w⌖.ring)
+
+※※ The request a slot holds, or `EAGAIN` where none could be had: every slot is
+※※ holding an answer nobody has read, and what would make it work is reading one.
+fn started(slot: i64, ring: u64) → Pending ? i32:
+    if slot < 0i64: ⊥ 11i32 else: Pending(.slot ← slot, .ring ← ring)
+
+※※ Wait for a request and answer what the kernel said: how many bytes went, or
+※※ a negative number.
+@[export]
+fn Pending.wait(p: Pending) → i64:
+    io_wait(⎕at(p.ring, ⌜&mut Ring⌝), p.slot)
+
+※※ Whether a request has been answered, asked without waiting.
+@[export]
+fn Pending.ready(p: Pending) → bool:
+    io_ready(⎕at(p.ring, ⌜&mut Ring⌝), p.slot) ≠ 0i64

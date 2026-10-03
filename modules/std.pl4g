@@ -6,15 +6,19 @@
 ※
 ※ The machinery is the runtime the compiler carries: C, compiled ahead of time
 ※ for every architecture, reached through `@[external]` and handed the ring as a
-※ record laid out the way it reads one.  That is `fs`'s, which this module hands
-※ on: the ring, the devices that carry where it is, and the directories files
-※ are opened in.  That there is a ring, and that there is sometimes not one, is
+※ record laid out the way it reads one.  That is `io`'s, which this module hands
+※ on with the devices that carry where the ring is; `fs`, handed on too, keeps
+※ the ring and the directories files are opened in.  That there is a ring, and that there is sometimes not one, is
 ※ not something a program can see.
 
-※※ Files, directories, the devices a program reads and writes, and the ring
-※※ their requests go through: `std.fs`.
+※※ Files, directories, and what a program does its I/O with: `std.fs`.
 @[export]
 let fs := ⎕import("fs")
+
+※※ The devices a program reads and writes, and the ring their requests go
+※※ through: `std.io`.
+@[export]
+let io := ⎕import("io")
 
 
 ※※ The devices a program starts with open.
@@ -27,7 +31,7 @@ let fs := ⎕import("fs")
 ※※ prevents.  There is no other way to them: a function that writes is handed the
 ※※ device it writes to.
 @[export]
-type Io = mut input : fs.Reader ; mut output : fs.Writer ; mut error : fs.Writer
+type Io = mut input : io.Reader ; mut output : io.Writer ; mut error : io.Writer
 
 ※※ What a program is started with: the devices it inherited, what it does its
 ※※ I/O with, and the words it was named with.
@@ -139,14 +143,14 @@ fn drain(s: &mut fs.State):
 ※ several writes may be in flight at once, and a program that wants to know one
 ※ of them happened says so.
 @[export]
-fn write(to: &mut fs.Writer, what: u8⟦⟧) → fs.Pending ? i32:
+fn write(to: &mut io.Writer, what: u8⟦⟧) → io.Pending ? i32:
     let at: u64 = if #what = 0: 0u64 else: ⎕address(&what⟦0⟧)
-    fs.Writer.start(to, at, ⎕drop(#what))
+    io.Writer.start(to, at, ⎕drop(#what))
 
 ※※ Wait for a request and answer how many bytes went, or what the kernel said.
 @[export]
-fn flush(of: fs.Pending) → u64 ¤size ? i32:
-    let got: i64 = fs.Pending.wait(of)
+fn flush(of: io.Pending) → u64 ¤size ? i32:
+    let got: i64 = io.Pending.wait(of)
     if got < 0i64:
         ⊥ refusal(got)
     else:
@@ -157,13 +161,13 @@ fn flush(of: fs.Pending) → u64 ¤size ? i32:
 ※ `write` and `flush` in one, which is what a program that has nothing else to
 ※ do while it waits should say.
 @[export]
-fn write_sync(to: &mut fs.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
+fn write_sync(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
     flush(write(to, what)?)
 
 ※※ What an answer says: how many bytes went, or what the kernel refused with --
 ※※ what `flush` answers for the same request.
 @[export]
-fn done(of: fs.Answer) → u64 ¤size ? i32:
+fn done(of: io.Answer) → u64 ¤size ? i32:
     if of.got < 0i64:
         ⊥ refusal(of.got)
     else:
@@ -179,9 +183,9 @@ fn done(of: fs.Answer) → u64 ¤size ? i32:
 ※ Nothing runs yet: a task takes its first turn in `run`.  A task may hand over
 ※ another, which `run` takes on in the round after.
 @[export, impure]
-fn spawn(s: &mut fs.State, walk: ⌖⇉fs.Pending ⇇ fs.Answer in ⎕heap):
+fn spawn(s: &mut fs.State, walk: ⌖⇉io.Pending ⇇ io.Answer in ⎕heap):
     s⌖.tasks ← s⌖.tasks ⧺ [fs.Task(.walk ← walk,
-                                   .waiting ← fs.Pending(.slot ← 0i64 - 1i64, .ring ← 0u64))]
+                                   .waiting ← io.Pending(.slot ← 0i64 - 1i64, .ring ← 0u64))]
 
 ※※ Drive every task handed to `spawn` until each has run to its end.
 ※※
@@ -204,11 +208,11 @@ fn run(s: &mut fs.State) → u64:
         let moved: mut bool = false
         foreach one: fs.Task = now:
             let first: bool = one.waiting.slot < 0i64
-            if first ∨ fs.Pending.ready(one.waiting):
+            if first ∨ io.Pending.ready(one.waiting):
                 moved ← true
-                let got: i64 = if first: 0i64 else: fs.Pending.wait(one.waiting)
-                match ⎕resume(one.walk, fs.Answer(.got ← got)):
-                    fs.Pending(p):
+                let got: i64 = if first: 0i64 else: io.Pending.wait(one.waiting)
+                match ⎕resume(one.walk, io.Answer(.got ← got)):
+                    io.Pending(p):
                         s⌖.tasks ← s⌖.tasks ⧺ [fs.Task(.walk ← one.walk, .waiting ← p)]
                     ⊥:
                         ended ← ended + 1u64
@@ -229,9 +233,9 @@ fn run(s: &mut fs.State) → u64:
 ※ There is no form of this that does not wait: what a read is for is the bytes,
 ※ and a program that has not waited does not have them.
 @[export]
-fn read(from: &mut fs.Reader, into: u8⟦⟧) → u64 ¤size ? i32:
+fn read(from: &mut io.Reader, into: u8⟦⟧) → u64 ¤size ? i32:
     let at: u64 = if #into = 0: 0u64 else: ⎕address(&into⟦0⟧)
-    flush(fs.Reader.start(from, at, ⎕drop(#into))?)
+    flush(io.Reader.start(from, at, ⎕drop(#into))?)
 
 ※※ Walk what `from` holds a line at a time.
 ※※
@@ -252,7 +256,7 @@ fn read(from: &mut fs.Reader, into: u8⟦⟧) → u64 ¤size ? i32:
 ※ for lines.  The buffer is in the walk's frame, which is why it is not larger: a
 ※ frame is the caller's room or the walk's description.
 @[export]
-fn read_lines(from: &mut fs.Reader) ⇉ u8⟦⟧ ? i32:
+fn read_lines(from: &mut io.Reader) ⇉ u8⟦⟧ ? i32:
     let buf: mut u8⟦1024⟧ = 1024 ⍴ 0u8
     let start: mut u64 ¤idx = 0
     let end: mut u64 ¤idx = 0
@@ -299,10 +303,10 @@ fn read_lines(from: &mut fs.Reader) ⇉ u8⟦⟧ ? i32:
 ※ some of them, a signal part way -- and a program that printed a line wants the
 ※ line printed.  So this is the loop `write_sync` does not do, and it is here
 ※ rather than in each caller because both of the two want it.
-fn Io.all_of(to: &mut fs.Writer, at: u64, total: u64) → u64 ¤size ? i32:
+fn Io.all_of(to: &mut io.Writer, at: u64, total: u64) → u64 ¤size ? i32:
     let done: mut u64 = 0u64
     while done < total:
-        let went: u64 = ⎕drop(flush(fs.Writer.start(to, at + done, total - done)?)?)
+        let went: u64 = ⎕drop(flush(io.Writer.start(to, at + done, total - done)?)?)
         if went = 0u64:
             ※ No progress and no refusal: nothing more will happen, and saying so
             ※ beats asking for ever.  `EIO` is what the kernel would have said.
@@ -317,7 +321,7 @@ fn Io.all_of(to: &mut fs.Writer, at: u64, total: u64) → u64 ¤size ? i32:
 ※※ \return how many bytes went, which is all of them
 ※※ \raises the number the kernel gave
 @[export]
-fn Io.print(to: &mut fs.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
+fn Io.print(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
     let total: u64 = ⎕drop(#what)
     if total = 0u64:
         ⎕unit(0u64, ⌜size⌝)
@@ -337,7 +341,7 @@ fn Io.print(to: &mut fs.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
 ※※ \return how many bytes went, which is `#what` and one more
 ※※ \raises the number the kernel gave
 @[export]
-fn Io.println(to: &mut fs.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
+fn Io.println(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
     ※ in the frame and not in the image: nothing here reaches past what it was handed
     let newline: mut u8⟦1⟧ = ⟦10u8⟧
     let text: u64 = ⎕drop(#what)
@@ -348,7 +352,7 @@ fn Io.println(to: &mut fs.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
         let before: u64 = ⎕address(&what⟦0⟧)
         ※ The kernel's `iovec` twice over: where the bytes are and how many.
         let parts: mut u64⟦4⟧ = ⟦before, text, after, 1u64⟧
-        let went: u64 = ⎕drop(flush(fs.Writer.start_several(to, ⎕address(&parts⟦0⟧), 2u64)?)?)
+        let went: u64 = ⎕drop(flush(io.Writer.start_several(to, ⎕address(&parts⟦0⟧), 2u64)?)?)
         let total: u64 = text + 1u64
         if went = total:
             ⎕unit(total, ⌜size⌝)

@@ -16,9 +16,9 @@ fn main(init: std.Init) → u6:
     if std.error_name(13i32) ≠ "not_allowed": return 2u6
     if std.error_name(105i32) ≠ "no_buffer": return 3u6
     if std.error_name(99i32) ≠ "other": return 4u6
-    match std.fs.Dir.open(std.fs.State.cwd(&init.fs), "/nonexistent/pl4g", ⌜std.fs.Reader⌝):
-        std.fs.Reader(r):
-            std.fs.Reader.close(r)
+    match std.fs.Dir.open(std.fs.State.cwd(&init.fs), "/nonexistent/pl4g", ⌜std.io.Reader⌝):
+        std.io.Reader(r):
+            std.io.Reader.close(r)
             5u6
         ⊥(code):
             if std.error_name(code) = "not_found": 0u6 else: 6u6

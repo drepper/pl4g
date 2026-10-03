@@ -8,6 +8,6 @@ let std := ⎕import("std")
 
 @[startup, impure]
 fn main(init: std.Init) → u6:
-    let mine: std.fs.Writer = init.io.error
-    std.fs.Writer.close(mine)
+    let mine: std.io.Writer = init.io.error
+    std.io.Writer.close(mine)
     0u6

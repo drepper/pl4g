@@ -19,10 +19,10 @@ fn main(init: std.Init) → u6:
     let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
     if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
         return 1u6
-    let out: mut std.fs.Writer = std.fs.Writer(.fd ← ends⟦1⟧, .ring ← init.io.error.ring)
-    defer std.fs.Writer.close(out)
-    let back: mut std.fs.Reader = std.fs.Reader(.fd ← ends⟦0⟧, .ring ← init.io.error.ring)
-    defer std.fs.Reader.close(back)
+    let out: mut std.io.Writer = std.io.Writer(.fd ← ends⟦1⟧, .ring ← init.io.error.ring)
+    defer std.io.Writer.close(out)
+    let back: mut std.io.Reader = std.io.Reader(.fd ← ends⟦0⟧, .ring ← init.io.error.ring)
+    defer std.io.Reader.close(back)
 
     ※ "x=7\n" is four bytes, and "ok" is two.
     if ⎕drop(std.println⌜&mut out, "x={}", 7u8⌝ ?? 0) ≠ 4u64:

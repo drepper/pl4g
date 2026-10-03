@@ -19,15 +19,15 @@ let std := ⎕import("std")
 let turns: mut [u8] = []
 
 @[impure]
-fn say(dir: std.fs.Dir, name: str, what: u8⟦⟧, who: u8) ⇉ std.fs.Pending ⇇ std.fs.Answer:
-    match std.fs.Dir.open(dir, name, ⌜std.fs.Writer⌝):
-        std.fs.Writer(to):
-            let out: mut std.fs.Writer = to
-            defer std.fs.Writer.close(out)
+fn say(dir: std.fs.Dir, name: str, what: u8⟦⟧, who: u8) ⇉ std.io.Pending ⇇ std.io.Answer:
+    match std.fs.Dir.open(dir, name, ⌜std.io.Writer⌝):
+        std.io.Writer(to):
+            let out: mut std.io.Writer = to
+            defer std.io.Writer.close(out)
             foreach _ := 0u8…3u8:
                 turns ← turns ⧺ [who]
                 match std.write(&mut out, what):
-                    std.fs.Pending(p):
+                    std.io.Pending(p):
                         match std.done(⎕await(p)):
                             u64 ¤size(n):
                                 if n ≠ 4:

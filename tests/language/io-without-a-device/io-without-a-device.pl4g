@@ -14,7 +14,7 @@
 let std := ⎕import("std")
 
 fn tidy(slot: i64, ring: u64) → i64:
-    std.fs.Pending.wait(std.fs.Pending(.slot ← slot, .ring ← ring))
+    std.io.Pending.wait(std.io.Pending(.slot ← slot, .ring ← ring))
 
 @[startup]
 fn main(init: std.Init) → u6:

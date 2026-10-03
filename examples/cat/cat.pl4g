@@ -21,7 +21,7 @@ let std := ⎕import("std")
 type State = numbered : bool ; blank_too : bool ; count : u64 ; at_start : bool
 
 ※※ Write `n` six columns wide and a tab after it.
-fn number(out: &mut std.fs.Writer, n: u64) → bool:
+fn number(out: &mut std.io.Writer, n: u64) → bool:
     let text: mut u8⟦7⟧ = 7 ⍴ 32u8
     text⟦6⟧ ← 9u8
     let left: mut u64 = n
@@ -35,7 +35,7 @@ fn number(out: &mut std.fs.Writer, n: u64) → bool:
 ※※ Copy everything `from` holds to `out` a line at a time, numbering as `state`
 ※※ says, and answer what went wrong: nought where nothing did.
 @[impure]
-fn copied(from: &mut std.fs.Reader, out: &mut std.fs.Writer, state: &mut State) → i32:
+fn copied(from: &mut std.io.Reader, out: &mut std.io.Writer, state: &mut State) → i32:
     foreach line := std.read_lines(from):
         match line:
             u8⟦⟧(text):
@@ -92,10 +92,10 @@ fn main(init: std.Init) → u6:
                             arg, &mut init.io.error) ≠ 0u6:
                     failed ← true
             else:
-                match std.fs.Dir.open(here, arg, ⌜std.fs.Reader⌝):
-                    std.fs.Reader(r):
-                        let from: mut std.fs.Reader = r
-                        defer std.fs.Reader.close(from)
+                match std.fs.Dir.open(here, arg, ⌜std.io.Reader⌝):
+                    std.io.Reader(r):
+                        let from: mut std.io.Reader = r
+                        defer std.io.Reader.close(from)
                         if reported(copied(&mut from, &mut init.io.output, &mut state), arg,
                                     &mut init.io.error) ≠ 0u6:
                             failed ← true
@@ -107,7 +107,7 @@ fn main(init: std.Init) → u6:
 ※※ Say what went wrong with `name`, where `code` says something did, and answer the
 ※※ status that comes to.
 @[impure]
-fn reported(code: i32, name: str, err: &mut std.fs.Writer) → u6:
+fn reported(code: i32, name: str, err: &mut std.io.Writer) → u6:
     if code = 0i32:
         return 0u6
     ⎕drop(std.println⌜err, "cat: {}: {}", name, std.error_name(code)⌝ ?? 0)
