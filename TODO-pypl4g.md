@@ -574,9 +574,8 @@ Optimizations
     other passes, a module's bodies are lowered only as far as the program names them, and parsed only when read -- each body a job
     of its own.  `startup-takes-the-record` went from 82 ms to about 27.
 
-[ ] lex a module as far as it is read.  What is left of reading `std` for a program that names one function of it is lexing the
-    whole file -- 7.6 ms of `std`'s 853 lines, where the signatures take 1.7 ms to parse.  The lexer could find where each top-level
-    definition ends from the indentation of its lines alone and leave the rest as text, as the parser now leaves a body as tokens.
+[x] lex a module as far as it is read.  Done on 2026-10-04: a function's indented body is left as text by the lexer and lexed by
+    its job; the bill of materials hashes a source by its bytes and names the functions of a module the program used.
 
 [ ] run the body jobs side by side.  The structure is there (`run_jobs`, `--jobs`), and the bootstrap compiler's interpreter runs
     one thread at a time; a compiler written in another language gets the parallelism from the same structure.  The same shape fits

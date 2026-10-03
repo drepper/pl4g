@@ -170,8 +170,9 @@ class Driver:
         # What the expander wants of it is its macros; a function's body is
         # parsed only if something reads it.  Kept for the checker, which reads
         # the same file for the rest.
-        tokens = tokenize(text, self.diags)
-        unit = parse(tokens, path.as_posix(), self.diags, defer=True)
+        tokens = tokenize(text, self.diags, lazy=True)
+        unit = parse(tokens, path.as_posix(), self.diags, defer=True,
+                     source=text)
         self.sources.remember(path, tokens, unit)
         return unit
 

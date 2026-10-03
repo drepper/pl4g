@@ -178,3 +178,29 @@ def test_the_hash_of_the_whole_is_the_hash_of_the_parts(tmp_path: Path) -> None:
     sources = [r.digest for r in rows if r.tag == Tag.SOURCE]
     whole = next(r.digest for r in rows if r.tag == Tag.SOURCES)
     assert whole == digest_of_digests(sources)
+
+
+USES_STD = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[startup, impure]
+fn main(init: mut std.Init) \N{RIGHTWARDS ARROW} u6:
+    if std.error_name(2i32) = "not_found": 0u6 else: 1u6
+"""
+
+
+def test_a_module_is_hashed_by_its_bytes_and_the_functions_used(tmp_path: Path) -> None:
+    """A source row is the hash of the file's bytes; a module has a row for each
+    function the program used of it, and none for the rest."""
+    import hashlib
+
+    triple = compiler_targets()[0]
+    rows = _rows_of(_built(tmp_path, triple, USES_STD))
+    std = Path(__file__).resolve().parents[2] / "modules" / "std.pl4g"
+    sources = {r.name: r.digest for r in rows if r.tag == Tag.SOURCE}
+    found = next(digest for name, digest in sources.items() if name.endswith("std.pl4g"))
+    assert found == hashlib.sha256(std.read_bytes()).hexdigest()
+    functions = [r.name for r in rows if r.tag == Tag.FUNCTION]
+    assert "error_name" in functions and "as_error" in functions, functions
+    assert "read_lines" not in functions and "spawn" not in functions, functions
+    assert not [r for r in rows if r.tag == Tag.TYPE and r.name == "Ring"], \
+        "a module's types have no row of their own"

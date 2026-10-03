@@ -6974,9 +6974,13 @@ prints.  There are five kinds:
 The hash of every source together is the hash of *their hashes*, in order -- which says the same thing as reading them all again
 and is what lets the whole be checked without the parts.
 
-**What is hashed is the tokens and not the text.**  A program means the same thing written with indentation or with braces, with
-one space or four, with a comment in the middle or without, and `0x10` and `16` are one number; a hash over the bytes would call
-all of those different programs.  So the token stream is normalized first:
+**A source is hashed by its bytes**, the whole file as it was read -- which is what `sha256sum` of the file prints.  A module is
+read only as far as the program uses it, so there are no tokens of the whole of it to hash, and the bytes are what every file has
+whole.
+
+**A definition is hashed by its tokens and not its text.**  A program means the same thing written with indentation or with braces,
+with one space or four, with a comment in the middle or without, and `0x10` and `16` are one number; a hash over the bytes would
+call all of those different programs.  So the token stream is normalized first:
 
 - the marks that say a block begins and ends become one mark each, whichever notation was used -- an indent and a brace are one
   thing, and so are a dedent and the closing brace;
@@ -6988,8 +6992,9 @@ Two spellings of one program therefore have one hash, which is the only thing th
 a definition whose hash moves when somebody reformats it says nothing about whether the program changed.
 
 A definition's hash covers its attributes as well as its body, because what a definition says about itself is part of what it is.
-Every definition of every source read is named, including one the image did not need and dropped: what the bill of materials is
-about is what went in.
+Every definition of a file the program was given is named, including one the image did not need and dropped.  **Of a module, the
+functions the program used are named and nothing else**: a module is read as far as the program names it, and what went in is
+those functions -- a body nobody read was never lexed, and is in the hash of the module's bytes and nowhere else.
 
 #### Generic Functions
 

@@ -694,6 +694,10 @@ class TokKind(StrEnum):
     INDENT = "indentation"
     DEDENT = "end of indented block"
     EOF = "end of file"
+    #: A function's indented body, not lexed yet: what a module read lazily has
+    #: in place of the tokens of a body nothing has asked for.  Its span is the
+    #: text, which a job lexes and parses when something reads the body.
+    BODY = "a function's body"
 
 
 #: The types a floating-point literal may name with its suffix.  There is no

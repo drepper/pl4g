@@ -1,12 +1,14 @@
 """What went into the binary, written into the binary.
 
 Every image carries a `.sbom` section naming the compiler, every source that
-was read and every definition that was compiled, each with a hash beside it.
+was read -- hashed by its bytes -- and every definition that was compiled, each
+with a hash beside it: every definition of a file the program was given, and
+the functions the program used of a module, which is read only that far.
 The section is always emitted: an SBOM that a flag turns off is one nobody can
 rely on being there, and the question it answers -- what is this built from --
 is one asked of binaries nobody thought to ask about at the time.
 
-**What is hashed is the tokens and not the text.**  A program means the same
+**What a definition is hashed by is its tokens and not its text.**  A program means the same
 thing written with indentation or with braces, with one space or four, and a
 hash over the bytes would say the two are different things.  So the token
 stream is normalized first: the marks that only say where a block begins and
@@ -239,7 +241,10 @@ def entries_for(read_units: Sequence[object]) -> list[Entry]:
     made = [Entry(Tag.COMPILER, COMPILER_ID, digest_of_text(COMPILER_ID))]
     each: list[str] = []
     for one in read_units:
-        digest = digest_of(one.tokens)                 # type: ignore[attr-defined]
+        # A source is hashed by its bytes: a module is read only as far as the
+        # program uses it, so there are no tokens of the whole of it to hash,
+        # and the bytes are the one thing every file has whole.
+        digest = digest_of_text(one.text)              # type: ignore[attr-defined]
         each.append(digest)
         made.append(Entry(Tag.SOURCE,
                           one.path.as_posix(), digest))  # type: ignore[attr-defined]
@@ -261,12 +266,25 @@ _TAGS: Final[dict[str, Tag]] = {
 
 
 def _definitions_of(read: object) -> list[Entry]:
-    """One row per definition of one source file."""
+    """One row per definition of one source file -- of a module, one per
+    function it was used for, which is every one whose body was read.
+
+    A definition is hashed by its tokens, as before; a body the lexer left as
+    text is hashed by the tokens its job made of it, which are the tokens the
+    lexer would have made there.
+    """
+    from .front.ast import DeferredBlock, FuncDef
     made: list[Entry] = []
     tokens = read.tokens                               # type: ignore[attr-defined]
+    module = getattr(read, "module", False)
     for item in read.unit.items:                       # type: ignore[attr-defined]
         tag = _TAGS.get(type(item).__name__)
         if tag is None:
+            continue
+        body = getattr(item, "body", None)
+        if module and (not isinstance(item, FuncDef)
+                       or not isinstance(body, DeferredBlock)
+                       or not body.parsed):
             continue
         span = item.span
         for attr in getattr(item, "attrs", ()):
@@ -275,7 +293,10 @@ def _definitions_of(read: object) -> list[Entry]:
             # keyword the definition's own span begins at.
             span = span.to(attr.span)
         held = [t for t in tokens
-                if t.span.start >= span.start and t.span.end <= span.end]
+                if t.span.start >= span.start and t.span.end <= span.end
+                and t.kind is not TokKind.BODY]
+        if isinstance(body, DeferredBlock):
+            held.extend(body.lexed)                    # type: ignore[arg-type]
         name = getattr(item, "name", "") or "\N{RIGHTWARDS ARROW}"
         made.append(Entry(tag, name, digest_of(held)))
     return made

@@ -43,6 +43,13 @@ class ReadUnit:
     path: Path
     tokens: object
     unit: object
+    #: The text of the file, whose bytes are what the bill of materials hashes
+    #: a source by.
+    text: str = ""
+    #: Whether it was read as a module of the program rather than given as one
+    #: of its files: a module's definitions are read as far as they are used,
+    #: and only those have a row of their own.
+    module: bool = False
 
 
 @dataclass(slots=True)
@@ -106,9 +113,12 @@ class SourceManager:
         reader of it."""
         self._parsed[path] = (tokens, unit)
 
-    def record(self, path: Path, tokens: object, unit: object) -> None:
+    def record(self, path: Path, tokens: object, unit: object,
+               module: bool = False) -> None:
         """Record that *path* was read and what came of reading it."""
-        self.read_units.append(ReadUnit(path=path, tokens=tokens, unit=unit))
+        text = next((one.text for one in self._files if one.path == path), "")
+        self.read_units.append(ReadUnit(path=path, tokens=tokens, unit=unit,
+                                        text=text, module=module))
 
     @property
     def files(self) -> list[SourceFile]:

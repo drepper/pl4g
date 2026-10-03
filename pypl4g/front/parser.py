@@ -7,7 +7,7 @@ meaning to the semantic analysis.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Final, Sequence
 
 from ..diag import ids as D
@@ -250,6 +250,12 @@ class BodyJob:
     path: str
     quoting: bool
     diags: DiagEngine
+    #: Where the body is text the lexer left alone (a `BODY` token, which
+    #: `tokens[end - 1]` then is): the file, so that this lexes it first.
+    source: object | None = None
+    #: The tokens the body came to, once lexed here -- for whatever hashes a
+    #: definition by its tokens.
+    lexed: list[Token] = field(default_factory=list)
 
     def parse(self) -> tuple[tuple[ast.Stmt, ...] | None, list[object]]:
         """The body's statements -- nothing where they could not be read -- and
@@ -257,8 +263,14 @@ class BodyJob:
         said: list[object] = []
         quiet = DiagEngine(said.append, self.diags.control, self.diags.catalog)
         last = self.tokens[self.end - 1]
-        piece = [*self.tokens[self.start:self.end],
-                 Token(TokKind.EOF, Span(last.span.end, last.span.end))]
+        if last.kind is TokKind.BODY:
+            from .lexer import tokenize_body
+            body = tokenize_body(self.source, last.span, quiet)  # type: ignore[arg-type]
+            self.lexed[:] = [one for one in body if one.kind is not TokKind.EOF]
+            piece = [*self.tokens[self.start:self.end - 1], *body]
+        else:
+            piece = [*self.tokens[self.start:self.end],
+                     Token(TokKind.EOF, Span(last.span.end, last.span.end))]
         parser = Parser(piece, self.path, quiet)
         parser._quoting = self.quoting
         try:
@@ -299,10 +311,12 @@ class Parser:
     """Parses the tokens of one source file."""
 
     def __init__(self, tokens: Sequence[Token], path: str, diags: DiagEngine,
-                 defer_bodies: bool = False) -> None:
+                 defer_bodies: bool = False, source: object | None = None) -> None:
         self._tokens = tokens
         self._path = path
         self._diags = diags
+        #: The file, where the lexer left bodies as text for a job to lex.
+        self._source = source
         #: Whether a function's body is set aside as a job rather than read
         #: where it stands, and the bodies set aside so far.
         self._defer_bodies = defer_bodies
@@ -1741,6 +1755,12 @@ class Parser:
             style = ast.BlockStyle.EXPLICIT
         elif first.kind is TokKind.COLON and at + 1 < len(tokens) \
                 and tokens[at].kind is TokKind.NEWLINE \
+                and tokens[at + 1].kind is TokKind.BODY:
+            # Left as text by the lexer: the job lexes it as well.
+            at += 2
+            style = ast.BlockStyle.LAYOUT
+        elif first.kind is TokKind.COLON and at + 1 < len(tokens) \
+                and tokens[at].kind is TokKind.NEWLINE \
                 and tokens[at + 1].kind is TokKind.INDENT:
             at += 2
             depth = 1
@@ -1762,7 +1782,8 @@ class Parser:
         self._pos = end
         block = ast.DeferredBlock(
             span=first.span.to(tokens[end - 1].span), style=style,
-            job=BodyJob(tokens, start, end, self._path, quoting, self._diags))
+            job=BodyJob(tokens, start, end, self._path, quoting, self._diags,
+                        self._source))
         self.deferred.append(block)
         return block
 
@@ -2845,7 +2866,8 @@ def _ends_inline(expr: ast.Expr) -> bool:
 
 
 def parse(tokens: Sequence[Token], path: str, diags: DiagEngine,
-          defer: bool = False, workers: int = 1) -> ast.SourceUnit:
+          defer: bool = False, workers: int = 1,
+          source: object | None = None) -> ast.SourceUnit:
     """Parse the tokens of one source file.
 
     In two steps: every definition's signature, with each function's body set
@@ -2854,7 +2876,7 @@ def parse(tokens: Sequence[Token], path: str, diags: DiagEngine,
     something first reads it -- which is how a module is read, so that a function
     nothing names is never parsed at all.
     """
-    parser = Parser(tokens, path, diags, defer_bodies=True)
+    parser = Parser(tokens, path, diags, defer_bodies=True, source=source)
     unit = parser.parse_unit()
     if not defer:
         run_jobs(parser.deferred, workers)

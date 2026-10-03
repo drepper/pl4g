@@ -4466,3 +4466,14 @@ default, the interpreter running one at a time; the structure is the point.  `pa
 parsed the first time anything reads its `stmts`, which collecting a definition never does, so a function nothing names is never
 parsed.  The expander's read of a module and the checker's are one read (`SourceManager.remember`/`parsed`).
 
+**A module's bodies are lexed when read** (`tokenize(…, lazy=True)`, `tokenize_body`).  Lexing a module, the lexer notes whether
+the definition at the margin is a function's (`_top_is_a_function`); where such a header ends in a colon and the next line is
+indented, `_set_aside` finds the end of the body a line at a time -- the first line at the margin that is not blank or a comment,
+comments at the margin just before it being the next definition's -- counting brackets on the way with text, characters and comments
+taken out (`_depth_change`), and emits one `BODY` token over that text.  A body whose count does not come out even, which would be a
+line at the margin inside a pair, is lexed where it stands.  The parser takes `: NEWLINE BODY` as a deferred block whose job lexes
+the text (a `Lexer` from the body's first line to its end, so that it makes the indent and dedent the whole file would) and then
+parses it; the tokens it made are kept on the job (`lexed`), and the bill of materials hashes a used function of a module by its
+signature's tokens and those.  A source is hashed by its bytes (`ReadUnit.text`); a module's definition rows are its functions
+whose bodies were read.  `std` is lexed in 4.3 ms rather than 7.6, its signatures being about half its tokens.
+

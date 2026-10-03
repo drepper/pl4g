@@ -9607,6 +9607,22 @@ no program reaches is still checked.  `--jobs N` says how many threads parse the
 fails to parse drops its function, as a definition the parser could not read always was, rather than leaving an empty one to report
 again.
 
+## 2026-10-04T04:00+02:00 — compiler
+
+**A module's bodies are lexed when they are read; the bill of materials hashes a source by its bytes**
+
+The user asked for modules to be lexed lazily.  A function's indented body is left as one token of text, found a line at a time by
+the left margin, and lexed by the job that parses it.  The bill of materials hashed every source by its normalized tokens, which a
+module read this way no longer has whole; asked, the user decided that **a source is hashed by the bytes of the whole file, and of a
+module only the functions used are named, each hashed by its tokens as before** -- against counting an unread body by the hash of its
+text, against hashing a module's bytes while still naming every definition, and against lexing everything for the table, which would
+have undone the saving in every compilation.  What is hashed of a definition is unchanged, so a definition's row still does not move
+when it is reformatted; a source's row now does.
+
+Taken without asking: a body with a line at the margin inside an open pair is lexed where it stands rather than set aside, which
+the bracket count on the way says; the bodies of anything but a function -- an enumeration's values, a bundle's lines -- are lexed as
+before.
+
 
 Open questions
 --------------

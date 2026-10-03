@@ -1290,6 +1290,13 @@ class DeferredBlock(Block):
         return self._parsed is not None
 
     @property
+    def lexed(self) -> list[object]:
+        """The tokens the body came to, where its job lexed them -- nothing where
+        the lexer made them with the rest of the file."""
+        _ = self.stmts
+        return list(getattr(self._job, "lexed", ()))
+
+    @property
     def failed(self) -> bool:
         """Whether reading them failed -- said where it did -- so that the
         function is one nothing should be asked about, as a definition the

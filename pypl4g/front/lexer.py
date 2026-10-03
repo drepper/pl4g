@@ -8,6 +8,8 @@ tokens are not produced.
 
 from __future__ import annotations
 
+import re
+
 import unicodedata
 
 from typing import Final
@@ -237,16 +239,21 @@ def _is_ident_continue(ch: str) -> bool:
 class Lexer:
     """Turns the text of one source file into a list of tokens."""
 
-    def __init__(self, source: SourceFile, diags: DiagEngine) -> None:
+    def __init__(self, source: SourceFile, diags: DiagEngine,
+                 lazy: bool = False, start: int = 0, end: int | None = None) -> None:
         self._source = source
-        self._text = source.text
+        self._text = source.text if end is None else source.text[:end]
         self._base = source.base
         self._diags = diags
-        self._pos = 0
+        self._pos = start
         self._tokens: list[Token] = []
         self._indents: list[int] = [0]
         self._bracket_depth = 0
         self._at_line_start = True
+        #: Whether an indented function body is left as text (`BODY`) rather
+        #: than lexed, and whether the definition being read is a function's.
+        self._lazy = lazy
+        self._top_is_a_function = False
 
     # -- helpers ---------------------------------------------------------------
 
@@ -270,6 +277,8 @@ class Lexer:
         """Tokenize the whole file."""
         while self._pos < len(self._text):
             if self._at_line_start and self._bracket_depth == 0:
+                if self._lazy and self._a_body_begins() and self._set_aside():
+                    continue
                 if not self._handle_line_start():
                     continue
             if not self._lex_one():
@@ -280,7 +289,7 @@ class Lexer:
         """Close any open block and append the end-of-file token."""
         end = len(self._text)
         if self._bracket_depth == 0 and self._tokens and self._tokens[-1].kind not in (
-                TokKind.NEWLINE, TokKind.DEDENT):
+                TokKind.NEWLINE, TokKind.DEDENT, TokKind.BODY):
             self._tokens.append(Token(TokKind.NEWLINE, self._span(end, end)))
         while len(self._indents) > 1:
             self._indents.pop()
@@ -315,6 +324,10 @@ class Lexer:
             self._skip_to_end_of_line()
             return False
         self._at_line_start = False
+        if width == 0:
+            # A definition begins at the margin, and whether it is a function's
+            # is what its line says.
+            self._top_is_a_function = False
         if width > self._indents[-1] and self._tokens \
                 and self._tokens[-1].kind is TokKind.NEWLINE \
                 and self._continues_a_header():
@@ -334,6 +347,56 @@ class Lexer:
                 self._diags.emit(D.LANG_SYNTAX_INCONSISTENT_INDENT,
                                  self._span(start, self._pos))
                 self._indents.append(width)
+        return True
+
+    def _a_body_begins(self) -> bool:
+        """Whether the line starting here is the first of a top-level function's
+        indented body: the line before ended a function's header with a colon."""
+        tokens = self._tokens
+        return (self._top_is_a_function and len(self._indents) == 1
+                and len(tokens) >= 2 and tokens[-1].kind is TokKind.NEWLINE
+                and tokens[-2].kind is TokKind.COLON
+                and self._text.startswith(" ", self._pos))
+
+    def _set_aside(self) -> bool:
+        """Leave the body that begins here as text, as one `BODY` token.
+
+        Where it ends is found a line at a time, with no token made: at the first
+        line at the left margin that is neither blank nor a comment -- comments
+        at the margin just before it being the next definition's -- which is
+        where the lexer would close the body.  The brackets are counted on the
+        way, with text and characters and comments taken out first; a body
+        that does not come out even, which would mean a line at the margin
+        inside a pair, is lexed here as it always was.
+        """
+        text = self._text
+        start = pos = self._pos
+        depth = 0
+        end = len(text)
+        margin_comment: int | None = None
+        while pos < len(text):
+            newline = text.find("\n", pos)
+            stop = len(text) if newline < 0 else newline
+            line = text[pos:stop]
+            content = line.lstrip(" \t")
+            if not content or content.startswith(COMMENT_GLYPH):
+                if content and len(content) == len(line) and margin_comment is None:
+                    margin_comment = pos
+                pos = stop + 1
+                continue
+            if len(content) == len(line):
+                end = margin_comment if margin_comment is not None else pos
+                break
+            margin_comment = None
+            depth += _depth_change(content)
+            pos = stop + 1
+        else:
+            end = margin_comment if margin_comment is not None else len(text)
+        if depth != 0 or end <= start:
+            return False
+        self._tokens.append(Token(TokKind.BODY, self._span(start, end)))
+        self._pos = end
+        self._at_line_start = True
         return True
 
     def _continues_a_header(self) -> bool:
@@ -535,7 +598,11 @@ class Lexer:
                                                    and self._peek() == KEY_GLYPH):
             self._pos += 1
         text = self._text[start:self._pos]
-        self._emit(KEYWORDS.get(text, TokKind.IDENT), start)
+        kind = KEYWORDS.get(text, TokKind.IDENT)
+        if kind is TokKind.KW_FN and len(self._indents) == 1 \
+                and self._bracket_depth == 0:
+            self._top_is_a_function = True
+        self._emit(kind, start)
 
     def _lex_exponent(self, start: int) -> None:
         """Lex a number written raised, which is an exponent.
@@ -767,6 +834,44 @@ class Lexer:
         return ""
 
 
-def tokenize(source: SourceFile, diags: DiagEngine) -> list[Token]:
-    """Tokenize *source*."""
-    return Lexer(source, diags).run()
+def tokenize(source: SourceFile, diags: DiagEngine,
+             lazy: bool = False) -> list[Token]:
+    """Tokenize *source*; where *lazy* says so, leave each top-level function's
+    indented body as one `BODY` token for `tokenize_body` to lex later."""
+    return Lexer(source, diags, lazy=lazy).run()
+
+
+def tokenize_body(source: SourceFile, span: Span, diags: DiagEngine) -> list[Token]:
+    """The tokens of a body `tokenize` left as text: from its first line to its
+    end, indentation and all, as the lexer would have made them there."""
+    start = span.start - source.base
+    return Lexer(source, diags, start=start, end=span.end - source.base).run()
+
+
+#: What `_depth_change` takes out of a line before counting: text, a character
+#: written out (not the mark after a type parameter), and a comment.
+_NOT_COUNTED: Final = re.compile(
+    "|".join(('"(?:[^"\\\n]|\\.)*"',
+              "(?<![\\w'])'(?:\\[^'\n]*|[^'\\\n])'",
+              "".join((COMMENT_GLYPH, ".*$")))))
+_GLYPHS: Final = re.compile("[^\\x00-\\x7f]")
+_ASCII_OPEN: Final = "([{"
+_ASCII_CLOSE: Final = ")]}"
+
+
+def _depth_change(line: str) -> int:
+    """How much deeper in brackets a line of a body leaves the next one."""
+    line = _NOT_COUNTED.sub("", line)
+    change = sum(line.count(one) for one in _ASCII_OPEN) \
+        - sum(line.count(one) for one in _ASCII_CLOSE)
+    for ch in _GLYPHS.findall(line):
+        # In the order the lexer asks: a glyph of the language is what it is,
+        # and only one the language does not have may be a pair's.
+        kind = _SIMPLE.get(ch)
+        if kind is not None:
+            change += (kind in _OPEN) - (kind in _CLOSE)
+        elif is_operator_opener(ch):
+            change += 1
+        elif is_operator_closer(ch):
+            change -= 1
+    return change

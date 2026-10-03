@@ -3933,7 +3933,7 @@ class Checker:
         if earlier is not None:
             # Read already, for its macros: one file is read once.
             tokens, found = earlier
-            self._sources.record(path, tokens, found)
+            self._sources.record(path, tokens, found, module=True)
             return found  # type: ignore[return-value]
         try:
             source = self._sources.read(path)
@@ -3941,14 +3941,16 @@ class Checker:
             self._diags.emit(D.LANG_IMPORT_UNREADABLE, node.source_span,
                              name=node.source, reason=str(exc))
             return None
-        tokens = tokenize(source, self._diags)
-        # A body is parsed when something asks for it: a module is lowered as
-        # far as the program names it, and what is not named is not read either.
-        found = parse(tokens, path.as_posix(), self._diags, defer=True)
+        # A body is lexed and parsed when something asks for it: a module is
+        # lowered as far as the program names it, and what is not named is not
+        # read either.
+        tokens = tokenize(source, self._diags, lazy=True)
+        found = parse(tokens, path.as_posix(), self._diags, defer=True,
+                      source=source)
         self._sources.remember(path, tokens, found)
         # A module read here is a source of the program like any other, and the
         # bill of materials has to name it.
-        self._sources.record(path, tokens, found)
+        self._sources.record(path, tokens, found, module=True)
         return found
 
     def _lower_member(self, builder: IRBuilder, expr: ast.Member,
