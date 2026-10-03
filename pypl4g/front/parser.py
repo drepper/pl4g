@@ -484,7 +484,7 @@ class Parser:
             # because what it makes is not a value: a module is a file that was
             # read, and there is nothing for an expression to come to.
             return self._parse_import(start, name_token, mutable, declared, doc,
-                                      doc_lines)
+                                      doc_lines, attrs)
         value = self._parse_expression()
         return ast.VarDef(span=start.to(value.span), name=name_token.text,
                           name_span=name_token.span, type=declared, value=value,
@@ -494,7 +494,8 @@ class Parser:
     def _parse_import(self, start: Span, name_token: Token, mutable: bool,
                       declared: ast.TypeExpr | None,
                       doc: str | None,
-                      doc_lines: tuple[Span, ...] = ()) -> ast.ModuleImport:
+                      doc_lines: tuple[Span, ...] = (),
+                      attrs: tuple[ast.Attribute, ...] = ()) -> ast.ModuleImport:
         """Parse the rest of ``let NAME ':=' \N{APL FUNCTIONAL SYMBOL QUAD}import(STRING)``.
 
         A module is not a value, so nothing about it may be qualified: there is
@@ -510,7 +511,8 @@ class Parser:
         assert source.str_value is not None
         return ast.ModuleImport(span=start.to(end.span), name=name_token.text,
                                 name_span=name_token.span, source=source.str_value,
-                                source_span=source.span, doc=doc, doc_lines=doc_lines)
+                                source_span=source.span, doc=doc, doc_lines=doc_lines,
+                                attrs=attrs)
 
     def _parse_doc_comments(self) -> tuple[str | None, tuple[Span, ...]]:
         """Collect the documentation comments preceding a definition.
@@ -1416,7 +1418,8 @@ class Parser:
         """Parse a type: a name, and whatever says what else it may be.
 
         A name may be reached through a module, as a function or a variable is:
-        `m.Point` is the `Point` that module `m` exports.
+        `m.Point` is the `Point` that module `m` exports, and `m.inner.Point`
+        the one a module `m` hands on exports.
 
         `TYPE?` is a result: a value of that type, or the fact that there is
         none.  `TYPE?ERROR` is one whose error carries a value of its own, and
@@ -1426,9 +1429,10 @@ class Parser:
         name_token = self._expect(TokKind.IDENT)
         first = name_token
         module: str | None = None
-        if self._check(TokKind.DOT):
+        while self._check(TokKind.DOT):
             self._advance()
-            module = name_token.text
+            module = name_token.text if module is None \
+                else ".".join((module, name_token.text))
             name_token = self._expect(TokKind.IDENT, D.LANG_SYNTAX_EXPECTED_MEMBER)
         args: list[ast.TypeExpr] = []
         if self._check(TokKind.LPAREN) and self._type_arguments_follow():

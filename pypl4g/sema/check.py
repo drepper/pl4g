@@ -2248,6 +2248,16 @@ def _is_build_object(ty: Type) -> bool:
                for where in system_modules())
 
 
+def _path_text(expr: ast.Expr) -> str:
+    """A path of names as it was written, `m` or `m.inner`, for a message."""
+    match expr:
+        case ast.NameRef():
+            return expr.name
+        case ast.Member():
+            return ".".join((_path_text(expr.base), expr.name))
+    return "an expression"
+
+
 def _is_exported(what: object) -> bool:
     """Whether a top-level definition is one an importing file may name."""
     return bool(getattr(what, "exported", False))
@@ -3134,6 +3144,10 @@ class Checker:
         #: not the compilation's: two files may each define a `counter`, and
         #: neither can see the other's unless it imports it.
         self._top: dict[str, object] = {}
+        #: The imports this file hands on, `@[export]` written on them: a file
+        #: importing this one reaches each as `this.name`.  Kept by name rather
+        #: than on the module, which every file importing it shares.
+        self._exported_imports: set[str] = set()
         #: The bundles this file defines, by name.  They are beside the names
         #: above rather than among them because a bundle is neither a type nor a
         #: value: what it stands for is a set of requirements, and the only place
@@ -3576,7 +3590,9 @@ class Checker:
         for is never less than what a body could call, and sometimes more.  An
         operator this module defines is always lowered, there being no name to
         ask it by.  The modules this one reads are asked first, and what is
-        lowered here goes callees before callers, as a whole file would.
+        lowered here goes callees before callers, as a whole file would.  A
+        module this one hands on is asked whatever this one has, the names
+        having been written through it.
         """
         names = set(names)
         chosen: list[_Collected] = []
@@ -3600,12 +3616,40 @@ class Checker:
             if not grew:
                 break
         if not chosen and not generics:
+            for name in self._exported_imports:
+                held = self._top.get(name)
+                if isinstance(held, LoadedModule) and held.want is not None:
+                    held.want(names)
             return
         self._ask_the_modules(names)
         for entry in _callees_first(chosen):
             self._lower_function(entry)
         for one in generics:
             self._check_generic(one)
+
+    def _module_at(self, expr: ast.Expr) -> LoadedModule | None:
+        """The module a path names, or nothing: `m`, or `m.inner` where `m`
+        hands on a module it imported under that name.
+
+        Asked quietly.
+        """
+        match expr:
+            case ast.NameRef():
+                held = self._top.get(expr.name)
+                return held if isinstance(held, LoadedModule) else None
+            case ast.Member():
+                outer = self._module_at(expr.base)
+                held = outer.exports.get(expr.name) if outer is not None else None
+                return held if isinstance(held, LoadedModule) else None
+        return None
+
+    def _module_called(self, path: str) -> LoadedModule | None:
+        """The module a type's name was reached through, written `m` or `m.inner`."""
+        first, *rest = path.split(".")
+        held = self._top.get(first)
+        for name in rest:
+            held = held.exports.get(name) if isinstance(held, LoadedModule) else None
+        return held if isinstance(held, LoadedModule) else None
 
     def _ask_the_modules(self, names: set[str]) -> None:
         """Have every module this file reads lower what *names* may name."""
@@ -3865,6 +3909,9 @@ class Checker:
         """
         if not self._declare(node.name, node.name_span):
             return
+        if any(attr.name == "export"
+               for attr in self._bind_attributes(node.attrs, AttrTarget.MODULE)):
+            self._exported_imports.add(node.name)
         try:
             path = self._registry.resolve(node.source, self._path)
         except ModuleNotFound as exc:
@@ -3937,7 +3984,9 @@ class Checker:
             inner.run([unit], whole_program=False)
             loaded.want = inner.want
             loaded.exports = {name: what for name, what in inner._top.items()
-                              if _is_exported(what)}
+                              if _is_exported(what)
+                              or (name in inner._exported_imports
+                                  and isinstance(what, LoadedModule))}
             # Every one of them and not only the exported ones: which it is, is
             # a question the file applying it is answered rather than a name it
             # cannot see at all, so that "there is no such bundle" and "it is not
@@ -4011,8 +4060,9 @@ class Checker:
             through = self._type_exported(base)
             if isinstance(through, EnumType):
                 return self._value_of_enum(through, expr)
-        if not isinstance(base, ast.NameRef) \
-                or self._holds_a_record(base.name):
+        inner = self._module_at(base) if isinstance(base, ast.Member) else None
+        if inner is None and (not isinstance(base, ast.NameRef)
+                              or self._holds_a_record(base.name)):
             # A field of a record: what stands on the left is a value and not
             # something names are reached through, so what follows the mark is
             # one of the fields its type wrote down.
@@ -4024,26 +4074,26 @@ class Checker:
             # one: what `\N{APL FUNCTIONAL SYMBOL QUAD}narrow` failed for is matched and compared like anything
             # else a program defined for itself.
             return self._value_of_enum(provided, expr)
-        held = self._top.get(base.name)
+        held = inner if inner is not None else self._top.get(_path_text(base))
         if isinstance(held, _NamedType):
             return self._enum_value(held, expr)
         if not isinstance(held, LoadedModule):
-            self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, base.span, name=base.name)
+            self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, base.span, name=_path_text(base))
             return UndefConst(ERROR)
         found = held.exports.get(expr.name)
         if self._notes is not None:
             # The module the name is reached through, and then the name itself:
             # two notes over two spans, the narrower of which is the one an
             # editor asks about when the cursor is on it.
-            where = self._defined.get(base.name)
-            self._note(base.span, MODULE, base.name, held.path.as_posix(),
+            where = self._defined.get(_path_text(base))
+            self._note(base.span, MODULE, _path_text(base), held.path.as_posix(),
                        where[0] if where is not None else INVALID_SPAN)
             if isinstance(found, Function):
                 self._note(expr.name_span, FUNCTION, expr.name,
                            found.ty.written(), found.name_span, found.doc or None)
         if found is None:
             self._diags.emit(D.LANG_IMPORT_NOT_EXPORTED, expr.name_span,
-                             name=expr.name, module=base.name)
+                             name=expr.name, module=_path_text(base))
             return UndefConst(ERROR)
         if isinstance(found, GlobalVar):
             return builder.load(found, expr.span)
@@ -5111,9 +5161,7 @@ class Checker:
         match expr:
             case ast.Member():
                 what = "a variable at the top level" \
-                    if isinstance(expr.base, ast.NameRef) \
-                    and isinstance(self._top.get(expr.base.name), LoadedModule) \
-                    else "a field"
+                    if self._module_at(expr.base) is not None else "a field"
             case ast.Element() | ast.Index():
                 what = "an element"
             case ast.Deref():
@@ -6682,8 +6730,8 @@ class Checker:
     def _defined_type(self, ref: ast.TypeRef) -> Type | None:
         """The type a name stands for, where a definition gave it one."""
         if ref.module is not None:
-            held = self._top.get(ref.module)
-            if not isinstance(held, LoadedModule):
+            held = self._module_called(ref.module)
+            if held is None:
                 self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, ref.span,
                                  name=ref.module)
                 return ERROR
@@ -7091,9 +7139,9 @@ class Checker:
             if self._notes is not None:
                 named = self._top.get(ref.name)
                 if ref.module is not None:
-                    held = self._top.get(ref.module)
+                    held = self._module_called(ref.module)
                     named = held.exports.get(ref.name) \
-                        if isinstance(held, LoadedModule) else None
+                        if held is not None else None
             if found is not None and isinstance(named, _NamedType):
                 self._note(ref.span, TYPE, ref.name, found.written(),
                            named.node.name_span, named.node.doc)
@@ -7513,10 +7561,9 @@ class Checker:
         called = expr.callee
         if isinstance(called, ast.NameRef):
             return self._bundles.get(called.name)
-        if isinstance(called, ast.Member) \
-                and isinstance(called.base, ast.NameRef):
-            held = self._top.get(called.base.name)
-            if isinstance(held, LoadedModule):
+        if isinstance(called, ast.Member):
+            held = self._module_at(called.base)
+            if held is not None:
                 found = held.bundles.get(called.name)
                 return found if isinstance(found, _Bundle) else None
         return None
@@ -11655,9 +11702,8 @@ class Checker:
         if ref.module is None:
             found = self._top.get(ref.name)
         else:
-            held = self._top.get(ref.module)
-            found = held.exports.get(ref.name) \
-                if isinstance(held, LoadedModule) else None
+            held = self._module_called(ref.module)
+            found = held.exports.get(ref.name) if held is not None else None
         return found if isinstance(found, _NamedType) else None
 
     def _as_wanted(self, builder: IRBuilder, value: Value, wanted: Type,
@@ -11988,8 +12034,8 @@ class Checker:
             # a lambda.
             named = self._top.get(callee.name)
             return named is None or isinstance(named, (Function, _Generic))
-        if isinstance(callee, ast.Member) and isinstance(callee.base, ast.NameRef):
-            return isinstance(self._top.get(callee.base.name), LoadedModule) \
+        if isinstance(callee, ast.Member):
+            return self._module_at(callee.base) is not None \
                 and self._type_exported(callee) is None
         return False
 
@@ -12897,10 +12943,8 @@ class Checker:
         taken of it and a field of it read at an offset, which is what every variable
         at the top level already is.
         """
-        if not isinstance(expr.base, ast.NameRef):
-            return None
-        held = self._top.get(expr.base.name)
-        if not isinstance(held, LoadedModule):
+        held = self._module_at(expr.base)
+        if held is None:
             return None
         found = held.exports.get(expr.name)
         return found if isinstance(found, GlobalVar) else None
@@ -15922,10 +15966,10 @@ class Checker:
     def _generator_named(self, callee: ast.Expr) -> _Generator | None:
         """The generator a call names, where it names one: by a bare name, or
         through the module that exports it."""
-        if isinstance(callee, ast.Member) and isinstance(callee.base, ast.NameRef):
-            held = self._top.get(callee.base.name)
-            if isinstance(held, LoadedModule) \
-                    and self._find_local(callee.base.name) is None:
+        if isinstance(callee, ast.Member):
+            held = self._module_at(callee.base)
+            if held is not None and not (isinstance(callee.base, ast.NameRef)
+                                         and self._find_local(callee.base.name)):
                 found = held.exports.get(callee.name)
                 return found if isinstance(found, _Generator) else None
             return None
@@ -20944,10 +20988,9 @@ class Checker:
         by a bare name, or through the module that exports it."""
         if isinstance(callee, ast.NameRef):
             found = self._top.get(callee.name)
-        elif isinstance(callee, ast.Member) and isinstance(callee.base, ast.NameRef):
-            held = self._top.get(callee.base.name)
-            found = held.exports.get(callee.name) \
-                if isinstance(held, LoadedModule) else None
+        elif isinstance(callee, ast.Member):
+            held = self._module_at(callee.base)
+            found = held.exports.get(callee.name) if held is not None else None
         else:
             return None
         return found if isinstance(found, _NamedType) and found.takes_types \
@@ -23316,10 +23359,8 @@ class Checker:
         call written `a.b(...)` to tell a record from a call, and what a name
         that is neither turns out to be is the ordinary path's to say.
         """
-        if not isinstance(expr.base, ast.NameRef):
-            return None
-        held = self._top.get(expr.base.name)
-        if not isinstance(held, LoadedModule):
+        held = self._module_at(expr.base)
+        if held is None:
             return None
         found = held.exports.get(expr.name)
         if not isinstance(found, _NamedType):
@@ -23339,12 +23380,9 @@ class Checker:
         match callee:
             case ast.NameRef():
                 found = self._top.get(callee.name)
-            case ast.Member() if isinstance(callee.base, ast.NameRef):
-                held = self._top.get(callee.base.name)
-                found = held.exports.get(callee.name) \
-                    if isinstance(held, LoadedModule) else None
             case ast.Member():
-                found = None
+                held = self._module_at(callee.base)
+                found = held.exports.get(callee.name) if held is not None else None
             case _:
                 return None
         if isinstance(found, _Generic):
@@ -23367,9 +23405,9 @@ class Checker:
             case ast.NameRef() as base if self._members and isinstance(
                     self._top.get(base.name), _NamedType):
                 return self._members.get((base.name, callee.name))
-            case ast.Member() as through if isinstance(through.base, ast.NameRef):
-                held = self._top.get(through.base.name)
-                if not isinstance(held, LoadedModule):
+            case ast.Member() as through:
+                held = self._module_at(through.base)
+                if held is None:
                     return None
                 return held.members.get((through.name, callee.name))
         return None
@@ -23387,8 +23425,7 @@ class Checker:
             case ast.NameRef() as base if isinstance(self._top.get(base.name),
                                                      _NamedType):
                 return (base.name, callee.name)
-            case ast.Member() as through if isinstance(through.base, ast.NameRef) \
-                    and isinstance(self._top.get(through.base.name), LoadedModule):
+            case ast.Member() as through if self._module_at(through.base) is not None:
                 if self._type_exported(through) is None:
                     return None
                 return (through.name, callee.name)
@@ -23406,18 +23443,23 @@ class Checker:
                              name=named[1], held=named[0])
             return None
         base = expr.base
-        if not isinstance(base, ast.NameRef):
-            self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, expr.span,
-                             name="an expression")
-            return None
-        held = self._top.get(base.name)
-        if not isinstance(held, LoadedModule):
-            self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, base.span, name=base.name)
+        held = self._module_at(base)
+        if held is None:
+            if isinstance(base, ast.NameRef):
+                self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, base.span, name=base.name)
+            elif isinstance(base, ast.Member) and self._module_at(base.base) is not None:
+                # A module the one before it does not hand on, or nothing at all
+                # by that name: either way it is not something it exports.
+                self._diags.emit(D.LANG_IMPORT_NOT_EXPORTED, base.name_span,
+                                 name=base.name, module=_path_text(base.base))
+            else:
+                self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, expr.span,
+                                 name="an expression")
             return None
         found = held.exports.get(expr.name)
         if found is None:
             self._diags.emit(D.LANG_IMPORT_NOT_EXPORTED, expr.name_span,
-                             name=expr.name, module=base.name)
+                             name=expr.name, module=_path_text(base))
             return None
         if not isinstance(found, Function):
             self._diags.emit(D.LANG_CALL_NOT_A_FUNCTION, expr.span, name=expr.name)
@@ -23426,8 +23468,8 @@ class Checker:
             # The module the name is reached through, and then the function
             # itself, which is defined in that module's file: two notes over two
             # spans, and the narrower is the one the cursor is on.
-            where = self._defined.get(base.name)
-            self._note(base.span, MODULE, base.name, held.path.as_posix(),
+            where = self._defined.get(_path_text(base))
+            self._note(base.span, MODULE, _path_text(base), held.path.as_posix(),
                        where[0] if where is not None else INVALID_SPAN)
             self._note(expr.name_span, FUNCTION, expr.name,
                        found.ty.written(), found.name_span, found.doc or None)

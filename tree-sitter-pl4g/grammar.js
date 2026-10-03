@@ -440,7 +440,8 @@ module.exports = grammar({
 
     _plain_type: $ => choice(
       seq(
-        field('module', optional(seq($.identifier, '.'))),
+        // `m.Name`, or `m.inner.Name` through a module `m` hands on
+        field('module', repeat(seq($.identifier, '.'))),
         $.identifier,
         // the types given to a type that takes type parameters: `Pair(u8)`
         optional(seq('(', sepBy1(',', field('argument', $.type)), ')')),

@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 3204 LANG_ATTR_NOT_APPLICABLE
+
+※ `@[export]` is the one thing said of an import; an attribute that belongs to a
+※ function says nothing about a module.
+
+@[inline]
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

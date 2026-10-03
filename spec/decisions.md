@@ -9678,6 +9678,20 @@ reached are not carried, and dropping one the compiler made for itself is not re
 know as a record of that name whose fields it does not say, as the printer writes one.  Golden files record what a program adds to
 `exit0`, the rest once in `stack.ARCH.asm`; tests that read a whole module or a whole log look at the program's own part.
 
+## 2026-10-04T08:00+02:00 — language
+
+**A module may hand on a module it imported**
+
+The user asked for `std.fs` -- a module `fs` that `std` imports and hands on, known outside `std` as `std.fs`.  Written `@[export]
+let fs := ⎕import("fs")`, as Zig writes `pub const fs = @import("fs.zig");` -- against Rust's `pub use`, which re-exports any item
+and not only a module, D's `public import`, which drops the prefix, and Python's way, where whatever a module imported is reachable
+whether or not it meant it to be; Go has no such thing.  The prefix stays, so a path says where its name comes from.
+
+Taken without asking: `@[export]` is the only attribute an import takes; a path reaches through any number of modules handed on and
+then at most a type and a name, so `std.fs.Dir.open` has four parts; a type is written `std.fs.Dir` the same way; operators a module
+handed on exports are in force where it was imported and no further; a module asked for names a program wrote passes them on to the
+modules it hands on, so that lowering on demand reaches through it.
+
 Open questions
 --------------
 

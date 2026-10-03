@@ -171,8 +171,9 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
                      "symbol, and the compiler fills it in"),
         AttrSpec("export",
                  AttrTarget.FUNCTION | AttrTarget.VARIABLE | AttrTarget.TYPE
-                 | AttrTarget.BUNDLE,
-                 doc="a file importing this module may name the definition"),
+                 | AttrTarget.BUNDLE | AttrTarget.MODULE,
+                 doc="a file importing this module may name the definition, "
+                     "or the module it imported"),
         AttrSpec("visible", AttrTarget.FUNCTION | AttrTarget.VARIABLE,
                  doc="the finished image offers the definition's symbol"),
         AttrSpec("flag", AttrTarget.TYPE,

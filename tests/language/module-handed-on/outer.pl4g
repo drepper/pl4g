@@ -1,0 +1,6 @@
+※ pl4g-test: module
+※※ Nothing of its own: it imports `inner` and hands it on, so that a file
+※※ importing this one reaches it as `outer.inner`.
+
+@[export]
+let inner := ⎕import("inner")

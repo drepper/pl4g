@@ -1,0 +1,19 @@
+※ pl4g-test: module
+※※ What the module handed on holds: a type, something inside it, a function and
+※※ an enumeration -- one of each thing a path can name.
+
+@[export]
+type Box = n : u8
+
+@[export]
+fn Box.get(b: Box) → u8:
+    b.n
+
+@[export]
+fn twice(n: u8) → u8:
+    n + n
+
+@[export]
+enum Colour:
+    red ;
+    green

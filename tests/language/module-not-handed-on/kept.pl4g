@@ -1,0 +1,4 @@
+※ pl4g-test: module
+※※ Imports `inner` for itself, and says nothing about handing it on.
+
+let inner := ⎕import("inner")

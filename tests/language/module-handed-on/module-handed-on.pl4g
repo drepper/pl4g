@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=8 diag=none
+
+※ A module may hand on a module it imported, `@[export]` written on the import,
+※ and a file importing it reaches that one through it: `outer.inner.twice` is a
+※ function, `outer.inner.Box` a type, `outer.inner.Box.get` a function inside the
+※ type and `outer.inner.Colour.green` a value -- four parts, the module counting
+※ as one more.
+
+let std := ⎕import("std")
+let outer := ⎕import("outer")
+
+fn colour_of(c: outer.inner.Colour) → u6:
+    if c = outer.inner.Colour.green: 2u6 else: 1u6
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let b: outer.inner.Box = outer.inner.Box(.n ← 3u8)
+    let n: u8 = outer.inner.twice(outer.inner.Box.get(b))
+    (⎕narrow(n, ⌜u6⌝) ?? 0u6) + colour_of(outer.inner.Colour.green)

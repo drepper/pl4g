@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4104 LANG_IMPORT_NOT_EXPORTED
+
+※ What a module imported for itself is its own: without `@[export]` on the import,
+※ a file importing it cannot reach through it.
+
+let std := ⎕import("std")
+let kept := ⎕import("kept")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ⎕narrow(kept.inner.twice(1u8), ⌜u6⌝) ?? 0u6

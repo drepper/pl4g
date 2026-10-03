@@ -1104,6 +1104,9 @@ class ModuleImport(Node):
     #: comment apart -- a `\param` that names nothing, say -- can point at the
     #: line it is on.  Written with the text, by the one place that collects it.
     doc_lines: tuple[Span, ...] = ()
+    #: What was said of it: `@[export]` hands the module on to whatever imports
+    #: this file, under the name it has here.
+    attrs: tuple[Attribute, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

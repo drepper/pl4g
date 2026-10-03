@@ -182,6 +182,25 @@ and is not one -- a module is not a value and there is nothing for an expression
 rather than a function, which is what the sigil says about it as much as about the name.  Nothing else of it can be named -- what a module does not export is its own, and two modules may
 each define a name without either seeing the other's.
 
+**A module may hand on a module it imported**, `@[export]` written on the import, and a file importing it reaches that one through
+it:
+
+```
+@[export]
+let fs := ⎕import("fs")
+```
+
+in `std` makes `std.fs.Dir` a type and `std.fs.Dir.open` a function of a program importing `std`.  The module handed on is the same
+module whoever reaches it and however, read once.  `@[export]` is the one attribute an import takes (3204), and one not handed on
+is the importing file's own (4104).  What a module handed on puts in force -- its operators -- it puts in force where it was
+imported and not further: an operator has no name to be reached through.
+
+Compare: **Zig**, whose `pub const fs = @import("fs.zig");` is this exactly and is how its `std.fs` is built; **Rust**'s `pub use`
+and `pub mod`, which re-export a module or any item; **Python**, where everything a module imported is reachable through it whether
+or not that was meant; **Go**, which has no re-export and makes the importer name the package; **D**'s `public import`, which
+puts the names in scope rather than behind a prefix.  This is Zig's: the prefix stays, so where a name comes from is written where
+it is used.
+
 A module is read while the program is compiled, and nothing of it reaches the program but the definitions it holds.  It is
 therefore not a value: it cannot be given a type, cannot be changed, cannot be computed with, and cannot be brought in inside a
 function, where what it holds would belong to one call rather than to the program.
@@ -6285,8 +6304,8 @@ let m := ⎕import("bag")
 m.Bag.doubled(&b)
 ```
 
-and that is the only three-part path the language has -- there is never a fourth, a type's own file being where its definitions
-are.  Only an exported one is a name an importing file can write (4609); one that is there and not exported is a different thing
+and through a module another hands on it has four, `std.fs.Dir.open(…)` -- the module's own path, then the type, then the name.
+Past the module there is never another part, a type's own file being where its definitions are.  Only an exported one is a name an importing file can write (4609); one that is there and not exported is a different thing
 from one that does not exist, and is reported as it.
 
 **Nothing declares what a type has.**  Having a definition of that name is the whole of what it means to have one, which is what
