@@ -251,15 +251,17 @@ moved, never copied, and closed by whoever holds it last.  `close` waits for eve
 it -- and what those answered is still read with `flush`.  It answers nothing: what a program would do about a refused close is
 nothing it could do.  The three a process starts with are fields of `Init` and `std.io`, never moved, never closed.
 
-**`read_lines(&mut r)` walks a reader a line at a time**: each line without the end of line after it, the last one too where the
-text ends without one, as a view into a buffer the walk keeps and good until the next turn.  Nothing is copied and nothing
-allocated; a program that keeps a line copies it.  A line longer than 1024 bytes is refused with `ENOBUFS` rather than handed out
+**`read_lines(&mut r)` walks a reader a line at a time**: each line with the end of line after it, the last one without where the
+text ends without one, as a view into a buffer the walk keeps and good until the next turn.  The end of line is kept so that a
+reader can tell the two apart, which writing the text back out exactly -- `cat` -- has to.  Nothing is copied and nothing
+allocated; a program that keeps a line copies it.  A line longer than 1024 bytes, its end of line included, is refused with `ENOBUFS` rather than handed out
 in pieces a reader would take for lines, and a failed read ends the walk with what the kernel said.  The buffer is in the walk's
 frame, and grows when the AArch64 back end can address a larger one.
 
-Compare: **Go**'s `os.OpenFile` and `bufio.Scanner`, whose `Bytes` and `ErrTooLong` this `read_lines` is; **Rust**'s `File::open`
-and `BufRead::lines`, which allocates a `String` per line and closes on drop; **Python**'s `open` and iterating a file, which keeps
-the end of line; **C**'s `fopen` and `getline`; **Zig**'s `openFile` and `readUntilDelimiter`.
+Compare: **C**'s `fopen` and `getline`, which keeps the end of line as this does; **Python**'s `open` and iterating a file, which
+keeps it too; **Go**'s `os.OpenFile` and `bufio.Scanner`, whose `ErrTooLong` this refusal is but which drops the end of line;
+**Rust**'s `File::open` and `BufRead::lines`, which drops it, allocates a `String` per line and closes on drop; **Zig**'s
+`openFile` and `readUntilDelimiter`.
 
 **`args` is what the program was named with**, read off the stack before anything runs.  The first is the name it was run under,
 as it is everywhere, and the rest are what followed.  Each is a `str` -- bytes and a length -- and the length is counted once

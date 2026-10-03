@@ -364,14 +364,16 @@ let LINE_MAX: u64 ¤idx = 1024
 ※※ Walk what `from` holds a line at a time.
 ※※
 ※※ \param from the device to read
-※※ \return each line without the end of line after it -- the last one too,
+※※ \return each line with the end of line after it -- the last one without,
 ※※ where the device ends without one -- or the number the kernel gave, which
 ※※ ends the walk
 ※
 ※ What each turn gives is a view into a buffer the walk keeps, good until the
-※ next turn: nothing is copied and nothing allocated, which is Go's
-※ `Scanner.Bytes` and what C's `getline` into one buffer does.  A reader that
-※ wants to keep a line copies it.
+※ next turn: nothing is copied and nothing allocated, which is what C's
+※ `getline` into one buffer does.  The end of line is kept, as `getline` and
+※ Python's walk of a file keep it, so that a reader can tell a last line that
+※ had one from one that did not -- which writing the text back out, as `cat`
+※ does, has to.  A reader that wants to keep a line copies it.
 @[export, io]
 fn read_lines(from: &mut Reader) ⇉ u8⟦⟧ ? i32:
     let buf: mut u8⟦1024⟧ = 1024 ⍴ 0u8
@@ -380,10 +382,11 @@ fn read_lines(from: &mut Reader) ⇉ u8⟦⟧ ? i32:
     let more: mut bool = true
     while more:
         let at: mut u64 ¤idx = start
-        while at < end ∧ buf⟦at⟧ ≠ 10u8:
+        ※ `and` and not `∧`: at the end of what was read there is nothing to look at
+        while at < end and buf⟦at⟧ ≠ 10u8:
             at ← at + 1
         if at < end:
-            yield buf⟦start…at⟧
+            yield buf⟦start…at + 1⟧
             start ← at + 1
         else:
             if start > 0:

@@ -9552,6 +9552,19 @@ holding it still clash; an element still lends its whole array.  `cat` also foun
 print: the user chose printing the `Error` enumeration's name, which needs an enumeration's names at run time -- not there yet, and
 asked about rather than added.
 
+## 2026-10-04T01:00+02:00 — language
+
+**`read_lines` keeps the end of line; `cat` is written with it**
+
+Asked to write `cat` with `std.read_lines`, two things it could not do were put to the user.  A line came without its end of
+line and without saying whether it had one, so a file not ending in one could not be copied as it was: the user chose to keep the
+end of line in the line, the last one coming without where the file has none -- C's `getline` and Python's walk of a file, against
+a flag beside the line (Go's `ReadLine`) and against leaving `cat` to add one.  And a line longer than the walk's 1024-byte buffer
+is refused: the user chose to accept that limit, `cat` reporting the error (105, `ENOBUFS`) and going no further with that file,
+against making the AArch64 and RISC-V back ends address larger frames and against handing a long line out in pieces.  Writing it
+found that `read_lines` read one byte past what it had read when a line filled the buffer -- `∧` evaluates both sides -- which is
+now `and`.
+
 
 Open questions
 --------------

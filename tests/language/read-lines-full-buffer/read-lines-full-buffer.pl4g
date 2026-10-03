@@ -1,0 +1,49 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `std.read_lines` takes a line of up to 1024 bytes, its end of line included,
+※ and refuses a longer one with `ENOBUFS` (105) rather than hand it out in
+※ pieces.  A line that fills the buffer exactly is the edge: looking for the
+※ end of line must stop at the end of what was read and not look past it.
+
+let std := ⎕import("std")
+
+@[impure]
+fn filled(out: std.Writer) → u6:
+    let w: mut std.Writer = out
+    defer std.Writer.close(w)
+    ※ in pieces of 256, so that no frame holds a kilobyte of its own
+    let piece: mut u8⟦256⟧ = 256 ⍴ 121u8
+    foreach _ := 0u8…3u8:
+        if (std.Io.print(&mut w, piece) ?? 0) ≠ 256: return 1u6
+    piece⟦255⟧ ← 10u8
+    if (std.Io.print(&mut w, piece) ?? 0) ≠ 256: return 1u6
+    piece⟦255⟧ ← 120u8
+    foreach _ := 0u8…4u8:
+        if (std.Io.print(&mut w, piece) ?? 0) ≠ 256: return 2u6
+    0u6
+
+@[impure]
+fn walked(from: std.Reader) → u6:
+    let r: mut std.Reader = from
+    defer std.Reader.close(r)
+    let lines: mut u64 = 0u64
+    foreach line := std.read_lines(&mut r):
+        match line:
+            u8⟦⟧(text):
+                if #text ≠ 1024 ∨ text⟦1023⟧ ≠ 10u8: return 3u6
+                lines ← lines + 1u64
+            ⊥(code):
+                if code ≠ 105i32 ∨ lines ≠ 1u64: return 4u6
+                return 0u6
+    5u6
+
+@[startup, impure]
+fn main() → u6:
+    let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
+    if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
+        return 6u6
+    let wrote := filled(std.Writer(.fd ← ends⟦1⟧))
+    if wrote ≠ 0u6:
+        std.Reader.close(std.Reader(.fd ← ends⟦0⟧))
+        return wrote
+    walked(std.Reader(.fd ← ends⟦0⟧))

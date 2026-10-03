@@ -7,14 +7,13 @@
 ※※ the next, and a line that runs on from the end of one file into the next is
 ※※ one line.
 ※※
-※※ The bytes are copied as they come -- a chunk read is a chunk written -- and a
-※※ number is written in front of a line only where one begins, so a file with no
-※※ end of line at its end, or with bytes no text has, comes out as it went in.
+※※ The text is walked a line at a time with `std.read_lines`, which hands each
+※※ line out with its end of line -- the last one without, where the file ends
+※※ without one -- so what comes out is what went in, with a number in front of
+※※ each line that begins.  A line longer than `std.read_lines` takes (1024
+※※ bytes) is reported as the error it hands out, and the file goes no further.
 
 let std := ⎕import("std")
-
-※※ How much one read asks for.
-let CHUNK: u64 ¤idx = 1024
 
 ※※ What the options asked for, and where numbering has got to.
 type State = numbered : bool ; blank_too : bool ; count : u64 ; at_start : bool
@@ -32,33 +31,23 @@ fn number(out: &mut std.Writer, n: u64) → bool:
         left ← left ÷ 10u64 ?? 0u64
     (std.Io.print(out, text) ?? 0) = 7
 
-※※ Copy everything `from` holds to `out`, numbering as `state` says.
+※※ Copy everything `from` holds to `out` a line at a time, numbering as `state`
+※※ says, and answer what went wrong: nought where nothing did.
 @[io]
 fn copied(from: &mut std.Reader, out: &mut std.Writer, state: &mut State) → i32:
-    let buf: mut u8⟦1024⟧ = 1024 ⍴ 0u8
-    while true:
-        match std.read(from, buf):
-            u64 ¤size(got):
-                if got = 0:
-                    return 0i32
-                let n: u64 ¤idx = ⎕unit(⎕drop(got), ⌜idx⌝)
-                let start: mut u64 ¤idx = 0
-                let i: mut u64 ¤idx = 0
-                while i < n:
-                    if state⌖.at_start:
-                        if state⌖.numbered ∧ (state⌖.blank_too ∨ buf⟦i⟧ ≠ 10u8):
-                            if (std.Io.print(out, buf⟦start…i⟧) ?? 0) ≠ ⎕unit(⎕drop(i - start), ⌜size⌝):
-                                return 0i32 - 1i32
-                            start ← i
-                            state⌖.count ← state⌖.count + 1u64
-                            if ¬number(out, state⌖.count):
-                                return 0i32 - 1i32
-                        state⌖.at_start ← false
-                    if buf⟦i⟧ = 10u8:
-                        state⌖.at_start ← true
-                    i ← i + 1
-                if (std.Io.print(out, buf⟦start…n⟧) ?? 0) ≠ ⎕unit(⎕drop(n - start), ⌜size⌝):
+    foreach line := std.read_lines(from):
+        match line:
+            u8⟦⟧(text):
+                ※ A line begins where the last one ended; one that runs on from the
+                ※ end of the file before is not numbered again.
+                let blank: bool = #text = 1 ∧ text⟦0⟧ = 10u8
+                if state⌖.at_start ∧ state⌖.numbered ∧ (state⌖.blank_too ∨ ¬blank):
+                    state⌖.count ← state⌖.count + 1u64
+                    if ¬number(out, state⌖.count):
+                        return 0i32 - 1i32
+                if (std.Io.print(out, text) ?? 0) ≠ #text:
                     return 0i32 - 1i32
+                state⌖.at_start ← text⟦⎕unit(⎕drop(#text) - 1u64, ⌜idx⌝)⟧ = 10u8
             ⊥(code):
                 return code
     0i32
