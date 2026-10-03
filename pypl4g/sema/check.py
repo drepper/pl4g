@@ -1153,6 +1153,14 @@ def _contains(node: object, kind: type) -> bool:
     return False
 
 
+def _is_nowhere(builder: IRBuilder, place: Value, span: Span) -> Value:
+    """Whether *place* is the null pointer, which a walk hands a turn to say
+    there is nowhere to write it: finish."""
+    return builder.compare(CmpPred.EQ,
+                           builder.cast(CastKind.BITCAST, place, U64, span),
+                           builder.int_const(U64, 0), span)
+
+
 def _breaks(node: object, label: str) -> bool:
     """Whether a `break` of the loop *label* stands below *node*."""
     if isinstance(node, ast.Break) and node.label.name == label:
@@ -2528,6 +2536,19 @@ class _Ready(ast.Expr):
     value: Value
 
 
+@dataclass(frozen=True, slots=True)
+class _Emit(ast.Expr):
+    """Code the compiler wrote, standing where a statement put off would.
+
+    No parser makes one.  A loop walking a generator through calls puts one off
+    for every way out of it -- a `return`, a `?`, a `break` of a loop outside --
+    so that the generator is told to finish wherever the walk stops, by the
+    mechanism `defer` already is.
+    """
+
+    run: Callable[[IRBuilder], None]
+
+
 @dataclass(slots=True)
 class _Abstract:
     """A generic function being checked where it is written.
@@ -2788,6 +2809,10 @@ class _Iteration:
     #: than given; the step where nothing says otherwise.  Counting the turns
     #: is what makes the two differ: a place stepped past is not a turn.
     passed: Callable[[IRBuilder, tuple[Value, ...]], tuple[Value, ...]] | None = None
+    #: What leaving the loop does, whichever way it is left: a walk through
+    #: calls tells the generator it walks to finish, so that what it put off
+    #: runs.  Nothing where leaving needs nothing.
+    finish: Callable[[IRBuilder], None] | None = None
 
 
 class Checker:
@@ -13410,6 +13435,31 @@ class Checker:
             self._lower_block(builder, stmt.body, func, as_result=False)
             self._pop_scope()
             return UndefConst(ERROR)
+        if found.finish is not None:
+            # Whichever way the loop is left, what it walks is told to finish:
+            # a way out that leaves more than the loop runs it as it runs what
+            # a block put off, and leaving the loop itself runs it after.
+            finish = found.finish
+            self._deferred.append([_Deferred(
+                node=ast.Defer(span=stmt.span, stmt=ast.ExprStmt(
+                    span=stmt.span, value=_Emit(span=stmt.span, run=finish))),
+                depth=len(self._scopes))])
+            self._emptied.append(set())
+            try:
+                answer = self._lower_walk(builder, stmt, func, expected,
+                                          produces, replace(found, finish=None))
+            finally:
+                self._deferred.pop()
+                self._emptied.pop()
+            if not builder.is_terminated and builder.block is not None:
+                finish(builder)
+            return answer
+        return self._lower_walk(builder, stmt, func, expected, produces, found)
+
+    def _lower_walk(self, builder: IRBuilder, stmt: ast.ForEach, func: Function,
+                    expected: Type | None, produces: bool,
+                    found: _Iteration) -> Value:
+        """The loop itself, over what *found* says to walk."""
         label = self._label_of(stmt.label)
         handing = self._wanted_of_a_loop(stmt, expected, produces)
         carried = self._loop_locals(stmt.body, stmt.alternative)
@@ -14857,7 +14907,19 @@ class Checker:
         self._words_into(builder, self._generating_out, value, found.element,
                          stmt.span)
         resumed = builder.new_block("resumed")
-        builder.yield_(resumed, stmt.span)
+        if _contains(found.node.body, ast.Defer):
+            # Resumed with nowhere to write to is being told to finish: what
+            # was put off up to here runs, and there is nothing more.
+            told = builder.new_block("told")
+            finishing = builder.new_block("finishing")
+            builder.yield_(told, stmt.span)
+            builder.position_at(told)
+            builder.condbr(_is_nowhere(builder, self._generating_out, stmt.span),
+                           finishing, resumed, span=stmt.span)
+            builder.position_at(finishing)
+            self._returning(builder, builder.bool_const(False), stmt.span)
+        else:
+            builder.yield_(resumed, stmt.span)
         builder.position_at(resumed)
 
     def _generator_named(self, callee: ast.Expr) -> _Generator | None:
@@ -14994,10 +15056,6 @@ class Checker:
         """
         found = walk.generator
         assert found is not None
-        if _contains(found.node.body, ast.Defer):
-            self._diags.emit(D.LANG_GENERATOR_DEFER_THROUGH_CALLS, span,
-                             name=found.node.name)
-            return UndefConst(ERROR)
         if self._generator_reaches_itself(found):
             self._diags.emit(D.LANG_GENERATOR_RECURSION, span,
                              name=found.node.name)
@@ -15074,6 +15132,37 @@ class Checker:
         start = inner.new_block("start")
         going = inner.new_block("going")
         go = inner.new_block("go")
+        asked = inner.new_block("asked")
+        stopping = inner.new_block("stopping")
+        inner.condbr(_is_nowhere(inner, out, span), stopping, asked, span=span)
+        # Told to finish: a walk under way is resumed once more with nowhere to
+        # write to, which runs what the body put off where it stopped; a walk
+        # not started, or overtaken, or a generator putting nothing off, has
+        # nothing to finish.
+        inner.position_at(stopping)
+        if _contains(found.node.body, ast.Defer):
+            finishing = inner.new_block("finishing")
+            nothing = inner.new_block("nothing")
+            under_way = inner.binary(
+                BinOp.AND,
+                inner.compare(CmpPred.NE, walking, inner.int_const(U64, 0), span),
+                inner.compare(CmpPred.EQ, inner.load(current, span), walking,
+                              span), span)
+            inner.condbr(under_way, finishing, nothing, span=span)
+            inner.position_at(finishing)
+            inner.set_memory(token)
+            inner.call(found.func, (inner.cast(CastKind.BITCAST, frame,
+                                               _ENVIRONMENT, span),
+                                    out,
+                                    inner.cast(CastKind.BITCAST, arguments,
+                                               _ENVIRONMENT, span)),
+                       BOOL, span)
+            inner.store(state, inner.int_const(U64, 0), span)
+            inner.ret(inner.bool_const(False), span)
+            inner.position_at(nothing)
+        inner.ret(inner.bool_const(False), span)
+        inner.position_at(asked)
+        inner.set_memory(token)
         inner.condbr(inner.compare(CmpPred.EQ, walking,
                                    inner.int_const(U64, 0), span),
                      start, going, span=span)
@@ -15299,6 +15388,14 @@ class Checker:
         described, state, out = (entry.add_param(_ENVIRONMENT, ""),
                                  entry.add_param(slot, ""),
                                  entry.add_param(_ENVIRONMENT, ""))
+        # Asked to finish, there is nothing to finish: what a loop walks as it is
+        # puts nothing off.
+        walking = inner.new_block("walking")
+        stopping = inner.new_block("stopping")
+        inner.condbr(_is_nowhere(inner, out, span), stopping, walking, span=span)
+        inner.position_at(stopping)
+        inner.ret(inner.bool_const(False), span)
+        inner.position_at(walking)
         types = [one for kind in kinds for one in self._word_types(kind)]
         record = self._module.types.tuple_type(tuple(types))
         offsets = member_offsets_of(record, _LAYOUT)
@@ -15370,11 +15467,18 @@ class Checker:
         given = builder.frame(self._module.types.tuple_type(
             tuple(self._word_types(element))), span)
         out = builder.cast(CastKind.BITCAST, given, _ENVIRONMENT, span)
+        def finish(b: IRBuilder) -> None:
+            # Asked with nowhere to write a turn to: finish, and run what was put
+            # off.  A walk that ran out has nothing to finish, and says so.
+            b.call(code, (described, slot,
+                          b.cast(CastKind.BITCAST, b.int_const(U64, 0),
+                                 _ENVIRONMENT, span)), BOOL, span)
+
         return _Iteration(
             element=element, start=(slot,),
             more=lambda b, s: b.call(code, (described, s[0], out), BOOL, span),
             take=lambda b, s: self._words_from(b, out, element, span),
-            step=lambda b, s: (s[0],))
+            step=lambda b, s: (s[0],), finish=finish)
 
     def _over_a_list(self, builder: IRBuilder, value: Value, ty: ListType,
                      span: Span) -> _Iteration:
@@ -16030,7 +16134,7 @@ class Checker:
         if isinstance(expr, ast.Call):
             self._answer_is_taken(expr)
             return
-        if isinstance(expr, (ast.Take, ast.TakeAt, ast.TakeThrough)):
+        if isinstance(expr, (ast.Take, ast.TakeAt, ast.TakeThrough, _Emit)):
             return
         found = self._diags.emit(D.LANG_STMT_VALUE_DISCARDED, expr.span)
         if isinstance(expr, ast.Binary) and expr.op is ast.BinaryOp.EQUAL:
@@ -16546,6 +16650,9 @@ class Checker:
     def _lower_written(self, builder: IRBuilder, expr: ast.Expr,
                        expected: Type | None) -> Value:
         """Lower an expression as it is written: the dispatch `_lower_expr` makes."""
+        if isinstance(expr, _Emit):
+            expr.run(builder)
+            return UndefConst(VOID)
         if isinstance(expr, (ast.Each, *_EACH_STEPS)) and _marked(expr) is not None:
             return self._lower_each(builder, expr, expected)
         if isinstance(expr, ast.Call) and any(

@@ -1126,7 +1126,7 @@ Runtime
 [x] let a generator from another module be called.  Done on 2026-10-03: through the module's name, walked through calls.  A call resolves only a generator of the same file: one written into a loop
     would be its syntax lowered with this file's names, and one walked through calls a function of the other module.
 
-[ ] let a generator with `defer` be walked through calls (4674): a walk that stops early has to finish the generator, which wants
+[x] let a generator with `defer` be walked through calls.  Done on 2026-10-03; 4674 is retired.  What was wanted: a walk that stops early has to finish the generator, which wants
     the loop's way out to resume it once more with "finish now" -- Python's `GeneratorExit`, C++'s `destroy`.
 
 [ ] let a generator walk itself (4675): the inner frames in an arena the generator names, `yield ⇉ walk(child) in scratch`.

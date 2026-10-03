@@ -6056,28 +6056,6 @@
       "option": null
     },
     {
-      "number": 4674,
-      "name": "LANG_GENERATOR_DEFER_THROUGH_CALLS",
-      "severity": "error",
-      "message": "'{name}' puts something off with 'defer', and a walk of it through calls may stop before it runs",
-      "args": [
-        {
-          "name": "name",
-          "type": "string",
-          "description": "the generator"
-        }
-      ],
-      "cause": "A walk that cannot see the generator takes each turn through a call, and the loop doing it may stop early -- a `break`, a `return` -- with the generator stopped part way.  What its body put off would then never run, which is what `defer` exists to rule out.  Written into a loop that can see it, a generator's `defer` runs as the loop leaves; walked through calls, it is refused until stopping a walk early can finish the generator.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / File Structure / Function Definition",
-        "requirement": "A generator with `defer` is walked only where the loop can see it."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 4675,
       "name": "LANG_GENERATOR_RECURSION",
       "severity": "error",

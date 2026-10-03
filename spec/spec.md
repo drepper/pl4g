@@ -4834,9 +4834,14 @@ the first walk's next turn finds that out rather than handing out what the secon
 is every walk of a generator written into its loop, which has no frame.  Compare: Python and C#, where walking one generator
 object from two loops interleaves them silently; Rust, whose borrow checker refuses the second walk.
 
-**What is refused through calls, and why:** a generator that puts something off with `defer` (4674), since a walk that stops early
-leaves it stopped part way and what it put off would never run -- written into a loop, its `defer` runs as the loop leaves; and a
-generator whose body walks itself (4675), whose frame would hold a frame of its own -- which is what naming an arena for the inner
+**A walk through calls left part way finishes the generator.**  Whichever way the loop is left -- running out, a `break`, a
+`return`, a `?`, a `break` of a loop outside -- the generator is resumed once more with nowhere to write to, which tells it to
+finish: what it put off with `defer` runs, once, as it would have at its end.  A walk that ran out has nothing to finish.
+Compare: **Python**, whose `close` raises `GeneratorExit` at the stopped `yield` and is called when the generator object is
+collected -- at some point; **C++**, whose `coroutine_handle::destroy` runs the destructors of what is live; **C#**, whose `foreach`
+disposes the enumerator, running the `finally` blocks, exactly when the loop is left -- which is this.
+
+**What is refused through calls, and why:** a generator whose body walks itself (4675), whose frame would hold a frame of its own -- which is what naming an arena for the inner
 frames will allow, as Rust needs a `Box::pin` for a recursive `async fn`.  **A generator may take type parameters**, and is compiled once per set of types a call gives it, as a generic function is --
 written into the loop that walks it with the type parameters renamed and bound there, or walked through calls.  **One exported
 from another file** is called through that file's name and walked through calls: its body means what its own file's names mean,

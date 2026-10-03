@@ -4313,3 +4313,9 @@ and read back at the head of each block that reads it; every `frame` the body to
 starts afresh after a stop.  A stop writes its number and answers `true`; a return writes all ones and answers `false`.  The
 size goes to `layout.measured`, which is what `size_of` asks for a `CoroutineFrame`.
 
+**Finishing a walk through calls.**  A `⇉T` value's `next` takes a null pointer where it would write a turn to mean "finish".  The
+loop walking one (`_Iteration.finish`) emits that call after the loop, and puts it off -- an `_Emit` in a `_Deferred` frame of its
+own around the loop -- for every way out that leaves more than the loop.  A plain iterator's `next` answers `false` to it at once;
+a generator's resumes a walk under way, if its body puts anything off, with the null pointer, and the body -- which after each
+stop tests the pointer when it has a `defer` in it -- runs what is pending and answers `false`.
+
