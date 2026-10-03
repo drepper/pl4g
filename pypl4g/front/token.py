@@ -361,6 +361,11 @@ ENVIRON_NAME: Final[str] = "".join((BUILTIN_GLYPH, "environ"))
 #: an element out and what is left has to go back where the list was.
 ITER_NAME: Final[str] = "".join((BUILTIN_GLYPH, "iter"))
 
+#: What starts a walk to be driven by hand -- a coroutine, or anything a loop
+#: walks -- and what takes its next turn, handing it what it takes back.
+START_NAME: Final[str] = "".join((BUILTIN_GLYPH, "start"))
+RESUME_NAME: Final[str] = "".join((BUILTIN_GLYPH, "resume"))
+
 #: The logical operators, which work on truth values and on nothing else.  Each
 #: is a glyph, and none has an ASCII substitute: the candidates would be `&&`,
 #: `||` and `!`, and spelling two of them with the characters the *bitwise*
@@ -466,6 +471,10 @@ EACH_GLYPH: Final[str] = "\N{DIAERESIS}"
 #: in a definition, takes what it gives from what it is given.  The arrow of a
 #: signature doubled: what follows is given out more than once.
 ITER_GLYPH: Final[str] = "\N{RIGHTWARDS PAIRED ARROWS}"
+
+#: What a coroutine takes back each time it is resumed, written after what it
+#: gives: `fn g(…) ⇉ T ⇇ U`.  The doubled arrow the other way.
+TAKES_GLYPH: Final[str] = "\N{LEFTWARDS PAIRED ARROWS}"
 
 #: What says a unit follows.  A unit is part of a type and not a type of its
 #: own, so it is written after one -- `u64 ¤meter` -- and the mark is what
@@ -668,6 +677,7 @@ class TokKind(StrEnum):
     DEREF = "'\N{POSITION INDICATOR}'"
     EACH = "'\N{DIAERESIS}'"
     ITER = "'\N{RIGHTWARDS PAIRED ARROWS}'"
+    TAKES = "'\N{LEFTWARDS PAIRED ARROWS}'"
     UNIT = "'\N{CURRENCY SIGN}'"
     LAMBDA = "'\N{GREEK SMALL LETTER LAMDA}'"
     LIFETIME = "'\N{WHITE HOURGLASS}'"
@@ -715,6 +725,7 @@ OPERATOR_GLYPHS: Final[frozenset[str]] = frozenset({
 #: lifting marks, and the raised minus of a negative literal.
 OPERATORS_NOT_NAMEABLE: Final[frozenset[str]] = frozenset({
     AND_GLYPH, OR_GLYPH, QUESTION_GLYPH, DEREF_GLYPH, EACH_GLYPH, ITER_GLYPH,
+    TAKES_GLYPH,
     ARROW_GLYPH, ASSIGN_GLYPH, BOTTOM_GLYPH, BUILTIN_GLYPH, LIFETIME_GLYPH,
     LIFT_OPEN_GLYPH, LIFT_CLOSE_GLYPH, NEGATIVE_GLYPH,
     # And the brackets the grammar needs for itself: a group, a list of

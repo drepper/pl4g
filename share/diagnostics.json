@@ -6078,6 +6078,99 @@
       "option": null
     },
     {
+      "number": 4676,
+      "name": "LANG_YIELD_TAKES_NOTHING",
+      "severity": "error",
+      "message": "'{name}' takes nothing back when it is resumed, so 'yield' answers nothing",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the generator"
+        }
+      ],
+      "cause": "What `yield` answers is what the next `⎕resume` hands in, and a generator says it takes something back by writing `⇇` and its type after what it gives.  One that does not is resumed with nothing, so its `yield` is a statement and has no value to stand where one is wanted.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "`yield` answers a value only in a coroutine written with `⇇`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4677,
+      "name": "LANG_COROUTINE_NOT_WALKED",
+      "severity": "error",
+      "message": "'{name}' takes a '{given}' back each time it is resumed, so it is driven with '⎕start' and '⎕resume', not walked",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the coroutine"
+        },
+        {
+          "name": "given",
+          "type": "string",
+          "description": "what it takes back"
+        }
+      ],
+      "cause": "A loop takes turns and hands nothing in, and a `⇉T` parameter is walked by a loop; a coroutine whose `yield` answers what it is handed would have nothing to answer with.  `⎕start` makes a walk of it under way, and `⎕resume(c, u)` hands it `u` and takes its next turn.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A coroutine written with `⇇` is driven by `⎕resume`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4678,
+      "name": "LANG_RESUME_ARGUMENTS",
+      "severity": "error",
+      "message": "'⎕resume' of {found} is handed what it takes back, and of a walk taking nothing, nothing",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the walk"
+        }
+      ],
+      "cause": "`⎕resume(c, u)` hands `u` to a coroutine written with `⇇`, to be what the `yield` it stopped at answers; a walk that takes nothing back is resumed with `⎕resume(c)` alone.  The two are told apart by what the walk was started from.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "`⎕resume` is handed a value exactly when the walk takes one."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4679,
+      "name": "LANG_RESUME_NOT_RUNNING",
+      "severity": "error",
+      "message": "'⎕resume' takes the next turn of a walk under way, which '⎕start' makes, and this is '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "what was handed"
+        }
+      ],
+      "cause": "A walk under way is a walk with its own state -- where it has got to -- and `⎕start` is what makes one, out of anything a loop walks or a coroutine.  An iterator itself is a description, walked from the start each time, and has no state to move on.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "`⎕resume` is handed what `⎕start` made."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

@@ -595,11 +595,15 @@ class Parser:
             # what comes back is a collection whose entries may be written.
             writable = self._accept(TokKind.KW_MUT) is not None
             ret_type = _writable(self._parse_type_ref(), writable)
-        elif self._accept(TokKind.ITER) is not None:
+        takes: ast.TypeExpr | None = None
+        if ret_type is None and self._accept(TokKind.ITER) is not None:
             # The arrow doubled: what follows is given out more than once, and
-            # the function is a generator.
+            # the function is a generator -- and with the arrow the other way
+            # after it, what it takes back each time it is resumed.
             generates = True
             ret_type = self._parse_type_ref()
+            if self._accept(TokKind.TAKES) is not None:
+                takes = self._parse_type_ref()
         # `in a, b` after the answer says which arenas it was made in: the `in` an
         # expression is written with, said of what the call comes to.
         made_in: tuple[tuple[str, Span], ...] = ()
@@ -626,6 +630,7 @@ class Parser:
                                made_in=made_in, attrs=attrs, doc=doc, doc_lines=doc_lines,
                                at_compile_time=at_compile_time,
                                is_macro=is_macro, generates=generates,
+                               takes=takes,
                                held=None if held is None else held.text,
                                held_span=None if held is None else held.span)
         # A body that runs while the compiler does may quote, which is what the marks
@@ -641,7 +646,7 @@ class Parser:
                            made_in=made_in, attrs=attrs, doc=doc,
                            doc_lines=doc_lines,
                            at_compile_time=at_compile_time, is_macro=is_macro,
-                           generates=generates,
+                           generates=generates, takes=takes,
                            held=None if held is None else held.text,
                            held_span=None if held is None else held.span)
 
@@ -2518,6 +2523,12 @@ class Parser:
     def _parse_atom(self) -> ast.Expr:
         """Parse an expression with nothing binding it to what is around it."""
         token = self._current
+        if token.kind is TokKind.KW_YIELD:
+            # A value handed out of a coroutine where what it takes back is
+            # wanted: it takes the whole expression after it, as `return` does.
+            start = self._advance().span
+            value = self._parse_expression()
+            return ast.YieldValue(span=start.to(value.span), value=value)
         if token.kind is TokKind.DOLLAR:
             # A hole, which stands where an expression stands and is written only
             # inside a macro's pattern or template.  It is read here rather than by

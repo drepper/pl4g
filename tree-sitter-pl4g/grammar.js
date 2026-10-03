@@ -201,8 +201,10 @@ module.exports = grammar({
             field('return_type', $.type),
             // `in a, b`: which arena parameters the answer was made in.
             optional(seq('in', sepBy1(',', field('made_in', $.identifier))))),
-        // A generator: the arrow doubled, and what each turn of a walk gives.
-        seq('\u21c9', field('gives', $.type)))),
+        // A generator: the arrow doubled, and what each turn of a walk gives --
+        // and with the arrow the other way, what it takes back when resumed.
+        seq('\u21c9', field('gives', $.type),
+            optional(seq('\u21c7', field('takes', $.type)))))),
       repeat($.clause),
       optional(field('body', $._block)),
     ),
@@ -639,7 +641,6 @@ module.exports = grammar({
       $.unit_definition,
       $.assignment,
       $.return_statement,
-      $.yield_statement,
       $.break_statement,
       $.continue_statement,
       $.defer_statement,
@@ -735,9 +736,11 @@ module.exports = grammar({
     // that takes the expression, which is the only one that can be meant.
     return_statement: $ => prec.right(seq('return', optional($._expression))),
 
-    // One value handed out of a generator, or after the doubled arrow every
-    // value something else gives.
-    yield_statement: $ => seq('yield', optional('\u21c9'), $._expression),
+    // One value handed out of a generator -- what the next resume hands in,
+    // where a value is wanted -- or after the doubled arrow every value
+    // something else gives.  A statement is an expression standing alone.
+    yield_expression: $ => prec.right(seq('yield', optional('\u21c9'),
+                                          $._expression)),
 
     expression_statement: $ => $._expression,
 
@@ -757,6 +760,9 @@ module.exports = grammar({
 
     _expression: $ => choice(
       $.failure_expression,
+      // It takes the whole expression after it, as `return` does, so it stands
+      // where a whole expression does and not inside one.
+      $.yield_expression,
       $.logical_expression,
       $._non_logical,
     ),
@@ -1354,7 +1360,7 @@ module.exports = grammar({
     operator_name: _ => token(seq(
       '`',
       choice(
-        /[[\p{Sm}\p{So}\-^&%#\u2308\u230a\u00ab\u00bb\u207f]--[?\u207b\u2190\u2192\u21c9\u2227\u2228\u22a5\u2316\u231c\u231d\u2395\u29d6]]/,
+        /[[\p{Sm}\p{So}\-^&%#\u2308\u230a\u00ab\u00bb\u207f]--[?\u207b\u2190\u2192\u21c7\u21c9\u2227\u2228\u22a5\u2316\u231c\u231d\u2395\u29d6]]/,
         // Or a pair: an opening bracket and a closing one written together, which
         // is what a pair is called.  The brackets the grammar needs for itself are
         // out, and so are the two Unicode calls brackets and this language calls
@@ -1366,7 +1372,7 @@ module.exports = grammar({
     // A glyph the language gives no meaning, standing where an operator stands.
     // What it means is what a program said it means; the grammar only says where
     // one may be written and how tightly it binds.
-    fresh_operator: _ => token(/[[\p{Sm}\p{So}]--[+<=>|~\u00ac\u00d7\u00f7\u207b\u2190-\u2193\u2195\u21ba\u21bb\u21c9\u21d5\u21e7\u21e9\u2223\u2224\u2227\u2228\u2245\u2247\u2260\u2264\u2265\u2295\u229e-\u22a0\u22a5\u22bc\u22bd\u2316\u231c\u231d\u2374\u2395\u29d6\u29fa\u2a85\u2a86\u2a89\u2a8a]]/),
+    fresh_operator: _ => token(/[[\p{Sm}\p{So}]--[+<=>|~\u00ac\u00d7\u00f7\u207b\u2190-\u2193\u2195\u21ba\u21bb\u21c7\u21c9\u21d5\u21e7\u21e9\u2223\u2224\u2227\u2228\u2245\u2247\u2260\u2264\u2265\u2295\u229e-\u22a0\u22a5\u22bc\u22bd\u2316\u231c\u231d\u2374\u2395\u29d6\u29fa\u2a85\u2a86\u2a89\u2a8a]]/),
 
     // The two halves of a pair the language gives no meaning.  The brackets it
     // needs for itself are out, its own two operator glyphs are out, and so are

@@ -823,6 +823,14 @@ class Yield(Stmt):
 
 
 @dataclass(frozen=True, slots=True)
+class YieldValue(Expr):
+    """`yield v` where a value is wanted: hand *v* out, stop, and answer what
+    the next `⎕resume` hands in."""
+
+    value: Expr
+
+
+@dataclass(frozen=True, slots=True)
 class ExprStmt(Stmt):
     """An expression evaluated for its effect."""
 
@@ -1381,6 +1389,9 @@ class FuncDef(Node):
     #: Whether its answer was written with `⇉`: a generator, whose call makes
     #: something a loop walks and whose body hands values out with `yield`.
     generates: bool = False
+    #: What it takes back each time it is resumed, written after `⇇`: a
+    #: coroutine driven by `⎕resume`, whose `yield` answers it.
+    takes: "TypeExpr | None" = None
     held: str | None = None
     #: And where that part of the name is, for a message about the type rather
     #: than about the function.

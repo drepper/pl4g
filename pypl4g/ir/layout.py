@@ -16,7 +16,8 @@ from .types import (ArrayType, BoolType, CharType, DictType, EnumType,
                     SyntaxType,
                     FloatType,
                     IntType, MemType,
-                    CoroutineFrame, FuncType, IterType, OpaqueType, ProductType, PtrType, SetType, TupleType,
+                    CoroutineFrame, FuncType, IterType, OpaqueType, ProductType,
+                    RunningType, PtrType, SetType, TupleType,
                     CursorType,
                     ListType, ResultType, StrType, SumType, Type, VecType,
                     VoidType, parts_of)
@@ -104,6 +105,8 @@ def size_of(ty: Type, layout: DataLayout) -> int:
             found = _FRAME_SIZES.get(id(ty))
             assert found is not None, "a generator's frame laid out before it is measured"
             return found
+        case RunningType():
+            return 4 * layout.pointer_size
         case FuncType() | IterType():
             # Where the code is, where what it brought in is, and the allocator
             # that came from: three words.
@@ -199,7 +202,7 @@ def align_of(ty: Type, layout: DataLayout) -> int:
             return align_of(ty.holder, layout)
         case CoroutineFrame():
             return 16
-        case FuncType() | IterType() | OpaqueType():
+        case FuncType() | IterType() | OpaqueType() | RunningType():
             return layout.pointer_size
         case TupleType():
             return max((align_of(m, layout) for m in ty.members), default=1)

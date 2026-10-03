@@ -1096,7 +1096,8 @@ Runtime
     questions taken at their recommendations: `fn g(…) ⇉ T` with `yield` and `yield ⇉`, written into a loop that can see it and
     otherwise split at its stops and walked through calls.  What is left is in the entries below.
 
-[ ] a cursor over an iterator, `⎕iter(q)`: part of the decision that an iterator is a description each walk starts afresh, so that
+[x] a cursor over an iterator.  Done on 2026-10-03 as `⎕start(q)` and `⎕resume(c)`, which make and step a walk under way of
+    anything a loop walks.  What was asked, `⎕iter(q)`: part of the decision that an iterator is a description each walk starts afresh, so that
     stepping one by hand has something of its own to step.  The cursor a list has is built for a list -- where the list is and how
     far along -- and has no spelling as a type; an iterator's would be its description and a state, and wants the cursor's
     operators (`⌖`, `⇧`) and its truth value, and a type to hold it in.
@@ -1135,6 +1136,7 @@ Runtime
     `elements_of`: a walk of a tree through
     calls resumes each level between the leaf and the root for every element.
 
-[ ] coroutines that take something back when resumed, and on them a scheduler over the `io_uring` ring: the third use in
+[ ] a scheduler over the `io_uring` ring, on coroutines that take something back -- which are done (2026-10-03, `⇉ T ⇇ U`,
+    `⎕start`, `⎕resume`): the third use in
     [spec/coroutines.md](spec/coroutines.md).
 

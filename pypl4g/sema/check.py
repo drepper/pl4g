@@ -30,6 +30,7 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            STR_OF_NAME, EMPTY_NAME,
                            WIDEN_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH, EACH_GLYPH, ITER_GLYPH,
+                           RESUME_NAME, START_NAME,
                            LIFETIME_GLYPH, LIFT_OPEN_GLYPH,
                            ARRAY_OPEN_GLYPH, ARRAY_CLOSE_GLYPH,
                            SET_OPEN_GLYPH, SET_CLOSE_GLYPH,
@@ -68,7 +69,7 @@ from ..ir.types import (ARENA, ARENA_NAME, StrType, ArrayType, BOOL, BoolType, B
                         I64, U16, U32, U64,
                         F64,
                         CoroutineFrame, FloatType, IntType, IterType, MEM,
-                        ProductType, PtrType,
+                        ProductType, PtrType, RunningType,
                         ResultType,
                         ListType, SetType, STR, SumType, TupleType, Type,
                         NARROWING, NO_UNIT, OpaqueType, Unit, VecType, VOID,
@@ -716,6 +717,9 @@ class _Generator:
     instances: dict[tuple[Type, ...], "_Generator"] = field(default_factory=dict)
     #: For an instance, the types its parameters stand for.
     bound: dict[str, Type] = field(default_factory=dict)
+    #: What it takes back each time it is resumed, where it was written with
+    #: `⇇`: a coroutine driven by `⎕resume`, never walked by a loop.
+    given: Type | None = None
 
 
 @dataclass(slots=True)
@@ -3026,6 +3030,7 @@ class Checker:
         self._generating: _Generator | None = None
         self._generating_out: Value | None = None
         self._generating_frame: Value | None = None
+        self._generating_args: Value | None = None
         #: The generators being written into a loop just now, which a walk of
         #: one of them inside its own body may not be.
         self._writing_in: list[int] = []
@@ -4900,6 +4905,9 @@ class Checker:
             if node.ret_type is not None else ERROR
         if element is ERROR or any(one is ERROR for one in params):
             return None
+        given = self._resolve_type(node.takes) if node.takes is not None else None
+        if given is ERROR:
+            return None
         if isinstance(element, IterType):
             self._diags.emit(D.LANG_ITERATOR_DOES_NOT_LEAVE,
                              node.ret_type.span if node.ret_type is not None
@@ -4926,7 +4934,7 @@ class Checker:
         self._owned.append(func)
         found = _Generator(node=node, func=func, params=params, element=element,
                            impure=func_attrs.impure or func_attrs.io,
-                           frame=frame, path=path, bound=dict(bound))
+                           frame=frame, path=path, bound=dict(bound), given=given)
         self._generator_bodies[id(func)] = found
         return found
 
@@ -8445,7 +8453,7 @@ class Checker:
             arriving = self._arguments_from(builder, args, generating.params,
                                             node.span)
             self._generating, self._generating_out = generating, out
-            self._generating_frame = own
+            self._generating_frame, self._generating_args = own, args
         else:
             arriving = [block.add_param(func.ty.params[index], param.name)
                         for index, param in enumerate(node.params)]
@@ -11396,7 +11404,8 @@ class Checker:
                 continue
             local.read = True
             held = self._held_by(local)
-            if local.iterable is not None or isinstance(held, IterType):
+            if local.iterable is not None \
+                    or isinstance(held, (IterType, RunningType)):
                 # What it walks is described in this call's room, which a
                 # lambda may outlive.
                 self._diags.emit(D.LANG_ITERATOR_DOES_NOT_LEAVE, one.span,
@@ -14850,6 +14859,20 @@ class Checker:
 
     # -- generators -------------------------------------------------------------
 
+    def _record_types(self, found: _Generator) -> tuple[Type, ...]:
+        """What a generator's argument record holds: its arguments, and after
+        them room for what a resume hands in, where it takes something back."""
+        return found.params if found.given is None \
+            else (*found.params, found.given)
+
+    def _given_place(self, builder: IRBuilder, args: Value, found: _Generator,
+                     span: Span) -> Value:
+        """Where in the argument record at *args* what a resume hands in is."""
+        assert found.given is not None
+        record, first = self._argument_record(self._record_types(found))
+        return self._inside(builder, args,
+                            member_offsets_of(record, _LAYOUT)[first[-1]], U8, span)
+
     def _argument_record(self, params: Sequence[Type]) -> tuple[TupleType, list[int]]:
         """How a generator's arguments lie in the record it reads them from:
         the record, and where each argument's first word is."""
@@ -14914,6 +14937,33 @@ class Checker:
         self._words_into(builder, self._generating_out, value, found.element,
                          stmt.span)
         self._stopped(builder, False, stmt.span)
+
+    def _lower_yield_value(self, builder: IRBuilder, expr: ast.YieldValue,
+                           expected: Type | None) -> Value:
+        """`yield v` where a value is wanted: hand *v* out, stop, and answer
+        what the next `⎕resume` handed in -- read from the argument record,
+        where the resume wrote it."""
+        found = self._generating
+        if found is None:
+            self._diags.emit(D.LANG_YIELD_OUTSIDE_A_GENERATOR, expr.span)
+            return UndefConst(ERROR)
+        if found.given is None or self._generating_args is None:
+            self._diags.emit(D.LANG_YIELD_TAKES_NOTHING, expr.span,
+                             name=found.node.name)
+            return UndefConst(ERROR)
+        func = self._demanding[1]
+        assert func is not None
+        self._lower_yield(builder, ast.Yield(span=expr.span, value=expr.value),
+                          func)
+        if builder.is_terminated:
+            return UndefConst(ERROR)
+        given = self._words_from(
+            builder, self._given_place(builder, self._generating_args, found,
+                                       expr.span), found.given, expr.span)
+        if not self._accepts(expected, found.given):
+            self._report_mismatch(expr.span, found.given, expected)
+            return UndefConst(ERROR)
+        return given
 
     def _stopped(self, builder: IRBuilder, delegates: bool, span: Span) -> None:
         """Stop the generator's body here, and go on after it when resumed --
@@ -15158,9 +15208,147 @@ class Checker:
                          name=walk.generator.node.name)
         return UndefConst(ERROR)
 
+    def _lower_start(self, builder: IRBuilder, expr: ast.Call,
+                     expected: Type | None) -> Value:
+        """`⎕start(w)`: a walk under way, to be driven by `⎕resume`.
+
+        *w* is anything a loop walks -- a generator's call, an iterator, a pick,
+        an array -- and a coroutine that takes something back, which only this
+        drives.  What it makes is where the walk's turn is taken, its
+        description, its state, kept here in this call's room, and where what
+        a resume hands in goes.
+        """
+        if len(expr.args) != 1 or isinstance(expr.args[0], (ast.Named, ast.Spread)):
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=START_NAME, expected=1, found=len(expr.args))
+            return UndefConst(ERROR)
+        written = expr.args[0]
+        outer = self._pick_in, self._pick_walked
+        self._pick_in, self._pick_walked = written, None
+        try:
+            value = self._lower_expr(builder, written, None)
+            walked = self._pick_walked
+        finally:
+            self._pick_in, self._pick_walked = outer
+        span = expr.span
+        given_type: Type | None = None
+        given_place: Value = builder.cast(CastKind.BITCAST,
+                                          builder.int_const(U64, 0),
+                                          _ENVIRONMENT, span)
+        if isinstance(walked, _Iterable) and walked.generator is not None:
+            found = walked.generator
+            name = found.node.name
+            walk = self._generator_described(
+                builder, name, walked,
+                self._module.types.iter_type(found.element), span, driven=True)
+            if self._value_type_of(walk) is ERROR:
+                return UndefConst(ERROR)
+            if found.given is not None:
+                _, offsets = self._description_of(found)
+                described = builder.extract(walk, 1, _ENVIRONMENT, span)
+                given_place = self._given_place(
+                    builder, self._inside(builder, described, offsets[3], U8,
+                                          span), found, span)
+                given_type = found.given
+            element = found.element
+        else:
+            if walked is None:
+                ty = self._value_type_of(value)
+                if ty is ERROR:
+                    return UndefConst(ERROR)
+                if isinstance(ty, IterType):
+                    walk, element = value, ty.element
+                else:
+                    found_walk = self._over_a_value(builder, value, ty, written.span) \
+                        if not isinstance(ty, TupleType) else None
+                    if found_walk is None:
+                        return UndefConst(ERROR)
+                    walked = _Iterable(element=found_walk.element, written=written,
+                                       base=value, ty=ty)
+            if walked is not None and not isinstance(walked, _Iterable):
+                base, ty, mask = walked
+                walked = _Iterable(element=self._picked_element(ty, mask),
+                                   written=written, base=base, ty=ty, mask=mask)
+            if isinstance(walked, _Iterable):
+                element = walked.element
+                walk = self._handed_on(builder, START_NAME, walked,
+                                       self._module.types.iter_type(element),
+                                       span)
+            if self._value_type_of(walk) is ERROR:
+                return UndefConst(ERROR)
+        assert element is not None
+        slot = builder.frame(U64, span)
+        builder.store(slot, builder.extract(walk, 2, U64, span), span)
+        ty = self._module.types.running_type(element, given_type)
+        made = builder.make_tuple(
+            (builder.extract(walk, 0, _ENVIRONMENT, span),
+             builder.extract(walk, 1, _ENVIRONMENT, span), slot, given_place),
+            ty, span)
+        self._report_iterator(START_NAME, "".join((
+            "a walk under way, driven by '", RESUME_NAME, "': its state is in this "
+            "call's room")), span)
+        if not self._accepts(expected, ty):
+            self._report_mismatch(span, ty, expected)
+            return UndefConst(ERROR)
+        return made
+
+    def _lower_resume(self, builder: IRBuilder, expr: ast.Call,
+                      expected: Type | None) -> Value:
+        """`⎕resume(c)` and `⎕resume(c, u)`: the next turn of a walk under way,
+        or the failure once it has nothing more -- handing *u* in first, to be
+        what the `yield` it stopped at answers, where it takes something."""
+        if not expr.args or len(expr.args) > 2 \
+                or any(isinstance(one, (ast.Named, ast.Spread)) for one in expr.args):
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=RESUME_NAME, expected=1, found=len(expr.args))
+            return UndefConst(ERROR)
+        span = expr.span
+        first = expr.args[0]
+        if isinstance(first, ast.Call) and self._generator_named(first.callee) is not None:
+            # A generator's call describes a walk and is not one under way.
+            self._diags.emit(D.LANG_RESUME_NOT_RUNNING, first.span,
+                             found="".join(("a call of '",
+                                            _written_as(first.callee), "'")))
+            return UndefConst(ERROR)
+        cursor = self._lower_expr(builder, first, None)
+        ty = self._value_type_of(cursor)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(ty, RunningType):
+            self._diags.emit(D.LANG_RESUME_NOT_RUNNING, expr.args[0].span,
+                             found=ty.written())
+            return UndefConst(ERROR)
+        if (ty.given is None) != (len(expr.args) == 1):
+            self._diags.emit(D.LANG_RESUME_ARGUMENTS, span,
+                             found=ty.written())
+            return UndefConst(ERROR)
+        if ty.given is not None:
+            handed = self._lower_into(builder, expr.args[1], ty.given,
+                                      expr.args[1].span)
+            if self._value_type_of(handed) is ERROR:
+                return UndefConst(ERROR)
+            self._words_into(builder, builder.extract(cursor, 3, _ENVIRONMENT, span),
+                             handed, ty.given, span)
+        element = ty.element
+        out = builder.cast(CastKind.BITCAST, builder.frame(
+            self._module.types.tuple_type(tuple(self._word_types(element))), span),
+            _ENVIRONMENT, span)
+        took = builder.call(builder.extract(cursor, 0, _ENVIRONMENT, span),
+                            (builder.extract(cursor, 1, _ENVIRONMENT, span),
+                             builder.extract(cursor, 2, self._module.types.ptr_type(
+                                 U64, mutable=True), span), out), BOOL, span)
+        answer = self._module.types.result_type(element)
+        made = builder.wrap(self._words_from(builder, out, element, span),
+                            builder.binary(BinOp.XOR, took, builder.bool_const(True),
+                                           span), answer, span)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(span, answer, expected)
+            return UndefConst(ERROR)
+        return made
+
     def _generator_described(self, builder: IRBuilder, name: str,
                              walk: _Iterable, wanted: IterType,
-                             span: Span) -> Value:
+                             span: Span, driven: bool = False) -> Value:
         """A generator's call as an iterator value, walked through calls.
 
         The description is in this call's room: two counters that tell one walk
@@ -15171,6 +15359,11 @@ class Checker:
         """
         found = walk.generator
         assert found is not None
+        if found.given is not None and not driven:
+            # A loop hands nothing in, and a `⇉T` parameter is walked by one.
+            self._diags.emit(D.LANG_COROUTINE_NOT_WALKED, span,
+                             name=found.node.name, given=found.given.written())
+            return UndefConst(ERROR)
         if walk.arena is None and self._generator_reaches_itself(found):
             self._diags.emit(D.LANG_GENERATOR_RECURSION, span,
                              name=found.node.name)
@@ -15195,7 +15388,7 @@ class Checker:
         the arguments, and the generator's frame -- last, since how large it is
         is known only once its body is split, and where it is needs only how it
         is aligned."""
-        arguments, _ = self._argument_record(found.params)
+        arguments, _ = self._argument_record(self._record_types(found))
         head = self._module.types.tuple_type((U64, U64, _ENVIRONMENT, arguments))
         offsets = member_offsets_of(head, _LAYOUT)
         end = offsets[3] + size_of(arguments, _LAYOUT)
@@ -15443,6 +15636,8 @@ class Checker:
         """Why *found* is not written into a loop, or nothing where it is."""
         body = found.node.body
         assert body is not None
+        if found.given is not None:
+            return "since it takes something back each time it is resumed"
         if found.scope is not None and found.scope is not self._top:
             return "since it is written in another file, whose names its body means"
         if id(found) in self._writing_in:
@@ -16860,6 +17055,8 @@ class Checker:
         if isinstance(expr, _Emit):
             expr.run(builder)
             return UndefConst(VOID)
+        if isinstance(expr, ast.YieldValue):
+            return self._lower_yield_value(builder, expr, expected)
         if isinstance(expr, (ast.Each, *_EACH_STEPS)) and _marked(expr) is not None:
             return self._lower_each(builder, expr, expected)
         if isinstance(expr, ast.Call) and any(
@@ -19714,6 +19911,10 @@ class Checker:
                 return self._lower_address_of(builder, expr, expected)
             if given == ITER_NAME:
                 return self._lower_iter(builder, expr, expected)
+            if given == START_NAME:
+                return self._lower_start(builder, expr, expected)
+            if given == RESUME_NAME:
+                return self._lower_resume(builder, expr, expected)
             if given == BYTES_NAME:
                 return self._lower_bytes(builder, expr, expected)
             if given == STR_OF_NAME:

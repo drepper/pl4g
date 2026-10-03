@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4678
+※ pl4g-test: expect-diag 4678 LANG_RESUME_ARGUMENTS
+
+※ A walk taking something back is resumed with it, and one taking nothing
+※ with nothing.
+
+fn acc(start: u64) ⇉ u64 ⇇ u64:
+    let more := yield start
+    yield more
+
+@[startup]
+fn main() → u6:
+    let c := ⎕start(acc(1u64))
+    let a := ⎕resume(c)
+    0u6

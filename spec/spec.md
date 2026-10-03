@@ -4856,6 +4856,35 @@ from another file** is called through that file's name and walked through calls:
 and the loop's body cannot be written into it.  Compare: **C++**'s `std::generator<T>` templates and **Rust**'s generic `impl
 Iterator`, compiled per type as this is; **C#** and **Python**, where a generic generator is one generator.
 
+##### Coroutines driven by hand
+
+**A generator written with `⇇` takes something back each time it is resumed**, and its `yield` answers it:
+
+```
+fn running_total(start: u64) ⇉ u64 ⇇ u64:
+    let total: mut u64 = start
+    while true:
+        let more := yield total
+        total ← total + more
+
+let c := ⎕start(running_total(10u64))
+⎕resume(c, 0u64)          ※ 10: the first value handed in is not seen
+⎕resume(c, 5u64)          ※ 15
+```
+
+`⇇` is the doubled arrow the other way: what comes back in.  **`⎕start(w)` makes a walk under way** out of a coroutine's call, or
+out of anything a loop walks -- a generator, an iterator, a pick, an array -- and **`⎕resume(c, u)` hands `u` in and takes the next
+turn** as a result, failed once the walk has nothing more; a walk that takes nothing back is resumed with `⎕resume(c)` alone (4678).
+What the first resume hands in is not seen, the body having reached no `yield` yet.  Such a coroutine is never walked by a loop,
+which hands nothing in (4677), and `yield` answers nothing in a generator without `⇇` (4676).  A walk under way is a handle: two
+names for it are one walk.  Its state is in the room of the call that started it, so it does not leave that call either.
+
+Compare: **Python**'s `x = yield v` and `send`, whose first `send` must be `None` for the same reason the first value here is not
+seen; **JavaScript**'s `next(u)`, which ignores its first argument likewise; **Lua**'s `coroutine.resume(co, u)`, whose first
+resume hands the function its arguments instead; **C#**, which has no two-way iterator and uses channels; **Kotlin**'s
+`Channel.send` and `receive`.  What is written here and none of them write is what comes back, in the signature: `⇇ U`, as C# and
+Kotlin say it in a channel's type.
+
 #### Attributes
 
 An attribute states something about an object that is not part of the object's own description: how a function takes part in the

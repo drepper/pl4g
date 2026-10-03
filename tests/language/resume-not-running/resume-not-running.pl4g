@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4679
+※ pl4g-test: expect-diag 4679 LANG_RESUME_NOT_RUNNING
+
+※ A generator's call describes a walk; `⎕start` makes one under way, which is
+※ what `⎕resume` moves on.
+
+fn acc(start: u64) ⇉ u64 ⇇ u64:
+    let more := yield start
+    yield more
+
+@[startup]
+fn main() → u6:
+    let a := ⎕resume(acc(1u64), 2u64)
+    0u6

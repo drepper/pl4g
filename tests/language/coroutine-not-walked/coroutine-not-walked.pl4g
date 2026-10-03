@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4677
+※ pl4g-test: expect-diag 4677 LANG_COROUTINE_NOT_WALKED
+
+※ A loop hands nothing in, so a coroutine whose `yield` answers what it is
+※ handed is driven with `⎕start` and `⎕resume` and not walked.
+
+fn acc(start: u64) ⇉ u64 ⇇ u64:
+    let more := yield start
+    yield more
+
+@[startup]
+fn main() → u6:
+    let n: mut u64 = 0u64
+    foreach v := acc(1u64):
+        n ← n + v
+    0u6

@@ -9441,6 +9441,20 @@ The split is a pass, `coroutines`, run at every level right after the calls take
 that made it is kept in the frame, which is more than the values crossing a stop and always enough, and the stop number in the
 frame's first word chooses where a call resumes.  The frame's size is known only there, and is told to the layout then.
 
+## 2026-10-03T21:00+02:00 — language
+
+**Coroutines that take something back, and the rest of the generator to-do list**
+
+The user asked for the entries added with generators.  Three questions about the last one were put and answered as
+recommended: `fn g(…) ⇉ T ⇇ U` with `let u := yield t` (Python's `send`, JavaScript's `next(u)`, Lua's `resume`, but said in the
+signature, as Kotlin's and C#'s channel types say it), against a parameter refilled at each resume; a walk under way made by
+`⎕start` and moved on by `⎕resume`, against coroutines only a scheduler drives (Rust's `async`, Go); and a scheduler of `std`
+tasks with `⎕await` over the `io_uring` ring (Python's asyncio, Rust's single-threaded executors, C#'s `await`), against designing
+it separately first.  `⎕start` takes anything a loop walks too, which answers the to-do entry for a cursor over an iterator.  The
+other entries -- generators with type parameters, from another file, with `defer` walked through calls (4674 retired), walking
+themselves with the inner frames `in` an arena, and `yield ⇉` handing the walk on in one step (C++23's `elements_of`) -- had
+their designs in [coroutines.md](coroutines.md) already.
+
 
 Open questions
 --------------

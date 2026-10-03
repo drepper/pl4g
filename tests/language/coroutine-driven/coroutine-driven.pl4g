@@ -1,0 +1,33 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ A coroutine written with `⇇` takes something back each time it is resumed,
+※ and its `yield` answers it.  `⎕start` makes a walk of it under way and
+※ `⎕resume(c, u)` hands it `u` and takes the next turn, as a result -- failed
+※ once it has nothing more.  What the first resume hands in is not seen: the
+※ body has not reached a `yield` yet.  `⎕start` takes anything a loop walks as
+※ well, which `⎕resume(c)` then steps by hand.
+
+fn running_total(start: u64) ⇉ u64 ⇇ u64:
+    let total: mut u64 = start
+    while true:
+        let more := yield total
+        total ← total + more
+
+fn upto(n: u8) ⇉ u8:
+    foreach i := 0u8…n:
+        yield i
+
+@[startup, impure]
+fn main() → u6:
+    let c := ⎕start(running_total(10u64))
+    let a := ⎕resume(c, 0u64) ?? 0u64
+    let b := ⎕resume(c, 5u64) ?? 0u64
+    let d := ⎕resume(c, 7u64) ?? 0u64
+    let u := ⎕start(upto(2u8))
+    let x := ⎕resume(u) ?? 99u8
+    let y := ⎕resume(u) ?? 99u8
+    let z := ⎕resume(u) ?? 99u8
+    let arr: u8⟦3⟧ = ⟦7u8, 8u8, 9u8⟧ in ⎕static
+    let w := ⎕start(arr⟦arr > 7u8⟧)
+    let p := ⎕resume(w) ?? 0u8
+    if a = 10u64 ∧ b = 15u64 ∧ d = 22u64 ∧ x = 0u8 ∧ y = 1u8 ∧ z = 99u8 ∧ p = 8u8: 0u6 else: 1u6

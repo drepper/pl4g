@@ -421,6 +421,39 @@ class CoroutineFrame(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class RunningType(Type):
+    """A walk under way, driven by hand: what `⎕start` makes and `⎕resume`
+    takes the next turn of.
+
+    Four words: the code taking a turn, where the walk is described, where its
+    state is, and where what a resume hands in goes -- nothing where the walk
+    takes nothing back.  It has no spelling: a name is given one by `⎕start`.
+    """
+
+    element: Type
+    given: Type | None
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return "".join(("running<", self.element.render(),
+                        "" if self.given is None else
+                        "".join((", ", self.given.render())), ">"))
+
+    def written(self) -> str:
+        """The name of this type as a program writes it."""
+        return "".join(("a walk of \N{RIGHTWARDS PAIRED ARROWS}", self.element.written(),
+                        "" if self.given is None else
+                        "".join((" \N{LEFTWARDS PAIRED ARROWS} ", self.given.written())),
+                        " under way"))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name."""
+        return "".join(("running<", self.element.mangled(),
+                        "" if self.given is None else
+                        "".join((",", self.given.mangled())), ">"))
+
+
+@dataclass(frozen=True, slots=True)
 class IterType(Type):
     """`⇉T`: something a loop can walk, giving a `T` each turn.
 
@@ -1150,6 +1183,7 @@ class TypeContext:
         self._pointers: dict[tuple[Type, bool, bool], PtrType] = {}
         self._functions: dict[tuple[tuple[Type, ...], Type], FuncType] = {}
         self._iterators: dict[Type | None, IterType] = {}
+        self._running: dict[tuple[Type, Type | None], RunningType] = {}
         self._integers: dict[tuple[int, bool], IntType] = {
             (t.bits, t.signed): t for t in (I8, I16, I32, I64, U8, U16, U32, U64)}
 
@@ -1264,6 +1298,15 @@ class TypeContext:
         if found is None:
             found = FuncType(params, ret, listable, hands_out, lasting)
             self._functions[key] = found
+        return found
+
+    def running_type(self, element: Type, given: Type | None) -> RunningType:
+        """Return the type of a walk of *element* under way, taking *given*."""
+        key = (element, given)
+        found = self._running.get(key)
+        if found is None:
+            found = RunningType(element, given)
+            self._running[key] = found
         return found
 
     def iter_type(self, element: Type | None) -> IterType:
@@ -1411,6 +1454,11 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
         # Where the code taking a turn is, where the description of what is
         # walked is, and the state a walk starts from.
         return (_pointer_to(U8), _pointer_to(U8), U64)
+    if isinstance(ty, RunningType):
+        # The same, the state kept somewhere rather than carried, and where
+        # what a resume hands in goes.
+        return (_pointer_to(U8), _pointer_to(U8), _pointer_to(U64),
+                _pointer_to(U8))
     if isinstance(ty, FuncType):
         # A function written where a value is wanted is three words: where its
         # code is, where what it brought in with it is, and the allocator that
