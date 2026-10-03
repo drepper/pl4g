@@ -36,7 +36,7 @@ from ..ir.function import BasicBlock, Function
 from ..ir.inst import (AssertInst, BlockTarget, BrInst, CmpInst, CmpPred, CondBrInst,
                        Instruction, SwitchInst, Terminator)
 from ..ir.rewrite import carried_values, incoming_edges
-from ..ir.types import FloatType, made_of_parts, parts_of
+from ..ir.types import FloatType, leaves_of, made_of_parts
 from ..ir.value import BlockParam
 from ..mc.asmbuilder import Assembler
 from ..mc.operand import MCImm, MCOperand, MCReg
@@ -295,7 +295,7 @@ def _moves_of(target: BlockTarget, operands: Operands,
     """
     moves: list[Move] = []
     for param, argument in carried_values(target):
-        pieces = parts_of(param.ty)
+        pieces = leaves_of(param.ty)
         if not made_of_parts(param.ty):
             moves.append(Move(into=operands.destination(param),
                                source=operands.value(argument, span)))

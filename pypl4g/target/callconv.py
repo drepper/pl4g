@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Mapping, Sequence, TYPE_CHECKING
 
-from ..ir.types import FloatType, Type, parts_of
+from ..ir.types import FloatType, Type, leaves_of
 from ..mc.reg import PhysReg, RegisterInfo, RegUnit
 
 if TYPE_CHECKING:
@@ -130,5 +130,5 @@ def _places(integers: Sequence[PhysReg], floats: Sequence[PhysReg],
         return bank[used[floating] - 1]
 
     for ty in types:
-        found.append([_take(part) for part in parts_of(ty)])
+        found.append([_take(part) for part in leaves_of(ty)])
     return found

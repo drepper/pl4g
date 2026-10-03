@@ -452,6 +452,14 @@ one instruction to read the third part, one operand on the one that makes a resu
 answer apart -- which now uses `unwrap`, `failed` and `error` for a result where it uses `extract` for a tuple, the parts of a
 result being of three types rather than indexed by number.
 
+**In registers a result's answer is spread out**, which `leaves_of` says where `parts_of` does not: an answer that is several
+values -- a string, a record of two fields -- is that many registers, then the truth value, then the error's.  The representation
+still reads a result by its three members; what gives a value registers, a place among the arguments or the answers, or a run of
+offsets in memory (`leaf_offsets_of`) asks for the leaves.  The selectors already counted an answer's registers from the leaves when
+reading one apart, so what was missing was the places that made the registers -- a block's parameters, a call's answer, a load --
+and the count `ReturnStyle.in_registers` makes: `Reader ? i32` is four registers, more than an answer travels in, so it goes
+through the caller's storage like any other large answer.
+
 **Counting the turns is one iterator wrapping another.**  `_Iteration` is the three things a loop asks -- whether there is
 another turn, what this turn gives, what the next turn starts from -- and `⎕enumerate` answers all three by asking the iterator
 underneath and carrying one number beside its state.  So it works over everything a loop works over without any of them knowing

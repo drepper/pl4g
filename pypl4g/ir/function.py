@@ -8,7 +8,7 @@ from typing import Final, Mapping, Sequence
 
 from ..source.location import INVALID_SPAN, Span
 from .inst import Instruction, Terminator
-from .types import FuncType, Type, held_in_memory, parts_of
+from .types import FuncType, Type, held_in_memory, leaves_of
 from .value import BlockParam, Const
 
 
@@ -190,9 +190,9 @@ class ReturnStyle(Enum):
             return False
         match self:
             case ReturnStyle.TWO_IN_REGISTERS:
-                return len(parts_of(ty)) <= 2
+                return len(leaves_of(ty)) <= 2
             case ReturnStyle.THREE_IN_REGISTERS:
-                return len(parts_of(ty)) <= 3
+                return len(leaves_of(ty)) <= 3
         raise AssertionError(self)
 
 

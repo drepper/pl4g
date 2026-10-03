@@ -7172,9 +7172,11 @@ class Checker:
             return self._module.types.result_type(found)
         # What the error carries is a type like any other, named the way the
         # answer is: the same lookup, and the same report where the name is not
-        # one.
+        # one.  Through the answer's module, except a type the language has,
+        # which no module defines: `std.fs.Pending ? i32` carries an `i32`.
         carried = self._resolve_type(
-            replace(ref, name=ref.error, result=False, error=None, unit=None))
+            replace(ref, name=ref.error, result=False, error=None, unit=None,
+                    module=None if ref.error in BUILTIN_TYPES else ref.module))
         if carried is ERROR:
             return ERROR
         if carried is VOID:

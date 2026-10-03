@@ -1,0 +1,37 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=25 diag=none
+
+※ A result whose answer is several values: a record of two fields, and a string.
+※ Each is that many registers, the truth value after them and the error after
+※ that -- handed across a call, joined where two arms meet, and taken apart by a
+※ `match`.  Four of them are more than an answer travels in, so they go through
+※ the caller's storage.
+
+let std := ⎕import("std")
+
+type Two = a : i64 ; b : u64
+
+@[inline(never)]
+fn made(n: i64) → Two ? i32:
+    if n < 0i64: ⊥ 11i32 else: Two(.a ← n, .b ← 7u64)
+
+@[inline(never)]
+fn named(n: i64) → str ? i32:
+    if n < 0i64: ⊥ 22i32 else: "abcde"
+
+fn worth(r: Two ? i32) → u64:
+    match r:
+        Two(t): (⎕narrow(t.a, ⌜u64⌝) ?? 0u64) + t.b
+        ⊥(e): ⎕narrow(e, ⌜u64⌝) ?? 0u64
+
+fn length(r: str ? i32) → u64:
+    match r:
+        str(s): ⎕drop(#s)
+        ⊥(e): ⎕narrow(e, ⌜u64⌝) ?? 0u64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let first: u64 = worth(made(3i64))               ※ 3 + 7
+    let failed: u64 = worth(made(0i64 - 1i64))       ※ 11
+    let text: u64 = length(named(1i64))              ※ 5
+    let refused: u64 = length(named(0i64 - 1i64))    ※ 22
+    ⎕narrow(first + failed + text + refused - 23u64, ⌜u6⌝) ?? 63u6

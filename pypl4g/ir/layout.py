@@ -292,6 +292,17 @@ def member_offsets_of(ty: TupleType, layout: DataLayout) -> tuple[int, ...]:
     return tuple(found)
 
 
+def leaf_offsets_of(ty: Type, layout: DataLayout) -> tuple[int, ...]:
+    """Where each of `leaves_of` starts: `part_offsets_of`, with a result's
+    answer walked down to its own parts where it has several."""
+    if isinstance(ty, ResultType):
+        error = (tuple(error_offset_of(ty, layout) + inner
+                       for inner in leaf_offsets_of(ty.err, layout))
+                 if ty.err is not None else ())
+        return (*leaf_offsets_of(ty.ok, layout), tag_offset_of(ty, layout), *error)
+    return part_offsets_of(ty, layout)
+
+
 def part_offsets_of(ty: Type, layout: DataLayout) -> tuple[int, ...]:
     """Where each *part* of *ty* starts, one offset for each of `parts_of`.
 

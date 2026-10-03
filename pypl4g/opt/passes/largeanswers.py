@@ -35,7 +35,7 @@ from ...ir.rewrite import stands_for
 from ...ir.layout import size_of
 from ...ir.types import (MEM, ProductType, ResultType, TupleType, Type, U8,
                          U16, U32, U64,
-                         VOID, held_in_memory, parts_of)
+                         VOID, held_in_memory, leaves_of, parts_of)
 from ...ir.value import IntConst, Value
 
 #: The one layout this compiler has.  Where it grows a second, the pass is
@@ -61,7 +61,7 @@ def through_storage(func: Function) -> bool:
         return False
     if held_in_memory(func.ty.ret):
         return True
-    return all(len(parts_of(part)) == 1 for part in parts_of(func.ty.ret))
+    return all(len(parts_of(leaf)) == 1 for leaf in leaves_of(func.ty.ret))
 
 
 class LargeAnswers:

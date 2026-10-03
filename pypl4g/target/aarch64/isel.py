@@ -31,10 +31,10 @@ from ..ordering import cannot_order
 from ..pool import Constants
 from ..narrow import normalize
 from ...ir.value import Value
-from ...ir.layout import (DataLayout, align_of, part_offsets_of, size_of,
+from ...ir.layout import (DataLayout, align_of, leaf_offsets_of, size_of,
                           stride_of,
                           tag_offset_of)
-from ...ir.types import (BOOL, ResultType, VecType, made_of_parts,
+from ...ir.types import (ResultType, leaves_of, VecType, made_of_parts,
                          parts_of)
 from ..callconv import (TooManyArguments, argument_places, destroyed_by,
                         result_places)
@@ -1339,13 +1339,13 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     # Not a value and never in a register: what it says is which
                     # path's ordering of the memory operations holds from here.
                     continue
-                pieces = parts_of(param.ty)
+                pieces = leaves_of(param.ty)
                 given = [_new_value(part, registers) for part in pieces]
                 held[id(param)] = given[0]
                 if len(given) > 1:
                     extra[id(param)] = given[1:]
                 continue
-            pieces = parts_of(param.ty)
+            pieces = leaves_of(param.ty)
             given = [_new_value(part, registers,
                                 hint=_as_argument(place, part, registers))
                      for part, place in zip(pieces, arriving[position])]
@@ -1354,7 +1354,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                 extra[id(param)] = given[1:]
     if entry is not None:
         for position, param in enumerate(entry.params):
-            pieces = parts_of(param.ty)
+            pieces = leaves_of(param.ty)
             for at, (part, place) in enumerate(zip(pieces, arriving[position])):
                 asm.loadreg(operands.part_of(param, at, None),
                             MCReg(_as_argument(place, part, registers)), func.span)
@@ -1507,10 +1507,10 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     # array whose type does not say its length: all the same
                     # shape from here, which is what `part_offsets_of` says.
                     address = inst.operands[1]
-                    pieces = parts_of(inst.ty)
+                    pieces = leaves_of(inst.ty)
                     taken = []
                     for at, (one, offset) in enumerate(
-                            zip(pieces, part_offsets_of(inst.ty, _LAYOUT))):
+                            zip(pieces, leaf_offsets_of(inst.ty, _LAYOUT))):
                         into = _new_value(
                             one, registers,
                             hint=(_result_register(one, cconv, registers, at)
@@ -1544,8 +1544,8 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                         # One write per part, as a read of one is one read per
                         # part, and at the same offsets so the two agree.
                         for at, (one, offset) in enumerate(
-                                zip(parts_of(written.ty),
-                                    part_offsets_of(written.ty, _LAYOUT))):
+                                zip(leaves_of(written.ty),
+                                    leaf_offsets_of(written.ty, _LAYOUT))):
                             asm.store(
                                 place_of(address, span, disp=offset,
                                          size_bits=_width_of(one),
@@ -1585,7 +1585,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                 case RetInst():
                     value = inst.operands[0]
                     ty = value.ty
-                    pieces = parts_of(ty)
+                    pieces = leaves_of(ty)
                     if made_of_parts(ty):
                         # One register per part, which is what every one of
                         # these architectures answers with for a two-word value.
@@ -1821,7 +1821,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                 case TupleInst():
                     # Several values made into one that travels together, which
                     # here is several registers with nothing between them.
-                    pieces = parts_of(inst.ty)
+                    pieces = leaves_of(inst.ty)
                     taken = [_new_value(part, registers) for part in pieces]
                     held[id(inst)] = taken[0]
                     extra[id(inst)] = taken[1:]
@@ -2054,7 +2054,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     # allocator prefers.
                     handed: list[Move] = []
                     for position, argument in enumerate(given):
-                        pieces = parts_of(argument.ty)
+                        pieces = leaves_of(argument.ty)
                         if made_of_parts(argument.ty):
                             for at, (part, place) in enumerate(
                                     zip(pieces, going[position])):
@@ -2088,7 +2088,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                              reads=[move.into for move in handed
                                     if through is None or move.into is not called])
                     if made_of_parts(inst.ty):
-                        pieces = parts_of(inst.ty)
+                        pieces = leaves_of(inst.ty)
                         try:
                             places = result_places(theirs, inst.ty)
                         except TooManyArguments as many:
@@ -2239,13 +2239,12 @@ def _answer_registers(value: object) -> int:
     ty = getattr(value, "ty", None)
     if not isinstance(ty, ResultType):
         return 1
-    return len(parts_of(ty.ok))
+    return len(leaves_of(ty.ok))
 
 
 def _result_registers(ty: ResultType) -> tuple[Type, ...]:
     """Every register a result takes: its answer's, the truth value, the error's."""
-    return (*parts_of(ty.ok), BOOL,
-            *(parts_of(ty.err) if ty.err is not None else ()))
+    return leaves_of(ty)
 
 
 def _new_value(ty: Type, registers: RegisterInfo,

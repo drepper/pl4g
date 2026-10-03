@@ -1401,6 +1401,22 @@ def made_of_parts(ty: Type) -> bool:
     return parts_of(ty) != (ty,)
 
 
+def leaves_of(ty: Type) -> tuple[Type, ...]:
+    """What a value of *ty* is in registers: `parts_of`, a result's answer spread out.
+
+    A result's parts are its members -- the answer, the truth value, the error --
+    and that is what the representation reads one by: `unwrap`, `failed` and
+    `error`.  In registers an answer that is several values -- a string, a record
+    of two fields -- is that many registers, the truth value after them and the
+    error after that.  Whatever gives a value registers, or a place in an answer
+    or an argument, asks this; whatever reads a member out asks `parts_of`.
+    """
+    if isinstance(ty, ResultType):
+        return (*leaves_of(ty.ok), BOOL,
+                *(leaves_of(ty.err) if ty.err is not None else ()))
+    return parts_of(ty)
+
+
 def parts_within(ty: Type) -> tuple[tuple[int, int], ...]:
     """Where each member of *ty* begins among its parts, and how many it has.
 
