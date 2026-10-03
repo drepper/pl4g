@@ -5738,13 +5738,21 @@ class Checker:
 
         What the answer is made in is what `→ T in a` says, and `⎕heap` where it
         says nothing.
+
+        A generator's own parameters are what the program wrote and not what the
+        function made of it takes -- that is its frame, where what it hands out
+        goes, and where the arguments are -- so their types are asked of the
+        generator.
         """
+        generating = self._generator_bodies.get(id(func))
+        types = generating.params if generating is not None else func.ty.params
+
         def local_of(at: int) -> _Local | None:
             return self._find_local(node.params[at].name)
         for at, param in enumerate(node.params):
             local = local_of(at)
             if local is None or self._is_arena(local) \
-                    or not _points_somewhere(func.ty.params[at]):
+                    or not _points_somewhere(types[at]):
                 continue
             arena_at = (func.param_made_in[at]
                         if at < len(func.param_made_in) else None)
@@ -5754,7 +5762,7 @@ class Checker:
                 local.arenas = frozenset()
                 continue
             arena = local_of(arena_at) if arena_at is not None else None
-            if _is_owning(func.ty.params[at]):
+            if _is_owning(types[at]):
                 if arena is not None and self._is_arena(arena):
                     local.holds_in = id(arena)
                     local.arenas = frozenset({id(arena)})

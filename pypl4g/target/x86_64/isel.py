@@ -1840,9 +1840,29 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     taken = [_new_value(part, registers) for part in pieces]
                     held[id(inst)] = taken[0]
                     extra[id(inst)] = taken[1:]
-                    for into, value in zip(taken, inst.operands):
-                        asm.loadreg(into, operands.value(value, inst.span),
-                                    inst.span)
+                    # A member that is itself several values -- a record of two
+                    # fields among a record's -- is that many registers here.
+                    members = [
+                        part
+                        for value in inst.operands
+                        for part in ([operands.value(value, inst.span)]
+                                     if len(leaves_of(value.ty)) == 1
+                                     else [MCReg(operands.part_of(value, at, inst.span))
+                                           for at in range(len(leaves_of(value.ty)))])]
+                    for into, source in zip(taken, members):
+                        asm.loadreg(into, source, inst.span)
+                case ExtractInst() if isinstance(inst.operands[0].ty, ResultType):
+                    # A member of a result, read by its place among the three:
+                    # the answer, which may be several registers, the truth
+                    # value after them, and the error after that.
+                    whole = inst.operands[0]
+                    first = (0 if inst.index == 0
+                             else _answer_registers(whole) + inst.index - 1)
+                    count = len(leaves_of(inst.ty))
+                    held[id(inst)] = operands.part_of(whole, first, span)
+                    if count > 1:
+                        extra[id(inst)] = [operands.part_of(whole, first + at, span)
+                                           for at in range(1, count)]
                 case ExtractInst():
                     # Nothing to emit: the value asked for is already in a
                     # register of its own, and this says to go on using it.

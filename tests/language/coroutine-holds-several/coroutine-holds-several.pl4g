@@ -1,0 +1,35 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=40 diag=none
+
+※ A walk keeps what it holds across a stop in its frame, and what it holds may be
+※ several values at once: a result whose answer is a record of two fields, kept
+※ from before the first stop to after the last, and a record holding that record.
+※ Its parameters are four, of one, two and three words -- read from where the
+※ arguments are kept, by the types the program wrote.
+
+let std := ⎕import("std")
+
+type Two = a : i64 ; b : u64
+type Held = two : Two ; n : u8
+
+@[inline(never)]
+fn made(n: i64) → Two ? i32:
+    if n < 0i64: ⊥ 11i32 else: Two(.a ← n, .b ← 7u64)
+
+fn walk(first: u8, name: str, bytes: u8⟦⟧, start: i64) ⇉ u64:
+    let kept: Two ? i32 = made(start)
+    let held: Held = Held(.two ← Two(.a ← 1i64, .b ← 2u64), .n ← first)
+    yield ⎕drop(#name)                                      ※ 4
+    yield ⎕drop(#bytes)                                     ※ 3
+    match kept:
+        Two(t):
+            yield (⎕narrow(t.a, ⌜u64⌝) ?? 0u64) + t.b        ※ 5 + 7
+        ⊥:
+            yield 99u64
+    yield held.two.b + ⎕widen(held.n, ⌜u64⌝) + 16u64        ※ 2 + 3 + 16
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let total: mut u64 = 0u64
+    foreach n := walk(3u8, "four", ⎕bytes("abc"), 5i64):
+        total ← total + n
+    ⎕narrow(total, ⌜u6⌝) ?? 63u6
