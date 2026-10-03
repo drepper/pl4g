@@ -16,8 +16,10 @@ let b: mut u6 = 9u6
 fn both(x: u6, y: u6) → 〈u6, u6〉:
     〈x + y, x × y〉
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ the type of the names comes from what the call answered with
     let sum, product := both(a, b)
     ※ and a tuple may be written down and named like any other value

@@ -6,8 +6,10 @@
 
 type Point = x : u8 ; y : u16
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     comptime foreach f := ⎕fields(⌜Point⌝):
         let k := f⟦1⟧
     0u6

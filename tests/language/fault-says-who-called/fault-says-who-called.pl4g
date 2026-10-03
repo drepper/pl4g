@@ -32,6 +32,8 @@ fn middle(a: u64) → u64:
 fn outer(a: u64) → u64:
     middle(a) + 2u64
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(outer(factor), ⌜u6⌝) ?? 1u6

@@ -8,8 +8,10 @@
 
 let beyond: u32 = 0x110000u32
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let c: char = ⎕chr(beyond)
     if ⎕ord(c) ≠ 0u32:
         1u6

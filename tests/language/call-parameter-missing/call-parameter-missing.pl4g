@@ -4,8 +4,10 @@
 ※ by name, or the default the definition wrote.  A parameter with neither is a
 ※ call the function cannot be entered with.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = plus(.by ← 2u8)
     0u6
 

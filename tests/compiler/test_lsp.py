@@ -161,9 +161,11 @@ def session():  # noqa: ANN201
 WRONG = """\
 \N{REFERENCE MARK} a program with one error
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let a: u8 = 300u8
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(a, \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 0u6
+
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 """
 
 #: And the same program with the value in range.
@@ -228,10 +230,11 @@ def test_a_glyph_is_as_wide_as_the_editor_asked(session: Session,
     text = "".join((
         "\N{REFERENCE MARK} two errors, one after a run of glyphs\n",
         "@[startup]\n",
-        "fn main() \N{RIGHTWARDS ARROW} u6:\n",
+        "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n",
         "    let s: str = \"a\N{POUND SIGN}\N{EURO SIGN}"
         "\N{LINEAR B SYLLABLE B008 A}\" ; let a: u8 = 300u8\n",
-        "    0u6\n"))
+        "    0u6\n",
+        "\nlet std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"))
     source = tmp_path / "wide.pl4g"
     source.write_text(text, encoding="utf-8")
     # Thirty-eight characters of that line come before the literal, and among
@@ -342,7 +345,7 @@ let count: u8 = 3u8
 
 \N{REFERENCE MARK}\N{REFERENCE MARK} what this one is for
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     0u6
 """
     source = tmp_path / "outline.pl4g"
@@ -462,7 +465,7 @@ fn total(p: Pair) \N{RIGHTWARDS ARROW} u8:
     p.first
 
 @[startup, impure]
-fn main(init: mut std.Init) \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let both: Pair = Pair(.first \N{LEFTWARDS ARROW} 1u8, .second \N{LEFTWARDS ARROW} 2u8)
     let sum: u8 = total(both)
     match std.write_sync(&mut init.io.error,
@@ -608,8 +611,10 @@ fn total(left: u8, right: u8) \N{RIGHTWARDS ARROW} u8:
     left \N{SQUARED PLUS} right
 
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(total(1u8, 2u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 0u6
+
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 """
 
 

@@ -56,8 +56,10 @@ fn bump(at: &mut ⧖d u8) → &mut ⧖d u8:
 fn ignoring(v: &⧖e u8) → &⧖e u8:
     &other
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ a reference that lasts as long as the program, written through
     let c: &mut static u8 = counter()
     c⌖ ← 5u8

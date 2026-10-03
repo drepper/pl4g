@@ -14,8 +14,10 @@
 ※ The answer's shape is the argument's and what it holds is the operator's, so a
 ※ comparison over an array of numbers gives an array of truth values.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
     let w: u8⟦3⟧ = ⟦10u8, 20u8, 30u8⟧ in ⎕static
     ※ both sides walked, in step

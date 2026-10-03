@@ -306,8 +306,10 @@ let wb: mut u6 = 0u6
 @[expect(4007)]
 let wc: mut u6 = 0u6
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let va: u6 = a
     let vb: u6 = b
     let vc: u6 = c
@@ -347,7 +349,8 @@ def test_far_more_values_than_registers_still_runs(triple: str, tmp_path) -> Non
     lines += ["".join(("let w", n, ": mut u6 = 0u6") if n == names[0]
                       else ("@[expect(4007)]\nlet w", n, ": mut u6 = 0u6"))
               for n in names]
-    lines += ["@[startup, impure]", "fn main() \N{RIGHTWARDS ARROW} u6:"]
+    lines += ["let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")",
+              "@[startup, impure]", "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:"]
     lines += ["".join(("    let ", n, ": u6 = g", n)) for n in names]
     lines += ["".join(("    w", n, " \N{LEFTWARDS ARROW} ", n))
               for n in reversed(names)]

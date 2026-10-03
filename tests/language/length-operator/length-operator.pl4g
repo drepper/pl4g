@@ -15,8 +15,10 @@
 ※ It binds as tightly as the other operators written before their operand, so
 ※ `#v + 1u64` asks about `v` and adds one, and `#v⟦0⟧` asks about the element.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
     let m: u8⟦2,4⟧ = ⟦⟦1u8, 2u8, 3u8, 4u8⟧, ⟦5u8, 6u8, 7u8, 8u8⟧⟧ in ⎕static
     let t: 〈u8, u16, u32〉 = 〈1u8, 2u16, 3u32〉

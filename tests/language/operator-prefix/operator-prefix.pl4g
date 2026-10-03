@@ -13,8 +13,10 @@ fn `⌈`(b: Bag) → u8:
 fn `⌈`(a: Bag, b: Bag) → Bag:
     Bag(.one ← a.one ⌈ b.one, .two ← a.two ⌈ b.two)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: Bag = Bag(.one ← 1u8, .two ← 7u8)
     let b: Bag = Bag(.one ← 4u8, .two ← 2u8)
     ⎕narrow(⌈(a ⌈ b), ⌜u6⌝) ?? 1u6

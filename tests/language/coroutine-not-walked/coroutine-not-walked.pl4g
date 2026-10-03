@@ -8,8 +8,10 @@ fn acc(start: u64) ⇉ u64 ⇇ u64:
     let more := yield start
     yield more
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: mut u64 = 0u64
     foreach v := acc(1u64):
         n ← n + v

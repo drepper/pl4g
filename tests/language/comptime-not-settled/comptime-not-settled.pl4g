@@ -5,8 +5,10 @@
 ※ value is a question about what the program does, which is what an ordinary
 ※ condition is for.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = 5u8
     comptime if n = 5u8:
         1u6

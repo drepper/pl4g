@@ -6,8 +6,10 @@
 ※ which has somewhere to say so; a zero written down has nowhere, and a program
 ※ that wrote one asked a question it knew the answer to.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = 7u8
     if 0u8 ∣ n:
         0u6

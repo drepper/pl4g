@@ -5,8 +5,10 @@
 ※ deliberately unspecified.  Where it may stand is the one place the answer is
 ※ wanted and never has to exist.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = 5u8
     if ⎕typeof(⌜n⌝) = ⌜u8⌝:
         1u6

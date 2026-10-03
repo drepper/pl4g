@@ -6,6 +6,8 @@
 
 let table: u6⟦5⟧ = ⟦1u6, 2u6, 4u6, 8u6, 16u6⟧ in ⎕static
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     table⟦0⟧ + table⟦2⟧ + table⟦4⟧

@@ -4,8 +4,10 @@
 
 ※ It may equally stand on the statement where the diagnostic is raised: the
 ※ value is lost when the assignment replaces it.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: mut u6 = 5u6
     @[expect(4006)]
     a ← 4u6

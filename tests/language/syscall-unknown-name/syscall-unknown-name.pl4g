@@ -10,7 +10,9 @@
 ※ A call some architecture has and this one does not reads differently (4575), so
 ※ a mistyped name and a name that is simply not there are told apart.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let answer: i64 = ⎕syscall(⎕sc@wirte, 1i64)
     if answer < 0i64: 0u6 else: 1u6

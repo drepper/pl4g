@@ -8,6 +8,8 @@
 fn clear(a: u8⟦⟧):
     a⟦0⟧ ← 0u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

@@ -12,8 +12,10 @@ import re
 from conftest import describe
 
 WALKED = """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let v: u8\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}4\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = \N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}10u8, 20u8, 30u8, 40u8\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} in \N{APL FUNCTIONAL SYMBOL QUAD}static
     let s: mut u8 = 0u8
     foreach x := v\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}v > 15u8\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}:
@@ -48,10 +50,12 @@ def test_a_pick_kept_in_a_name_takes_room_for_all_of_it(compile_source) -> None:
 
 
 PER_PLACE = """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 type Person = { age : u8 ; height : u8 }
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let ps: Person\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}2\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = \N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}Person(.age \N{LEFTWARDS ARROW} 12u8, .height \N{LEFTWARDS ARROW} 150u8), Person(.age \N{LEFTWARDS ARROW} 30u8, .height \N{LEFTWARDS ARROW} 180u8)\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} in \N{APL FUNCTIONAL SYMBOL QUAD}static
     let n: mut u8 = 0u8
     foreach _ := ps\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}ps\N{DIAERESIS}.age \N{GREATER-THAN OR EQUAL TO} 18u8\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}:

@@ -12,8 +12,10 @@ fn Handle.close(h: Handle):
 fn made(n: u8) → Handle:
     Handle(.n ← n)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let h: Handle = made(1u8)
     let i: mut u8 = 0u8
     while i < 3u8:

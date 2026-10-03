@@ -7,6 +7,8 @@ let at: u8 = 1u8
 let table: mut u16⟦4⟧ = ⟦10u16, 20u16, 30u16, 40u16⟧
 let some: &mut static u16 = &mut table⟦at⟧
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

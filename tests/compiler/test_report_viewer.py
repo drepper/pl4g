@@ -23,8 +23,10 @@ let only_by_dropped: u6 = 9u6
 fn unreached() \N{RIGHTWARDS ARROW} u6:
     only_by_dropped
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     @[ignore(4006)]
     let unread: u6 = used ⊞ 1u6
     used
@@ -96,10 +98,13 @@ def test_a_pattern_matching_nothing_says_so(compiled) -> None:  # noqa: ANN001
 def test_the_records_come_out_in_the_order_of_the_file(compiled) -> None:  # noqa: ANN001
     """The compiler records them in the order of its passes, which is not the
     order anyone reads a file in."""
-    _, log = compiled
+    source, log = compiled
     out = view(log, "--only-reports").stdout
-    numbers = [int(line.split(":")[1]) for line in out.splitlines() if ":" in line]
-    assert numbers == sorted(numbers), out
+    # Each file's in its order: `std`'s are there too, every program importing it.
+    for name in (str(source), "std.pl4g"):
+        numbers = [int(line.split(":")[1]) for line in out.splitlines()
+                   if ":" in line and line.split(":")[0].endswith(name)]
+        assert numbers and numbers == sorted(numbers), out
 
 
 # -- finding the sources --------------------------------------------------------
@@ -204,7 +209,7 @@ def test_the_mark_stands_over_the_column_the_record_gives(tmp_path: Path) -> Non
     source = tmp_path / "show.pl4g"
     source.write_text("".join((
         "fn worked_out() \N{RIGHTWARDS ARROW} u6:\n    1u6\n\n",
-        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n",
         "    _ \N{LEFTWARDS ARROW} worked_out()\n    0u6\n")), encoding="utf-8")
     log = tmp_path / "reports.json"
     proc = run_compiler(["-o", str(tmp_path / "out"),
@@ -228,7 +233,7 @@ def test_the_mark_counts_a_glyph_as_the_terminal_draws_it(tmp_path: Path) -> Non
     source = tmp_path / "show.pl4g"
     source.write_text("".join((
         "fn worked_out() \N{RIGHTWARDS ARROW} u6:\n    1u6\n\n",
-        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n",
         "    let t: \N{LEFT ANGLE BRACKET}u6, u6\N{RIGHT ANGLE BRACKET} = ",
         "\N{LEFT ANGLE BRACKET}1u6, 2u6\N{RIGHT ANGLE BRACKET}\n",
         "    _ \N{LEFTWARDS ARROW} worked_out()\n",

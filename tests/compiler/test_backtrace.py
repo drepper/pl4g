@@ -36,24 +36,30 @@ fn middle(a: u64) {0} u64:
 fn outer(a: u64) {0} u64:
     middle(a) + 2u64
 
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup, impure]
-fn main() {0} u6:
+fn main(init: std.Init) {0} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(outer(factor), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """.format(ARROW, TIMES)
 
 #: The same fault with nothing above it, which is what most programs are.
 SHALLOW = """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 let factor: u64 = 4294967296u64
 
 @[startup, impure]
-fn main() {0} u6:
+fn main(init: std.Init) {0} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(factor {1} factor, \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """.format(ARROW, TIMES)
 
 #: A program that cannot fault at all, which should carry none of this.
 QUIET = """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup]
-fn main() {0} u6:
+fn main(init: std.Init) {0} u6:
     0u6
 """.format(ARROW)
 

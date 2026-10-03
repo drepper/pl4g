@@ -31,8 +31,10 @@ from conftest import (architecture_of, check_conformance, compiler_targets,
                       describe, run_compiler, runner_for)
 
 SOURCE = """\N{REFERENCE MARK} A program that exits with status 0.
+let std := ⎕import("std")
+
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     0
 """
 
@@ -113,10 +115,11 @@ def test_the_entry_point_makes_it_itself(triple: str, tmp_path: Path) -> None:
     """A few dozen instructions the compiler selected, and nothing carried.
 
     The making of the stack was compiled from C once and carried in the image;
-    it is now emitted like any other code, which is what keeps a program that
-    wanted nothing else from the packaged runtime from carrying any of it.  So
-    what this looks for is the four calls in the entry point itself and no
-    packaged object anywhere.
+    it is now emitted like any other code.  The packaged runtime is in every
+    image all the same -- every program imports `std`, whose destructor drains
+    the ring -- so what this looks for is the four calls in the entry point
+    itself, and nothing of the runtime called from there but what reads the
+    arguments.
     """
     output = tmp_path / "out.asm"
     source = tmp_path / "exit0.pl4g"
@@ -125,11 +128,12 @@ def test_the_entry_point_makes_it_itself(triple: str, tmp_path: Path) -> None:
                          "".join(("--target=", triple)), str(source)])
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
-    entry = text[text.index("_start:"):]
+    entry = text[text.index("_start:"):].split("\nsection ", 1)[0]
     for number in (MMAP[architecture_of(triple)], MPROTECT[architecture_of(triple)]):
         assert _mentions(entry, number), entry
     assert HANDLER_SYMBOL in text, "the handler was not emitted"
-    assert ".pl4grt" not in text, "the packaged runtime was placed"
+    assert set(re.findall(r"\N{RIGHTWARDS ARROW} (pl4g_\w+)", entry)) <= {"pl4g_args"}, \
+        "the packaged runtime makes the stack"
 
 
 def _mentions(text: str, number: int) -> bool:
@@ -156,14 +160,20 @@ def test_asking_for_none_leaves_the_program_where_it_started(
     """--stack-size=0 is the way out, and it costs nothing at all.
 
     A program that says it wants no stack of its own stays on the one the kernel
-    supplied, makes no call, and carries none of the runtime -- which is what
-    makes it the smallest image the compiler can produce, and is why the tests
-    that are about the size of an image build this way.
+    supplied and makes no call to make one -- which is what makes it the
+    smallest image the compiler can produce, and is why the tests that are about
+    the size of an image build this way.  The runtime it carries is `std`'s,
+    which every program imports, and the stack adds nothing to it.
     """
     path = _build(tmp_path, "bare", "--stack-size=0", triple=triple)
     assert _stack_segment(path).p_memsz == 0
     image = elfcheck.parse(path.read_bytes())
-    assert [s.name for s in image.sections if s.name.startswith(".pl4grt")] == []
+    stacked = elfcheck.parse(_build(tmp_path, "stacked", triple=triple).read_bytes())
+    assert [s.name for s in image.sections if s.name.startswith(".pl4grt")] == \
+        [s.name for s in stacked.sections if s.name.startswith(".pl4grt")]
+    assert image.symbol("pl4g_args") is not None and \
+        sum(s.sh_size for s in image.sections if s.name.startswith(".pl4grt")) == \
+        sum(s.sh_size for s in stacked.sections if s.name.startswith(".pl4grt"))
     runner = runner_for(triple)
     if runner and not shutil.which(runner[0]):
         pytest.skip("".join((runner[0], " is not installed")))

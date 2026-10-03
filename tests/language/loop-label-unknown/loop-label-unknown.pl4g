@@ -4,8 +4,10 @@
 ※ inside: leaving a loop that has already ended is not a thing that could
 ※ happen.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: mut u8 = 0u8
     while §counting n < 3u8:
         n ← n + 1u8

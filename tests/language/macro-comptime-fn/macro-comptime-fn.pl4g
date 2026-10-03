@@ -19,6 +19,8 @@ comptime fn deepest(e: syntax) → u64:
 macro depth(e: syntax) → syntax:
     ⌜$(deepest(e))⌝
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(⎕narrow(depth⌜1u8 + 2u8 + 3u8⌝, ⌜u6⌝) ?? 1u6, ⌜u6⌝) ?? 1u6

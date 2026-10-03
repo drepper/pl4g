@@ -10,6 +10,8 @@ macro keep:
         let q: u8 = $x
     ⌝
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(keep⌜1u8⌝, ⌜u6⌝) ?? 1u6

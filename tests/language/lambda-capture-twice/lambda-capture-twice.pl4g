@@ -4,8 +4,10 @@
 ※ ways of reaching one variable inside one body, and which of them a mention
 ※ meant would not be decidable.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = 1u8
     let f: fn(u8) → u8 = λ a: u8 [n, n] → u8 { a + n }
     0u6

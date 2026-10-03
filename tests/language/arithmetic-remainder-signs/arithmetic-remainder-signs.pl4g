@@ -12,8 +12,10 @@ let quotient: mut i8 = 0i8
 @[visible]
 let rest: mut i8 = 0i8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     quotient ← minus_seven ÷ two ?? 0i8
     rest ← minus_seven % two ?? 0i8
     0u6

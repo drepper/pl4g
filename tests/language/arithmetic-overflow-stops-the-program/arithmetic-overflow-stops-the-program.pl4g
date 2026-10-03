@@ -10,8 +10,10 @@
 let two_hundred: u8 = 200u8
 let one_hundred: u8 = 100u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ which stops the program, so nothing below it runs
     if two_hundred + one_hundred ≠ 0u8:
         1u6

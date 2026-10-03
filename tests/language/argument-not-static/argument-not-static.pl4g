@@ -7,6 +7,8 @@
 fn named(s: str in ⎕static) → str in ⎕static:
     s
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if named("a" ⧺ "b") = "ab": 0u6 else: 1u6

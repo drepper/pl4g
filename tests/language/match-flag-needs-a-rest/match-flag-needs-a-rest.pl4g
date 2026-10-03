@@ -10,8 +10,10 @@ enum Perm { read ; write }
 
 let mine: mut Perm = Perm.read
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     match mine:
         read:
             return 1u6

@@ -9,8 +9,10 @@
 fn first(v: u8⟦⟧) → u8:
     v⟦0⟧
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let arr: u8⟦4⟧ = ⟦0u8, 1u8, 2u8, 3u8⟧ in ⎕static
     let q := arr⟦arr > 1⟧
     let a: ⟦⟧ = arr⟦arr > 1⟧

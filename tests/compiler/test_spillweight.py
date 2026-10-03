@@ -175,8 +175,10 @@ PRESSED = """\
 @[expect(4007)]
 let w: mut u6 = 0u6
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let n: mut u6 = 3u6
     let total: mut u6 = 0u6
 {loads}

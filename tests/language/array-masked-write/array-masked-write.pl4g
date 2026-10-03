@@ -11,8 +11,10 @@
 ※ which.  Every element is written either way, which for a place the program
 ※ already owns is a write of what was already there.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: mut u6⟦4⟧ = ⟦10u6, 20u6, 30u6, 40u6⟧
     let want: bool⟦4⟧ = ⟦false, true, false, true⟧ in ⎕static
     v⟦want⟧ ← 1u6

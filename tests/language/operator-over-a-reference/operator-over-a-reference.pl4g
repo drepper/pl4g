@@ -17,8 +17,10 @@ fn `⇧`(t: &mut Test) → i32:
         t⌖.a ← t⌖.a + 1i32
     t⌖.a
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let i: mut Test = Test(.a ← 1i32, .b ← 4i32)
     let first: i32 = ⇧&mut i
     ⎕narrow(first + ⇧&mut i, ⌜u6⌝) ?? 1u6

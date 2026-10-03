@@ -24,8 +24,10 @@ let big: u32 = 4000000000u32
 let wide: u64 = 18000000000000000000u64
 let n: u8 = 1u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if ⎕wrap(a + b) ≠ 44u8:
         1u6
     elif ⎕wrap(b - a) ≠ 156u8:

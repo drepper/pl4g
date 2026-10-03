@@ -9,7 +9,9 @@
 ※ be read, and a walk that has to carry whether it has seen anything yet is a
 ※ walk with a second value in it for the sake of a case that stops the program.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let empty: [u6] = [] in ⎕static
     ⌈empty

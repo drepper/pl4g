@@ -1,16 +1,8 @@
 ※ symbolic assembler dump; internal form, not a syntax
 
 section .text executable
-main()u6:
+main(ptr<Init>)u6:
                              ※ align 16
+    48 89 c1                 mov rcx, rax
     31 c0                    xor eax, eax
     c3                       ret
-.Lpl4g.frames.end:
-    cc cc cc cc cc cc cc cc cc cc cc cc cc ※ align 16
-_start:
-    31 ed                    xor ebp, ebp
-    e8 00 00 00 00           call main()u6   ※ fixup pcrel32 → main()u6
-    89 c7                    mov edi, eax
-    b8 e7 00 00 00           mov eax, 231
-    0f 05                    syscall
-    0f 0b                    ud2

@@ -65,16 +65,24 @@ class Verifier:
         only fail if the mangling itself is wrong, which is a defect in the
         compiler and not in the program.
         """
-        seen: dict[str, str] = {}
+        seen: dict[str, Function] = {}
         for func in self._module.functions.values():
             symbol = symbol_name(func)
             previous = seen.get(symbol)
             if previous is not None:
+                if previous.attrs.external is not None \
+                        and func.attrs.external is not None \
+                        and not previous.blocks and not func.blocks:
+                    # One function of the runtime declared by two files -- a
+                    # program and `std` -- each in its own types: the one
+                    # symbol.  What a declaration says of the parameters is
+                    # that file's word, checked against nothing either way.
+                    continue
                 self._fail("module", "".join((
-                    "'", previous, "' and '", func.name,
+                    "'", previous.name, "' and '", func.name,
                     "' are both known by the symbol '", symbol, "'")))
                 continue
-            seen[symbol] = func.name
+            seen[symbol] = func
 
     def _check_special_caches(self) -> None:
         """Check that the special-function caches agree with the attributes."""

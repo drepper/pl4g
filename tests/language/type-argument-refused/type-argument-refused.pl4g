@@ -14,7 +14,9 @@ fn make(kind: ⌜T'⌝, v: u8) → T'
     else:
         B(.n ← v)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let x: u8 = make(⌜u8⌝, 3u8)
     if x = 3u8: 0u6 else: 1u6

@@ -5,8 +5,10 @@
 ※ instead of none.  A value that has a unit reaches another through `⎕drop` and
 ※ then `⎕unit`, which is two things said out loud.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u32 ¤meter = 5
     let m: u32 ¤second = ⎕unit(n, ⌜second⌝)
     0u6

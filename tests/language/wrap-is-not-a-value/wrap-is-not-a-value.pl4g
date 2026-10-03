@@ -5,7 +5,9 @@
 ※ it mean, which is a property of where they are written and not a value that
 ※ can be passed about.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let held: u8 = ⎕wrap
     held

@@ -2941,12 +2941,25 @@ Below that each machine answers for itself, through `Assembler.acquire` and
 What a program is started with
 ------------------------------
 
-The startup function may take one parameter, and the compiler knows exactly one
-type it may be: the record the `std` module calls `Init`.  Which type that is is
-settled by where it was written down -- `modules/std.pl4g` beside the compiler,
-found through `system_modules()` -- and not by its shape, so a record a program
-defines for itself and calls `Init` is a record it defined for itself and is
-refused (4404).
+The startup function takes exactly one parameter, not `mut`, of exactly one
+type: the record the `std` module calls `Init`.  `_check_startup_signature` in
+`sema/check.py` refuses each other shape with its own wording of 4404 -- no
+parameter, more than one, `mut`, a reference, another type, another answer --
+so the message says what to change.  Which type that is is settled by where it
+was written down -- `modules/std.pl4g` beside the compiler, found through
+`system_modules()`, which is also what a `SearchPath` holds when it is made
+without one -- and not by its shape, so a record a program defines for itself
+and calls `Init` is a record it defined for itself and is refused.
+
+Every program therefore imports `std`, and **`std.finish`, its destructor, is a
+root of every program**: it drains the ring, so `std.ring`, `std.drain` and the
+packaged runtime are in every image.  The runtime is placed whole, so an image
+holds all of it -- some four kilobytes of code on x86-64 -- however little of it
+the program calls.
+`dropunreached` keeps no variable for a function whose body is elsewhere -- what
+is compiled elsewhere names only what the image offers, which is a root anyway --
+so `std`'s variables nothing reached are not carried, and the ones the compiler
+made for itself are dropped without a report, nobody having written them.
 
 `Init` holds an `Io`, which holds three descriptors, and the words the program
 was named with.  **What the image carries is the record**, an object in the

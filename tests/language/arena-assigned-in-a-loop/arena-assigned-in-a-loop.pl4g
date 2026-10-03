@@ -5,8 +5,10 @@
 ※ turn gave it: a turn is behind the next in the text and ahead of it in time.  So it is taken to
 ※ be made in anything the body names, as well as in what it held before the loop.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let s1: mut arena = ⎕arena
     let s2: mut arena = ⎕arena
     defer ⎕empty(s2)

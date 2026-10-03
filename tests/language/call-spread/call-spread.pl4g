@@ -24,8 +24,10 @@ fn four(a: u6, b: u16, c: u6, d: u16) → u6:
     else:
         0u6
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let pair: 〈u6, u6〉 = 〈1u6, 2u6〉
     ※ the members of the tuple, then an argument written out
     let head: u6 = three(⁂pair, 4u6)

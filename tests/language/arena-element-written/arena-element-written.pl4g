@@ -5,8 +5,10 @@
 ※ the same allocator, so the text is copied into `⎕heap` on the way in and the temporary in `s`
 ※ is given back.  Emptying `s` afterwards takes nothing from the array.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let s: mut arena = ⎕arena
     let v: mut str⟦2⟧ = ⟦"-", "-"⟧
     v⟦0⟧ ← "a" ⧺ "b" in s

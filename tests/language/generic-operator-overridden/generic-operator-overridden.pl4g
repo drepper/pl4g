@@ -3,7 +3,7 @@
 ※ How a program says what its own type's text is, with no overloading anywhere.
 ※
 ※ A glyph has one meaning per number of operands, so a program does not add a second
-※ definition of `⍕` -- it writes *the* one for this file, which wins over the imported
+※ definition of `⍎` -- it writes *the* one for this file, which wins over the imported
 ※ one silently, tests for the types it cares about while the compiler runs, and hands
 ※ everything else back to the module's under its name.
 ※
@@ -16,13 +16,15 @@ type Point = x: u8 ; y: u8
 let t := ⎕import("text")
 
 @[impure]
-fn `⍕`(v: T') → str:
+fn `⍎`(v: T') → str:
     comptime if ⎕typeof(⌜v⌝) = ⌜Point⌝:
         "a point"
     else:
         t.text(v)
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
-    let s: str = ⍕Point(.x ← 1u8, .y ← 2u8) ⧺ ⍕true
+fn main(init: std.Init) → u6:
+    let s: str = ⍎Point(.x ← 1u8, .y ← 2u8) ⧺ ⍎true
     ⎕narrow(⎕drop(#s), ⌜u6⌝) ?? 1u6

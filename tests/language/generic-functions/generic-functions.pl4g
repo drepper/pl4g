@@ -43,8 +43,10 @@ fn right(p: 〈T', U'〉) → U':
 fn applied(g: fn(T') → T', x: T') → T':
     g(g(x))
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u8⟦3⟧ = ⟦7u8, 8u8, 9u8⟧ in ⎕static
     let w: u16⟦2⟧ = ⟦40u16, 50u16⟧ in ⎕static
     let n: u16 = 4u16

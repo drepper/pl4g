@@ -8,8 +8,10 @@
 fn either(c: bool, a: &mut arena, s: str in a) → str in a:
     if c: s else: "-" ⧺ s in a
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let long: mut arena = ⎕arena
     defer ⎕empty(long)
     let short: mut arena = ⎕arena

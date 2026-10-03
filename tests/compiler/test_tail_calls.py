@@ -30,8 +30,10 @@ fn summed(n: u64) \N{RIGHTWARDS ARROW} u64:
 fn looped(n: u64) \N{RIGHTWARDS ARROW} u64:
     if n = 0u64: 0u64 else: looped(n - 1u64)
 
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let c: mut u64 = 0u64
     let x: mut u64 = 9u64
     let all: u64 = deferred(3u64, &mut c) + checked(3u64) + framed(3u64, &mut x) + summed(3u64) + looped(3u64)

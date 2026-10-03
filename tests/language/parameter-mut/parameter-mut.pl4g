@@ -25,6 +25,8 @@ fn total(n: mut u6) → u6:
 fn twice(n: u6) → u6:
     n + n
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     total(5u6) + twice(10u6)

@@ -33,6 +33,8 @@ fn deep(n: u64) → u64:
     else:
         n + deep(n + 1u64)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(deep(1u64), ⌜u6⌝) ?? 0u6

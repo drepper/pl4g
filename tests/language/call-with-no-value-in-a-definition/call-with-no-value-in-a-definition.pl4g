@@ -5,8 +5,10 @@
 fn prepare():
     return
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[ignore(4006)]
     let kept: u8 = prepare()
     0u6

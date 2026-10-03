@@ -13,8 +13,10 @@
 ※ through what an `if` came to, where every branch has to reach one of them.
 ※ A reference reached by none of those is not the one that was promised.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6
 
 fn second(p: &u8, q: &⧖x u8) → &⧖x u8:

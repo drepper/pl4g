@@ -16,6 +16,8 @@
 macro twice(e: syntax) → syntax:
     ⌜$e + $e⌝
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(twice⌜3u8⌝, ⌜u6⌝) ?? 1u6

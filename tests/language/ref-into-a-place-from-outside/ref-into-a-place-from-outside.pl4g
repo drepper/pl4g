@@ -19,8 +19,10 @@
 ※ Until it can, the write is refused where it is written, which costs the
 ※ programs that would have been right and keeps the ones that would not.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6
 
 @[impure]

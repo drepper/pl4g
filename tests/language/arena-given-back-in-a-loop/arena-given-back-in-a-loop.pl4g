@@ -6,8 +6,10 @@
 ※ dead for the whole of the loop.  What a turn makes for itself it makes again each turn,
 ※ and that is not touched.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let scratch: mut arena = ⎕arena
     defer ⎕empty(scratch)
     let first: str = "a" ⧺ "b" in scratch

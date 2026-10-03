@@ -9,6 +9,8 @@
 fn largest(a: T', b: T') → T':
     a ⌈ b
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

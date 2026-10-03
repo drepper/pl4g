@@ -127,8 +127,10 @@ def test_every_shape_says_for_itself_whether_it_has_effects() -> None:
 
 UNREAD = """let g: u6 = 3u6
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     @[ignore(4006)]
     let unread: u6 = g
     5u6
@@ -329,7 +331,9 @@ def test_a_declaration_nothing_calls_goes_too() -> None:
     assert list(module.functions) == ["main"]
 
 
-UNREACHED = """let g: mut u6 = 0u6
+UNREACHED = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+let g: mut u6 = 0u6
 
 @[constructor, impure]
 fn prepare():
@@ -339,7 +343,7 @@ fn unreached() \N{RIGHTWARDS ARROW} u6:
     2u6
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     g
 """
 
@@ -443,14 +447,16 @@ def test_a_variable_the_image_offers_is_a_root() -> None:
     assert list(module.globals) == ["shared"]
 
 
-UNREACHED_VAR = """let used: u6 = 7u6
+UNREACHED_VAR = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+let used: u6 = 7u6
 let only_by_dropped: u6 = 9u6
 
 fn unreached() \N{RIGHTWARDS ARROW} u6:
     only_by_dropped
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     used
 """
 

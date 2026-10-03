@@ -4,7 +4,9 @@
 ※ in it is one the place the lambda is written can see.  A name that is not is
 ※ a spelling, or a name that belongs somewhere else.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let f: fn(u8) → u8 = λ a: u8 [nope] → u8 { a }
     0u6

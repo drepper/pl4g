@@ -11,7 +11,9 @@ type Out = x : In ; y : In
 fn both(p: &mut Out, q: &mut In) → u8:
     q⌖.a
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let o: mut Out = Out(.x ← In(.a ← 0u8, .b ← 0u8), .y ← In(.a ← 0u8, .b ← 0u8))
     if both(&mut o, &mut o.y) = 0u8: 0u6 else: 1u6

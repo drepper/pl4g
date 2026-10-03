@@ -3,7 +3,9 @@
 ※ pl4g-test: diag=none
 
 ※ ':=' is not one token, so it may be written apart.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let status : = 3u6
     status

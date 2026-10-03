@@ -72,9 +72,11 @@ def _parse_type(text: str, types: TypeContext, line_number: int) -> Type:
         return types.vec_type(_parse_type(text[:lanes_at], types, line_number),
                               int(count))
     found = BUILTIN_TYPES.get(text)
-    if found is None:
-        raise IRSyntaxError(line_number, "".join(("unknown type '", text, "'")))
-    return found
+    if found is not None:
+        return found
+    if text.isidentifier():
+        return types.named_record(text)
+    raise IRSyntaxError(line_number, "".join(("unknown type '", text, "'")))
 
 
 def _split_opcode(body: str) -> tuple[str, str]:

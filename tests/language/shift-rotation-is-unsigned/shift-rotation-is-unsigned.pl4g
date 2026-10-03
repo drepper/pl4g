@@ -6,8 +6,10 @@
 let value: i8 = 13i8
 let one: i8 = 1i8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[ignore(5005)]
     value ↺ one
     0u6

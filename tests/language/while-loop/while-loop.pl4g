@@ -14,8 +14,10 @@
 ※ a loop able to count anything: the value a turn leaves is the value the next
 ※ turn reads, and the value the last turn leaves is what follows the loop reads.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let total: mut u6 = 0u6
     let n: mut u6 = 5u6
     while n > 0u6:

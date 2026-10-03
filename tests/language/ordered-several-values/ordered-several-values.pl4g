@@ -7,7 +7,9 @@
 
 type Pair = a : u32 ; b : u32
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let q: mut Pair = Pair(.a ← 1u32, .b ← 2u32)
     if ⎕acquire(&q).a = 1u32: 0u6 else: 1u6

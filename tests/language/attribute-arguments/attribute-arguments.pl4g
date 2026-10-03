@@ -3,8 +3,10 @@
 
 ※ An attribute's arguments are checked against its declared signature; 'test'
 ※ selects one of the three kinds of test function.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0
 
 @[test(sideways)]

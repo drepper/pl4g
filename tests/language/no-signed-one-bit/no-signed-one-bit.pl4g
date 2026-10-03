@@ -6,8 +6,10 @@
 ※ that there is no such type.  `u1` is there: nothing and one is a pair
 ※ programs want constantly.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     held(0u1)
 
 fn held(x: i1) → u6:

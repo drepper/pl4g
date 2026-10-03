@@ -5,8 +5,10 @@
 
 let counter: mut u8 = 0u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let s: ⸨u8⸩ = ⸨1u8⸩ in counter
     if s⸨1u8⸩:
         1u6

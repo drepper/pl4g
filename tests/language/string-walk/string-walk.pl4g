@@ -10,8 +10,10 @@
 ※ only counted, since a decoder that lost the bits would still give the right
 ※ number of turns.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let text: str = "a£€𐀀"
     let at: mut u8 = 0u8
     let wrong: mut u8 = 0u8

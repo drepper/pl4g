@@ -5,6 +5,8 @@
 ※ number round.  Keeping the two apart is the point of having both.
 let count: u8 = 3u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → bool:
+fn main(init: std.Init) → bool:
     ¬ count

@@ -9,7 +9,9 @@
 fn two(a: u8, b: u8) → u8:
     a + b
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let three: 〈u8, u8, u8〉 = 〈1u8, 2u8, 3u8〉
     two(⁂three)

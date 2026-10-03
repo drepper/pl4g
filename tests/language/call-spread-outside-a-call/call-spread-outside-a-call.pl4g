@@ -6,8 +6,10 @@
 ※ therefore not an expression at all, which is why the parser says this rather
 ※ than the checker.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let p: 〈u8, u8〉 = 〈1u8, 2u8〉
     let q: 〈u8, u8〉 = ⁂p
     q⟦0⟧

@@ -14,8 +14,10 @@
 
 type Shape = dot : u8 | line : u32 | empty : void
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ two parts, which is a product's shape and not a sum's
     let a: Shape = Shape(.dot ← 1u8, .line ← 2u32)
     ※ a name the definition does not have

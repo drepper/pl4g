@@ -3,7 +3,9 @@
 
 ※ The sign belongs to the literal, so a space after it is not a subtraction of
 ※ some kind but a sign with nothing to sign.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: i8 = ⁻ 3i8
     1u6

@@ -20,8 +20,10 @@ type Holder = first : u8 ? ⎕narrowing ; second : u8
 fn made(x: u8, y: u8) → 〈u8 ? ⎕narrowing, u8〉:
     〈⎕narrow(x + y, ⌜u8⌝), y〉
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let pair: 〈u8 ? ⎕narrowing, u8〉 = 〈⎕narrow(a + b, ⌜u8⌝), b〉
     let rec: Holder = Holder(.first ← ⎕narrow(a + b, ⌜u8⌝), .second ← b)
     let answered: 〈u8 ? ⎕narrowing, u8〉 = made(a, b)

@@ -6,8 +6,10 @@
 ※ lent to it while it is in scope, and writing one meanwhile is refused: every
 ※ walk then reads what the first would have.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let arr: mut u8⟦4⟧ = ⟦0u8, 1u8, 2u8, 3u8⟧
     let q := arr⟦arr > 1⟧
     arr⟦0⟧ ← 5u8

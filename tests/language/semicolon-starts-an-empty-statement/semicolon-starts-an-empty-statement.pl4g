@@ -4,7 +4,9 @@
 ※ A semicolon separates and never terminates, so a body ending in one ends in
 ※ a statement that is empty -- and an empty statement produces no value, so a
 ※ function declared to answer with one has not answered.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[ignore(5005)]
     7u8;

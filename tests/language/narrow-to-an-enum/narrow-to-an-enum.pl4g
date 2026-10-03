@@ -29,8 +29,10 @@ enum Code:
     again = 5 ;
     gone = 32
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ one of them, from a wider type
     let a: Code = ⎕narrow(5i64, ⌜Code⌝) ?? Code.ok
     ※ and from a narrower one

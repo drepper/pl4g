@@ -6,6 +6,8 @@
 ※ is the function's result -- here, the exit status.
 let counter: mut u6 = 1u6
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     counter ← 42u6

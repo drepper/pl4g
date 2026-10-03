@@ -7,7 +7,9 @@
 let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
 let k: u8⟦2,2⟧ = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧⟧
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let both: u8⟦4,3⟧ = m ⧺ k
     0u6

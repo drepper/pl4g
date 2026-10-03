@@ -4,8 +4,10 @@
 ※ Only a pure function is run while compiling: one that is not may answer
 ※ differently, or do something, each time.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let t: 〈u8, u16〉 = 〈1u8, 2u16〉
     let a: u8 = t⟦counted(0)⟧
     0u6

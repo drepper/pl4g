@@ -4,8 +4,10 @@
 ※ half of an address is not a place, and widening it would be the compiler
 ※ deciding which half.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u32 = 4u32
     let a: &mut u32 = ⎕at(n, ⌜&mut u32⌝)
     if a⌖ = 0u32: 0u6 else: 1u6

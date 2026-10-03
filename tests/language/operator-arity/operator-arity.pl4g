@@ -11,6 +11,8 @@ type Point = x : u8 ; y : u8
 fn `⊛`(a: Point, b: Point, c: Point) → Point:
     a
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

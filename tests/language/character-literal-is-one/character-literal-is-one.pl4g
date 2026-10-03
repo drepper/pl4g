@@ -4,7 +4,9 @@
 ※ exactly one between the apostrophes.  Several of them are a string, which is
 ※ written between quotation marks.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let c: char = 'ab'
     0u6

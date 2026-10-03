@@ -4,6 +4,8 @@
 ※ The variable an assignment stands for must have the type the function returns.
 let counter: mut u16 = 1u16
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     counter ← 7u16

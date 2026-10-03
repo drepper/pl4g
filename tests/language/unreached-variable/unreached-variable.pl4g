@@ -12,6 +12,8 @@ let only_by_dropped: u6 = 9u6
 fn unreached() → u6:
     only_by_dropped
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     used

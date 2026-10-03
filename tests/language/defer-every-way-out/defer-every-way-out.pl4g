@@ -49,8 +49,10 @@ fn handed_on(trail: &mut u64, v: u8 ? i32) → u8 ? i32:
     let got: u8 = v?
     got
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let trail: mut u64 = 0u64
     in_order(&mut trail)
     if trail ≠ 321u64:

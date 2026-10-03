@@ -32,8 +32,10 @@ fn doubled(n: Number) → i64:
         f64:
             0i64
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let taken: Number = pick(true)
     let other: Number = pick(false)
     if doubled(taken) ≠ 6i64:

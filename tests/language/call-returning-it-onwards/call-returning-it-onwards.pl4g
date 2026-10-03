@@ -14,7 +14,9 @@ fn prepare():
 fn also_prepare():
     return prepare()
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     also_prepare()
     counter

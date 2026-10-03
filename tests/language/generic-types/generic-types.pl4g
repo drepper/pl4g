@@ -39,8 +39,10 @@ fn depth(m: Maybe(Maybe(u8))) → u8:
         Maybe(u8)(inner): get(inner, 9u8)
         void: 0u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let p: Pair(u8) = Pair(.first ← 1u8, .second ← 2u8)
     let q := swap(Pair(.first ← 3u16, .second ← 4))
     let w: Pair(u16) = Pair(.first ← 5, .second ← 6)

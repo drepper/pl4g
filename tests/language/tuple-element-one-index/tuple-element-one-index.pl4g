@@ -3,7 +3,9 @@
 ※ A tuple is a run of members and not a shape, so there is one place to name and
 ※ one index to name it with.  An array is what takes one index per dimension.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let p: 〈u8, u8〉 = 〈1u8, 2u8〉
     p⟦0,1⟧

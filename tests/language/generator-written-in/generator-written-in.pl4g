@@ -44,8 +44,10 @@ fn guarded(n: u8) ⇉ u8:
     foreach i := 0u8…n:
         yield i
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: mut u64 = 0u64
     foreach x := evens(10u64):
         a ← a + x

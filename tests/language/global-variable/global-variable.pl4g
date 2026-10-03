@@ -5,6 +5,8 @@
 ※ A variable at the top level lives in the image and is read from memory.
 let counter: u6 = 42u6
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     counter

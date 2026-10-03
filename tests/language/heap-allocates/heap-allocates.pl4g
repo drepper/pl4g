@@ -24,8 +24,10 @@ fn grown(n: u64) → u64:
         i ← i + 1u64
     ⎕drop(#s)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if grown(70u64) ≠ 70000u64:
         return 1u6
     let k: mut u64 = 0u64

@@ -38,8 +38,10 @@ fn grown() → mut ⸨str: u64⸩:
 fn told(d: ⸨str: u64⸩, key: str) → u64:
     d⸨key⸩ ?? 0u64
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let h: mut Holder = Holder(.table ← grown(), .frozen ← ⸨"b": 2u64⸩)
     fill(&mut h)
     if told(h.table, "a") ≠ 1u64:

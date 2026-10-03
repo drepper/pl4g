@@ -12,7 +12,7 @@ let std := ⎕import("std")
 fn label(a: &mut arena, n: u16) → str in a:
     std.format⌜a, "#{}:{}", n, true⌝
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let scratch: mut arena = ⎕arena
     defer ⎕empty(scratch)
     let s: str = std.format⌜scratch, "{} and {}", 1u8, "two"⌝

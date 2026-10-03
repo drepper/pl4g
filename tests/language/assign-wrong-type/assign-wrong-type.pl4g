@@ -2,8 +2,10 @@
 ※ pl4g-test: expect-diag 4204 LANG_TYPE_ASSIGNMENT_MISMATCH
 
 ※ A variable keeps the type it was defined with.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let status: mut = 3u8
     status ← true
     status

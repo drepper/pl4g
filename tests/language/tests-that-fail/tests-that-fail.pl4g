@@ -31,7 +31,9 @@ fn does_not() → bool:
 fn nor_does_this() → bool:
     2u8 = 5u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ never reached: the tests are run before the startup function is
     0u6

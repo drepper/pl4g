@@ -22,8 +22,10 @@ let wc: mut u6 = 0u6
 @[expect(4007)]
 let wd: mut u6 = 0u6
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let va: u6 = a
     let vb: u6 = b
     let vc: u6 = c

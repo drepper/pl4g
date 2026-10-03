@@ -31,8 +31,10 @@
 ※ iterators cannot remove at all; **Python**, where removing while walking is
 ※ the mistake every tutorial warns about; **Go**, which has neither.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let l: mut [u8] = [1u8, 2u8, 3u8, 4u8, 5u8, 6u8]
     let it: mut = ⎕iter(l)
     ※ every even element goes, and the walk goes on from where it was

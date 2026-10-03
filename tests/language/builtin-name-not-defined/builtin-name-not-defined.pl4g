@@ -11,6 +11,8 @@ let ⎕tolerance: mut f64 = 1f64
 fn ⎕mine() → u8:
     0u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

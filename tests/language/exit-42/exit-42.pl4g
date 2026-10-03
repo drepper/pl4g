@@ -3,6 +3,8 @@
 ※ pl4g-test: diag=none
 
 ※ The value the startup function returns becomes the process exit status.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     42

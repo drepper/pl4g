@@ -11,6 +11,8 @@
 fn `+`(a: u8, b: u8) → u8:
     99u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(1u8 + 2u8, ⌜u6⌝) ?? 1u6

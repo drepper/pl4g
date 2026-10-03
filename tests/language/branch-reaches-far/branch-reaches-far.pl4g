@@ -612,6 +612,8 @@ fn sum(go: bool, step: u64) → u64:
         x ← x + step
     x
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if sum(true, 1u64) = 600u64 ∧ sum(false, 1u64) = 0u64: 0u6 else: 1u6

@@ -15,8 +15,10 @@ let signed_says: mut bool = false
 @[visible]
 let unsigned_says: mut bool = false
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     signed_says ← negative < positive
     unsigned_says ← big < one
     0u6

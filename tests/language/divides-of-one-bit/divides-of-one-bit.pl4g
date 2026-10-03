@@ -5,8 +5,10 @@
 ※ one.  What was meant is a question about that one bit, and comparing it with
 ※ nothing says it.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let flag: u1 = 1u1
     if ∣flag:
         0u6

@@ -14,8 +14,10 @@ fn last(v: u8⟦COLS⟧) → u8:
 
 let ROWS: u64 = 3
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: u8⟦ROWS⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
     let b: u8⟦COLS⟧ = ⟦4u8, 5u8, 6u8, 7u8⟧ in ⎕static
     let m: u8⟦ROWS, COLS⟧ = 〈ROWS, COLS〉 ⍴ 1u8

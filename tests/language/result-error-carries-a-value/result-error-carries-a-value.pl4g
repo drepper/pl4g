@@ -15,8 +15,10 @@
 ※ A name written in the `⊥` arm stands for what the error carries, exactly as a
 ※ name on the answer's arm stands for the answer.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let three: u8 = 3u8
     let zero: u8 = 0u8
     ※ an answer, taken with `??` and with a name in the arm

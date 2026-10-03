@@ -8,7 +8,9 @@
 let a: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
 let w: u16⟦2⟧ = ⟦4u16, 5u16⟧
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let both: u16⟦5⟧ = a ⧺ w
     0u6

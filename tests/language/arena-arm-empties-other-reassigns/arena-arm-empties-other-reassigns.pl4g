@@ -5,8 +5,10 @@
 ※ dead along one of the two ways that reach the join, so it is dead: a name read later cannot
 ※ tell which way it came.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let s: mut arena = ⎕arena
     defer ⎕empty(s)
     let c: bool = true

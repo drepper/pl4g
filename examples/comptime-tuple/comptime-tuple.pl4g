@@ -16,8 +16,10 @@
 ※※ type and checks the three totals afterwards.  It exits with 0 where they are
 ※※ what they should be, and with the number of the check that failed otherwise.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ five members, of three different types
     let values: 〈u8, u16, u32, u8, u16〉 = 〈1u8, 2u16, 3u32, 4u8, 5u16〉
 

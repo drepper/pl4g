@@ -8,8 +8,10 @@
 ※ A reference takes the whole of what follows it, so `&u8⟦4⟧` is a reference to
 ※ an array of four and never an array of four references.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
     let r: &u8⟦4⟧ = &v
     let e: u8 = v⟦0⟧

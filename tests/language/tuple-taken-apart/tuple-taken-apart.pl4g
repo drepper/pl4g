@@ -20,8 +20,10 @@ fn sorted(x: u6, y: u6) → 〈u6, u6〉:
     else:
         〈y, x〉
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ into variables at the top level
     low, high ← sorted(b, a)
     ※ and into names inside the body

@@ -6,8 +6,10 @@
 ※ teaches turns into here -- and it is reported rather than silently obeyed.
 ※ The last statement of a body is the function's result, so a comparison there
 ※ is the point of the line and is not reported; this one is not the last.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let status: mut = 3u8
     status = 5u8
     status

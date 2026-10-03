@@ -11,6 +11,8 @@ type Ring = state : u64 ; fd : u64
 fn holds(r: Ring) → u64:
     r.state
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

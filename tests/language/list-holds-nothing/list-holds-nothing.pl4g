@@ -4,7 +4,9 @@
 ※ nothing to say it with.  Where something wants a particular list that is
 ※ what it holds; where nothing does, there is nothing to take it from.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let nothing = []
     0u6

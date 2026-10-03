@@ -2,7 +2,9 @@
 ※ pl4g-test: expect-diag 4203 LANG_TYPE_INITIALIZER_MISMATCH
 
 ※ A literal that names its type must name the one the variable was declared.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let status: u8 = 3i32
     status

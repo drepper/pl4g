@@ -10,7 +10,9 @@ let three: i8 = 3i8
 @[visible]
 let same: mut i8 = 0i8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     same ← three + ⁻3i8
     twenty - 3u6

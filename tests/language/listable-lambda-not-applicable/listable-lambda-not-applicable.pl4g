@@ -10,8 +10,10 @@
 ※ So the list is checked against a target of its own, and `inline` written here
 ※ is an attribute that does not apply to a lambda or a function type.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let f: fn(u8) → u8 = @[inline] λ a: u8 → u8:
         a + a
     if f(1u8) ≠ 2u8:

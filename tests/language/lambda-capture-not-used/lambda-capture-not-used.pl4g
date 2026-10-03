@@ -12,8 +12,10 @@
 ※ much; the rule is asked of them all the same, and where it ever fires of one
 ※ it is the compiler that has got it wrong and not the program.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = 1u8
     let m: u8 = 2u8
     let f: fn(u8) → u8 = λ a: u8 [n, m] → u8 { a + n }

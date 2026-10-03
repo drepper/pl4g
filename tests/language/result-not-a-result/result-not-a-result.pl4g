@@ -10,8 +10,10 @@ let hundred: mut u8 = 100u8
 fn asking() → u8?:
     hundred?
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[ignore(5005)]
     hundred ?? 1u8
     0u6

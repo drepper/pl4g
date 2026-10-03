@@ -4,7 +4,9 @@
 
 type Pair(T') = first: T' ; second: T'
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let p: Pair(u8, u16) = Pair(.first ← 1u8, .second ← 2u8)
     0u6

@@ -5,8 +5,10 @@
 ※ either: what it was made in is the union of what the arms that reach the join left.  Emptying
 ※ one of the two kills it.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let s1: mut arena = ⎕arena
     let s2: mut arena = ⎕arena
     defer ⎕empty(s2)

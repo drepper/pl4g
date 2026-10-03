@@ -5,8 +5,10 @@
 ※ without `mut` is not one of those, and asking for `&mut` of it is asking to
 ※ get round its definition.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = 1u8
     let r: &mut u8 = &mut n
     let m: u8 = r⌖

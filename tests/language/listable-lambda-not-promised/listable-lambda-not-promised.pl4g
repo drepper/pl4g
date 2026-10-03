@@ -9,8 +9,10 @@
 ※ `&T` is: a value that promises more may stand for one that promises less, one
 ※ way only.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let plain: fn(u8) → u8 = λ a: u8 → u8:
         a + a
     let walks: @[listable] fn(u8) → u8 = plain

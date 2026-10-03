@@ -31,8 +31,10 @@ enum Colour:
 
 let counted: mut u8 = 0u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ every argument written, by place, which is what it always was
     if plus(1u8, 10u8) ≠ 11u8:
         1u6

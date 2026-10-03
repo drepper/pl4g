@@ -9,6 +9,8 @@ fn add_one(n: u6) → u6:
 fn add_two(n: u6) → u6:
     add_one(add_one(n))
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     add_two(40u6) ⊞ add_two(0u6) ⊟ 2u6

@@ -10,8 +10,10 @@
 ※ several places would expect.  A string of nothing is a string: it has no
 ※ characters and a walk over it runs no turns.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let empty: str = ""
     let one: str = "x"
     let same: str = "x"

@@ -24,8 +24,10 @@ fn k(a: u8, b: u8) → u8
         a + b
     }
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if g(2u6) ≠ 3u6: return 1u6
     if h(4u8) ≠ 5u8: return 2u6
     if k(1u8, 2u8) ≠ 3u8: return 3u6

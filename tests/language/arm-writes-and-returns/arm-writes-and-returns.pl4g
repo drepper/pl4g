@@ -12,8 +12,10 @@ fn early(trail: &mut u64, leave: bool) → u8:
     trail⌖ ← trail⌖ + 1u64
     8u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let trail: mut u64 = 0u64
     let one: u8 = early(&mut trail, false)
     if one ≠ 8u8 ∨ trail ≠ 1u64:

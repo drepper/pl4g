@@ -2,6 +2,8 @@
 ※ pl4g-test: expect-diag 3009 LANG_SYNTAX_EXPECTED_CLOSING_PAREN
 
 ※ A group that is opened has to be closed.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     (1u8 & 2u8

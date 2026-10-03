@@ -9,5 +9,7 @@ let b: mut u6 = 9u6
 @[visible]
 let kept: mut u6 = 0u6
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6 { if a < b { kept ← 3u6 } elif a = b { kept ← 4u6 } else { kept ← 5u6 } ; kept + 4u6 }
+fn main(init: std.Init) → u6 { if a < b { kept ← 3u6 } elif a = b { kept ← 4u6 } else { kept ← 5u6 } ; kept + 4u6 }

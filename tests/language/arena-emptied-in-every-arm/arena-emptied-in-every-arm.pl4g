@@ -12,6 +12,8 @@ fn both(c: bool) → bool:
     else:
         ⎕empty(s)
     r
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if both(true): 0u6 else: 1u6

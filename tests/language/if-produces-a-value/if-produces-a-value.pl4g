@@ -8,8 +8,10 @@
 let a: mut u8 = 3u8
 let b: mut u8 = 9u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let first: u6 = if a < b:
         4u6
     elif a = b:

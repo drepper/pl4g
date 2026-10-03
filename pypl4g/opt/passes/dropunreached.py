@@ -50,6 +50,9 @@ from ...source.location import Span
 #: does not depend on.
 ENVIRON_MAKE: Final[str] = "__pl4g_environ_make"
 
+#: How every name the compiler makes for itself begins.
+COMPILER_MADE: Final[str] = "__pl4g_"
+
 
 class DropUnreached:
     """Removes the functions and variables no root reaches."""
@@ -86,7 +89,9 @@ class DropUnreached:
         if len(variables) != len(module.globals):
             changed = True
             for key, var in module.globals.items():
-                if key not in variables:
+                # One the compiler made -- a piece of text, the default arena --
+                # is nothing anybody wrote, so nobody asks where it went.
+                if key not in variables and not var.name.startswith(COMPILER_MADE):
                     module.reports.record(
                         ReportKind.DROP_VARIABLE, var.name,
                         "no function that is itself reached names it, and it is "
@@ -163,14 +168,14 @@ class DropUnreached:
         read through that address, and an array is named exactly that way --
         what a value of one is, is where its elements are.
 
-        A function whose body is elsewhere may name anything, so one of those
-        keeps every variable.  None exists yet, which is why this is a guard
-        rather than a mechanism.
+        A function whose body is elsewhere -- the runtime's, one the program
+        declares external -- names nothing here: what is compiled elsewhere can
+        name only what the image offers, and a variable it offers is a root of
+        its own.  What such a function is handed, it is handed by the call,
+        which is an operand of a function that is reached.
         """
         named: set[int] = set()
         for func in functions:
-            if func.is_declaration:
-                return {id(var) for var in module.globals.values()}
             for block in func.blocks:
                 for inst in block.insts:
                     for place in (*inst.operands, *inst.reads(), *inst.writes()):

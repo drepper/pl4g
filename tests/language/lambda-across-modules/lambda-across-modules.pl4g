@@ -12,8 +12,10 @@
 
 let h := ⎕import("lambda-across-modules-helper")
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let g: fn(u8) → u8 = λ a: u8 → u8 { a + 2u8 }
     if g(1u8) ≠ 3u8:
         1u6

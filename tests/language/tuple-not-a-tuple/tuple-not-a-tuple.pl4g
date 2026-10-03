@@ -7,7 +7,9 @@
 
 let n: mut u8 = 3u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a, b := n
     a + b

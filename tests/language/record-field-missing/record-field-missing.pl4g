@@ -11,7 +11,9 @@
 
 type Point = x : u32 ; y : u32
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let p : Point = Point(.x ← 1u32)
     if p.x = 1u32: 0u6 else: 1u6

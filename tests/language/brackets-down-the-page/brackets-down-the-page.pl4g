@@ -31,9 +31,11 @@ fn wide(a: u8,
 fn pick(a: u8, b: u8) → u8:
     a + b
 
+let std := ⎕import("std")
+
 @[startup,
   impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ a call down the page
     let sum: u8 = wide(1u8,
                        2u8,

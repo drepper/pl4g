@@ -26,6 +26,8 @@ fn worked_out() → u6:
     ※ reading a variable at the top level, and calling another pure function
     summed(room) + doubled(base)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     worked_out() + 1u6

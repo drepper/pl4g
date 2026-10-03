@@ -6,6 +6,8 @@
 let twenty: u6 = 20u6
 let three: u6 = 3u6
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     twenty × three + 1u6

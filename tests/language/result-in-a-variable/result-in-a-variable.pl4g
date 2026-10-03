@@ -21,8 +21,10 @@ let kept: mut u8? = 1u8
 @[visible]
 let fixed: u8? = 9u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ a division with no answer, kept and then read back
     kept ← hundred ÷ none
     let after: u8 = kept ?? 50u8

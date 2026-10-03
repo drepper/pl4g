@@ -8,6 +8,8 @@ let a: bool = true
 let b: bool = false
 let c: bool = true
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → bool:
+fn main(init: std.Init) → bool:
     a ⊼ b ⊼ c

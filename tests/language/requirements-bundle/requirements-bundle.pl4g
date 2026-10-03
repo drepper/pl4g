@@ -17,6 +17,8 @@ bundle comparable(T'):  T' < T' → bool ; T' = T' → bool
 fn bigger(a: T', b: T') → T' pre(number(T')) pre(comparable(T')):
     a ⌈ b
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(bigger(3u8, 5u8), ⌜u6⌝) ?? 1u6

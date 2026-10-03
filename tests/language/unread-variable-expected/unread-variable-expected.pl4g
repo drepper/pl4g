@@ -8,7 +8,9 @@
 @[expect(4007)]
 let counter: mut u8 = 1u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     counter ← 7u8
     3u6

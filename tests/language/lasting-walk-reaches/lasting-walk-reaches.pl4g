@@ -16,7 +16,9 @@ fn started(s: str) → ⌖⇉u64 ¤size in ⎕heap:
     if first ≠ 3: return ⎕start(count("") in ⎕heap)
     ⎕start(count(s) in ⎕heap)
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let w := started("x")
     if ⎕resume(w) ?? 0 = 1: 0u6 else: 1u6

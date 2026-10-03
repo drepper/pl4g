@@ -30,7 +30,7 @@ fn one_of(c: bool, a: &mut arena, b: &mut arena) → str in a, b:
     if c: "x" ⧺ "y" in a else: "z" ⧺ "w" in b
 
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let long: mut arena = ⎕arena
     defer ⎕empty(long)
     let short: mut arena = ⎕arena

@@ -20,7 +20,7 @@ ARROW = "\N{RIGHTWARDS ARROW}"
 ASSIGN = "\N{LEFTWARDS ARROW}"
 MARK = "\N{REFERENCE MARK}"
 
-PROGRAM = "".join(("@[startup, impure]\nfn main() ", ARROW, " u6:\n    0u6\n"))
+PROGRAM = "".join(("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    0u6\n"))
 
 
 def build(compile_source, text: str, *extra: str):  # noqa: ANN001, ANN201
@@ -67,7 +67,7 @@ def test_one_list_holding_both_is_how_it_is_written(compile_source) -> None:  # 
 def test_the_rule_holds_inside_a_body_too(compile_source) -> None:  # noqa: ANN001
     """A statement is a thing attributes attach to, so it is the same question."""
     proc, _ = compile_source("".join((
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    @[ignore(5002)]\n    @[expect(4006)]\n    let a: mut u6 = 5u6\n",
         "    a ", ASSIGN, " 4u6\n")))
     assert proc.returncode != 0, describe(proc)

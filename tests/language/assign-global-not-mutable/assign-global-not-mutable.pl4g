@@ -3,7 +3,9 @@
 
 let counter: u8 = 1u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     counter ← 7u8
     counter

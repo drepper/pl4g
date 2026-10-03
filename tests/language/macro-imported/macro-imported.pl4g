@@ -14,7 +14,9 @@
 
 let m := ⎕import("shouting")
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ 3 + 3 is six, and 7 + 6 is thirteen.
     ⎕narrow(m.mine⌜m.twice⌜3u8⌝⌝, ⌜u6⌝) ?? 1u6

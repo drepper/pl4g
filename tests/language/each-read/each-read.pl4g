@@ -17,8 +17,10 @@ fn add(a: u8, b: u8) → u8:
 fn total(v: u8⟦3⟧) → u8:
     v⟦0⟧ + v⟦1⟧ + v⟦2⟧
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let ps: Person⟦3⟧ = ⟦Person(.age ← 12u8, .height ← 150u8, .pos ← Pos(.x ← 1u8, .y ← 2u8)),
                          Person(.age ← 30u8, .height ← 180u8, .pos ← Pos(.x ← 3u8, .y ← 4u8)),
                          Person(.age ← 40u8, .height ← 170u8, .pos ← Pos(.x ← 5u8, .y ← 6u8))⟧ in ⎕static

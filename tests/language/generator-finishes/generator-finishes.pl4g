@@ -44,8 +44,10 @@ fn broken(s: ⇉u8) → u8:
         t ← t + x
     t
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a := first_over(lines(9u8), 3u8)
     let b := sum(lines(4u8))
     let c := broken(lines(9u8))

@@ -10,8 +10,10 @@
 fn put(v: mut str⟦⟧, s: str):
     v⟦0⟧ ← s
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: mut arena = ⎕arena
     defer ⎕empty(a)
     let w: mut str⟦2⟧ = ⟦"a", "b"⟧ in a

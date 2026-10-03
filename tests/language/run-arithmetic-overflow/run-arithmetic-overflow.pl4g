@@ -9,8 +9,10 @@
 
 let v: u8⟦16⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8, 11u8, 12u8, 13u8, 14u8, 250u8, 16u8⟧ in ⎕static
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let up: u8⟦16⟧ = v + 10u8
     ※ which stops the program, so nothing below it runs
     if up⟦0⟧ ≠ 0u8:

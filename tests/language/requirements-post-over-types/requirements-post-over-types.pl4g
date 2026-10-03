@@ -7,6 +7,8 @@
 fn total(a: T') → T' post(T' ⊞ T' → T'):
     a
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(total(3u8), ⌜u6⌝) ?? 1u6

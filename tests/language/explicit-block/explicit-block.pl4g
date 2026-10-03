@@ -4,5 +4,7 @@
 
 ※ The same program in the explicit notation: a brace-enclosed block whose
 ※ statements are separated by semicolons.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6 { 7 }
+fn main(init: std.Init) → u6 { 7 }

@@ -7,8 +7,10 @@
 enum Colour { red ; green }
 let chosen: mut Colour = Colour.red
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let kept: u8 = match chosen:
         red:
             1u6

@@ -8,6 +8,8 @@ type Sorted(T') pre(T' < T' → bool) = low: T' ; high: T'
 fn same(a: T') → Sorted(T'):
     Sorted(.low ← a, .high ← a)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

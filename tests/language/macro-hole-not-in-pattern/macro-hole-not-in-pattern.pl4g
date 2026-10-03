@@ -9,6 +9,8 @@
 macro wrong:
     ⌜$x⌝ → ⌜$y + $y⌝
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

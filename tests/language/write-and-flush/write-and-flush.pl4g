@@ -33,7 +33,7 @@
 let std := ⎕import("std")
 
 @[startup, impure]
-fn main(init: mut std.Init) → u6:
+fn main(init: std.Init) → u6:
     ※ started, waited for, and the count read back
     match std.write(&mut init.io.error, ⎕bytes("one\n")):
         std.Pending(h):
@@ -42,26 +42,26 @@ fn main(init: mut std.Init) → u6:
                     if n ≠ 4:
                         1u6
                     else:
-                        rest(&mut init)
+                        rest(&mut init.io.error)
                 ⊥:
                     2u6
         ⊥:
             3u6
 
 @[impure]
-fn rest(init: &mut std.Init) → u6:
+fn rest(err: &mut std.Writer) → u6:
     ※ the two in one
-    match std.write_sync(&mut init⌖.io.error, ⎕bytes("two\n")):
+    match std.write_sync(err, ⎕bytes("two\n")):
         u64 ¤size(n):
             if n ≠ 4:
                 4u6
             else:
-                refused(init)
+                refused(err)
         ⊥:
             5u6
 
 @[impure]
-fn refused(init: &mut std.Init) → u6:
+fn refused(err: &mut std.Writer) → u6:
     ※ a descriptor nothing opened: the number comes back as the kernel gave it
     let nowhere: mut std.Writer = std.Writer(.fd ← 77i32)
     defer std.Writer.close(nowhere)
@@ -76,7 +76,7 @@ fn refused(init: &mut std.Init) → u6:
             else:
                 ※ started and never waited for: the drain before the program
                 ※ ends is what makes it happen
-                match std.write(&mut init⌖.io.error, ⎕bytes("four\n")):
+                match std.write(err, ⎕bytes("four\n")):
                     std.Pending:
                         0u6
                     ⊥:

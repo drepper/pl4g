@@ -14,6 +14,8 @@ fn sized(first: str, early: bool) → bool:
     ⎕empty(scratch)
     true
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if sized("a", true): 0u6 else: 1u6

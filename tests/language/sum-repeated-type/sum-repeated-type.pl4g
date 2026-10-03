@@ -10,6 +10,8 @@ type Twice = first : u8 | second : u8
 
 type Fine = a : u8 ; b : u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

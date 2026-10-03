@@ -33,6 +33,8 @@ type Other = m : u16 ; back : &Pair
 ※ way.
 type Chain = nothing : void | more : &Chain
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

@@ -4,7 +4,9 @@
 ※ whether it is one of them is known while compiling.  A program that must fail
 ※ whenever it is started is one that need not be started.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: u8⟦4⟧ = ⟦1u8, 2u8, 4u8, 8u8⟧
     a⟦9⟧

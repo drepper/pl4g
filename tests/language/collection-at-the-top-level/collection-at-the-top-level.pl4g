@@ -36,8 +36,10 @@ let seen: mut u64 = 0u64
 fn early():
     seen ← counts⸨"b"⸩ ?? 0u64
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if seen ≠ 2u64:
         1u6
     elif (counts⸨"a"⸩ ?? 0u64) ≠ 1u64:

@@ -100,8 +100,10 @@ def test_a_match_over_an_enumeration_is_one_switch(compile_source) -> None:  # n
 enum Colour { red ; green ; blue }
 let chosen: Colour = Colour.green
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     match chosen:
         red: 1u6
         green: 0u6
@@ -117,11 +119,13 @@ def test_a_match_over_a_result_is_still_two_ways(compile_source) -> None:  # noq
     """It has two alternatives and asks about one of them, which is a
     conditional branch and not a question with an answer per value."""
     proc, output = compile_source("""\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 let hundred: u8 = 100u8
 let seven: u8 = 7u8
 
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let taken: u8 = match hundred \N{DIVISION SIGN} seven:
         u8(q):
             q

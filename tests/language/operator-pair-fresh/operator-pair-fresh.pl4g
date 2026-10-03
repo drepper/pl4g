@@ -21,7 +21,9 @@ fn `⟬⟭`(g: Grid, i: u64) → u8:
 fn `⟬⟭`(g: Grid, i: u64, j: u64) → u8:
     g.a ⊞ g.b ⊞ (⎕narrow(i ⊞ j, ⌜u8⌝) ?? 0u8)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let g: Grid = Grid(.a ← 3u8, .b ← 5u8)
     ⎕narrow(g⟬1u64⟭ ⊞ g⟬1u64, 2u64⟭, ⌜u6⌝) ?? 1u6

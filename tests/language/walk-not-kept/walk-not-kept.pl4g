@@ -15,7 +15,9 @@ type J = walk : ⌖⇉u8
 fn out() → ⌖⇉u8:
     ⎕start(upto(1u8))
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: ⌖⇉u8 in ⎕heap = ⎕start(upto(2u8))
     0u6

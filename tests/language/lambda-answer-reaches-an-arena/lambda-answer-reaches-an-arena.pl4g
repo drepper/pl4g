@@ -12,6 +12,8 @@ fn greeting(name: str) → fn() → str:
     let said: str = "hello " ⧺ name in pool
     λ [said] → str { said }
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

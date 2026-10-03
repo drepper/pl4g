@@ -2,7 +2,9 @@
 ※ pl4g-test: expect-diag 3007 LANG_VARDEF_MISSING_INITIALIZER
 
 ※ There is no form that leaves a variable without a value.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let status: u8
     status

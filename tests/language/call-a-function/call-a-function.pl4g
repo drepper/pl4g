@@ -6,6 +6,8 @@
 fn twice(n: u6) → u6:
     n ⊞ n
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     twice(21u6)

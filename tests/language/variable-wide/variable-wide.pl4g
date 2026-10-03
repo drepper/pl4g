@@ -16,8 +16,10 @@ let signed_word: i32 = 70000i32
 let unsigned_wide: u64 = 42u64
 let signed_wide: i64 = 42i64
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ Each of these exists to make the backend emit one load; nothing reads
     ※ them afterwards, and the attribute says so rather than the program
     ※ being written round the warning.

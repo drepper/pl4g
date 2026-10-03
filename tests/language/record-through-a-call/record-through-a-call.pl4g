@@ -39,8 +39,10 @@ fn copied(l: Line) → Line:
 fn whole(l: Line) → Point:
     l.to
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let l : Line = made(1u32)
     if reach(l) ≠ 5u32:
         1u6

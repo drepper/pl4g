@@ -624,3 +624,11 @@ Optimizations
     round and grows every branch that does not reach; a function with many far branches takes as many rounds as growing one moves
     another out of reach, which is few in practice and is bounded at thirty-two.
 
+
+[ ] place only the runtime functions something calls.  The packaged runtime goes into the image whole, and since every program
+    imports `std`, whose destructor calls `pl4g_io_drain`, every image carries all of it -- `pl4g_env`, `io_open`, the heap --
+    some four kilobytes of code on x86-64 for a program that calls none of them.  The relocations say which function calls which,
+    so the same walk `dropunreached` makes would do, given the package keeps each function's extent.
+
+[ ] give the startup function's `std.Init` no register where nothing reads it.  Every startup function takes the record now, and
+    on x86-64 one that never names it still copies the pointer (`mov rcx, rax`) before anything else.

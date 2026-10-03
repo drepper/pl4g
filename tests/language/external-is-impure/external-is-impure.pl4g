@@ -31,6 +31,8 @@ fn reads_nothing() → u6:
     _ ← io_write(&mut ring, 2i32, ⎕address(&m⟦0⟧), 1u64)
     0u6
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     reads_nothing()

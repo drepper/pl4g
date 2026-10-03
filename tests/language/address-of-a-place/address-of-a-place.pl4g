@@ -23,8 +23,10 @@
 ※ this exactly and whose `@ptrFromInt` is `⎕at`; **Go**, where `uintptr` is the
 ※ type and the garbage collector makes the whole question harder than it is here.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let m: mut u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
     let at: u64 = ⎕address(&m⟦0⟧)
     ※ back through the door it came out of, and the same elements

@@ -7,7 +7,9 @@
 
 type Point = x : u8 ; y : u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let p: Point = Point(.x ← 1u8, .y ← 2u8) ⊛ Point(.x ← 1u8, .y ← 2u8)
     0u6

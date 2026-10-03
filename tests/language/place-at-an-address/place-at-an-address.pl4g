@@ -32,8 +32,10 @@
 let READ_WRITE: i64 = 3i64
 let PRIVATE_ANONYMOUS: i64 = 0x22i64
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let got: i64 = ⎕syscall(⎕sc@mmap, 0i64, 4096i64, READ_WRITE,
                             PRIVATE_ANONYMOUS, ⁻1i64, 0i64)
     if got < 0i64:

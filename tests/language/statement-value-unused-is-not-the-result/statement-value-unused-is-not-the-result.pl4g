@@ -4,6 +4,8 @@
 ※ and nothing about it is reported.
 let count: u6 = 7u6
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     count

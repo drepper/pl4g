@@ -4,8 +4,10 @@
 ※ A call in a constant is run while compiling, and what the compiler cannot
 ※ run there is reported, naming what it could not do.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let t: 〈u8, u16〉 = 〈1u8, 2u16〉
     let a: u8 = t⟦picked(0)⟧
     0u6

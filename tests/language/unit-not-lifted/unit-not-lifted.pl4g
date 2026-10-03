@@ -5,8 +5,10 @@
 ※ So it is lifted out of the program the same way a type is where the compiler
 ※ is asked about one, and `⌜meter⌝` is what `⎕unit` is given.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u32 = 5u32
     let m: u32 ¤meter = ⎕unit(n, 3u32)
     0u6

@@ -46,8 +46,10 @@ fn first(v: &⧖y u32) → &⧖y u32:
 fn reads(v: &⧖z u32) → u32:
     v⌖
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ both arguments last as long as the program, so the answer does
     let kept: &mut static u32 = either(true, &mut top, &mut other)
     kept⌖ ← 9u32

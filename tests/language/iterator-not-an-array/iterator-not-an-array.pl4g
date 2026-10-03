@@ -8,6 +8,8 @@ fn first(s: ⇉u8) → u8:
     let r: ⇉ = s
     r⟦0⟧
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

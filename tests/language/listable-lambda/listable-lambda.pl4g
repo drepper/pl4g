@@ -32,8 +32,10 @@
 fn twice(a: u8) → u8:
     a + a
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ a lambda that walks, called with an array and with a single value
     let double: @[listable] fn(u8) → u8 = @[listable] λ a: u8 → u8:
         a + a

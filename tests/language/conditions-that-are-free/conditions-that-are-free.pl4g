@@ -9,6 +9,8 @@
 fn step(a: u8) → u8 pre(⌜u8⌝ ≠ ⌜u16⌝):
     a
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(step(1u8), ⌜u6⌝) ?? 1u6

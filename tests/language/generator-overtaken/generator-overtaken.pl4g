@@ -16,6 +16,8 @@ fn pairs(s: ⇉u8) → u8:
             t ← t ⊞ (a ⊞ b)
     t
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if pairs(count(3u8)) = 0u8: 0u6 else: 1u6

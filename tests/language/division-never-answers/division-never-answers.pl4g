@@ -9,8 +9,10 @@
 @[visible]
 let kept: mut u8 = 0u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[expect(4215)]
     kept ← 100u8 ÷ 0u8 ?? 1u8
     @[expect(4215)]

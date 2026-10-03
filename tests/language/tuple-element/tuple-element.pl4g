@@ -23,8 +23,10 @@ let FIRST: u6 = 0u6
 fn both(x: u6, y: u16) → 〈u6, u16〉:
     〈x, y〉
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let pair: 〈u6, u16〉 = both(7u6, 300u16)
     ※ a bare literal, a literal with a suffix, and a name that cannot change
     let low: u6 = pair⟦0⟧ + pair⟦0u6⟧ + pair⟦FIRST⟧

@@ -7,8 +7,10 @@
 
 type R = f: str
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: mut arena = ⎕arena
     defer ⎕empty(a)
     let b: mut arena = ⎕arena

@@ -19,8 +19,10 @@ let neither: mut bool = false
 @[visible]
 let opposite: mut bool = false
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     both ← yes ∧ no
     either ← yes ∨ no
     one_of ← yes ⊕ no

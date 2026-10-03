@@ -24,8 +24,10 @@
 ※ square this computes is always a power the answer itself contains -- so what
 ※ the check reports is the answer and never a step towards it.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: u32 = 3u32
     let n: u32 = 5u32
     let s: i16 = ⁻3i16

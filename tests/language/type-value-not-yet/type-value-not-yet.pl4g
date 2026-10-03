@@ -12,6 +12,8 @@ type Point = x : f64 ; y : f64
 fn middle(p: Point) → Point:
     p
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

@@ -10,8 +10,10 @@ fn picked(v: u8⟦⟧, w: u8⟦⟧) → u8:
         n ← n + x
     n
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧ in ⎕static
     let w: u8⟦3⟧ = ⟦1u8, 1u8, 1u8⟧ in ⎕static
     if picked(v, w) = 0u8: 0u6 else: 1u6

@@ -4,8 +4,10 @@
 ※ `break` hands a value over and there is no `else` arm that gives one.  A loop
 ※ is a statement until something in it says otherwise.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let found: u8? = while §counting true:
         let n: u8 = 1u8
         n + 1u8

@@ -30,8 +30,10 @@ fn addq(a: i64, b: i64) → i64:
 fn subq(a: u64, b: u64) → u64:
     a - b
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if adds(200u8, 55u8) ≠ 255u8:
         1u6
     elif subs(⁻100i8, 28i8) ≠ ⁻128i8:

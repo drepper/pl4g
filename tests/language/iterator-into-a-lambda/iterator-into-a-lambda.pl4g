@@ -3,8 +3,10 @@
 
 ※ A lambda may outlive the call it was made in, and an iterator may not.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let arr: u8⟦4⟧ = ⟦0u8, 1u8, 2u8, 3u8⟧ in ⎕static
     let q := arr⟦arr > 1⟧
     let f: fn(u8) → u8 = λ a: u8 [q] → u8 { a }

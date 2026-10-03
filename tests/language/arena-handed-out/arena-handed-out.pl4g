@@ -26,7 +26,7 @@ fn words(n: u64) → [str] in pool:
     l
 
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let found: [str] in kept = words(3u64)
     defer ⎕empty(kept)
     let count: mut u64 = 0u64

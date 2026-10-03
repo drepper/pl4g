@@ -5,8 +5,10 @@
 let ready: bool = true
 let seen: bool = false
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[ignore(5005)]
     ready ⊞ seen
     0u6

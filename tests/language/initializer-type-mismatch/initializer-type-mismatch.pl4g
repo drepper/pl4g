@@ -2,7 +2,9 @@
 ※ pl4g-test: expect-diag 4203 LANG_TYPE_INITIALIZER_MISMATCH
 
 ※ There is no conversion that would hide the difference between the two.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let flag: bool = 3
     1u6

@@ -4,7 +4,9 @@
 ※ on the definition and the words in the brackets are the same words.  What is
 ※ at an address is one value, reached through a reference.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: &mut u32 = ⎕at(8u64, ⌜u32⌝)
     if a⌖ = 0u32: 0u6 else: 1u6

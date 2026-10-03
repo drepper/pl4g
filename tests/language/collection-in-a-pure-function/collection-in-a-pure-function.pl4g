@@ -12,8 +12,10 @@ fn local() → bool:
     defer ⎕empty(scratch)
     let s: ⸨u8⸩ = ⸨1u8, 2u8⸩ in scratch
     s⸨2u8⸩
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: mut arena = ⎕arena
     defer ⎕empty(a)
     if kept(&mut a) ∧ local(): 0u6 else: 1u6

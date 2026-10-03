@@ -8,6 +8,8 @@ fn f(n: u8) → u8:
     n ← 1u8
     n
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     f(3u8)

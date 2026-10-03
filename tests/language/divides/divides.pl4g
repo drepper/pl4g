@@ -16,8 +16,10 @@
 ※ nothing about it is a result -- which is the whole reason it is worth having
 ※ beside `%`.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: u8 = 12u8
     let b: u8 = 3u8
     let c: u8 = 5u8

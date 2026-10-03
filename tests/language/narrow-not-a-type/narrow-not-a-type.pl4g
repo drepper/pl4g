@@ -6,8 +6,10 @@
 ※ identifiers -- and which was meant would depend on what the name turned out
 ※ to be, which is the thing the marks are there to stop.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u32 = 300u32
     let small: u8?⎕narrowing = ⎕narrow(n, u8)
     0u6

@@ -4,7 +4,9 @@
 ※ of it: there is no failure of such a type that carries nothing, so a `⊥`
 ※ written without a value would be making a value with a hole in it.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8?u16 = ⊥
     0u6

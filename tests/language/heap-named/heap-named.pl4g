@@ -30,7 +30,7 @@ fn formatted(v: u16) → str:
     std.format⌜"<{}>", v⌝
 
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if arrow("a") ≠ "a<-":
         return 1u6
     if unnamed("a") ≠ "a!":

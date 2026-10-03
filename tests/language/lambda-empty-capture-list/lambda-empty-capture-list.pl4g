@@ -4,7 +4,9 @@
 ※ one would be a second spelling of that.  Where two ways of writing something
 ※ would mean the same thing in every respect, the language admits one of them.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let f: fn(u8) → u8 = λ a: u8 [] → u8 { a }
     0u6

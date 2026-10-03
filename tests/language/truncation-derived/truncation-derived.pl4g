@@ -2,7 +2,9 @@
 ※ pl4g-test: expect-diag 2006 LANG_SYNTAX_INTEGER_RANGE
 
 ※ The type comes from the suffix, and the value still has to fit it.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let status := 999u8
     status

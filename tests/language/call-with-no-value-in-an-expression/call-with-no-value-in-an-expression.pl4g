@@ -5,6 +5,8 @@
 fn prepare():
     return
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     prepare() ⊞ 1u8

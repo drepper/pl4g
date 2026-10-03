@@ -4,8 +4,10 @@
 
 ※ Where the diagnostic does not arise, 'ignore' says nothing -- which is the
 ※ whole difference between it and 'expect'.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[ignore(4006)]
     let a: u6 = 5u6
     a

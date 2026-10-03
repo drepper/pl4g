@@ -8,8 +8,10 @@ fn named(n: u64) → str in pool:
     let pool: mut arena = ⎕arena
     "a" ⧺ "b" in pool
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let k: mut arena = ⎕arena
     defer ⎕empty(k)
     let s: str = named(1u64) in k

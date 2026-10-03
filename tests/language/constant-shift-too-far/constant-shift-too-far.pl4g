@@ -4,7 +4,9 @@
 ※ A shift by the width of the type stops the running program, so worked out
 ※ while compiling it is an error.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u8⟦1u8 « 8u8⟧ = ⟦1u8⟧ in ⎕static
     0u6

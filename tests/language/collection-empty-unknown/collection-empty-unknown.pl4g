@@ -4,8 +4,10 @@
 ※ A collection with nothing in it is neither a set nor a dictionary until
 ※ something says which, and what says so is the type it is wanted as.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[ignore(5005)]
     ⸨⸩
     0u6

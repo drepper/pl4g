@@ -11,8 +11,10 @@
 ※ that said "whatever the body turns out to use" would be a list that said
 ※ nothing.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = 1u8
     let f: fn(u8) → u8 = λ a: u8 → u8 { a + n }
     0u6

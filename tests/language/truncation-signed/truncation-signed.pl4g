@@ -4,6 +4,8 @@
 ※ 200 fits in a u8 but not in an i8; the range is the type's, not the width's.
 let value: i8 = 200i8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     1u6

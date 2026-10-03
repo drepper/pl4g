@@ -6,8 +6,10 @@
 ※ unsigned numbers is: Unicode numbers the code points, and every collation in
 ※ the world starts from that numbering before it does anything else.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: char = 'a'
     let b: char = 'b'
     let pound: char = '£'

@@ -8,8 +8,10 @@
 ※ A `&` lends nothing away that a read would disturb -- it shares, and the name
 ※ is another sharer -- so a name lent that way stays readable.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: mut u8 = 1u8
     let r: &mut u8 = &mut n
     r⌖ ← 2u8

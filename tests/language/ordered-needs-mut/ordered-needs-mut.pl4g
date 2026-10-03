@@ -4,8 +4,10 @@
 ※ written, and a releasing write is a write.  The ordering says what other
 ※ observers see and changes nothing about who may write.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: mut u32 = 5u32
     let r: &u32 = &v
     ⎕release(r, 9u32)

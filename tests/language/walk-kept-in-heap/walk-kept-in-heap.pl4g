@@ -28,8 +28,10 @@ fn started(from: u64) → ⌖⇉u64 ⇇ u64 in ⎕heap:
 fn resumed(c: ⌖⇉u64 ⇇ u64, by: u64) → u64:
     ⎕resume(c, by) ?? 0u64
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     jobs ← jobs ⧺ [Job(.walk ← started(10u64), .n ← 1u8)]
     jobs ← jobs ⧺ [Job(.walk ← started(100u64), .n ← 2u8)]
     let total: mut u64 = 0u64

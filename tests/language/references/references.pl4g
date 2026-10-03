@@ -48,8 +48,10 @@ enum Colour:
     red ;
     green
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: mut i8 = 1i8
     ※ a reference to a name, read and written through
     let r: &mut i8 = &mut n

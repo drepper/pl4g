@@ -45,8 +45,10 @@ fn named(n: u8) → fn(u8) → u8:
 fn keep(b: &mut Box, n: u8):
     b⌖.f ← λ x: u8 [n] → u8 { x + n + 3u8 }
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let p: fn(u8) → u8 = plain()
     let q: fn(u8) → u8 = adding(5u8)
     let r: fn(u8) → u8 = either(5u8, true)

@@ -5,7 +5,9 @@
 
 type Sorted(T') pre(T' < T' → bool) = low: T' ; high: T'
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let s: Sorted(bool) = Sorted(.low ← false, .high ← true)
     0u6

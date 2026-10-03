@@ -4,5 +4,7 @@
 
 ※ In the brace notation there is no indentation to place it, so it simply
 ※ precedes the statement.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6 { @[expect(4006)] let a: mut u6 = 5u6; a ← 4u6 }
+fn main(init: std.Init) → u6 { @[expect(4006)] let a: mut u6 = 5u6; a ← 4u6 }

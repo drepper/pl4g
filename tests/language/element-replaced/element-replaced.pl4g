@@ -6,8 +6,10 @@
 ※ is arithmetic -- what was read out before may be gone.  A pool's container never gives anything
 ※ back one at a time, so reading out of one is not touched.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: mut str⟦2⟧ = ⟦"a" ⧺ "b", "c"⟧
     let x: str = v⟦0⟧
     v⟦0⟧ ← "d" ⧺ "e"

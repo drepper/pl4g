@@ -15,8 +15,10 @@ fn root_of(square: u8) → u8:
     else:
         99u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: mut u8 = 0u8
     ※ a `while` takes one too, and its else arm runs when the condition stops
     let counted: u8 = while §counting n < 10u8:

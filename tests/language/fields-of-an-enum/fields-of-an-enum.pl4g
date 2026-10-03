@@ -15,8 +15,10 @@ enum Colour:
     green = 4 ;
     blue = 9
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let names: mut ⸨Colour: str⸩ = ⸨⸩
     let letters: mut u64 = 0u64
     let turns: mut u8 = 0u8

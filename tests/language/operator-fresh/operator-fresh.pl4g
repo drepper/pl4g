@@ -17,7 +17,9 @@ fn `⊛`(a: Point, b: Point) → Point:
 fn `♯`(p: Point) → u8:
     p.x ⊞ p.y
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let p: Point = Point(.x ← 1u8, .y ← 2u8) ⊛ Point(.x ← 10u8, .y ← 20u8)
     ⎕narrow(♯p, ⌜u6⌝) ?? 1u6

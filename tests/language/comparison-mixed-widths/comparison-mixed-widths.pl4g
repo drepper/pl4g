@@ -7,6 +7,8 @@
 let narrow: u8 = 1u8
 let wide: u16 = 2u16
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → bool:
+fn main(init: std.Init) → bool:
     narrow < wide

@@ -4,8 +4,10 @@
 
 ※ 'ignore' keeps a diagnostic quiet without saying anything about whether it
 ※ arises.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[ignore(4006)]
     let a: mut u6 = 5u6
     a ← 4u6

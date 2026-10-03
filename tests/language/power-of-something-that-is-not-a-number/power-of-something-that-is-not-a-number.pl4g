@@ -5,7 +5,9 @@
 ※ asks the same of what stands before it as the operator does of its left side,
 ※ being that operator.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let x: str = "ab"²
     0u6

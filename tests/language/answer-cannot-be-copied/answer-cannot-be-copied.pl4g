@@ -12,6 +12,8 @@ fn made(first: str) → Named:
     defer ⎕empty(scratch)
     Named(.name ← first ⧺ "!" in scratch)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if made("a").name = "a!": 0u6 else: 1u6

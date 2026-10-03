@@ -2896,7 +2896,7 @@
       "number": 4404,
       "name": "LANG_FUNCDEF_SPECIAL_BAD_SIGNATURE",
       "severity": "error",
-      "message": "the startup function must be written 'fn NAME() → {type}' or 'fn NAME(NAME: std.Init) → {type}', but '{name}' {problem}",
+      "message": "the startup function must be written 'fn NAME(NAME: std.Init) → {type}', but '{name}' {problem}",
       "args": [
         {
           "name": "type",
@@ -2914,7 +2914,7 @@
           "description": "how the signature differs"
         }
       ],
-      "cause": "The entry point calls one function and hands it one thing, so what that function may be written as is settled rather than chosen.  The record is handed over *as* the record and not as a reference to it: there is one of it -- `Init` is `@[unique]` -- so having it is having the thing itself, and a program that passes it along takes the reference where it passes it.  `mut` before the type says the program may write the record it was handed.  A program that wants none of it takes nothing.",
+      "cause": "The entry point calls one function and hands it one thing, so what that function may be written as is settled rather than chosen.  The record is handed over *as* the record and not as a reference to it: there is one of it -- `Init` is `@[unique]` -- so having it is having the thing itself, and a program that passes it along takes the reference where it passes it.  It is never `mut`: what of it a program may change are its streams, which are `mut` fields, written and lent by `&mut` from a record that is not.  Every startup function takes it, whether it uses it or not, so that there is one signature and what a program is started with arrives in one place.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition / Special Functions",

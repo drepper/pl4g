@@ -18,8 +18,10 @@ fn first(xs: u6⟦⟧) → u6:
 fn forty() → u6:
     40u6
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ given to a name whose type does not say the length
     let named: u6⟦⟧ = ⟦40u6, 2u6⟧ in ⎕static
     ※ handed to a parameter whose type does not say it

@@ -38,8 +38,10 @@ let seen: mut u8 = 0u8
 fn note(a: u8):
     seen ← a
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
     ※ named where a value is wanted, and its walk comes with it
     let walks: @[listable] fn(u8) → u8 = twice

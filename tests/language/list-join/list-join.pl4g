@@ -8,8 +8,10 @@
 ※ Both sides hold the same type, which today is every list's rule and will
 ※ later be the case worth not boxing.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: [u8] = [1u8, 2u8, 3u8] in ⎕static
     let b: [u8] = [4u8, 5u8] in ⎕static
     let both: [u8] = a ⧺ b

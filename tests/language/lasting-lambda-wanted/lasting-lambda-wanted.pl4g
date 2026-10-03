@@ -7,8 +7,10 @@
 fn keep(f: fn(u8) in ⎕heap → u8) → fn(u8) in ⎕heap → u8:
     f
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = 1u8
     let p: fn(u8) → u8 = λ x: u8 [n] → u8 { x + n }
     let q: fn(u8) in ⎕heap → u8 = keep(p)

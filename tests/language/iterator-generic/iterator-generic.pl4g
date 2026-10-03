@@ -10,8 +10,10 @@ fn count(s: ⇉T') → u64:
         n ← n + 1u64
     n
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let arr: u8⟦4⟧ = ⟦0u8, 1u8, 2u8, 3u8⟧ in ⎕static
     let q: ⇉ = arr⟦arr > 1⟧
     let names: [str] = ["a", "b", "c"] in ⎕static

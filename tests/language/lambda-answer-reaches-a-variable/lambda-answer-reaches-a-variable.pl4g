@@ -10,6 +10,8 @@ fn counting(n: u8) → fn(u8) → u8:
     let seen: u8 = n
     λ a: u8 [&seen] → u8 { a + seen }
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

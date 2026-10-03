@@ -8,7 +8,9 @@
 
 let m := ⎕import("bag")
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let b: m.Bag = m.Bag(.held ← 3u8)
     ⎕narrow(m.Bag.doubled(&b), ⌜u6⌝) ?? 1u6

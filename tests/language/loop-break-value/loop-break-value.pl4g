@@ -15,8 +15,10 @@ fn root_of(square: u8) → u8:
             break §looking i
     found ?? 99u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ 6, and 99 for a number that is no square
     ※ what this used to say through the exit status, which is six bits now
     if root_of(36u8) + root_of(7u8) ≠ 105u8:

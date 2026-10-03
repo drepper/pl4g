@@ -10,7 +10,9 @@ let ready: bool = true
 @[expect(4007)]
 let seen: mut bool = false
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     seen ← ready
     1u6

@@ -84,8 +84,10 @@ def test_a_message_about_a_reference_says_what_the_source_said(
 fn takes(p: &mut Pair) \N{RIGHTWARDS ARROW} u8:
     p\N{POSITION INDICATOR}.a
 
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let p: mut Pair = Pair(.a \N{LEFTWARDS ARROW} 1u8, .b \N{LEFTWARDS ARROW} 2u8)
     let r: &Pair = &p
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(takes(r), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
@@ -100,11 +102,13 @@ def test_a_message_about_a_result_says_what_the_source_said(
         compile_source) -> None:  # noqa: ANN001
     """A result reads as a signature writes one, spaces and all."""
     proc, _ = compile_source("""\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 fn answers() \N{RIGHTWARDS ARROW} u64 ? i32:
     1u64
 
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let n: u64 = answers()
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(n, \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """)
@@ -116,11 +120,13 @@ def test_the_ir_keeps_its_own_spelling(compile_source) -> None:  # noqa: ANN001
     """Which is why this is a second method and not a change to the first: the
     printer and the reader are two halves of one format."""
     proc, output = compile_source(PAIR + """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 fn takes(p: &mut Pair) \N{RIGHTWARDS ARROW} u8:
     p\N{POSITION INDICATOR}.a
 
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let p: mut Pair = Pair(.a \N{LEFTWARDS ARROW} 1u8, .b \N{LEFTWARDS ARROW} 2u8)
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(takes(&mut p), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """, "--emit=ir")

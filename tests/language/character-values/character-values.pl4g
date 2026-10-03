@@ -22,8 +22,10 @@ let last: char = 0x10ffff
 let nul: char = 0
 let letters: char⟦3⟧ = ⟦'A', 'z', 'ω'⟧ in ⎕static
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if ⎕ord(a) ≠ 65u32 ∨ ⎕ord(z) ≠ 122u32:
         1u6
     elif ⎕ord(omega) ≠ 0x3c9u32:

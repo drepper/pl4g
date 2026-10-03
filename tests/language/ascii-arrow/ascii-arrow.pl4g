@@ -7,6 +7,8 @@
 ※ '->' is accepted as a substitute for the arrow because it is a sequence of
 ※ more than one character and so claims no character for itself.  The warning
 ※ is off by default; this test asks for it.
+let std := ⎕import("std")
+
 @[startup]
-fn main() -> u6:
+fn main(init: std.Init) -> u6:
     0

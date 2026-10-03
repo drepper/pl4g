@@ -6,8 +6,10 @@
 ※ number of any width counts, being widened by its own signedness, and so does a
 ※ reference, being an address.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let how_far: f64 = 1.5
     let answer: i64 = ⎕syscall(1i64, 1i64, how_far, 6i64)
     if answer < 0i64: 1u6 else: 0u6

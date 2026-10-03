@@ -4,8 +4,10 @@
 ※ An `if` with no `else` has a way through that runs no arm, and along it a name keeps what it
 ※ had -- so the old value's arena is still one the name may be made in.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let s0: mut arena = ⎕arena
     let s1: mut arena = ⎕arena
     defer ⎕empty(s1)

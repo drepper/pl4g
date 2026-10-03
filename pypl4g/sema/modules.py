@@ -111,8 +111,9 @@ class SearchPath:
     #: Directories given on the command line, in the order given.
     given: list[Path] = field(default_factory=list)
     #: Directories the installation provides, looked at last and only for a name
-    #: with no slash in it.
-    system: list[Path] = field(default_factory=list)
+    #: with no slash in it.  The installation's own unless something says
+    #: otherwise: every program imports `std`, which is found there.
+    system: list[Path] = field(default_factory=lambda: system_modules())
     #: Where the compiler was run, which is what a relative entry of the path is
     #: relative to when the importing file's own directory did not have it.
     working: Path = field(default_factory=Path.cwd)

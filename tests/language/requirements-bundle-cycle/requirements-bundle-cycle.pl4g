@@ -9,6 +9,8 @@
 bundle one(T'):  two(T')
 bundle two(T'):  one(T')
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

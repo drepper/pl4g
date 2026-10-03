@@ -17,8 +17,10 @@ fn three(a: u6, b: u6, c: u6) → u6:
 fn ends(top: u6⟦3⟧, bottom: u6⟦3⟧) → u6:
     top⟦0⟧ + bottom⟦2⟧
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u6⟦3⟧ = ⟦10u6, 19u6, 20u6⟧ in ⎕static
     ※ every element an argument of its own
     let whole: u6 = three(⁂v)

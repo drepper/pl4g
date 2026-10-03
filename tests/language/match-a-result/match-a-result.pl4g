@@ -32,8 +32,10 @@ fn leaves(a: u8, b: u8) → u8:
         u8(q):
             return q
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ 15 + 99 - 14
     ※ what this used to say through the exit status, which is six bits now
     if share(hundred, seven) + share(hundred, none) - leaves(hundred, seven) ≠ 100u8:

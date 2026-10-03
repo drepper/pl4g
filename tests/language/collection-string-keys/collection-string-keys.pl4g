@@ -29,8 +29,10 @@
 fn named(d: ⸨str: str⸩, k: str) → str:
     d⸨k⸩ ?? "none"
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ text as the key and text as what it stands for
     let d: mut ⸨str: str⸩ = ⸨"one": "first", "two": "second"⸩
     d⸨"three"⸩ ← "third"

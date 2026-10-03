@@ -101,8 +101,10 @@ def test_the_verifier_catches_two_functions_under_one_symbol() -> None:
         verify(module)
 
 
-SOURCE = """@[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+SOURCE = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[startup, impure]
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     0
 """
 
@@ -116,7 +118,7 @@ def test_the_symbol_reaches_the_image(tmp_path) -> None:  # noqa: ANN001
     assert proc.returncode == 0, describe(proc)
     listing = subprocess.run(["eu-readelf", "-s", str(output)], capture_output=True,
                              text=True, timeout=60)
-    assert "main()u6" in listing.stdout, listing.stdout
+    assert "main(ptr<Init>)u6" in listing.stdout, listing.stdout
     assert " main\n" not in listing.stdout, "the unmangled name is in the image"
 
 

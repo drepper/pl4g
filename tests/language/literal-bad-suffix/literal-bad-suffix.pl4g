@@ -2,7 +2,9 @@
 ※ pl4g-test: expect-diag 2007 LANG_SYNTAX_BAD_LITERAL_SUFFIX
 
 ※ The suffix names an integer type; nothing else means anything there.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let status := 3bool
     status

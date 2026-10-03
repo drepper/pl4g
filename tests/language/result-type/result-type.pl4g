@@ -22,8 +22,10 @@ let none: mut u8 = 0u8
 fn share(a: u8, b: u8) → u8?:
     (a ÷ b)? + 1u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ a local holds a result like any other value
     let good: u8? = share(hundred, seven)
     let bad: u8? = share(hundred, none)

@@ -3,7 +3,9 @@
 
 ※ Nothing but `true` and `false` is a boolean.  A number is not one spelled
 ※ differently, so it is refused rather than taken to mean the same thing.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let flag: bool = 1u8
     1u6

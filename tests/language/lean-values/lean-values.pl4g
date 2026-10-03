@@ -27,8 +27,10 @@ fn pick(c: bool, a: &mut arena, n: u64) → u64:
     ※ the parameter's arena on every way
     let w: str = if c: "i" ⧺ "j" in a else: "k" ⧺ "l" in a
     ⎕drop(#s + #t + #u + #w)
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: mut arena = ⎕arena
     defer ⎕empty(a)
     if pick(true, &mut a, 3u64) = 11u64: 0u6 else: 1u6

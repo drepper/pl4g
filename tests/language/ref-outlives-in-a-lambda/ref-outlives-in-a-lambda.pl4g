@@ -10,8 +10,10 @@
 
 let b1 : bool = true
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v1 : mut u32 = 5u32
     let f : mut fn() → u32 = λ [&v1] → u32 { v1 }
     if b1:

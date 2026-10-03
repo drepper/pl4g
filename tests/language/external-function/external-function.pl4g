@@ -54,8 +54,10 @@ let ring: mut Ring = Ring(
     .held ← ⟦0u64, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64⟧,
     .answer ← ⟦0i64, 0i64, 0i64, 0i64, 0i64, 0i64, 0i64, 0i64⟧)
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let message: u8⟦6⟧ = ⟦104u8, 101u8, 108u8, 108u8, 111u8, 10u8⟧ in ⎕static
     ※ standard error, so that a run under a test suite says nothing that has
     ※ to be filtered out of what the program answered

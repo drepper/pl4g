@@ -183,8 +183,10 @@ SOURCE = """let ready: bool = true
 @[visible]
 let seen: mut bool = false
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     seen \N{LEFTWARDS ARROW} ready
     0u6
 """

@@ -42,8 +42,10 @@ fn sum_of(s: ⇉u8?) → u8:
         t ← t ⊞ (r ?? 100u8)
     t
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u8⟦3⟧ = ⟦4u8, 6u8, 8u8⟧ in ⎕static
     let n: mut u64 = 0u64
     foreach i, _ := ⎕enumerate(count(4u8)):

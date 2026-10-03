@@ -22,8 +22,10 @@ let signed: i64 = 4294967296i64
 let negative: i64 = ⁻4294967296i64
 let root: i64 = 3037000499i64
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let wrong: mut u6 = 0u6
     if big ⊠ big ≠ 18446744073709551615u64:
         wrong ← 1u6

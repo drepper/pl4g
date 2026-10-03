@@ -4,7 +4,9 @@
 ※ an array type that says its length says something the count would then have to
 ※ agree with, and two statements of one thing can disagree.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let b: u8⟦⟧ = ⎕span(8u64, 4u64, ⌜u8⟦4⟧⌝)
     if #b = 4: 0u6 else: 1u6

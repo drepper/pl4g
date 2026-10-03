@@ -11,8 +11,10 @@
 let huge: mut f64 = 1e308f64
 let ten: mut f64 = 10f64
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[ignore(5005)]
     huge × ten
     0u6

@@ -5,7 +5,9 @@
 ※ instruction on any of these machines computes and which this language does
 ※ not offer; one is written as a call to whatever computes it.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let x: f64 = 2.0f64 ⁿ 0.5f64
     0u6

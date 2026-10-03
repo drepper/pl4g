@@ -13,8 +13,10 @@ let byte_agrees: mut bool = false
 @[visible]
 let half_agrees: mut bool = false
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     byte_agrees ← ~ fifteen = 240u8
     half_agrees ← ~ sixteen_bits = 65520u16
     0u6

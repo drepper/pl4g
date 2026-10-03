@@ -29,8 +29,10 @@ fn looped(a: u32, k: u32) \N{RIGHTWARDS ARROW} u32:
         n \N{LEFTWARDS ARROW} n + k
     total
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let s: u32 = seed()
     let twice: u32 = square(s) + square(s)
     let folded: u32 = square(12u32)

@@ -13,8 +13,10 @@ let seven: u8 = 7u8
 @[visible]
 let rest: mut u8 = 0u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     rest ← hundred % seven ?? 0u8
     ※ what this used to say through the exit status, which is six bits now
     if hundred ÷ seven ?? 0u8 ≠ 14u8:

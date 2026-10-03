@@ -4,8 +4,10 @@
 ※ An arm that leaves the function reaches no join, so what it did to a name is not what holds
 ※ after the `if`: there `x` still holds what it was given first, made in `s0`.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let s0: mut arena = ⎕arena
     let s1: mut arena = ⎕arena
     defer ⎕empty(s1)

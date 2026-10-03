@@ -6,7 +6,9 @@
 ※ alike.
 let stored: u6 = 11u6
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let status: u6 = stored
     status

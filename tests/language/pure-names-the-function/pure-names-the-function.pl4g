@@ -17,6 +17,8 @@ fn bump() → u8:
     counter ← counter + 1u8
     counter
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(bump(), ⌜u6⌝) ?? 1u6

@@ -11,6 +11,7 @@ from __future__ import annotations
 import fcntl
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -242,6 +243,17 @@ def describe(proc: subprocess.CompletedProcess[Any]) -> str:
                         "\nstderr: ", str(proc.stderr)))
     return "".join(("exit status ", str(proc.returncode),
                     "\nstdout: ", str(proc.stdout), "\nstderr: ", str(proc.stderr)))
+
+
+def function_ir(text: str, name: str = "main") -> str:
+    """The function called *name* in the textual IR *text*, from `fn` to its brace.
+
+    Every program imports `std` and carries what its destructor reaches, so a
+    test asking about what the program itself compiled to asks about this.
+    """
+    found = re.search("".join((r"^fn @", re.escape(name), r"\(.*?^}$")), text, re.S | re.M)
+    assert found is not None, text
+    return found.group(0)
 
 
 class PL4GFile(pytest.File):

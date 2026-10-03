@@ -32,8 +32,10 @@ macro joined(a: syntax, b: syntax, want: syntax) → syntax:
         $made = $want
     ⌝
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u6 = twice⌜2u6⌝ + twice⌜3u6⌝
     if v ≠ 10u6:
         return 1u6

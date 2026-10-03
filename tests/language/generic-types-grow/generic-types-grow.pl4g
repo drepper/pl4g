@@ -8,6 +8,8 @@
 fn deeper(x: T', n: u8) → u8:
     if n = 0u8: 0u8 else: deeper(〈x, x〉, n - 1u8)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(deeper(1u8, 3u8), ⌜u6⌝) ?? 2u6

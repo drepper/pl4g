@@ -11,8 +11,10 @@
 
 let l := ⎕import("labels")
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let mine: str = "prog"
     let also: str = "another"
     if l.tag() ≠ "mod":

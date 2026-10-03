@@ -8,8 +8,10 @@
 ※ with a `next` answering the next value or a failure.  A range is the only
 ※ thing that is one so far, and `A…B` means what Python's `range(A, B)` means.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let total: mut u6 = 0u6
     foreach i := 0u6…5u6:
         total ← total + i

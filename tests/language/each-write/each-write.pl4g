@@ -14,8 +14,10 @@ type Person = { age : u8 ; height : u8 ; pos : Pos }
 fn birthday(ps: mut Person⟦⟧, by: u8):
     ps¨.age ← by
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let ps: mut Person⟦3⟧ = ⟦Person(.age ← 12u8, .height ← 150u8, .pos ← Pos(.x ← 1u8, .y ← 2u8)),
                              Person(.age ← 30u8, .height ← 180u8, .pos ← Pos(.x ← 3u8, .y ← 4u8)),
                              Person(.age ← 40u8, .height ← 170u8, .pos ← Pos(.x ← 5u8, .y ← 6u8))⟧

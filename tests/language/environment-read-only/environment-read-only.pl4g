@@ -23,8 +23,10 @@
 ※ **Python**, where `os.environ` is a writable mapping that writes through.  Each
 ※ of those changes what the process passes on to what it starts.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕environ⸨"PL4G_TEST"⸩ ← "no"
     ⎕environ ← ⸨"PL4G_TEST": "no"⸩
     0u6

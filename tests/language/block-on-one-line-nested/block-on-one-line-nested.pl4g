@@ -11,8 +11,10 @@
 ※ else { 2u6 }` is allowed and means what it says.  Written out over three lines
 ※ the indentation says it, which is the other way.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: bool = true
     let b: bool = true
     if a: if b: 1u6 else: 2u6

@@ -16,8 +16,10 @@
 ※ this is here: what it is about is the *place* the comparison stands in, and
 ※ nothing before it tested that place.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: f64 = 1.0f64
     let b: f64 = 2.0f64
     let n: f32 = 1.0f32

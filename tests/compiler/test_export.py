@@ -45,8 +45,10 @@ fn prepare():
 fn unreached() \N{RIGHTWARDS ARROW} u6:
     2u6
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     shared
 """
 
@@ -88,7 +90,7 @@ def test_what_is_visible_is_bound_globally_and_visible(image: Built, name: str) 
     assert image.image.visibility_of(symbol) == STV_DEFAULT
 
 
-@pytest.mark.parametrize("name", ["private", "prepare()void", "main()u6"])
+@pytest.mark.parametrize("name", ["private", "prepare()void", "main(ptr<Init>)u6"])
 def test_what_is_not_exported_is_kept_in(image: Built, name: str) -> None:
     """Twice over: bound locally, and marked as not visible."""
     symbol = image.image.symbol(name)
@@ -110,7 +112,7 @@ def test_what_nothing_reaches_is_not_there_at_all(image: Built) -> None:
 
 def test_the_startup_function_is_not_exported_either(image: Built) -> None:
     """It is reached by the entry point, which is inside the same image."""
-    startup = image.image.symbol("main()u6")
+    startup = image.image.symbol("main(ptr<Init>)u6")
     assert startup is not None and startup.binding == STB_LOCAL
 
 
@@ -143,7 +145,7 @@ def test_visible_is_the_only_thing_that_changes_it(compile_source) -> None:  # n
         "let g: mut u6 = 0u6\n\n",
         "@[align(16), constructor, impure]\nfn helper():\n",
         "    g \N{LEFTWARDS ARROW} 1u6\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n    1u6\n")))
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    1u6\n")))
     assert proc.returncode == 0, describe(proc)
     parsed = elfcheck.parse(output.read_bytes())
     symbol = parsed.symbol("helper()void")
@@ -152,7 +154,9 @@ def test_visible_is_the_only_thing_that_changes_it(compile_source) -> None:  # n
 
 # -- the two questions are not one ----------------------------------------------
 
-EITHER = """@[export]
+EITHER = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[export]
 let lent: u6 = 1u6
 
 @[visible]
@@ -162,7 +166,7 @@ let offered: u6 = 2u6
 let both: u6 = 3u6
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     lent
 """
 
@@ -186,7 +190,7 @@ def test_offering_a_symbol_does_not_export_the_definition(tmp_path) -> None:  # 
                                        encoding="utf-8")
     source = tmp_path / "main.pl4g"
     source.write_text("".join((
-        'let l := ⎕import("lib")\n\n@[startup, impure]\nfn main() ', ARROW,
+        'let l := ⎕import("lib")\n\nlet std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\x22std\x22)\n@[startup, impure]\nfn main(init: std.Init) ', ARROW,
         " u6:\n    l.v\n")), encoding="utf-8")
     proc = run_compiler(["-o", str(tmp_path / "out"), str(source)])
     assert proc.returncode != 0

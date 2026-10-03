@@ -9,6 +9,8 @@
 macro endless:
     ⌜$x⌝ → ⌜endless⌜$x⌝⌝
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(endless⌜1u8⌝, ⌜u6⌝) ?? 1u6

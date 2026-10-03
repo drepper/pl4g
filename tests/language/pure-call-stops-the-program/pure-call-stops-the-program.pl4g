@@ -8,6 +8,8 @@
 fn boom(x: u8) → u8:
     x + 250u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(boom(10u8), ⌜u6⌝) ?? 2u6

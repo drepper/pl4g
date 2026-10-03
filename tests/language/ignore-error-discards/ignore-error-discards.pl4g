@@ -8,6 +8,8 @@
 fn helper() → nosuchtype:
     1u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     1u6

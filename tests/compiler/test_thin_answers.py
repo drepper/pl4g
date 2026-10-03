@@ -27,8 +27,10 @@ fn fixed(c: bool) \N{RIGHTWARDS ARROW} str in \N{APL FUNCTIONAL SYMBOL QUAD}heap
 fn into(a: &mut arena, s: str) \N{RIGHTWARDS ARROW} str in a:
     s \N{DOUBLE PLUS} "!" in a
 
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let p: mut arena = \N{APL FUNCTIONAL SYMBOL QUAD}arena
     defer \N{APL FUNCTIONAL SYMBOL QUAD}empty(p)
     let one: str = joined("a", "b")

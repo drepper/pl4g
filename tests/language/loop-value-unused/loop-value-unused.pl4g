@@ -4,8 +4,10 @@
 ※ nothing and a value handed over here would be worked out and thrown away.  A
 ※ loop whose value is wanted is written where one is wanted.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     while §counting true:
         break §counting 5u8
     0u6

@@ -27,8 +27,10 @@
 ※ A unit stays: narrowing a length gives a length, what changes being how much
 ※ room the number has and a unit saying nothing about that.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ it fits
     if (⎕narrow(given(42u32), ⌜u8⌝) ?? 0u8) ≠ 42u8:
         1u6

@@ -9,8 +9,10 @@ type Person = { age : u8 ; height : u8 }
 fn add(a: u8, b: u8) → u8:
     a + b
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6
 
 fn ages(ps: Person⟦⟧) → u8:

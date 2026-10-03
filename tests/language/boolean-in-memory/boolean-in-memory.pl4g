@@ -16,8 +16,10 @@ let seen: mut bool = false
 @[visible]
 let after: mut u8 = 6u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     seen ← ready
     ※ Nothing here can look at the guards yet -- there is no way to compare --
     ※ so what this asserts is that the program runs to its end and exits

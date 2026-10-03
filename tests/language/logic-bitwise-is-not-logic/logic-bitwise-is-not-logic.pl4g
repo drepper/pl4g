@@ -7,6 +7,8 @@
 let ready: bool = true
 let seen: bool = false
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → bool:
+fn main(init: std.Init) → bool:
     ready & seen

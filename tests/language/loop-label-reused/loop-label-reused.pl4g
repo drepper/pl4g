@@ -5,8 +5,10 @@
 ※ mean.  A label exists to say which loop is meant, and one that hides another
 ※ says less than it appears to.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     while §counting true:
         while §counting true:
             break §counting

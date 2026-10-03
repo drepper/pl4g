@@ -34,8 +34,10 @@ type Pair = a : u8 ; b : u8
 
 let seen: mut u8 = 0u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     two()
     let both: Pair = Pair(.a ← one(seen), .b ← 0u8)
     ⎕narrow(both.a, ⌜u6⌝) ?? 0u6

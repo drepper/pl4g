@@ -27,8 +27,10 @@ let chosen: mut Colour = Colour.green
 @[visible]
 let side: Wide = Wide.second
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let kept: mut u8 = 0u8
     match chosen:
         red:

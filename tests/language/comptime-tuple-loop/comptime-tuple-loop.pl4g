@@ -11,8 +11,10 @@
 ※ compiler settles, and the arms it does not choose are not lowered at all --
 ※ which is what lets them be of types that would not otherwise agree.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let values: 〈u8, u16, u32, u8, u16〉 = 〈1u8, 2u16, 3u32, 4u8, 5u16〉
     let bytes: mut u8 = 0u8
     let halves: mut u16 = 0u16

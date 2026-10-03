@@ -6,8 +6,10 @@
 ※ compiled, and what it exports is named through the name it was bound to here.
 let limits := ⎕import("limits")
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ what this used to say through the exit status, which is six bits now
     if (limits.ceiling & limits.floor) = 65u8:
         0u6

@@ -5,8 +5,10 @@
 ※ run in one instruction, and which instruction that is depends on how many
 ※ bytes it covers -- four, eight or sixteen -- so each of the three is here, and
 ※ each element width is here so that the lanes are counted right.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧ in ⎕static
     let b: u8⟦8⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8⟧ in ⎕static
     let c: u32⟦4⟧ = ⟦1u32, 2u32, 3u32, 4u32⟧ in ⎕static

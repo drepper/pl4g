@@ -24,8 +24,10 @@ fn count(s: ⇉T') → u64:
         n ← n + 1u64
     n
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: mut u8 = 0u8
     foreach x := twice(3u8):
         a ← a + x

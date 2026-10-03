@@ -22,7 +22,9 @@ macro sum:
 
 let two: u8 = 2u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(pick⌜3u8, 3u8⌝ + pick⌜3u8, 4u8⌝ + sum⌜5u8 × two⌝ + sum⌜7u8⌝,
             ⌜u6⌝) ?? 1u6

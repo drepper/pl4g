@@ -8,8 +8,10 @@
 fn put(a: &mut arena, v: mut str⟦⟧ in a, s: str):
     v⟦0⟧ ← s
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: mut arena = ⎕arena
     defer ⎕empty(a)
     let b: mut arena = ⎕arena

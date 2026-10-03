@@ -9,8 +9,10 @@
 ※ which is the other half of the same rule and is what the error test beside
 ※ this one covers.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     added(5u3, 6u3)
 
 fn added(a: u3, b: u3) → u6:

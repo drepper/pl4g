@@ -9,6 +9,8 @@ let counter: mut u6 = 0u6
 fn prepare():
     counter ← 7u6;
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     counter

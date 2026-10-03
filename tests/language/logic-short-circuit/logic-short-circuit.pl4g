@@ -15,8 +15,10 @@ let either: mut bool = false
 @[visible]
 let chained: mut bool = false
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     both ← yes and no
     either ← yes or no
     chained ← yes and no or yes

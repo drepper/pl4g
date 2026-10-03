@@ -7,6 +7,8 @@
 fn wrapped(g: fn(u8) → u8) → fn(u8) in ⎕heap → u8:
     λ x: u8 [g] in ⎕heap → u8 { g(x) }
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

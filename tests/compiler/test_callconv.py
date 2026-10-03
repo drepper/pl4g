@@ -79,7 +79,7 @@ def _is_byte(word: str) -> bool:
 
 #: The function the whole arrangement is for: it answers with what it was given.
 IDENTITY = "".join(("fn f(p: u6) ", ARROW, " u6:\n    p\n\n",
-                    "@[startup, impure]\nfn main() ", ARROW, " u6:\n    f(42u6)\n"))
+                    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    f(42u6)\n"))
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
@@ -107,7 +107,7 @@ def test_and_it_runs(triple: str, tmp_path) -> None:  # noqa: ANN001
 TWO_CONVENTIONS = "".join((
     "@[cdecl]\nfn theirs(a: u6, b: u6) ", ARROW, " u6:\n    a | b\n\n",
     "fn ours(a: u6, b: u6) ", ARROW, " u6:\n    a | b\n\n",
-    "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
     "    theirs(32u6, 8u6) | ours(2u6, 0u6)\n"))
 
 
@@ -135,7 +135,7 @@ ACROSS_A_CALL = "".join((
     "".join("".join(("let v", str(n), ": u6 = ", str(1 << n), "u6\n"))
             for n in range(5)),
     "\nfn twice(p: u6) ", ARROW, " u6:\n    p | p\n\n",
-    "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
     "    let a: u6 = v0\n    let b: u6 = v1\n    let c: u6 = v2\n",
     "    let d: u6 = v3\n    let e: u6 = v4\n",
     "    let got: u6 = twice(32u6)\n",
@@ -154,7 +154,7 @@ def test_nothing_is_saved_across_a_call_that_destroys_nothing(
     registers, take five it has to hand back, and save and restore all five.
     """
     dump = listing(tmp_path, triple, ACROSS_A_CALL, "-O1")
-    inside = dump.split("main()u6:")[1].split("\n_start")[0]
+    inside = dump.split("main(ptr<Init>)u6:")[1].split("\n_start")[0]
     named = _handed_back(triple)
     assert not [n for n in named if "".join((" ", n, ",")) in inside
                 or "".join((" ", n, "\n")) in inside], inside
@@ -202,8 +202,10 @@ def declaring(abi: str) -> str:
 fn elsewhere(n: u64) """, ARROW, """ u64:
     n + 1u64
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() """, ARROW, """ u6:
+fn main(init: std.Init) """, ARROW, """ u6:
     0u6
 """))
 
@@ -256,11 +258,13 @@ def test_a_convention_of_another_target_is_still_a_name_this_one_refuses(
 def test_a_type_is_laid_out_and_not_called(tmp_path) -> None:  # noqa: ANN001
     """So a convention written on one is a name with nothing to say."""
     said = refused(tmp_path, compiler_targets()[0], """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[abi("cdecl")]
 type Ring = state : u64 ; fd : u64
 
 @[startup, impure]
-fn main() """ + ARROW + """ u6:
+fn main(init: std.Init) """ + ARROW + """ u6:
     0u6
 """)
     assert "PL4G-3211" in said

@@ -29,8 +29,10 @@ fn total(of: [str]) → u64:
         sum ← sum + ⎕drop(#one)
     sum
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let seen: ⸨str⸩ = ⸨"x", "y", "zz", "www", "v", "u", "t"⸩ in ⎕static
     let local: [u8] = [1u8, 2u8] in ⎕static
     let grid: u8⟦2,2⟧ = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧⟧ in ⎕static

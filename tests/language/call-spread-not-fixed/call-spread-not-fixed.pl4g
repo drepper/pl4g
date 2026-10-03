@@ -12,7 +12,9 @@ fn two(a: u8, b: u8) → u8:
 fn spread_them(xs: u8⟦⟧) → u8:
     two(⁂xs)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u8⟦2⟧ = ⟦1u8, 2u8⟧
     spread_them(v)

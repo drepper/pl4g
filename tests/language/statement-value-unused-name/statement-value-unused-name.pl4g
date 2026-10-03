@@ -4,7 +4,9 @@
 ※ Naming a variable reads it and then throws what it read away.
 let count: u8 = 7u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     count
     0u6

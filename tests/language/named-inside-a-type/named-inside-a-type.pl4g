@@ -29,8 +29,10 @@ fn Count.next(c: &mut Count) → u8:
 fn next() → u8:
     0u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let w: mut Walk = Walk(.at ← 3u8, .last ← 9u8)
     let c: mut Count = Count(.seen ← 0u8)
     ⎕narrow(Walk.next(&mut w) + Count.next(&mut c) + next(), ⌜u6⌝) ?? 1u6

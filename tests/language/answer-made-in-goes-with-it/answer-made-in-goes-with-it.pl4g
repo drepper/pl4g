@@ -11,7 +11,7 @@ fn label(a: &mut arena, b: &mut arena, v: u16) → str in a:
     "#" ⧺ scratch in a
 
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let long: mut arena = ⎕arena
     let short: mut arena = ⎕arena
     defer ⎕empty(short)

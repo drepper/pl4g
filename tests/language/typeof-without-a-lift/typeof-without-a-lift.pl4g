@@ -6,8 +6,10 @@
 ※ names turned out to mean -- which is the thing the brackets are there to
 ※ stop.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = 1u8
     comptime if ⎕typeof(n) = ⌜u8⌝:
         0u6

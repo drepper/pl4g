@@ -26,8 +26,10 @@ fn two(a: u6) → 〈u6, u6〉:
     ※ two still travels in registers, which is what the style says
     〈a, a + 1u6〉
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let t: 〈u6, u6, u6〉 = three_of_five()
     let w: 〈u6, u16, u6, u6, u6〉 = five(10u6)
     let p: 〈u6, u6〉 = two(5u6)

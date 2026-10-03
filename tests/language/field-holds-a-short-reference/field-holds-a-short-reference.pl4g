@@ -17,8 +17,10 @@ fn keep(h: &mut Holder):
     let gone: u8 = 5u8
     h⌖.at ← &gone
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let m: u8 = 9u8
     let h: mut Holder = Holder(.at ← &m, .n ← 0u32)
     keep(&mut h)

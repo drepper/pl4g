@@ -8,7 +8,9 @@
 fn one(a: u8) → u8:
     a
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = 7u8
     one(⁂n)

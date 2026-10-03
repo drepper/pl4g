@@ -6,7 +6,7 @@
 
 let std := ⎕import("std")
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let s: mut arena = ⎕arena
     let got: str = if true:
         let tmp: str = ⍕7u8 in s

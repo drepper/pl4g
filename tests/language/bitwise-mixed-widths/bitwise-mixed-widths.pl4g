@@ -2,6 +2,8 @@
 ※ pl4g-test: expect-diag 4206 LANG_TYPE_OPERAND_MISMATCH
 
 ※ Nothing is widened to make two types meet, here as anywhere else.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     1u8 & 2u16

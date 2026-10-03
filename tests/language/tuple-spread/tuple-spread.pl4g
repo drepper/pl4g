@@ -10,8 +10,10 @@
 ※ nothing that reads it knows the difference -- and, a tuple being its members
 ※ held separately, none of it costs an instruction.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let pair: 〈u6, u6〉 = 〈1u6, 2u6〉
     ※ one tuple joined to another, and each member keeps its own type
     let wide: 〈u6, u16〉 = 〈3u6, 4u16〉

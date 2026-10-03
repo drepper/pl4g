@@ -5,6 +5,8 @@
 ※ something to hand arguments to.
 let counter: u8 = 3u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     counter(1u8)

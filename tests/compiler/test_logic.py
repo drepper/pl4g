@@ -47,7 +47,7 @@ def keeping(expression: str) -> str:
     """A program whose only act is to keep the answer to one expression."""
     return "".join((
         "@[visible]\nlet answer: mut bool = false\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    answer ", ASSIGN, " ", expression, "\n    0u6\n"))
 
 
@@ -95,7 +95,7 @@ def test_every_row_of_every_truth_table(tmp_path, operator: str, left: bool,
     """The whole table for each, so that a row got backwards is caught."""
     text = compile_to_ir(tmp_path, keeping(" ".join((literal(left), operator,
                                                      literal(right)))))
-    wanted = "".join(("store.bool %0, @answer, ", literal(expected)))
+    wanted = "".join(("store.bool %1, @answer, ", literal(expected)))
     assert wanted in text, "".join((literal(left), " ", operator, " ",
                                     literal(right), " gave\n", text))
 
@@ -110,7 +110,7 @@ def test_every_row_of_the_two_that_branch(tmp_path, operator: str, left: bool,
     has one way in, and a parameter one value reaches is that value."""
     text = compile_to_ir(tmp_path, keeping(" ".join((literal(left), operator,
                                                      literal(right)))))
-    wanted = "".join(("store.bool %0, @answer, ", literal(expected)))
+    wanted = "".join(("store.bool %1, @answer, ", literal(expected)))
     assert wanted in text, "".join((literal(left), " ", operator, " ",
                                     literal(right), " gave\n", text))
     assert "br " not in text and "block1" not in text, text
@@ -120,7 +120,7 @@ def test_every_row_of_the_two_that_branch(tmp_path, operator: str, left: bool,
 def test_not_answers_the_opposite(tmp_path, operand: bool) -> None:  # noqa: ANN001
     """Both rows of the one-operand table."""
     text = compile_to_ir(tmp_path, keeping(" ".join((NOT, literal(operand)))))
-    wanted = "".join(("store.bool %0, @answer, ", literal(not operand)))
+    wanted = "".join(("store.bool %1, @answer, ", literal(not operand)))
     assert wanted in text, text
 
 
@@ -130,7 +130,7 @@ def test_turning_a_truth_value_round_is_not_complementing_it(tmp_path) -> None: 
     text = compile_to_ir(tmp_path, "".join((
         "let ready: bool = true\n\n",
         "@[visible]\nlet answer: mut bool = false\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    answer ", ASSIGN, " ", NOT, " ready\n    0u6\n")), "-O0")
     assert "xor.bool" in text, text
     assert "not.bool" not in text, text
@@ -143,7 +143,7 @@ def test_the_logical_operators_bind_looser_than_the_comparisons(tmp_path) -> Non
     text = compile_to_ir(tmp_path, "".join((
         "let a: u6 = 1u6\nlet b: u6 = 2u6\nlet c: u6 = 3u6\nlet d: u6 = 4u6\n\n",
         "@[visible]\nlet answer: mut bool = false\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    answer ", ASSIGN, " a < b ", AND, " c < d\n    0u6\n")), "-O0")
     # Both comparisons are made, and the "and" is what joins their answers.
     assert text.count("icmp.") == 2, text
@@ -157,7 +157,7 @@ def test_and_binds_tighter_than_or(tmp_path) -> None:  # noqa: ANN001
     text = compile_to_ir(tmp_path, "".join((
         "let a: bool = true\nlet b: bool = false\nlet c: bool = true\n\n",
         "@[visible]\nlet answer: mut bool = false\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    answer ", ASSIGN, " a ", OR, " b ", AND, " c\n    0u6\n")), "-O0")
     assert text.index("and.bool") < text.index("or.bool"), text
 
@@ -168,7 +168,7 @@ def test_not_binds_tighter_than_anything_between_two_operands(tmp_path) -> None:
     text = compile_to_ir(tmp_path, "".join((
         "let ready: bool = true\nlet seen: bool = false\n\n",
         "@[visible]\nlet answer: mut bool = false\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    answer ", ASSIGN, " ", NOT, " ready ", AND, " seen\n    0u6\n")), "-O0")
     assert text.index("xor.bool") < text.index("and.bool"), text
 

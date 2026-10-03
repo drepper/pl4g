@@ -9,6 +9,8 @@
 fn total(a: T', b: T') → T' pre(T' ⊞ T' → T'):
     a ⊞ b
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(total(true, false), ⌜u6⌝) ?? 1u6

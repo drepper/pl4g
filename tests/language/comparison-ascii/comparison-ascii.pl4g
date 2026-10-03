@@ -14,8 +14,10 @@ let at_most: mut bool = false
 @[visible]
 let at_least: mut bool = false
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     at_most ← a <= b
     at_least ← a >= b
     0u6

@@ -51,8 +51,10 @@ fn seen(through: &Point) → u32:
     ※ read through a reference, without reading the whole record first
     through⌖.x + through⌖.y
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let p : Point = Point(.x ← 3u32, .y ← 4u32)
     ※ handed to a call, and answered with
     let q : Point = moved(p, 10u32)

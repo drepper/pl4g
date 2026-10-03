@@ -6,8 +6,10 @@
 ※ at the top is dead after the replacement, though nothing of the heap's was in the array before
 ※ the loop began.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: mut str⟦1⟧ = ⟦"a"⟧
     let n: mut u8 = 0u8
     while n < 2u8:

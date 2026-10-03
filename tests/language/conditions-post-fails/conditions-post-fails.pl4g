@@ -9,6 +9,8 @@ let one: u8 = 1u8
 fn same(a: u8) → u8 post(⎕answer > a):
     a
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(same(one), ⌜u6⌝) ?? 1u6

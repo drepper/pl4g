@@ -17,8 +17,10 @@
 ※ got to and the count is advanced by the mask, so a thing that was not picked
 ※ is written where the next one writes over it.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧ in ⎕static
     let want: bool⟦4⟧ = ⟦false, true, false, true⟧ in ⎕static
     let picked: u8⟦⟧ = v⟦want⟧

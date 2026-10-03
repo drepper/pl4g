@@ -4,8 +4,10 @@
 ※ What a `foreach` takes out of what it walks points where the whole did: an element of a
 ※ list made in an arena is in the arena.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let s: mut arena = ⎕arena
     defer ⎕empty(s)
     let l: [str] = [("a" ⧺ "b" in s), ("c" ⧺ "d" in s)] in s

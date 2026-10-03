@@ -2,6 +2,8 @@
 ※ pl4g-test: expect-diag 4201 LANG_TYPE_UNKNOWN
 
 ※ The built-in types are i8 to i64, u8 to u64, f32, f64, bool and void.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → integer:
+fn main(init: std.Init) → integer:
     0

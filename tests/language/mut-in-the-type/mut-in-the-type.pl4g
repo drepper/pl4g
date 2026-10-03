@@ -8,8 +8,10 @@
 let first: mut u8 = 1u8
 let second: mut = 2u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[expect(4006)]
     let third: mut = 3u6
     third ← 12u6

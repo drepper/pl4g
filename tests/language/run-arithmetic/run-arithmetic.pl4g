@@ -11,8 +11,10 @@
 let u: u8⟦16⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8, 11u8, 12u8, 13u8, 14u8, 15u8, 16u8⟧ in ⎕static
 let i: i8⟦16⟧ = ⟦1i8, 2i8, 3i8, 4i8, 5i8, 6i8, 7i8, 8i8, 9i8, 10i8, 11i8, 12i8, 13i8, 14i8, 15i8, 16i8⟧ in ⎕static
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let up: u8⟦16⟧ = u + 200u8
     let down: u8⟦16⟧ = u - 1u8
     let si: i8⟦16⟧ = i + 100i8

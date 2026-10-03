@@ -11,8 +11,10 @@
 ※ arrives; what a `⧖x` stands for is read off the arguments too.  Here `⧖x` is
 ※ written on the answer alone, and `&mut static u32` is what was meant.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6
 
 fn f(b: &mut u32) → &mut ⧖x u32:

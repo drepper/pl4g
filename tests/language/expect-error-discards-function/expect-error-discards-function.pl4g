@@ -4,6 +4,8 @@
 ※ An error can be caught too, but a definition that raises one cannot be
 ※ compiled, so it is discarded entirely.  Here the only startup function goes
 ※ with it, which is what the remaining error says.
+let std := ⎕import("std")
+
 @[startup, expect(4201)]
-fn main() → nosuchtype:
+fn main(init: std.Init) → nosuchtype:
     1u8

@@ -12,6 +12,8 @@ bundle number(T'):  T' ⊞ T' → T'
 fn total(a: T', b: T') → T' pre(number(⌜u8⌝)) pre(T' ⊞ T' → T'):
     a ⊞ b
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(total(3u8, 4u8), ⌜u6⌝) ?? 1u6

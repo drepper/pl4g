@@ -11,8 +11,10 @@
 ※ must agree -- and the type they agree on is recorded, which is what will make
 ※ the case where they do agree the one worth not boxing.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: [u8] = [1u8, 2u8, 3u8] in ⎕static
     let wide: [u32] = [100u32, 200u32] in ⎕static
     ※ one written with nothing in it takes the type wanted where it stands

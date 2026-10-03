@@ -2,8 +2,10 @@
 ※ pl4g-test: expect-diag 4001 LANG_FILESTRUCT_DUPLICATE_DEFINITION
 ※ pl4g-test: expect-diag 4002 LANG_FILESTRUCT_PREVIOUS_DEFINITION
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let status := 1u8
     let status := 2u8
     status

@@ -10,6 +10,8 @@
 let a: u8 = 200u8
 let b: u8 = 100u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕wrap(a ⊞ b)

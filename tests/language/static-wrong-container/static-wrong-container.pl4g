@@ -5,6 +5,8 @@
 
 let wrong: u8⟦2⟧ = [1u8, 2u8] in ⎕static
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

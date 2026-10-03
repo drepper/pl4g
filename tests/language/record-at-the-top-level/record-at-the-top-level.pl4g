@@ -33,8 +33,10 @@ let moving: mut Line = Line(.from ← Point(.x ← 0u32, .y ← 0u32),
 fn bump(at: &mut u32):
     at⌖ ← at⌖ + 1u32
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     moving.to.x ← 5u32
     ※ a whole nested field, copied out of the one that cannot be written
     moving.from ← origin.from

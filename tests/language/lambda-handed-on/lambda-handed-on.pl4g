@@ -25,8 +25,10 @@ type Hook = run: fn(u8) in ⎕heap → u8
 fn install(h: &mut Hook, f: fn(u8) in ⎕heap → u8):
     h⌖.run ← f
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = 10u8
     let add: fn(u8) in ⎕heap → u8 = λ x: u8 [n] in ⎕heap → u8 { x + n }
     let double: fn(u8) in ⎕heap → u8 = λ x: u8 → u8 { x × 2u8 }

@@ -14,6 +14,8 @@ fn which(n: Number) → u8:
         ⊥:
             return 2u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

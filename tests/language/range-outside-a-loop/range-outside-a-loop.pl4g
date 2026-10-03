@@ -4,7 +4,9 @@
 ※ would make it one, with a type and a place in memory, and nothing yet needs
 ※ that.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let r: u8 = 0u8…5u8
     r

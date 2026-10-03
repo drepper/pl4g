@@ -11,8 +11,10 @@
 fn both(p: 〈T', T'〉) → T':
     p⟦0⟧
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = both(〈1u8, 2u16〉)
     if n = 1u8:
         0u6

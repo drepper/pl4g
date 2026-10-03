@@ -13,7 +13,9 @@
 fn twice(n: u8) → u8:
     n + n
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     twice(4u8)
     0u6

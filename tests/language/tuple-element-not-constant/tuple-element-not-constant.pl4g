@@ -6,8 +6,10 @@
 ※ have been worked out while compiling is a question about the expression rather
 ※ than about the name.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let p: 〈u8, u8〉 = 〈1u8, 2u8〉
     let at: u8 = 1u8
     p⟦at⟧

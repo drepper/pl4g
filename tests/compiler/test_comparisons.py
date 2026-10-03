@@ -38,7 +38,7 @@ def keeping(answer: str, left: str, operator: str, right: str) -> str:
     """A program whose only act is to keep the answer to one comparison."""
     return "".join((
         "@[visible]\nlet answer: mut bool = ", answer, "\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    answer ", ASSIGN, " ", left, " ", operator, " ", right, "\n",
         "    0u6\n"))
 
@@ -67,7 +67,7 @@ def test_each_comparison_of_constants_folds_to_its_answer(
         tmp_path, operator: str, left: str, right: str, expected: bool) -> None:  # noqa: ANN001
     """The folder computes what the machine would have computed."""
     text = compile_to_ir(tmp_path, keeping("false", left, operator, right))
-    wanted = "".join(("store.bool %0, @answer, ", "true" if expected else "false"))
+    wanted = "".join(("store.bool %1, @answer, ", "true" if expected else "false"))
     assert wanted in text, "".join((left, " ", operator, " ", right, " gave\n", text))
 
 
@@ -76,9 +76,9 @@ def test_the_two_signed_orderings_are_not_the_unsigned_ones(tmp_path) -> None:  
     -1 is below 1; as the bits of a byte it is above."""
     signed = compile_to_ir(tmp_path, keeping("false", "\N{SUPERSCRIPT MINUS}1i8",
                                              "<", "1i8"))
-    assert "store.bool %0, @answer, true" in signed, signed
+    assert "store.bool %1, @answer, true" in signed, signed
     unsigned = compile_to_ir(tmp_path, keeping("false", "63u6", "<", "1u6"))
-    assert "store.bool %0, @answer, false" in unsigned, unsigned
+    assert "store.bool %1, @answer, false" in unsigned, unsigned
 
 
 #: Which predicate the representation should name, for a signed and for an
@@ -100,7 +100,7 @@ def test_the_predicate_follows_the_type_of_the_operands(
         text = compile_to_ir(tmp_path, "".join((
             "let a: ", ty, " = 1", ty, "\nlet b: ", ty, " = 2", ty, "\n\n",
             "@[visible]\nlet answer: mut bool = false\n\n",
-            "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+            "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
             "    answer ", ASSIGN, " a ", operator, " b\n    0u6\n")))
         assert "".join(("icmp.", wanted, ".", ty)) in text, text
 
@@ -113,7 +113,7 @@ def test_a_comparison_binds_looser_than_the_bitwise_operators(tmp_path) -> None:
     text = compile_to_ir(tmp_path, "".join((
         "let flags: u6 = 42u6\nlet mask: u6 = 10u6\n\n",
         "@[visible]\nlet answer: mut bool = false\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    answer ", ASSIGN, " flags & mask = mask\n    0u6\n")), "-O0")
     # The "and" is computed, and the comparison reads what it computed.
     assert "and.u6" in text, text
@@ -139,7 +139,7 @@ def test_no_comparison_chains(tmp_path, operator: str) -> None:  # noqa: ANN001
     of two of them is refused and not only the ones that look odd."""
     refuses(tmp_path, "".join((
         "let a: u6 = 1u6\nlet b: u6 = 2u6\nlet c: u6 = 3u6\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " bool:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " bool:\n",
         "    a ", operator, " b ", operator, " c\n")), 3014)
 
 
@@ -148,7 +148,7 @@ def test_two_different_comparisons_do_not_chain_either(tmp_path) -> None:  # noq
     and gets the same answer."""
     refuses(tmp_path, "".join((
         "let a: u6 = 1u6\nlet b: u6 = 2u6\nlet c: u6 = 3u6\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " bool:\n    a < b = c\n")), 3014)
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " bool:\n    a < b = c\n")), 3014)
 
 
 def test_parenthesizing_a_chain_says_what_was_meant(tmp_path) -> None:  # noqa: ANN001
@@ -161,7 +161,7 @@ def test_parenthesizing_a_chain_says_what_was_meant(tmp_path) -> None:  # noqa: 
     text = compile_to_ir(tmp_path, "".join((
         "let a: u6 = 1u6\nlet b: u6 = 2u6\nlet ready: bool = true\n\n",
         "@[visible]\nlet answer: mut bool = false\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    answer ", ASSIGN, " (a < b) = ready\n    0u6\n")), "-O0")
     # The inner comparison answers with a truth value, and the outer one
     # compares that answer -- which is the thing the chain would have meant.

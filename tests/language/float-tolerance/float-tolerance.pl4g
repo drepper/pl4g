@@ -17,8 +17,10 @@ fn stop_unless(ok: bool):
     @[ignore(5005)]
     ok or (two_hundred + two_hundred = 0u8)
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ half apart, which the tolerance it starts with does not allow for
     stop_unless(one_value ≇ other)
     ⎕tolerance ← 1f64

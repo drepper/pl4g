@@ -23,7 +23,7 @@ PROGRAM = """\
 let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     0u6
 """
 

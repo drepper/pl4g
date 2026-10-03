@@ -37,8 +37,10 @@
 fn told(env: ⸨str: str⸩, name: str) → str:
     env⸨name⸩ ?? "nothing"
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if told(⎕environ, "PL4G_TEST_NAME") ≠ "a value with spaces":
         1u6
     ※ a value that is empty is a value, and is not the same as no answer

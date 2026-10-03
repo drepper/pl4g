@@ -12,8 +12,10 @@
 ※ the same thing; **C++**, where `erase` is not `const`; **Go**, which cannot say
 ※ it of a map at all.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let d: ⸨str: u64⸩ = ⸨"a": 1u64⸩
     ※ reading is allowed
     let held: u64 = d⸨"a"⸩ ?? 0u64

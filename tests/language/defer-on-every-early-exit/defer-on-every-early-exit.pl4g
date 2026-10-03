@@ -31,8 +31,10 @@ fn turns() → u8:
             n ← n + 1u8
     n
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if early(false) ≠ 0u6:
         return 1u6
     if (handed_on(4u8) ?? 0u8) ≠ 4u8:

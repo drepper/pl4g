@@ -8,7 +8,9 @@
 fn three() → 〈u8, u8, u8〉:
     〈1u8, 2u8, 3u8〉
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a, b := three()
     a + b

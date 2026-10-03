@@ -17,8 +17,10 @@ fn upto(n: u8) ⇉ u8:
     foreach i := 0u8…n:
         yield i
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let c := ⎕start(running_total(10u64))
     let a := ⎕resume(c, 0u64) ?? 0u64
     let b := ⎕resume(c, 5u64) ?? 0u64

@@ -5,7 +5,9 @@
 ※ is several of something, and the unit belongs to what it holds -- which is
 ※ where it is written: `u8 ¤meter⟦4⟧` is four lengths.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let flag: bool ¤meter = true
     0u6

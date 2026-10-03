@@ -16,6 +16,8 @@ fn prepare():
 fn unreached() → u6:
     2u6
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     g

@@ -5,8 +5,10 @@
 ※ nothing.  Where the number has to be known while compiling there is nothing
 ※ to take out of it, so `?` over it is refused; `??` says what to have instead.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let t: 〈u8, u16〉 = 〈1u8, 2u16〉
     let a: u8 = t⟦(1 ÷ 0)?⟧
     0u6

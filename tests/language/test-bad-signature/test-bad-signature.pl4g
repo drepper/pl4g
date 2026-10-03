@@ -6,8 +6,10 @@
 ※ saying the same thing, and answering nothing would leave the runner unable to
 ※ tell a test that passed from one that did not.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6
 
 @[test]

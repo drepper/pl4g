@@ -8,8 +8,10 @@
 ※ A key that is not there answers with the error half of a result, which is what
 ※ `??` reads: `d⸨200u8⸩ ?? 1u8` is one, and every key that is there is itself.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let d: mut ⸨u8: u8⸩ = ⸨⸩
     foreach i := 0u8…40u8:
         d⸨i⸩ ← i

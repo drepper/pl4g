@@ -55,7 +55,7 @@ def checked(body: str, around: str = "") -> tuple[Module, list]:
     one log holding what was said beside what was chosen, in the order the two
     happened.
     """
-    source = "".join((around, "@[startup, impure]\nfn main() ", ARROW,
+    source = "".join((around, "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW,
                       " u6:\n", body))
     sources = SourceManager()
     unit_source = sources.add(Path("t.pl4g"), source)
@@ -74,7 +74,7 @@ def compiled(body: str) -> Module:
     The optimizer is not run: what is being asked about is what the checker
     decided, and a pass that dropped something would only add to it.
     """
-    source = "".join(("@[startup, impure]\nfn main() ", ARROW, " u6:\n", body))
+    source = "".join(("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n", body))
     sources = SourceManager()
     unit_source = sources.add(Path("t.pl4g"), source)
     engine, collected = collecting_engine(None)
@@ -158,7 +158,7 @@ def test_a_lifetime_worked_out_at_a_call_is_recorded() -> None:
         "let total: mut u8 = 3u8\n\n",
         "fn first(v: &", LIFETIME, "a u8) ", ARROW, " &", LIFETIME,
         "a u8:\n    v\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    let g: &static u8 = first(&total)\n",
         "    let n: u8 = 1u8\n",
         "    let s: &u8 = first(&n)\n",
@@ -253,11 +253,21 @@ def _with_conditions(source: str, semantic: object) -> Module:
     return module
 
 
+def _own_functions(module: Module) -> list:
+    """The functions of *module* that `t.pl4g` defines.
+
+    Every program imports `std`, and what of it is lowered is in the module too,
+    with whatever checks of its own it has.
+    """
+    return [func for key, func in module.functions.items()
+            if key.partition("\0")[0] == "t.pl4g"]
+
+
 #: A function with one condition of each kind, and a call of it.
 _TWO_CONDITIONS: Final[str] = "".join((
     "fn twice(a: u8) ", ARROW, " u8 pre(a > 0u8) post(", ANSWER, " > a):\n",
     "    a ", SAT_ADD, " a\n\n",
-    "@[startup]\nfn main() ", ARROW, " u6:\n",
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n",
     "    ", NARROW, "(twice(1u8), ", LIFT_OPEN, "u6", LIFT_CLOSE, ") ?? 1u6\n"))
 
 
@@ -274,7 +284,7 @@ def test_which_conditions_this_build_left_out_is_recorded() -> None:
     assert all(d.span.is_valid for d in dropped), \
         "a reader has to be able to be pointed at the clause"
     assert not any(isinstance(inst, AssertInst)
-                   for func in module.functions.values()
+                   for func in _own_functions(module)
                    for block in func.blocks for inst in block.insts), \
         "what a build turns off is the check, so none of them is emitted"
 
@@ -291,7 +301,7 @@ def test_an_observed_condition_is_a_check_that_comes_back() -> None:
     from pypl4g.target.tests import observes
 
     module = _with_conditions(_TWO_CONDITIONS, Conditions.OBSERVE)
-    checks = [inst for func in module.functions.values()
+    checks = [inst for func in _own_functions(module)
               for block in func.blocks for inst in block.insts
               if isinstance(inst, AssertInst)]
     assert len(checks) == 2 and all(one.observing for one in checks)
@@ -310,7 +320,7 @@ def test_the_default_build_stops_the_program() -> None:
     from pypl4g.sema.clauses import Conditions
 
     module = _with_conditions(_TWO_CONDITIONS, Conditions.CHECK)
-    checks = [inst for func in module.functions.values()
+    checks = [inst for func in _own_functions(module)
               for block in func.blocks for inst in block.insts
               if isinstance(inst, AssertInst)]
     assert len(checks) == 2 and not any(one.observing for one in checks)

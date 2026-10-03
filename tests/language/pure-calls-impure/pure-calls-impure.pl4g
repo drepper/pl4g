@@ -16,7 +16,9 @@ fn twice():
     bump()
     bump()
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     twice()
     counter

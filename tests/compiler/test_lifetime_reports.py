@@ -22,11 +22,13 @@ fn made(n: u8) \N{RIGHTWARDS ARROW} Handle:
     Handle(.n \N{LEFTWARDS ARROW} n)
 
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let a: Handle = made(1u8)
     let b: Handle = a
     Handle.close(b)
     0u6
+
+let std := ⎕import("std")
 """
 
 

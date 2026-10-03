@@ -8,6 +8,8 @@
 macro pair(a: syntax, b: syntax) → syntax:
     ⌜$a⌝
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(pair⌜1u8⌝, ⌜u6⌝) ?? 1u6

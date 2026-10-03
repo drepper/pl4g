@@ -14,6 +14,8 @@ let word: i32 = ⁻2i32
 @[export]
 let hexadecimal: i16 = ⁻0x1fi16
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     5u6

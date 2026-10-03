@@ -20,8 +20,10 @@ let third: &mut static u16 = &mut table⟦2⟧
 let seen: &static u8 = &fixed
 let pointed: &static Point = &origin
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     kept⌖ ← kept⌖ + 1u8
     wy⌖ ← 7u32
     third⌖ ← third⌖ + 3u16

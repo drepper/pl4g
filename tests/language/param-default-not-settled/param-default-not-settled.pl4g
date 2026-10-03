@@ -8,8 +8,10 @@
 ※ worked out afresh at each call -- which needs a scope to travel with the
 ※ function, and nothing here carries one.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = plus(1u8)
     0u6
 

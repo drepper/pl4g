@@ -12,5 +12,7 @@ let seven: mut u8 = 7u8
 @[visible]
 let kept: mut u8 = 0u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6 { match hundred ÷ seven { u8(q) { kept ← q } ⊥ { kept ← 9u8 } } ; if kept = 14u8 { 0u6 } else { 1u6 } }
+fn main(init: std.Init) → u6 { match hundred ÷ seven { u8(q) { kept ← q } ⊥ { kept ← 9u8 } } ; if kept = 14u8 { 0u6 } else { 1u6 } }

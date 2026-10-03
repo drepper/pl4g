@@ -5,8 +5,10 @@
 ※ generator emitted by mistake, which is what every rule here about a statement
 ※ with no effect is for.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u32 = 5u32
     let m: u32 = ⎕drop(n)
     0u6

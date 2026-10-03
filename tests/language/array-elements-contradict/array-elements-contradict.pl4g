@@ -9,7 +9,9 @@
 ※ says what the ones before it were: an element is only wrong here relative to
 ※ the others.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a := ⟦1u8, 2u16⟧
     0u6

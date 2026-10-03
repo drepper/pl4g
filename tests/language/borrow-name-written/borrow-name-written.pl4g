@@ -6,8 +6,10 @@
 ※ whichever kind of reference is out -- so this is refused where the `&` is
 ※ shared as much as where a `&mut` is not.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: mut u8 = 1u8
     let only: &u8 = &n
     n ← 2u8

@@ -15,8 +15,10 @@
 ※ borrow there now ends at its last use, which reads more programs but needs a
 ※ liveness analysis to say where a reference stops existing.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: mut u8 = 1u8
     let r: &mut u8 = &mut n
     let second: &mut u8 = &mut n

@@ -7,7 +7,9 @@
 
 let v: u8⟦2⟧ = ⟦1u8, 2u8⟧
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let both: str = "ab" ⧺ v
     0u6

@@ -21,8 +21,10 @@ fn bump() → u6:
 fn prepare():
     counter ← 5u6
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ nothing takes what it answers with, and the attribute says that is meant
     prepare()
     bump()

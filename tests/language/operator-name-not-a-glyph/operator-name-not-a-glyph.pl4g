@@ -9,6 +9,8 @@
 fn `←`(a: u8, b: u8) → u8:
     a
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

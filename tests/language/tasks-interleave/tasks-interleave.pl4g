@@ -40,7 +40,7 @@ fn say(name: str, what: u8⟦⟧, who: u8) ⇉ std.Pending ⇇ std.Answer:
             return
 
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     std.spawn(⎕start(say("/dev/null", ⎕bytes("one\n"), 1u8) in ⎕heap))
     std.spawn(⎕start(say("/dev/null", ⎕bytes("two\n"), 2u8) in ⎕heap))
     if std.run() ≠ 2u64:

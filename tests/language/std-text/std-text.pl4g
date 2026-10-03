@@ -22,7 +22,7 @@ type Point = x: u8 ; y: i16
 type Line = from: Point ; to: Point
 
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if ⍕0u8 ≠ "0":
         return 1u6
     if ⍕1234u32 ≠ "1234":

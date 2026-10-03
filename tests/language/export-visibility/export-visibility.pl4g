@@ -25,6 +25,8 @@ fn lendable() → u6:
 fn unreachable() → u6:
     3u6
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     shared

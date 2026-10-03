@@ -10,8 +10,10 @@
 ※ `_` is the name that is not a name, as it is in a `match` arm: the loop runs a
 ※ turn for each value there is and the value itself is not wanted.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let total: mut u6 = 0u6
     ※ a step, with the type written rather than taken from the ends
     foreach i : u6 = 0…10…2:

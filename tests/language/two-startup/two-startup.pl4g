@@ -3,10 +3,12 @@
 ※ pl4g-test: expect-diag 4403 LANG_FUNCDEF_SPECIAL_PREVIOUS_STARTUP
 
 ※ Exactly one function may be marked as the startup function.
+let std := ⎕import("std")
+
 @[startup]
-fn first() → u6:
+fn first(init: std.Init) → u6:
     0
 
 @[startup]
-fn second() → u8:
+fn second(init: std.Init) → u8:
     0

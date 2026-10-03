@@ -15,8 +15,10 @@ fn summing() ⇉ u64 ⇇ u64:
         total ← total + more
         ⎕await(0u64)
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let c := ⎕start(summing())
     let a := ⎕resume(c, 0u64) ?? 9u64
     let b := ⎕resume(c, 5u64) ?? 9u64

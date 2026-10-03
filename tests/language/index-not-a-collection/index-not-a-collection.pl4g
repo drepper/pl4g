@@ -4,8 +4,10 @@
 ※ `c⸨k⸩` asks a set whether it holds a key and a dictionary what a key stands
 ※ for.  A value of any other type holds no keys.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let plain: u8 = 3u8
     @[ignore(5005)]
     plain⸨1u8⸩

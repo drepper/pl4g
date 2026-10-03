@@ -10,6 +10,8 @@ type Grid = a : u8 ; b : u8
 fn `⟬⟭`(g: Grid) → u8:
     g.a
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

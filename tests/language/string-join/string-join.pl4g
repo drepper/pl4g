@@ -8,8 +8,10 @@
 ※ Joining well-formed bytes to well-formed bytes gives well-formed bytes, which
 ※ is why the walk below needs no more care than the walk over a literal does.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: str = "ab"
     let b: str = "cω"
     let both: str = a ⧺ b

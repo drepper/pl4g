@@ -6,8 +6,10 @@
 ※ asks what is to be done with what is after the point -- and nothing in the
 ※ language answers it yet.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let x: f64 = 1.5
     let n: u8?⎕narrowing = ⎕narrow(x, ⌜u8⌝)
     0u6

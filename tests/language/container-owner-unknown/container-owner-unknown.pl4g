@@ -8,8 +8,10 @@
 
 type Holder = names: str⟦2⟧
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let h: mut Holder = Holder(.names ← ⟦"a", "b"⟧)
     h.names⟦0⟧ ← "c"
     0u6

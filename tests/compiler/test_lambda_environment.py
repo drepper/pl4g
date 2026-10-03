@@ -21,7 +21,7 @@ fn adding(n: u8) \N{RIGHTWARDS ARROW} fn(u8) \N{RIGHTWARDS ARROW} u8:
     \N{GREEK SMALL LETTER LAMDA} a: u8 [n] \N{RIGHTWARDS ARROW} u8 { a + n }
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let n: u8 = 3u8
     let called: fn(u8) \N{RIGHTWARDS ARROW} u8 = \N{GREEK SMALL LETTER LAMDA} a: u8 [n] \N{RIGHTWARDS ARROW} u8 { a + n }
     let renamed: fn(u8) \N{RIGHTWARDS ARROW} u8 = \N{GREEK SMALL LETTER LAMDA} a: u8 [n] \N{RIGHTWARDS ARROW} u8 { a \N{MULTIPLICATION SIGN} n }
@@ -33,6 +33,8 @@ fn main() \N{RIGHTWARDS ARROW} u6:
     let added: fn(u8) \N{RIGHTWARDS ARROW} u8 = adding(1u8)
     let r: u8 = apply(\N{GREEK SMALL LETTER LAMDA} a: u8 [n] \N{RIGHTWARDS ARROW} u8 { a - n }, called(1u8)) + other(1u8)
     if r + pooled(4u8) + plain(0u8) + added(0u8) = 6u8: 0u6 else: 1u6
+
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 """
 
 

@@ -10,7 +10,9 @@ let mask: u8 = 0b0000_1010u8
 @[visible]
 let set: mut bool = false
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     set ← flags & mask = mask
     0u6

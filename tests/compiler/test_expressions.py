@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from subprocess import CompletedProcess
 
@@ -20,14 +21,14 @@ ARROW = "\N{RIGHTWARDS ARROW}"
 
 def expression(text: str) -> ast.Expr:
     """Parse *text* as the body of a startup function and return the expression."""
-    source = "".join(("@[startup, impure]\nfn main() ", ARROW, " u6:\n    ", text, "\n"))
+    source = "".join(("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    ", text, "\n"))
     sources = SourceManager()
     unit_source = sources.add(Path("t.pl4g"), source)
     engine, collected = collecting_engine(None)
     unit = parse(tokenize(unit_source, engine), "t.pl4g", engine)
     assert [d.info.number for d in collected] == [], \
         [d.info.name for d in collected]
-    func = unit.items[0]
+    func = unit.items[-1]
     assert isinstance(func, ast.FuncDef)
     assert func.body is not None
     statement = func.body.stmts[0]
@@ -91,14 +92,19 @@ def test_a_group_may_hold_a_whole_expression() -> None:
 def compile_expression(text: str, *extra: str,
                        tmp_path) -> tuple[CompletedProcess[str], str]:  # noqa: ANN001
     """Compile a startup function whose result is *text*, returning the process
-    result and the intermediate representation."""
+    result and the intermediate representation of that function -- what `std`
+    brings, which every program imports, is not what any of these look at."""
     source = tmp_path / "t.pl4g"
     source.write_text("".join((
         "let a: u6 = 0b11_0011u6\nlet b: u6 = 0b01_0101u6\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n    ", text, "\n")), encoding="utf-8")
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    ", text, "\n")), encoding="utf-8")
     output = tmp_path / "out"
     proc = run_compiler(["-o", str(output), "--emit=ir", *extra, str(source)])
-    return proc, output.read_text(encoding="utf-8") if proc.returncode == 0 else ""
+    if proc.returncode != 0:
+        return proc, ""
+    found = re.search(r"fn @main\(.*?\n}", output.read_text(encoding="utf-8"), re.S)
+    assert found is not None
+    return proc, found.group(0)
 
 
 @pytest.mark.parametrize(("written", "opcode"), [
@@ -186,7 +192,7 @@ def test_the_program_computes_it(triple: str, written: str, expected: int,
     source = tmp_path / "t.pl4g"
     source.write_text("".join((
         "let a: u6 = 0b11_0011u6\nlet b: u6 = 0b01_0101u6\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n    ", written, "\n")),
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    ", written, "\n")),
         encoding="utf-8")
     output = tmp_path / "out"
     proc = run_compiler(["-o", str(output), "".join(("--target=", triple)),

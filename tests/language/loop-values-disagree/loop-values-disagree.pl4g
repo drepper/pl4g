@@ -5,8 +5,10 @@
 ※ in a loop and its `else` arm all give that one type, and nothing is widened
 ※ to make two of them meet.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let found: u8 = while §counting true:
         break §counting 1u8
     else:

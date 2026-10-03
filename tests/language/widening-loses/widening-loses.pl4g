@@ -5,8 +5,10 @@
 ※ number is somewhere the unsigned type does not reach, so this is a narrowing
 ※ and `⎕narrow` is what answers whether it fitted.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let b: i64 = ⁻3i64
     let q: u64 = ⎕widen(b, ⌜u64⌝)
     if q = 0u64: 0u6 else: 1u6

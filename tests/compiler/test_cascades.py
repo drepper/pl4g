@@ -38,7 +38,7 @@ def reported(source: str) -> list[int]:
 
 def body(text: str) -> str:
     """A startup function around *text*."""
-    return "".join(("@[startup, impure]\nfn main() ", ARROW, " u6:\n", text,
+    return "".join(("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n", text,
                     "    0u6\n"))
 
 

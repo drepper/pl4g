@@ -13,7 +13,9 @@ fn walked(xs: u8⟦⟧) → u8:
     let d: u8⟦1⟧ = doubled(xs)
     d⟦0⟧
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u8⟦2⟧ = ⟦1u8, 2u8⟧
     walked(v)

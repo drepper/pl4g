@@ -17,8 +17,10 @@
 ※ other half of the rule: one element defines the type and no other may
 ※ disagree with it.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ the first element says it
     let a := ⟦1u8, 2⟧ in ⎕static
     ※ and so does the second, which is the same array

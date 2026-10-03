@@ -7,6 +7,8 @@
 
 fn nowhere() → i64
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if nowhere() = 0i64: 0u6 else: 1u6

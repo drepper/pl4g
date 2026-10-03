@@ -6,7 +6,9 @@
 ※ `break`, `continue`, a `?` that hands a failure on, another `defer`, and a `let`, whose
 ※ name would be gone as soon as it was made.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     defer return 1u6
     0u6

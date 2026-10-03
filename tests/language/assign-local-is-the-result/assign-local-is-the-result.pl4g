@@ -4,8 +4,10 @@
 
 ※ The same for a local, which is a value: nothing is read back because nothing
 ※ was written anywhere.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[expect(4006)]
     let status: mut u6 = 3u6
     status ← 9u6

@@ -26,8 +26,10 @@
 ※ at all and where `append(l[:i], l[i+1:]...)` is what a program writes; **Rust**,
 ※ whose `Vec::remove` answers the element and panics past the end, which is this.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let l: mut [u8] = [1u8, 2u8, 3u8, 4u8, 5u8]
     ※ what was there comes back
     if †l⟦1⟧ ≠ 2u8:

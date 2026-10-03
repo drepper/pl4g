@@ -17,8 +17,10 @@ fn bump() → u8:
     counter ← counter + 1u8
     counter
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ this call is made for what it does
     _ ← bump()
     ※ and this one for what it answers with

@@ -7,8 +7,10 @@
 ※ arguments is what gets round it at the call, but the rule is about what a
 ※ call written without names can mean.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = plus(1u8, 2u8)
     0u6
 

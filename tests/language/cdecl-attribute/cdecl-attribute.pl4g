@@ -26,6 +26,8 @@ fn asks_ours(a: u6, b: u6) → u6:
 fn asks_theirs(a: u6, b: u6) → u6:
     system_way(a, b)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     asks_ours(32u6, 8u6) | asks_theirs(2u6, 0u6)

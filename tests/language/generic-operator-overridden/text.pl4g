@@ -26,5 +26,5 @@ fn text(v: T') → str:
 
 ※※ And the operator, which is the same thing written where a reader expects it.
 @[export, impure]
-fn `⍕`(v: T') → str:
+fn `⍎`(v: T') → str:
     text(v)

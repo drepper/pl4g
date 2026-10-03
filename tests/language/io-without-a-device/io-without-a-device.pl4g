@@ -3,19 +3,20 @@
 
 ※ A function that was handed no device may not read or write one.
 ※
-※ Reaching a device through a *variable* is not being handed one: a variable at the
-※ top level is ambient, so a function that writes through it is doing something its
-※ signature does not account for and says so with `@[io]`.  The standard streams are
-※ no such variable -- they arrive in `init.io` and are handed on by `&mut` -- but a
-※ program may make one of its own, and this is what writing through it asks.
+※ Permission to do input or output travels with a device: the startup function
+※ is handed `init`, which holds three, and a function it hands one to may use it.
+※ A function handed none that does input or output anyway -- here by waiting on
+※ every request in flight, which `std.drain` does -- is doing something its
+※ signature does not account for, and says so with `@[io]`.
 ※
 ※ What it is *not* is `@[impure]`, and the note says which attribute would answer it.
 
 let std := ⎕import("std")
 
-let out: mut std.Writer = std.Writer(.fd ← 1i32)
+fn tidy():
+    std.drain()
 
 @[startup]
-fn main() → u6:
-    ⎕drop(std.Io.println(&mut out, ⎕bytes("ambient")) ?? 0)
+fn main(init: std.Init) → u6:
+    tidy()
     0u6

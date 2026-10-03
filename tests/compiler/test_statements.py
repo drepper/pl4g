@@ -39,7 +39,7 @@ def test_a_header_without_an_arrow_answers_with_nothing(tmp_path) -> None:  # no
     proc = compile_source(tmp_path, "".join((
         "let counter: mut u6 = 0u6\n\n@[constructor, impure]\nfn prepare():\n",
         "    counter ", ASSIGN, " 7u6\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n    counter\n")))
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    counter\n")))
     assert proc.returncode == 0, describe(proc)
     assert proc.stderr.strip() == "", proc.stderr
 
@@ -49,7 +49,7 @@ def test_writing_the_nothing_out_is_refused(tmp_path) -> None:  # noqa: ANN001
     meaning is what the language admits nowhere."""
     proc = compile_source(tmp_path, "".join((
         "@[constructor]\nfn prepare() ", ARROW, " void:\n    0u6\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n    0u6\n")))
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    0u6\n")))
     assert raises(proc, 4209), describe(proc)
 
 
@@ -57,7 +57,7 @@ def test_a_return_in_it_carries_nothing(tmp_path) -> None:  # noqa: ANN001
     """There is nothing for it to carry."""
     proc = compile_source(tmp_path, "".join((
         "@[constructor]\nfn prepare():\n    return 1u6\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n    0u6\n")))
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    0u6\n")))
     assert raises(proc, 5004), describe(proc)
 
 
@@ -68,7 +68,7 @@ def test_the_advice_to_omit_return_is_not_given_where_it_would_not_help(tmp_path
     value goes nowhere."""
     proc = compile_source(tmp_path, "".join((
         "@[constructor]\nfn prepare():\n    return 1u6\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n    0u6\n")))
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    0u6\n")))
     assert raises(proc, 5004), describe(proc)
     assert not raises(proc, 5002), describe(proc)
 
@@ -78,7 +78,7 @@ def test_a_bare_return_at_the_end_is_still_redundant(tmp_path) -> None:  # noqa:
     proc = compile_source(tmp_path, "".join((
         "let counter: mut u6 = 0u6\n\n@[constructor, impure]\nfn prepare():\n",
         "    counter ", ASSIGN, " 1u6\n    return\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n    counter\n")))
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    counter\n")))
     assert raises(proc, 5002), describe(proc)
 
 
@@ -88,7 +88,7 @@ def test_a_semicolon_separates_statements_in_the_layout_notation(tmp_path) -> No
     """What a statement is does not depend on which notation it is written in."""
     proc = compile_source(tmp_path, "".join((
         "let a: mut u6 = 0u6\nlet b: mut u6 = 0u6\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    a ", ASSIGN, " 3u6; b ", ASSIGN, " 4u6\n    a + b\n")))
     assert proc.returncode == 0, describe(proc)
     assert proc.stderr.strip() == "", proc.stderr
@@ -98,7 +98,7 @@ def test_a_trailing_semicolon_leaves_no_value(tmp_path) -> None:  # noqa: ANN001
     """It separates and never terminates, so what follows it is a statement --
     the empty one, which produces nothing."""
     proc = compile_source(tmp_path, "".join((
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    @[ignore(5005)]\n    7u6;\n")))
     assert raises(proc, 5003), describe(proc)
 
@@ -108,7 +108,7 @@ def test_a_trailing_semicolon_asks_for_nothing_where_nothing_is_wanted(tmp_path)
     proc = compile_source(tmp_path, "".join((
         "let counter: mut u6 = 0u6\n\n@[constructor, impure]\nfn prepare():\n",
         "    counter ", ASSIGN, " 7u6;\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n    counter\n")))
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    counter\n")))
     assert proc.returncode == 0, describe(proc)
     assert proc.stderr.strip() == "", proc.stderr
 
@@ -125,7 +125,7 @@ def test_how_many_statements_a_run_of_semicolons_makes(tmp_path, body: str,  # n
     from pypl4g.front.parser import parse
     from pypl4g.source.manager import SourceManager
 
-    text = "".join(("@[startup, impure]\nfn main() ", ARROW, " u6:\n    ", body, "\n"))
+    text = "".join(("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    ", body, "\n"))
     sources = SourceManager()
     source = sources.add(tmp_path / "t.pl4g", text)
     engine, collected = collecting_engine(None)
@@ -133,7 +133,7 @@ def test_how_many_statements_a_run_of_semicolons_makes(tmp_path, body: str,  # n
     assert [d.info.number for d in collected] == [], collected
     from pypl4g.front import ast
 
-    definition = unit.items[0]
+    definition = unit.items[-1]
     assert isinstance(definition, ast.FuncDef)
     assert definition.body is not None
     assert len(definition.body.stmts) == statements
@@ -142,5 +142,5 @@ def test_how_many_statements_a_run_of_semicolons_makes(tmp_path, body: str,  # n
 def test_the_brace_notation_counts_them_the_same_way(tmp_path) -> None:  # noqa: ANN001
     """The rule is about semicolons, not about which notation they are in."""
     proc = compile_source(tmp_path, "".join((
-        "@[startup, impure]\nfn main() ", ARROW, " u6 { 7u6; }\n")))
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6 { 7u6; }\n")))
     assert raises(proc, 5003), describe(proc)

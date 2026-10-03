@@ -7,7 +7,7 @@ import subprocess
 import pytest
 
 import elfcheck
-from conftest import compiler_targets, describe, run_compiler, runner_for
+from conftest import compiler_targets, describe, function_ir, run_compiler, runner_for
 from pypl4g.ir.layout import DataLayout, NoLayoutError, align_of, size_of
 from pypl4g.ir.module import GlobalVar, Module
 from pypl4g.ir.types import (BOOL, I32, MEM, ProductType, TypeContext, U8, U16,
@@ -86,8 +86,10 @@ def test_a_variable_is_named_by_its_own_name() -> None:
 SOURCE = """let counter: u6 = 42u6
 let touched: mut u6 = 7u6
 
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     touched \N{LEFTWARDS ARROW} counter
 """
 
@@ -149,12 +151,12 @@ def test_each_kind_of_section_gets_a_segment_of_its_own(image: tuple) -> None:
 def test_the_value_is_in_the_image(image: tuple) -> None:
     """The byte the program named is the byte the file holds."""
     _, parsed, _ = image
-    rodata = parsed.section(".rodata")
-    assert rodata is not None
-    assert parsed.data[rodata.sh_offset:rodata.sh_offset + 1] == b"\x2a"
-    data = parsed.section(".data")
-    assert data is not None
-    assert parsed.data[data.sh_offset:data.sh_offset + 1] == b"\x07"
+    for name, section, held in (("counter", ".rodata", b"\x2a"), ("touched", ".data", b"\x07")):
+        found = parsed.section(section)
+        symbol = parsed.symbol(name)
+        assert found is not None and symbol is not None
+        at = found.sh_offset + symbol.value - found.sh_addr
+        assert parsed.data[at:at + 1] == held, name
 
 
 def test_the_variable_has_a_symbol_of_object_kind(image: tuple) -> None:
@@ -184,7 +186,7 @@ def test_more_than_one_value_at_a_time_now_works(triple: str, tmp_path) -> None:
     """
     source = tmp_path / "t.pl4g"
     source.write_text("let a: u6 = 1u6\nlet b: u6 = 2u6\n"
-                      "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+                      "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
                       "    @[ignore(4006)]\n    let first: u6 = a\n"
                       "    @[ignore(4006)]\n    let second: u6 = b\n    first\n",
                       encoding="utf-8")
@@ -257,7 +259,7 @@ def test_an_oversized_initializer_is_refused(compile_source, declared: str,  # n
                                              value: str) -> None:
     """No value is quietly narrowed to fit the variable it is given to."""
     proc, _ = compile_source("".join((
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    let v: ", declared,
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    let v: ", declared,
         " = ", value, "\n    1u6\n")))
     assert proc.returncode != 0, proc.stdout
     assert "[PL4G-2006]" in proc.stderr, proc.stderr
@@ -273,16 +275,18 @@ def test_the_largest_value_of_a_type_is_accepted(compile_source, declared: str, 
     """The boundary is where the type says, not one short of it."""
     proc, _ = compile_source("".join((
         "let v: ", declared, " = ", value,
-        "\n@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    1u6\n")))
+        "\nlet std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\x22std\x22)\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    1u6\n")))
     assert proc.returncode == 0, describe(proc)
 
 
 # -- changing a variable -------------------------------------------------------
 
-ASSIGN = """let counter: mut u6 = 1u6
+ASSIGN = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+let counter: mut u6 = 1u6
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     counter \N{LEFTWARDS ARROW} 7u6
     counter
 """
@@ -294,7 +298,7 @@ def test_a_local_assignment_writes_nothing(compile_source, tmp_path) -> None:  #
     Nothing reaches memory, and the whole function folds to its result.
     """
     proc, output = compile_source(
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    let x: mut u6 = 3u6\n    x \N{LEFTWARDS ARROW} 5u6\n    x\n",
         "--emit=ir")
     assert proc.returncode == 0, describe(proc)
@@ -310,9 +314,10 @@ def test_a_global_assignment_is_a_store_the_token_orders(compile_source,  # noqa
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
     assert "let @counter: mut u6" in text, text
-    assert "%0 = mem.start" in text, text
-    assert "%1 = store.u6 %0, @counter, 7" in text, text
-    assert "%2 = load.u6 %1, @counter" in text, "the read is not ordered after the write"
+    text = function_ir(text)
+    assert "%1 = mem.start" in text, text
+    assert "%2 = store.u6 %1, @counter, 7" in text, text
+    assert "%3 = load.u6 %2, @counter" in text, "the read is not ordered after the write"
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
@@ -360,21 +365,21 @@ def test_the_verifier_refuses_a_store_into_something_immutable() -> None:
 def test_an_assignment_is_the_result_when_it_is_last(compile_source) -> None:  # noqa: ANN001
     """A read follows the write, and the token is what puts it after."""
     proc, output = compile_source(
-        "let counter: mut u6 = 1u6\n@[startup, impure]\n"
-        "fn main() \N{RIGHTWARDS ARROW} u6:\n    counter \N{LEFTWARDS ARROW} 42u6\n",
+        "let counter: mut u6 = 1u6\nlet std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\n"
+        "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    counter \N{LEFTWARDS ARROW} 42u6\n",
         "--emit=ir")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
-    assert "%1 = store.u6 %0, @counter, 42" in text, text
-    assert "%2 = load.u6 %1, @counter" in text, text
-    assert "ret.u6 %2" in text, text
+    assert "%2 = store.u6 %1, @counter, 42" in text, text
+    assert "%3 = load.u6 %2, @counter" in text, text
+    assert "ret.u6 %3" in text, text
 
 
 def test_a_discarded_assignment_reads_nothing_back(compile_source) -> None:  # noqa: ANN001
     """Reading a place nothing looks at would be an instruction nobody asked for."""
     proc, output = compile_source(
-        "let counter: mut u6 = 1u6\n@[startup, impure]\n"
-        "fn main() \N{RIGHTWARDS ARROW} u6:\n    counter \N{LEFTWARDS ARROW} 42u6\n"
+        "let counter: mut u6 = 1u6\nlet std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\n"
+        "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    counter \N{LEFTWARDS ARROW} 42u6\n"
         "    3u6\n", "--emit=ir")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
@@ -385,7 +390,7 @@ def test_a_discarded_assignment_reads_nothing_back(compile_source) -> None:  # n
 def test_a_local_assignment_as_the_result_touches_no_memory(compile_source) -> None:  # noqa: ANN001
     """A local is a value, so there is nothing to read back."""
     proc, output = compile_source(
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    let status: mut u6 = 3u6\n    status \N{LEFTWARDS ARROW} 9u6\n",
         "--emit=ir")
     assert proc.returncode == 0, describe(proc)
@@ -401,7 +406,7 @@ def test_a_local_assignment_as_the_result_touches_no_memory(compile_source) -> N
 def test_mut_stands_where_the_type_does(compile_source, source: str) -> None:  # noqa: ANN001
     """Either part after the colon may be left out; the qualifier has a place."""
     proc, _ = compile_source("".join((
-        source, "\n@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        source, "\nlet std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\x22std\x22)\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    v \N{LEFTWARDS ARROW} 5u6\n")))
     assert proc.returncode == 0, describe(proc)
 
@@ -409,7 +414,7 @@ def test_mut_stands_where_the_type_does(compile_source, source: str) -> None:  #
 def test_mut_before_the_name_is_no_longer_the_syntax(compile_source) -> None:  # noqa: ANN001
     """It qualifies the type, so it does not stand before the name."""
     proc, _ = compile_source(
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    let mut v: u6 = 1u6\n    v\n")
     assert proc.returncode != 0
 
@@ -418,8 +423,10 @@ def test_mut_before_the_name_is_no_longer_the_syntax(compile_source) -> None:  #
 
 WRITTEN_ONLY = """let counter: mut u6 = 1u6
 
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     counter \N{LEFTWARDS ARROW} 7u6
     3u6
 """
@@ -439,7 +446,7 @@ def test_reading_it_anywhere_is_enough(compile_source) -> None:  # noqa: ANN001
     proc, _ = compile_source(
         "let counter: mut u6 = 1u6\n\n"
         "@[export]\nfn peek() \N{RIGHTWARDS ARROW} u6:\n    counter\n\n"
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    counter \N{LEFTWARDS ARROW} 7u6\n    3u6\n")
     assert proc.returncode == 0, describe(proc)
     assert "[PL4G-4007]" not in proc.stderr, proc.stderr
@@ -450,7 +457,7 @@ def test_an_exported_variable_is_never_reported(compile_source) -> None:  # noqa
     that nothing does."""
     proc, _ = compile_source(
         "@[export]\nlet counter: mut u6 = 1u6\n\n"
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    counter \N{LEFTWARDS ARROW} 7u6\n    3u6\n")
     assert proc.returncode == 0, describe(proc)
     assert "[PL4G-4007]" not in proc.stderr, proc.stderr
@@ -460,7 +467,7 @@ def test_a_variable_nothing_writes_either_is_not_reported(compile_source) -> Non
     """It is dropped rather than reported: there is no write to call pointless."""
     proc, output = compile_source(
         "let unused: u6 = 1u6\n\n"
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    3u6\n", "--emit=ir")
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    3u6\n", "--emit=ir")
     assert proc.returncode == 0, describe(proc)
     assert "[PL4G-4007]" not in proc.stderr, proc.stderr
     assert "@unused" not in output.read_text(encoding="utf-8")
@@ -479,7 +486,7 @@ def test_an_assertion_nothing_meets_is_still_reported(compile_source) -> None:  
     """Carrying the expectation that far must not make it impossible to fail."""
     proc, _ = compile_source(
         "@[expect(4007)]\nlet counter: mut u6 = 1u6\n\n"
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    counter \N{LEFTWARDS ARROW} 7u6\n")
     assert proc.returncode != 0
     assert "[PL4G-3206]" in proc.stderr, proc.stderr
@@ -511,7 +518,7 @@ def test_nothing_but_true_and_false_is_a_boolean(compile_source, source: str,  #
     unfinished where the program was simply wrong.
     """
     proc, _ = compile_source("".join((
-        source, "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    1u6\n")))
+        source, "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    1u6\n")))
     assert proc.returncode != 0, proc.stdout
     assert "[PL4G-4203]" in proc.stderr, proc.stderr
     assert "".join(("of type '", found, "'")) in proc.stderr, proc.stderr
@@ -521,7 +528,7 @@ def test_a_type_already_reported_says_nothing_more_about_the_value(compile_sourc
     """One mistake, one message: the unknown type is not also a bad initializer."""
     proc, _ = compile_source(
         "let v: nosuchtype = 1u6\n"
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    1u6\n")
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    1u6\n")
     assert proc.returncode != 0
     assert proc.stderr.count("[PL4G-") == 1, proc.stderr
     assert "[PL4G-4201]" in proc.stderr, proc.stderr
@@ -532,7 +539,7 @@ def test_a_boolean_constant_is_read_only_and_a_mutable_one_is_not(tmp_path) -> N
     source = tmp_path / "t.pl4g"
     source.write_text("let ready: bool = true\n"
                       "let seen: mut bool = false\n"
-                      "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+                      "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
                       "    seen \N{LEFTWARDS ARROW} ready\n    1u6\n", encoding="utf-8")
     output = tmp_path / "out"
     proc = run_compiler(["-o", str(output), str(source)])
@@ -556,7 +563,7 @@ def test_the_memory_chain_starts_in_the_entry_block(compile_source,  # noqa: ANN
     into a loop among them, would be reading something that does not dominate it.
     """
     proc, output = compile_source(
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    let k: u6 = if true { 5u6 } else { 6u6 }\n"
         "    let a: u6? = while \N{SECTION SIGN}x true:\n"
         "        break \N{SECTION SIGN}x 1u6\n"
@@ -564,7 +571,7 @@ def test_the_memory_chain_starts_in_the_entry_block(compile_source,  # noqa: ANN
         "--emit=ir", "-O0")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
-    entry = text.split("block0:", 1)[1].split("\n\n", 1)[0]
+    entry = function_ir(text).split("block0(", 1)[1].split("\nblock", 1)[0]
     assert "mem.start" in entry, text
 
 
@@ -579,7 +586,7 @@ def test_an_answer_of_four_parts_goes_through_the_callers_storage(  # noqa: ANN0
     proc, output = compile_source(
         "fn three() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8, u8, u8\N{RIGHT ANGLE BRACKET}:\n"
         "    \N{LEFT ANGLE BRACKET}1u8, 2u8, 3u8, 4u8\N{RIGHT ANGLE BRACKET}\n\n"
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    let t: \N{LEFT ANGLE BRACKET}u8, u8, u8, u8\N{RIGHT ANGLE BRACKET} = three()\n"
         "    if t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = 1u8:\n        0u6\n    else:\n        1u6\n",
         "--emit=ir", "-O0")
@@ -594,7 +601,7 @@ def test_an_answer_of_four_parts_goes_through_the_callers_storage(  # noqa: ANN0
     # drop the call.
     assert "\N{RIGHTWARDS ARROW} void internal cconv(pl4g) answer-in-storage" \
         in text, text
-    assert " impure" not in text.split("fn @main")[0], text
+    assert " impure" not in function_ir(text, "three"), text
     assert "frame.ptr<mut \N{LEFT ANGLE BRACKET}u8, u8, u8, u8\N{RIGHT ANGLE BRACKET}>" in text, text
     assert "ret.\N{LEFT ANGLE BRACKET}" not in text, text
 
@@ -605,7 +612,7 @@ def test_an_answer_of_two_parts_stays_in_registers(compile_source,  # noqa: ANN0
     proc, output = compile_source(
         "fn two() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8\N{RIGHT ANGLE BRACKET}:\n"
         "    \N{LEFT ANGLE BRACKET}1u8, 2u8\N{RIGHT ANGLE BRACKET}\n\n"
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    let t: \N{LEFT ANGLE BRACKET}u8, u8\N{RIGHT ANGLE BRACKET} = two()\n"
         "    if t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = 1u8:\n        0u6\n    else:\n        1u6\n",
         "--emit=ir", "-O0")
@@ -625,7 +632,7 @@ def test_a_string_answer_stays_in_registers(compile_source,  # noqa: ANN001
     proc, output = compile_source(
         "fn named(c: bool) \N{RIGHTWARDS ARROW} str:\n"
         "    if c: \"x\" else: \"y\" \N{DOUBLE PLUS} \"z\"\n\n"
-        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    if named(true) = \"x\": 0u6 else: 1u6\n",
         "--emit=ir", "-O0")
     assert proc.returncode == 0, describe(proc)
@@ -639,6 +646,8 @@ def test_a_string_answer_stays_in_registers(compile_source,  # noqa: ANN001
 #: is left is a call; `pick` is not, so the condition it branches on is settled
 #: once it stands in `main` and the arm that reads the answer goes with it.
 UNREAD = """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[inline(never)]
 fn three() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8, u8, u8\N{RIGHT ANGLE BRACKET}:
     \N{LEFT ANGLE BRACKET}1u8, 2u8, 3u8, 4u8\N{RIGHT ANGLE BRACKET}
@@ -651,7 +660,7 @@ fn pick(c: bool) \N{RIGHTWARDS ARROW} u8:
         7u8
 
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(pick({0}), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """
 
@@ -669,7 +678,7 @@ def test_a_call_answering_through_storage_goes_where_nothing_reads_it(
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
     assert "frame." not in text, text
-    assert "call " not in text, text
+    assert "call " not in function_ir(text), text
     assert "fn @three" not in text, text
 
 

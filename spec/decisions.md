@@ -9652,6 +9652,32 @@ where it may be written; and `&mut` of the whole record still needs the record t
 may still make an ambient device of its own, and a function writing through it says `@[io]` as before.
 
 
+## 2026-10-04T07:00+02:00 — language
+
+**The startup function takes exactly one `std.Init`**
+
+The user asked that a startup function take exactly one argument, of type `std.Init` -- no `mut`, no further parameters -- and
+that anything else fail.  Asked, the user decided that **a startup function that takes nothing is refused as well**, so every
+program writes `fn NAME(NAME: std.Init) → u6` and imports `std` -- against keeping the empty form for a program that wants nothing
+it was started with, which C, C++, D, Rust, Go, Zig, Odin and Haskell all allow because their programs reach the arguments and the
+streams through the library; here nothing else reaches them, so the one form is the form that works.  Writing `mut` is refused
+because nothing needs it: the streams are `mut` fields and the rest is the program's to read.
+
+Two consequences were put to the user.  **A module exporting an operator `std` exports cannot be imported beside `std`** (4924),
+which before only a program importing both met and now every program does; the user chose to keep refusing it, and the tests that
+defined `⍕` in a module of their own define `⍎` instead.  **`std`'s destructor is a root of every program**, so the ring, the drain
+and the packaged runtime are in every image: `exit0`, under a kilobyte before, is about eight and a half on x86-64, seven on the
+other two.  The user chose to keep it a root always, against keeping it only where something reached the ring, which would have
+made what runs at exit depend on what the program called.
+
+Taken without asking: 4404 says which way a signature is wrong -- no parameter, more than one, `mut`, a reference, another type,
+another answer.  The verifier lets two external declarations share a symbol, which a program declaring a function of the runtime
+that `std` declares as well now always does.  `dropunreached` no longer keeps every variable because some function's body is
+elsewhere -- what is compiled elsewhere names only what the image offers, which is kept anyway -- so `std`'s variables nothing
+reached are not carried, and dropping one the compiler made for itself is not reported.  The textual IR reads a name it does not
+know as a record of that name whose fields it does not say, as the printer writes one.  Golden files record what a program adds to
+`exit0`, the rest once in `stack.ARCH.asm`; tests that read a whole module or a whole log look at the program's own part.
+
 Open questions
 --------------
 

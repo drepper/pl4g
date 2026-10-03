@@ -25,7 +25,7 @@ from pypl4g.diag.style import ColourWhen, Palette
 #: Any escape sequence, which is what "no colour" means the absence of.
 ESCAPE = re.compile("\N{ESCAPE}\\[[0-9;]*m")
 
-SOURCE = "".join(("@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n",
+SOURCE = "".join(("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n",
                   "    let n : u8 = nosuch + 1u8\n    0u6\n"))
 
 
@@ -134,10 +134,10 @@ def test_a_line_of_glyphs_is_cut_in_the_right_places() -> None:
     and used in the other lands somewhere in the middle of a bracket.  This is
     the check that the conversion happens.
     """
-    source = "".join(("@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n",
+    source = "".join(("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n",
                       "    let v : u8\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}3\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = "
                       "\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}1u8\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}\n    0u6\n"))
-    line = source.splitlines()[2]
+    line = source.splitlines()[3]
     found = Highlighter().of_line(source, source.index(line), len(line))
     if not found:
         pytest.skip("no tree-sitter module or no built library")

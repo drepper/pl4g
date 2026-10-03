@@ -11,8 +11,10 @@
 
 type Point = x : u8 ; y : u16 ; z : u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let text: mut u64 = 0u64
     let small: mut u8 = 0u8
     comptime foreach f := ⎕fields(⌜Point⌝):

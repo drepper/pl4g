@@ -7,8 +7,10 @@
 let hundred: mut u8 = 100u8
 let seven: mut u8 = 7u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     match hundred ÷ seven:
         u8(q):
             return q

@@ -5,7 +5,9 @@
 ※ that scope -- one that could be read, and that would have to be `mut` to be
 ※ assigned to again -- which is a second meaning for one spelling.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let _: u8 = 1u8
     0u6

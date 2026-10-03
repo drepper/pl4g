@@ -7,8 +7,10 @@
 ※ The body of a loop is a scope like any other, so the inner loop's counter is
 ※ defined afresh on every turn of the outer one.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let total: mut u6 = 0u6
     let i: mut u6 = 0u6
     while i < 4u6:

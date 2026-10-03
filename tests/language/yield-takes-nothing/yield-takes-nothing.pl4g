@@ -7,6 +7,8 @@ fn plain(n: u8) ⇉ u8:
     let x := yield n
     yield x
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

@@ -19,8 +19,10 @@ fn sum(s: ⇉u8) → u8:
         total ← total + x
     total
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let pool: mut arena = ⎕arena
     defer ⎕empty(pool)
     let leaf1: Tree = Tree(.value ← 3u8, .children ← [] in pool)

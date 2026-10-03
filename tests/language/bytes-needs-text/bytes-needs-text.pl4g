@@ -5,8 +5,10 @@
 ※ to answer with: an array already is its elements, and a number is a number
 ※ whatever width it is held in.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u32 = 5u32
     let b: u8⟦⟧ = ⎕bytes(n)
     if #b = 4: 0u6 else: 1u6

@@ -66,6 +66,8 @@ gives it no meaning, and an operator's name may be any glyph the language did no
 This compiles and runs as it stands:
 
 ```
+let std := ⎕import("std")
+
 type Point = x: u8 ; y: u8
 
 @[impure]
@@ -73,7 +75,7 @@ fn `⍕`(p: Point) → str:
     "a point"
 
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let p: Point = Point(.x ← 1u8, .y ← 2u8)
     let s: str = "it is " ⧺ ⍕p
     ⎕narrow(⎕drop(#s), ⌜u6⌝) ?? 1u6          ※ 13

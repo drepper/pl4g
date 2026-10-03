@@ -26,8 +26,10 @@ fn total(s: ⇉u8) → u8:
     n
 
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let ps: Person⟦3⟧ = ⟦Person(.age ← 12u8, .height ← 170u8), Person(.age ← 30u8, .height ← 180u8), Person(.age ← 40u8, .height ← 160u8)⟧ in ⎕static
     let adults := ps⟦ps¨.age ≥ 18u8⟧
     let m: u8⟦3,2⟧ = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧, ⟦5u8, 6u8⟧⟧ in ⎕static

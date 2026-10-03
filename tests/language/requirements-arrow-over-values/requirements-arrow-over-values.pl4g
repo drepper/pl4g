@@ -9,6 +9,8 @@
 fn total(a: u8) → u8 pre(a ⊞ a → u8):
     a
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(total(3u8), ⌜u6⌝) ?? 1u6

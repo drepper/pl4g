@@ -15,8 +15,10 @@ let m := ⎕import("held")
 fn bump(c: &mut m.Counter):
     c⌖.seen ← c⌖.seen + 1u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ A field, read through the path.
     if m.count.seen ≠ 3u8:
         return 1u6

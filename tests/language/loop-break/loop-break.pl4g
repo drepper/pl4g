@@ -10,8 +10,10 @@
 ※ whichever way it was left: the block the loop ends at is reached from the test
 ※ and from every `break`, and what it reads has to be right down all of them.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let total: mut u6 = 0u6
     foreach §counting i := 0u6…10u6:
         if i = 5u6:

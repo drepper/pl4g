@@ -14,8 +14,10 @@
 ※ there is no default, because the two answers differ and guessing either would
 ※ make a promise the program did not.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6
 
 fn first(a: &mut u8) → &mut u8:

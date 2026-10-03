@@ -6,7 +6,9 @@
 let source: u6 = 23u6
 let target: mut u6 = 0u6
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     target ← source
     target

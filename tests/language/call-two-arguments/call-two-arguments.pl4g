@@ -6,6 +6,8 @@
 fn difference(a: u6, b: u6) → u6:
     a ⊟ b
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     difference(50u6, 8u6)

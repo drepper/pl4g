@@ -5,7 +5,9 @@
 ※ to, and naming a place outright would be a second way of saying what a
 ※ reference already says.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u32 = 5u32
     if ⎕acquire(v) = 5u32: 0u6 else: 1u6

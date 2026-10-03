@@ -15,9 +15,11 @@ from conftest import describe, limited, run_compiler
 
 #: A program to build, which answers with the status the tests look for.
 PROGRAM = """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 \N{REFERENCE MARK} A program that exits with the status in its name.
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     {status}u6
 """
 
@@ -218,7 +220,7 @@ def test_what_the_compiler_provides_is_not_in_a_program(tmp_path: Path) -> None:
 let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let b: mut std.Build = std.Build(.output_dir \N{LEFTWARDS ARROW} "", .target \N{LEFTWARDS ARROW} "",
                                      .opt_level \N{LEFTWARDS ARROW} 0u8, .mclevel \N{LEFTWARDS ARROW} "",
                                      .stack_size \N{LEFTWARDS ARROW} 0u64, .guard_size \N{LEFTWARDS ARROW} 0u64)

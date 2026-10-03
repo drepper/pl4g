@@ -5,8 +5,10 @@
 
 fn both(a: &mut arena) → 〈str, u8〉 in a:
     〈"a" ⧺ "b" in a, 1u8〉
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let s: mut arena = ⎕arena
     let x, y := both(&mut s)
     ⎕empty(s)

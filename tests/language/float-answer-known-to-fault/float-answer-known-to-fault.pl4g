@@ -7,8 +7,10 @@
 ※ number is reported where it is written rather than left to fault.  The same
 ※ rule the integers get, and for the same reason.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[ignore(5005)]
     1f64 ÷ 0f64
     @[ignore(5005)]

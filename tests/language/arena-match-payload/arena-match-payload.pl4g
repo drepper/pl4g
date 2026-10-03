@@ -6,8 +6,10 @@
 
 fn g(a: &mut arena) → str ? i32 in a:
     "x" ⧺ "y" in a
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let s: mut arena = ⎕arena
     defer ⎕empty(s)
     let r: str ? i32 = g(&mut s)

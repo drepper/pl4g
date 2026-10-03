@@ -1,7 +1,9 @@
 ※ pl4g-test: compile=fail
 ※ pl4g-test: expect-diag 2006 LANG_SYNTAX_INTEGER_RANGE
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let status: u8 = 256u8
     status

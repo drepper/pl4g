@@ -4,8 +4,10 @@
 ※ An array is room in the frame, so `in` after one says which allocator what its elements point
 ※ into comes from.  Numbers point nowhere, so there is nothing for it to say.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: mut arena = ⎕arena
     defer ⎕empty(a)
     let v: u8⟦2⟧ = ⟦1u8, 2u8⟧ in a

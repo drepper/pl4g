@@ -6,7 +6,9 @@
 ※ value written for an error that has nowhere to put it is a value nothing
 ※ would ever read.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8? = ⊥ 7u16
     0u6

@@ -14,7 +14,7 @@
 let std := ⎕import("std")
 
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if ⎕str('x') ≠ "x":
         1u6
     elif #⎕bytes(⎕str('x')) ≠ 1:

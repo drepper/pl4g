@@ -10,6 +10,8 @@ type Handle = n : u8
 fn Handle.release(h: &Handle):
     let n: u8 = h⌖.n
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

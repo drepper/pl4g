@@ -12,6 +12,8 @@
 ※ masked, shifted or otherwise interfered with between the program answering
 ※ and whoever started it asking.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     63u6

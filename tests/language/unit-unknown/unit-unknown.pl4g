@@ -11,8 +11,10 @@
 ※ system too.  A unit that appeared by being written is a unit that catches
 ※ nothing.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let d: u32 ¤metre = 5
     let n: u32 = ⎕drop(d)
     0u6

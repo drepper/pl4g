@@ -18,8 +18,10 @@ macro swap:
         $b ← t
     ⌝
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let t: mut u8 = 1u8
     let u: mut u8 = 2u8
     swap⌜t, u⌝

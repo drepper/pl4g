@@ -29,8 +29,10 @@ fn pair_of(n: u8) → 〈u8, u8〉:
 fn four(a: u8, b: u8, c: u8, d: u8) → u8:
     a + b + c + d
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ 1, then the two the spread stands for, then 4
     let sum: u8 = four(note(1u8), ⁂pair_of(2u8), note(4u8))
     let arguments: u8 = order

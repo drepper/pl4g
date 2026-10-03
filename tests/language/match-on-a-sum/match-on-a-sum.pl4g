@@ -31,8 +31,10 @@
 type Point = x : u8 ; y : u8
 type Shape = dot : Point | line : u32 | empty : void
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: Shape = Shape(.dot ← Point(.x ← 2u8, .y ← 3u8))
     if size(a) ≠ 5u32:
         1u6

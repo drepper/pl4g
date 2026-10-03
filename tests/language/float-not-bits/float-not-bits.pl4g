@@ -11,8 +11,10 @@
 let a: f64 = 1.5f64
 let b: f64 = 0.5f64
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[ignore(5005)]
     a & b
     @[ignore(5005)]

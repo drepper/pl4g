@@ -4,7 +4,9 @@
 ※ `yield` hands a value out of a generator, and nothing else has anything to
 ※ hand it to.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     yield 3u8
     0u6

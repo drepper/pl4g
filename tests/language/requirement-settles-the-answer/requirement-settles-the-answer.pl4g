@@ -24,8 +24,10 @@ fn same(a: T') → T' pre(T' + T' → ⌜u8⌝):
 fn plain(a: u6) → u6 pre(a < 10u6) pre(⌜u6⌝ = ⌜u6⌝):
     a
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if g(2u6) ≠ 3u6: return 1u6
     if h(4u6) ≠ 8u6: return 2u6
     if k(true) ≠ 0u6: return 3u6

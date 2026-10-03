@@ -7,8 +7,10 @@
 ※ discards the function it is in.
 let count: u8 = 7u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[ignore(5005)]
     1u6
     @[ignore(5005)]

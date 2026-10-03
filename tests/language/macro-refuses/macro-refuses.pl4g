@@ -18,7 +18,9 @@ macro only_short(t: syntax) → syntax:
         return ⎕refuse("'" ⧺ said ⧺ "' is longer than two characters")
     ⌜$(said)⌝
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let s: str = only_short⌜"abcd"⌝
     ⎕narrow(⎕drop(#s), ⌜u6⌝) ?? 1u6

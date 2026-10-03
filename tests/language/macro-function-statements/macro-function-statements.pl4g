@@ -13,8 +13,10 @@ macro bump(a: syntax) → syntax:
         $a ← $a + step
     ⌝
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: mut u8 = 5u8
     let step: mut u8 = 40u8
     bump⌜n⌝

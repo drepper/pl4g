@@ -5,8 +5,10 @@
 ※ there is dead from that point: reading it would read memory the arena may already have
 ※ handed out again.  A name given something new is alive again.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let scratch: mut arena = ⎕arena
     let both: str = "a" ⧺ "b" in scratch
     ⎕empty(scratch)

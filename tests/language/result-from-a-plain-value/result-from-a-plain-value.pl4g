@@ -17,8 +17,10 @@ fn give() → u6?:
     ※ answered with from a function whose answer is a result
     4
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ given to a name whose type is written
     let named: u6? = 1
     ※ assigned to one

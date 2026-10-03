@@ -4,6 +4,8 @@
 ※※ to it once the startup phase completes, and the value it returns becomes the
 ※※ exit status of the process.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0

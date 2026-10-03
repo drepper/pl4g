@@ -43,8 +43,10 @@ fn either(h: Handle, early: bool) → u8:
     Handle.close(moved)
     2u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: Handle = made(1u8)
     let b: Handle = passed(a)
     kept(b)

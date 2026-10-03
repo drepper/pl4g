@@ -23,8 +23,10 @@ fn stop_unless(ok: bool):
     @[ignore(5005)]
     ok or (two_hundred + two_hundred = 0u8)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ alike, though not equal
     stop_unless(tenth × three ≅ three_tenths)
     @[ignore(4217)]

@@ -36,8 +36,10 @@
 ※ answers how many were removed.  Answering what was there is Rust''s choice and
 ※ is the one that needs no second spelling.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let d: mut ⸨str: u64⸩ = ⸨"a": 1u64, "b": 2u64, "c": 3u64⸩
     ※ what was under the key comes back, and the key is gone
     if (†d⸨"b"⸩ ?? 0u64) ≠ 2u64:

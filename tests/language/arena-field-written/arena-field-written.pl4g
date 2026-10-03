@@ -6,8 +6,10 @@
 ※ Reading a field of a record whose arena was given back is reading what is gone.
 
 type R = f: str
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let s: mut arena = ⎕arena
     let r: mut R = R(.f ← "-")
     r.f ← "a" ⧺ "b" in s

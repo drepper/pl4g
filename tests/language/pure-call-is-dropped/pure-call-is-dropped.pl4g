@@ -22,8 +22,10 @@ fn notes(n: u6) → u6:
     seen ← n
     n
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ nothing reads this, and nothing else depends on it having happened
     _ ← worked_out(3u6)
     _ ← notes(42u6)

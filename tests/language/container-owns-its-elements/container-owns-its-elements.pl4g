@@ -17,8 +17,10 @@
 ※ checker refuses the store instead and `clone_in` is the copy; **Zig**, where an
 ※ `ArrayList` holds what it is given and which allocator made it is the program's to know.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: mut arena = ⎕arena
     defer ⎕empty(a)
     let b: mut arena = ⎕arena

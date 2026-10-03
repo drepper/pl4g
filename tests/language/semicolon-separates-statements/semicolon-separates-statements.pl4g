@@ -7,7 +7,9 @@
 let a: mut u6 = 0u6
 let b: mut u6 = 0u6
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     a ← 3u6; b ← 4u6
     a + b

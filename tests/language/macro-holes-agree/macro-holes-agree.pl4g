@@ -9,7 +9,9 @@ macro same:
     ⌜$x, $x⌝ → ⌜1u8⌝
     ⌜$x, $y⌝ → ⌜0u8⌝
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(same⌜2u8 + 3u8, 2u8 + 3u8⌝ × same⌜2u8, 3u8⌝ + same⌜4u8, 4u8⌝,
             ⌜u6⌝) ?? 1u6

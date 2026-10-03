@@ -6103,19 +6103,26 @@ class Checker:
     def _check_startup_signature(self, func: Function, node: ast.FuncDef) -> None:
         """Check the startup function's signature.
 
-        It takes what the program is started with, or nothing: a program that
-        wants neither the devices it inherited nor anything else that arrives
-        with it writes no parameter, and that is most of them.  What it may take
-        is one thing, the record the `std` module calls `Init`, so that what a
-        program is started with can grow without every signature that exists by
-        then having to change.
+        It takes what the program is started with, and that alone: exactly one
+        parameter, the record the `std` module calls `Init`, written as it is --
+        not `mut`, not a reference, and with nothing beside it.  One signature
+        for every program, so that what a program is started with can grow
+        without any signature having to change, and so that a program's
+        devices arrive in one place: `Init`'s streams are `mut` fields, written
+        and lent by `&mut` from a record that is not `mut` itself.
         """
         expected = BUILTIN_TYPES[STARTUP_RETURN_TYPE_NAME]
         if func.ty.ret is ERROR or ERROR in func.ty.params:
             return
         problem: str | None = None
-        if len(func.ty.params) > 1:
+        if not func.ty.params:
+            problem = "".join(("takes nothing, where it takes one '",
+                               STARTUP_ARGUMENT_TYPE_NAME, "'"))
+        elif len(func.ty.params) > 1:
             problem = "takes more than one parameter"
+        elif node.params and node.params[0].mutable:
+            problem = "".join(("takes a 'mut ", STARTUP_ARGUMENT_TYPE_NAME,
+                               "', where it takes the record as it is"))
         elif func.ty.params and not _is_startup_argument(func.ty.params[0]):
             problem = "".join(("takes a '", func.ty.params[0].written(), "'"))
         elif node.params and isinstance(node.params[0].type, ast.RefTypeRef):

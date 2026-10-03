@@ -8,8 +8,10 @@ let mask: u8 = 0b1100_0011u8
 
 let bits: u8 = 0b0101_0101u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ what this used to say through the exit status, which is six bits now
     if (mask & bits) | (~mask ^ bits) ≠ 105u8:
         1u6

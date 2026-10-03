@@ -5,7 +5,9 @@
 ※ -- and the definition says so, so that a reader knows the table is not built
 ※ every time the line runs.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let names: [str] = ["one", "two"]
     if #names = 2: 0u6 else: 1u6

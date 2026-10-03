@@ -10,8 +10,10 @@ type Counter = mut hits : u8 ; fixed : u8
 fn peek(c: &Counter):
     c⌖.hits ← 1u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let c: Counter = Counter(.hits ← 0u8, .fixed ← 7u8)
     peek(&c)
     0u6

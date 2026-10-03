@@ -5,8 +5,10 @@
 let a: u8 = 1u8
 let b: u8 = 2u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[ignore(4006)]
     let answer: u8 = a < b
     0u6

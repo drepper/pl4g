@@ -5,8 +5,10 @@
 ※ tuple written out.  An array of no elements spread into a tuple leaves none,
 ※ and what a spread leaves obeys the same rule as what is written.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let empty: u8⟦0⟧ = ⟦⟧
     let nothing: 〈u8〉 = 〈⁂empty〉
     nothing⟦0⟧

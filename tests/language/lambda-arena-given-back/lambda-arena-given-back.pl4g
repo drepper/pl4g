@@ -4,8 +4,10 @@
 ※ made in it as a string written `in pool` is -- and once the arena is given
 ※ back, calling the lambda would read what went with it.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = 1u8
     let pool: mut arena = ⎕arena
     let k: fn(u8) → u8 = λ x: u8 [n] in pool → u8 { x + n }

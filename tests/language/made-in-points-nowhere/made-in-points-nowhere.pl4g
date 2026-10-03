@@ -7,8 +7,10 @@
 fn count(a: &mut arena) → u8 in a:
     0u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let x: mut arena = ⎕arena
     defer ⎕empty(x)
     if count(&mut x) = 0u8: 0u6 else: 1u6

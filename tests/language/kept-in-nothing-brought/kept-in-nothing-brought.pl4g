@@ -6,6 +6,8 @@
 fn same() → fn(u8) in ⎕heap → u8:
     λ x: u8 in ⎕heap → u8 { x }
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

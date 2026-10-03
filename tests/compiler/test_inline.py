@@ -11,7 +11,7 @@ import subprocess
 
 import pytest
 
-from conftest import compiler_targets, describe, run_compiler, runner_for
+from conftest import compiler_targets, describe, function_ir, run_compiler, runner_for
 from pypl4g.ir.callgraph import (called_by_count, in_a_cycle, in_call_order,
                                  size_of_body)
 from pypl4g.ir.function import FuncAttrs, Function
@@ -24,8 +24,10 @@ SMALL = """\
 fn add(a: u8, b: u8) \N{RIGHTWARDS ARROW} u8:
     a + b
 
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(add(1u8, 2u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """
 
@@ -116,7 +118,7 @@ def emitted(compile_source, source: str, *extra: str) -> str:  # noqa: ANN001
 def test_a_small_callee_is_put_where_it_was_called(compile_source) -> None:  # noqa: ANN001
     """And the function it was is then dropped, nothing calling it any more."""
     text = emitted(compile_source, SMALL, "-O1")
-    assert "call" not in text
+    assert "call" not in function_ir(text)
     assert "fn @add" not in text
 
 
@@ -139,12 +141,14 @@ fn seed() \N{RIGHTWARDS ARROW} u8:
 def test_the_program_may_say_never(compile_source) -> None:  # noqa: ANN001
     """`@[inline(never)]` is a thing the program said, so nothing argues."""
     text = emitted(compile_source, SEED + """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[inline(never)]
 fn add(a: u8, b: u8) \N{RIGHTWARDS ARROW} u8:
     a + b
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(add(seed(), 2u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """, "-O1")
     assert "call" in text and "fn @add" in text
@@ -160,11 +164,13 @@ fn wide(a: u8) \N{RIGHTWARDS ARROW} u8:
 """, body, """
     n1
 
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(wide(1u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """)), "-O1")
-    assert "call" not in text
+    assert "call" not in function_ir(text)
 
 
 def test_one_the_whole_program_calls_once_is_put_in_place(
@@ -178,11 +184,13 @@ fn wide(a: u8) \N{RIGHTWARDS ARROW} u8:
 """, body, """
     n1
 
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(wide(1u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """)), "-O1")
-    assert "call" not in text and "fn @wide" not in text
+    assert "call" not in function_ir(text) and "fn @wide" not in text
 
 
 def test_one_several_call_and_nobody_says_to_stays(compile_source) -> None:  # noqa: ANN001
@@ -194,11 +202,13 @@ fn wide(a: u8) \N{RIGHTWARDS ARROW} u8:
 """, body, """
     n1
 
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(wide(seed()) + wide(seed()), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """)), "-O1")
-    assert "call" in text and "fn @wide" in text
+    assert "call" in function_ir(text) and "fn @wide" in text
 
 
 def test_a_function_that_calls_itself_is_left_alone(compile_source) -> None:  # noqa: ANN001
@@ -207,11 +217,13 @@ def test_a_function_that_calls_itself_is_left_alone(compile_source) -> None:  # 
     The call is not in tail position -- a tail call to itself is a loop, and a
     loop is inlined like anything else (below)."""
     text = emitted(compile_source, SEED + """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 fn down(n: u8) \N{RIGHTWARDS ARROW} u8:
     if n = 0u8: 0u8 else: n + down(n - 1u8)
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(down(seed()), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """, "-O1")
     assert "fn @down" in text
@@ -221,11 +233,13 @@ def test_a_function_calling_itself_last_is_a_loop_and_is_inlined(
         compile_source) -> None:  # noqa: ANN001
     """Calling itself in tail position makes it a loop, and no ring is left."""
     text = emitted(compile_source, """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 fn down(n: u8) \N{RIGHTWARDS ARROW} u8:
     if n = 0u8: 0u8 else: down(n - 1u8)
 
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(down(3u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """, "-O1")
     assert "fn @down" not in text, text
@@ -251,6 +265,8 @@ def test_an_inlined_program_answers_what_it_did(triple: str, tmp_path) -> None: 
     """The point of every one of these: the program is the same program."""
     source = tmp_path / "t.pl4g"
     source.write_text("""\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 fn add(a: u8, b: u8) \N{RIGHTWARDS ARROW} u8:
     a + b
 
@@ -258,7 +274,7 @@ fn twice(a: u8) \N{RIGHTWARDS ARROW} u8:
     add(a, a)
 
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(twice(3u8) + add(1u8, 2u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """, encoding="utf-8")
     out = tmp_path / "out"

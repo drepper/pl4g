@@ -9,6 +9,8 @@ let limit: u6 = 42u6
 
 let counter: mut u6 = 1u6
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     counter ← limit

@@ -13,8 +13,10 @@
 ※ is assigned in the inner body, so both loops carry it, and what follows them
 ※ reads what the way out of them left.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let found: mut u6 = 0u6
     foreach §rows r := 0u6…4u6:
         foreach §cols c := 0u6…4u6:

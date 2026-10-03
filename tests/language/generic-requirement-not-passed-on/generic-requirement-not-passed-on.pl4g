@@ -11,6 +11,8 @@ fn bigger(a: T', b: T') → T' pre(T' ⌈ T' → T'):
 fn either(a: T', b: T') → T':
     bigger(a, b)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

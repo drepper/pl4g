@@ -4,7 +4,9 @@
 
 ※ The value a variable is given and never read before it is replaced.  Nothing
 ※ reads the 5, so giving it cannot affect what the program does.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: mut u6 = 5u6
     a ← 4u6

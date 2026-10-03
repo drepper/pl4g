@@ -3,10 +3,10 @@ module "assign-global.pl4g" triple "x86_64-linux-none"
 
 let @counter: mut u6 internal = 1
 
-fn @main() → u6 internal cconv(pl4g) special(startup) impure {
-block0:
-  %0 = mem.start
-  %1 = store.u6 %0, @counter, 7
-  %2 = load.u6 %1, @counter
-  ret.u6 %2
+fn @main(ptr<Init>) → u6 internal cconv(pl4g) special(startup) impure {
+block0(%0: ptr<Init>):
+  %1 = mem.start
+  %2 = store.u6 %1, @counter, 7
+  %3 = load.u6 %2, @counter
+  ret.u6 %3
 }

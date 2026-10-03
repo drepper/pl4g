@@ -8,7 +8,9 @@ fn acc(start: u64) ⇉ u64 ⇇ u64:
     let more := yield start
     yield more
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a := ⎕resume(acc(1u64), 2u64)
     0u6

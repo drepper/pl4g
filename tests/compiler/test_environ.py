@@ -23,14 +23,18 @@ BUILDER = "__pl4g_environ_make"
 
 #: A program that reads the environment, and one that does not.
 READS = """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     if \N{APL FUNCTIONAL SYMBOL QUAD}environ\N{LEFT DOUBLE PARENTHESIS}"PL4G_TEST_NAME"\N{RIGHT DOUBLE PARENTHESIS} ?? "nothing" = "said": 0u6 else: 1u6
 """
 
 SILENT = """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     0u6
 """
 
@@ -89,7 +93,7 @@ def test_a_build_function_reads_the_compiler_s_own(tmp_path: Path) -> None:
     command has in front of them.
     """
     (tmp_path / "one.pl4g").write_text(
-        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    0u6\n", encoding="utf-8")
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    0u6\n", encoding="utf-8")
     (tmp_path / "build.pl4g").write_text("""\
 let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
@@ -106,7 +110,7 @@ fn build(b: &mut std.Build):
 def test_the_build_object_reads_the_same_dictionary(tmp_path: Path) -> None:
     """`std.Build.env` is that same environment, under the name the field has."""
     (tmp_path / "one.pl4g").write_text(
-        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    0u6\n", encoding="utf-8")
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    0u6\n", encoding="utf-8")
     (tmp_path / "build.pl4g").write_text("""\
 let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 

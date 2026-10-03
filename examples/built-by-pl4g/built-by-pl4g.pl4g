@@ -2,6 +2,8 @@
 ※
 ※ There is nothing about this program that says so: what says so is the
 ※ `build.pl4g` beside it, which the compiler runs to find out what to build.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

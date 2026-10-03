@@ -16,6 +16,8 @@ let seven: u8 = 7u8
 fn twice(a: u8, b: u8) → u8 pre(a > 0u8):
     a ⊞ b ⊞ b
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(twice(zero, seven), ⌜u6⌝) ?? 1u6

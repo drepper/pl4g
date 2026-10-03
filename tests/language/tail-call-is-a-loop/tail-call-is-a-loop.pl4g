@@ -41,8 +41,10 @@ fn joined(n: u64, acc: str) → str:
     else:
         joined(n - 1u64, acc ⧺ "x")
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if count(10000000u64, 0u64) ≠ 10000000u64:
         return 1u6
     if down(10000000u64) ≠ 7u64:

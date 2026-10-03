@@ -5,6 +5,8 @@
 @[export, visible, align(1)]
 let shared: u6 = 7u6
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     shared

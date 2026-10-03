@@ -9,6 +9,8 @@
 @[visible]
 let shared: u8 = 7u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     shared

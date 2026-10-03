@@ -10,7 +10,9 @@ let one: u6 = 1u6
 @[visible]
 let halved: mut u6 = 0u6
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     halved ← thirteen » one
     thirteen « one

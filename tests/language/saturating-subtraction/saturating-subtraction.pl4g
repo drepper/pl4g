@@ -6,6 +6,8 @@
 let five: u6 = 5u6
 let nine: u6 = 9u6
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     five ⊟ nine

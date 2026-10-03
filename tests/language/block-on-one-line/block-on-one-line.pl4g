@@ -30,8 +30,10 @@ fn twice(a: u8) → u8: a + a
 @[impure]
 fn note(a: u8): counted ← a
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let b: bool = true
     ※ an arm and its else, both on the line
     let picked: u8 = if b: 1u8 else: 2u8

@@ -12,6 +12,8 @@ fn bump(a: mut u8) → u8 post(⎕answer > a):
     a ← a ⊞ 1u8
     a
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(bump(5u8), ⌜u6⌝) ?? 1u6

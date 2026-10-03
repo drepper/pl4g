@@ -12,8 +12,10 @@
 ※ then answer about the width *it* worked at and not about the width the type
 ※ has, so the check is a comparison against the type's two ends.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: u3 = 5u3
     let b: u3 = 2u3
     let one: u1 = 1u1

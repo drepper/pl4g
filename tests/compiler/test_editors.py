@@ -200,7 +200,7 @@ fn deep(depth: u64) \N{RIGHTWARDS ARROW} u64:
     depth
 
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     \N{REFERENCE MARK} a remark
     let found: mut u6 = 0u6
     foreach \N{SECTION SIGN}rows r := 0u6\N{HORIZONTAL ELLIPSIS}4u6:
@@ -208,6 +208,8 @@ fn main() \N{RIGHTWARDS ARROW} u6:
             found \N{LEFTWARDS ARROW} r
             break \N{SECTION SIGN}rows
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(found, \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 0u6
+
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 """
 
 #: What opening that program in Neovim has to arrive at: the token, and the

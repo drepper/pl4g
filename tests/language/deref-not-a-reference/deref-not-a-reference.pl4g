@@ -4,8 +4,10 @@
 ※ reference names a place.  Written after anything else there is nothing to
 ※ read through.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = 1u8
     let m: u8 = n⌖
     0u6

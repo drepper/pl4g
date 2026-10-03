@@ -5,8 +5,10 @@
 ※ Each assignment supersedes the one before it.
 let counter: mut u6 = 1u6
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     counter ← 10u6
     counter ← 20u6
     counter ← 30u6

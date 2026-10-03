@@ -29,8 +29,10 @@ fn `⟦⟧`(g: Grid, i: u64, j: u64) → u8:
 fn `⸨⸩`(g: Grid, k: u8) → bool:
     g.a = k
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let g: Grid = Grid(.a ← 3u8, .b ← 5u8, .c ← 7u8, .d ← 9u8)
     let one: u8 = g⟦0u64⟧
     let two: u8 = g⟦1u64, 1u64⟧

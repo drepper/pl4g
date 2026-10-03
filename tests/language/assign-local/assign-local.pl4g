@@ -4,8 +4,10 @@
 
 ※ A local that may be changed.  Nothing is written anywhere: a local is a value,
 ※ so the assignment binds the name to a new one.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[expect(4006)]
     let status: mut u6 = 3u6
     status ← 5u6

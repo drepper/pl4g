@@ -17,7 +17,9 @@ fn cell_where(product: u6) → u6:
     else:
         0u6
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ 2 × 3 is the first pair found, so 23; and nothing makes 29
     cell_where(6u6) + cell_where(29u6) + 19u6

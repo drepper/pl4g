@@ -2,6 +2,8 @@
 ※ pl4g-test: expect-diag 3205 LANG_ATTR_CONFLICT
 
 ※ A function cannot be both the startup function and a destructor.
+let std := ⎕import("std")
+
 @[startup, destructor]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0

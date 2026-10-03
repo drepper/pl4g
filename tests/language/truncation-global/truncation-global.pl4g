@@ -5,6 +5,8 @@
 ※ dropped would start the program with a number it never named.
 let counter: u8 = 300u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     counter

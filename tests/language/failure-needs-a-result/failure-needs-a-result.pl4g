@@ -5,7 +5,9 @@
 ※ successful result of the same type.  So it needs somewhere that wants a
 ※ result, and somewhere that wants anything else has nothing for it to be.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = ⊥
     0u6

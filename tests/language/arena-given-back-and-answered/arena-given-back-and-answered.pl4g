@@ -12,6 +12,8 @@ fn f(first: str) → str:
     ⎕empty(scratch)
     both
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if f("a") = "a<-": 0u6 else: 1u6

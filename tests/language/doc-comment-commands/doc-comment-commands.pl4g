@@ -46,7 +46,9 @@ fn remember(a: u8, b: u8):
 
 let kept: mut u8 = 0u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     remember(3u8, 4u8)
     ⎕narrow(kept, ⌜u6⌝) ?? 1u6

@@ -4,6 +4,8 @@
 
 ※ Writing 'return' on the last statement is accepted but warned about: the
 ※ canonical form of the language omits it.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     return 0

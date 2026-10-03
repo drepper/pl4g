@@ -5,8 +5,10 @@
 ※ refusal is what stops it -- so this test is also what says the suite runs every program under a
 ※ limit (`tests/limits.py`): without one, doubling a string forever would take the machine.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let piece: mut str = "0123456789abcdef"
     while true:
         piece ← piece ⧺ piece

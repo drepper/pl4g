@@ -47,8 +47,10 @@ CASES = [
 ASKING = """\
 let value: {1} = {2}
 
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup]
-fn main() {0} u6:
+fn main(init: std.Init) {0} u6:
     if {3}{4}(value) ≠ {5}u8:
         1u6
     else:
@@ -129,14 +131,14 @@ def test_the_level_without_it_counts_the_bits_itself(tmp_path) -> None:  # noqa:
     def branches(level: str) -> int:
         """How many instructions of `main` are branches at *level*."""
         body = dumped(source("ones", "u64", "7u64", 3), tmp_path,
-                      "".join(("--mclevel=", level))).split("main()u6:")[1]
+                      "".join(("--mclevel=", level))).split("main(ptr<Init>)u6:")[1]
         body = body.split("\n_start")[0]
         return sum(body.count(one) for one in (" jmp ", " je ", " jne "))
 
     def instructions(level: str) -> int:
         """And how many instructions it is in all."""
         body = dumped(source("ones", "u64", "7u64", 3), tmp_path,
-                      "".join(("--mclevel=", level))).split("main()u6:")[1]
+                      "".join(("--mclevel=", level))).split("main(ptr<Init>)u6:")[1]
         return body.split("\n_start")[0].count("\n    ")
 
     assert instructions("v1") > instructions("v2") + 8
@@ -146,11 +148,13 @@ def test_the_level_without_it_counts_the_bits_itself(tmp_path) -> None:  # noqa:
 #: A shift by a value the program computed, which is three instructions and a
 #: fixed register at the first two levels and one instruction at the third.
 SHIFTING = """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 let value: u64 = 1229782938247303441u64
 let distance: u64 = 4u64
 
 @[startup]
-fn main() {0} u6:
+fn main(init: std.Init) {0} u6:
     if {1}ones(value {2} distance) ≠ 15u8:
         1u6
     else:
@@ -179,10 +183,12 @@ def test_counting_the_bits_of_something_that_is_not_a_number_is_refused(
     """Both count the bits of a whole number and of nothing else."""
     path = tmp_path / "t.pl4g"
     path.write_text("""\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 let value: f64 = 1.5f64
 
 @[startup]
-fn main() {0} u6:
+fn main(init: std.Init) {0} u6:
     {1}narrow({1}ones(value), {2}u6{3}) ?? 1u6
 """.format(ARROW, QUAD, LIFT, DROP), encoding="utf-8")
     proc = run_compiler(["-o", str(tmp_path / "out"),

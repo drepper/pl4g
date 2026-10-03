@@ -4,8 +4,10 @@
 ※ An index worked out while compiling is checked against the length while
 ※ compiling, as a number written down is.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧ in ⎕static
     let a: u8 = v⟦2 + 2⟧
     0u6

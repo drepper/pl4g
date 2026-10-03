@@ -5,7 +5,9 @@
 ※ dictionary.  Anything else is a value the program worked out, and there is
 ※ nowhere for an assignment to put anything.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     3u8 ← 4u8
     0u6

@@ -8,6 +8,8 @@
 let thirteen: u6 = 13u6
 let eight: u6 = 8u6
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     thirteen « eight

@@ -12,8 +12,10 @@ let none: u8 = 0u8
 @[visible]
 let rest: mut u8 = 0u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     rest ← hundred % none ?? 3u8
     ※ what this used to say through the exit status, which is six bits now
     if hundred ÷ none ?? 9u8 ≠ 9u8:

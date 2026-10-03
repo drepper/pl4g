@@ -4,8 +4,10 @@
 ※ takes one: there is no type for an iterator in this language and nothing else
 ※ to do with one.  So it stands after the `=` of a `foreach` and nowhere else.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u8⟦2⟧ = ⟦1u8, 2u8⟧
     let held: u8 = ⎕enumerate(v)
     0u6

@@ -1200,12 +1200,25 @@ class TypeContext:
         self._running: dict[tuple[Type, Type | None, bool], RunningType] = {}
         self._integers: dict[tuple[int, bool], IntType] = {
             (t.bits, t.signed): t for t in (I8, I16, I32, I64, U8, U16, U32, U64)}
+        self._named: dict[str, ProductType] = {}
 
     #: How much room an enumeration takes where its definition does not say.
     #: The smallest unsigned type that holds every one of its values, the values
     #: being numbered from zero in the order they were written.
     HOLDERS: Final[tuple[tuple[int, int], ...]] = (
         (1 << 8, 8), (1 << 16, 16), (1 << 32, 32), (1 << 64, 64))
+
+    def named_record(self, name: str) -> ProductType:
+        """The record the textual form of the IR calls *name*.
+
+        That form names a record and does not define it, so what is read back is
+        a record of that name whose fields are not known: one per name, since a
+        record is nominal and every mention of the name is the one type.
+        """
+        found = self._named.get(name)
+        if found is None:
+            found = self._named[name] = ProductType((), name=name)
+        return found
 
     def holder_for(self, count: int) -> IntType:
         """The smallest unsigned type that holds *count* values."""

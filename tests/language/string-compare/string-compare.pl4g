@@ -10,8 +10,10 @@
 ※ lengths, so a prefix comes first.  That is what every ordering of strings
 ※ anyone uses says, and it is the only answer that makes the order a total one.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: str = "abc"
     let b: str = "abd"
     let c: str = "ab"

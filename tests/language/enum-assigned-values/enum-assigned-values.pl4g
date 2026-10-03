@@ -17,8 +17,10 @@ enum Code:
 @[visible]
 let seen: mut Code = Code.retry
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let first: u6 = match seen:
         ok:
             1u6

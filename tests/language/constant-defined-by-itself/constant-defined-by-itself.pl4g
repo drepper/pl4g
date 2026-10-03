@@ -9,7 +9,9 @@
 let A: u64 = B + 1
 let B: u64 = A + 1
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u8⟦A⟧ = ⟦1u8⟧ in ⎕static
     0u6

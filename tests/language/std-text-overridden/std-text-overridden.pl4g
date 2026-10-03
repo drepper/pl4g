@@ -22,7 +22,7 @@ fn `⍕`(v: T') → str:
         std.text(v, &mut ⎕heap)
 
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if ⍕Secret(.held ← 3u8) ≠ "hidden":
         return 1u6
     ※ Everything else still reads as it would have, including a record of its own.

@@ -3,6 +3,8 @@
 ※
 ※ An operator has no name to qualify it by, so this is reached without naming the
 ※ module: exporting it is what puts it in force where the module is imported.
+※ It is `⍎` and not `⍕`, which `std` exports for this and which every program
+※ imports: two modules exporting one operator cannot both be imported (4924).
 
 ※※ The digits, so that a number can be written one place at a time.
 ※
@@ -10,9 +12,9 @@
 ※ there is not implemented yet; what it costs is the table per call, and that is a
 ※ note in `TODO-pypl4g.md` and not a decision.
 @[export, impure]
-fn `⍕`(n: u64) → str:
+fn `⍎`(n: u64) → str:
     let digits: str⟦10⟧ = ⟦"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"⟧ in ⎕static
     if n < 10u64:
         digits⟦⎕unit(n, ⌜idx⌝)⟧
     else:
-        ⍕(n ÷ 10u64 ?? 0u64) ⧺ digits⟦⎕unit(n % 10u64 ?? 0u64, ⌜idx⌝)⟧
+        ⍎(n ÷ 10u64 ?? 0u64) ⧺ digits⟦⎕unit(n % 10u64 ?? 0u64, ⌜idx⌝)⟧

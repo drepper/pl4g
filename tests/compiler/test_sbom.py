@@ -19,8 +19,10 @@ import elfcheck
 from conftest import ELFLINT, compiler_targets, describe, run_compiler
 from pypl4g.sbom import ROW_SIZE, Tag
 
-LAYOUT = """@[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+LAYOUT = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[startup, impure]
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let n: u8 = twice(2u8)
     if n = 4u8:
         0
@@ -35,8 +37,10 @@ fn twice(of: u8) \N{RIGHTWARDS ARROW} u8:
 #: meant to see through: braces instead of indentation, semicolons instead of
 #: ends of lines, another number of spaces, a comment, and a literal written in
 #: another base.
-BRACED = """@[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6 { let n: u8 = twice(0x2u8) ;
+BRACED = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[startup, impure]
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6 { let n: u8 = twice(0x2u8) ;
       \N{REFERENCE MARK} a remark, which says nothing about the program
       if n = 4u8 { 0 } else { 1 } }
 fn twice(of: u8) \N{RIGHTWARDS ARROW} u8 { of + of }
@@ -97,11 +101,15 @@ def _built(tmp_path: Path, triple: str, source: str, name: str = "t") -> Path:
 def test_the_table_is_there_and_says_what_went_in(triple: str, tmp_path: Path) -> None:
     """Every kind of row, in the order the format puts them."""
     rows = _rows_of(_built(tmp_path, triple, LAYOUT))
-    assert [r.tag for r in rows] == [Tag.COMPILER, Tag.SOURCE, Tag.SOURCES,
-                                     Tag.FUNCTION, Tag.FUNCTION]
+    # Every program imports `std`, so it is the second source, and what of it
+    # was read -- its destructor among them -- follows the program's own.
+    assert [r.tag for r in rows][:4] == [Tag.COMPILER, Tag.SOURCE, Tag.SOURCE, Tag.SOURCES]
+    assert {r.tag for r in rows[4:]} == {Tag.FUNCTION}
     assert rows[0].name.startswith("pypl4g ")
     assert rows[1].name.endswith("t.pl4g")
-    assert [r.name for r in rows if r.tag == Tag.FUNCTION] == ["main", "twice"]
+    assert rows[2].name.endswith("std.pl4g")
+    functions = [r.name for r in rows if r.tag == Tag.FUNCTION]
+    assert functions[:2] == ["main", "twice"] and "finish" in functions[2:]
     assert all(len(r.digest) == 64 for r in rows), "SHA-256, written out in full"
     assert all(set(r.digest) <= set("0123456789abcdef") for r in rows)
 

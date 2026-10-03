@@ -9,8 +9,10 @@
 ※ found it was reflection over a record, whose answer is a tuple of pairs holding
 ※ strings.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let held: 〈〈str, u8〉, 〈str, u16〉〉 = 〈〈"x", 1u8〉, 〈"yz", 2u16〉〉
     let out: mut str = ""
     comptime foreach one := held:

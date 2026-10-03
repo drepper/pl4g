@@ -9,7 +9,9 @@
 fn rounded(x: f64) → f64:
     ⇕x
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕ord('a')
     0u6

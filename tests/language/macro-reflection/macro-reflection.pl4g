@@ -20,6 +20,8 @@ macro sum(e: syntax) → syntax:
     else:
         ⌜$e⌝
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(sum⌜3u8 + 4u8⌝ + sum⌜5u8⌝, ⌜u6⌝) ?? 1u6

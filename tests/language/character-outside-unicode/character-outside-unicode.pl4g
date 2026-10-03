@@ -5,8 +5,10 @@
 ※ above it is not a code point at all, and one written down is reported rather
 ※ than left to stop the program.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let c: char = 0x110000
     if ⎕ord(c) ≠ 0u32:
         1u6

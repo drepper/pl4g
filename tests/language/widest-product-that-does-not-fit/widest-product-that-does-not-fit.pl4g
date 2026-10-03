@@ -6,8 +6,10 @@
 
 let big: u64 = 4294967296u64
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if big × big = big:
         1u6
     else:

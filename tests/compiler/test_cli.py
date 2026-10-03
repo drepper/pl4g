@@ -20,8 +20,10 @@ from pypl4g.diag.engine import DiagEngine
 from pypl4g.driver.cli import SUBCOMMANDS, CommandLine
 from pypl4g.driver.options import ExitCode, load_option_table
 
-GOOD = """@[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+GOOD = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[startup, impure]
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     0
 """
 
@@ -161,7 +163,7 @@ def test_unknown_warning_name_is_reported(source: Path, tmp_path: Path) -> None:
 def test_warnings_can_be_turned_off_and_made_errors(tmp_path: Path) -> None:
     """A warning is controlled by the option its catalog entry declares."""
     source = tmp_path / "t.pl4g"
-    source.write_text("@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    return 0\n",
+    source.write_text("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    return 0\n",
                       encoding="utf-8")
     output = tmp_path / "out"
     plain = run_compiler(["-o", str(output), str(source)])
@@ -198,6 +200,16 @@ def test_emit_modes_write_to_the_output_file(source: Path, tmp_path: Path) -> No
         assert needle in output.read_text(encoding="utf-8")
 
 
+def own(reports: list[dict], source: Path) -> list[dict]:
+    """The entries of *reports* about *source*.
+
+    Every program imports `std`, and what the compiler decided about it -- the
+    functions nothing reaches, the generic ones it checked -- is in the log too.
+    """
+    return [entry for entry in reports
+            if "where" in entry and Path(entry["where"]["file"]).resolve() == source.resolve()]
+
+
 def test_report_log_is_written(source: Path, tmp_path: Path) -> None:
     """A program the compiler said nothing and chose nothing about has an empty
     log."""
@@ -207,7 +219,7 @@ def test_report_log_is_written(source: Path, tmp_path: Path) -> None:
     assert proc.returncode == ExitCode.SUCCESS
     document = json.loads(log.read_text(encoding="utf-8"))
     assert document["format_version"] == 3
-    assert document["reports"] == []
+    assert own(document["reports"], source) == []
     # Where the compiler ran, so that a path in the log can be found from
     # anywhere -- the arrangement DWARF uses for a compilation unit.
     assert Path(document["directory"]).is_absolute()
@@ -219,8 +231,10 @@ let only_by_dropped: u6 = 9u6
 fn unreached() \N{RIGHTWARDS ARROW} u6:
     only_by_dropped
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     used
 """
 
@@ -270,13 +284,13 @@ def test_nothing_the_image_offers_is_ever_logged_as_dropped(tmp_path: Path) -> N
     source.write_text("".join((
         "@[visible]\nlet shared: u6 = 1u6\n\n",
         "@[visible]\nfn reachable() \N{RIGHTWARDS ARROW} u6:\n    1u6\n\n",
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    1u6\n")),
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    1u6\n")),
         encoding="utf-8")
     log = tmp_path / "reports.json"
     proc = run_compiler(["-o", str(tmp_path / "out"),
                          "".join(("--report-log=", str(log))), str(source)])
     assert proc.returncode == ExitCode.SUCCESS, proc.stderr
-    assert json.loads(log.read_text(encoding="utf-8"))["reports"] == []
+    assert own(json.loads(log.read_text(encoding="utf-8"))["reports"], source) == []
 
 
 def test_time_report(source: Path, tmp_path: Path) -> None:
@@ -290,11 +304,13 @@ def test_time_report(source: Path, tmp_path: Path) -> None:
 DROPPED_LOCAL = """let g: u6 = 3u6
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     @[ignore(4006)]
     let unread: u6 = g ⊞ 1u6
     let kept: u6 = g
     kept
+
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 """
 
 
@@ -335,8 +351,9 @@ def test_nothing_is_dropped_where_nothing_asked_for_it(tmp_path: Path) -> None:
 
 DROPPED_CALL = "".join((
     "fn worked_out(n: u6) \N{RIGHTWARDS ARROW} u6:\n    n + n\n\n",
-    "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n",
-    "    _ \N{LEFTWARDS ARROW} worked_out(3u6)\n    0u6\n"))
+    "@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n",
+    "    _ \N{LEFTWARDS ARROW} worked_out(3u6)\n    0u6\n\n",
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"))
 
 
 def test_a_call_that_is_not_made_reaches_the_log(tmp_path: Path) -> None:
@@ -383,7 +400,7 @@ MANY_GLYPHS = "".join((
     "\N{REFERENCE MARK} \N{RIGHTWARDS ARROW} \N{LEFTWARDS ARROW} ",
     "\N{SECTION SIGN} \N{HORIZONTAL ELLIPSIS} glyphs before anything\n",
     "fn worked_out() \N{RIGHTWARDS ARROW} u6:\n    1u6\n\n",
-    "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n",
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n",
     "    \N{REFERENCE MARK} \N{RIGHTWARDS ARROW} and here too\n",
     "    _ \N{LEFTWARDS ARROW} worked_out()\n    0u6\n"))
 
@@ -402,7 +419,7 @@ def test_a_column_counts_characters_and_not_bytes(tmp_path: Path) -> None:
     assert proc.returncode == ExitCode.SUCCESS, proc.stderr
     reports = json.loads(log.read_text(encoding="utf-8"))["reports"]
     lines = MANY_GLYPHS.split("\n")
-    for entry in reports:
+    for entry in own(reports, source):
         where = entry["where"]
         at = lines[where["line"] - 1][where["column"] - 1:]
         assert at.startswith("worked_out"), (entry, at)

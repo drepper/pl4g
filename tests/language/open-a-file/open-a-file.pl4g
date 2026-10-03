@@ -54,7 +54,7 @@ fn missing() → u6:
             if code = 2i32: 0u6 else: 7u6
 
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a := written()
     if a ≠ 0u6: return a
     let b := read()

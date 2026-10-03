@@ -5,11 +5,13 @@
 ※ only thing exporting one could mean.
 ※
 ※ This is what lets a library say what a glyph means for the types it deals in --
-※ `⍕` for a number being the case it was found for.
+※ `⍎` for a number being the case it was found for.
 
 let d := ⎕import("digits")
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
-    let s: str = "n=" ⧺ ⍕1234u64
+fn main(init: std.Init) → u6:
+    let s: str = "n=" ⧺ ⍎1234u64
     ⎕narrow(⎕drop(#s), ⌜u6⌝) ?? 1u6

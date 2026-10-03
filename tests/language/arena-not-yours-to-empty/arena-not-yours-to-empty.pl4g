@@ -9,8 +9,10 @@ fn cleared(a: &mut arena) → u8:
     ⎕empty(a)
     0u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let scratch: mut arena = ⎕arena
     defer ⎕empty(scratch)
     if cleared(&mut scratch) = 0u8: 0u6 else: 1u6

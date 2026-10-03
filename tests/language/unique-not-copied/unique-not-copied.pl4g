@@ -17,8 +17,10 @@ type Handle = fd : i32
 fn peek(h: &Handle) → i32:
     h⌖.fd
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let h: Handle = Handle(.fd ← 1i32)
     ※ A field of it, and a reference to it: neither is a copy.
     let n: i32 = h.fd + peek(&h)

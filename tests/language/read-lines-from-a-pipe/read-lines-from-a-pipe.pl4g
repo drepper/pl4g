@@ -41,7 +41,7 @@ fn counted(from: std.Reader) → u6:
     if lines = 4u64 ∧ bytes = 17u64 ∧ fourth = 102u8: 0u6 else: 4u6
 
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
     if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
         return 5u6

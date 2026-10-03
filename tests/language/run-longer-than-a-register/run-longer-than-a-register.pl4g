@@ -9,8 +9,10 @@
 let wide: u8⟦32⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8⟧ in ⎕static
 let odd: u8⟦17⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 2u8⟧ in ⎕static
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let up: u8⟦32⟧ = wide + 100u8
     let masked: u8⟦17⟧ = odd & 3u8
     let down: u8⟦17⟧ = odd - 1u8

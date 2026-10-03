@@ -9,6 +9,8 @@ fn named(n: u64) → str in pool:
     let pool: mut arena = ⎕arena
     "a" ⧺ "b" in pool
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if named(1u64) = "ab": 0u6 else: 1u6

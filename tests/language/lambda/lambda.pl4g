@@ -48,8 +48,10 @@
 
 let counted: mut u8 = 0u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ nothing brought in, the body written with braces
     let one: fn(u8) → u8 = λ a: u8 → u8 { a + 1u8 }
     ※ and written by indentation, which is the same function

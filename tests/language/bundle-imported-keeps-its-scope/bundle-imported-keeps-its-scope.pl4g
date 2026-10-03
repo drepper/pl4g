@@ -17,8 +17,10 @@ fn step(a: bool) → bool:
 fn go(a: T') → T' pre(scoped.steppable(T')):
     a
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if go(true):
         1u6
     else:

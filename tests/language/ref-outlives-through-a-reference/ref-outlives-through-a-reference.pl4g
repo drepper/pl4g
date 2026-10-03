@@ -8,8 +8,10 @@
 
 let b1 : bool = true
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v1 : mut u32 = 0u32
     let r1 : mut &mut u32 = &v1
     let rr : &mut &mut u32 = &mut r1

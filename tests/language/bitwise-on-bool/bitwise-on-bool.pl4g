@@ -3,7 +3,9 @@
 
 ※ A truth value is not a one-bit integer: `bool` has two values and no
 ※ representation the language promises, so there is nothing for `&` to work on.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let flag: bool = true
     ~flag

@@ -6,8 +6,10 @@
 
 type Box = f: fn(u8) → u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let b: mut Box = Box(.f ← λ x: u8 → u8 { x })
     let first: fn(u8) → u8 = b.f
     if first(0u8) = 0u8:

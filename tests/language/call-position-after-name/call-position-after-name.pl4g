@@ -6,8 +6,10 @@
 ※ written by name after, which is the order they read in anyway.  Python
 ※ states the same rule about the same two kinds of argument.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = plus(.n ← 2u8, 1u8)
     0u6
 

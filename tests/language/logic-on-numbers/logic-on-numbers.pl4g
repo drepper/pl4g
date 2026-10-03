@@ -8,6 +8,8 @@
 let count: u8 = 3u8
 let ready: bool = true
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → bool:
+fn main(init: std.Init) → bool:
     count ∧ ready

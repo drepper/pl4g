@@ -4,8 +4,10 @@
 
 ※ The same program, saying what it raises.  The attribute stands on its own
 ※ line, indented with the statement it belongs to.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[expect(4006)]
     let a: mut u6 = 5u6
     a ← 4u6

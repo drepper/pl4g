@@ -39,8 +39,10 @@ unit mph = 1609344 ÷ 3600000 × meter ÷ second
 ※ things may stand where one is wanted.  The other way round does not follow.
 unit ¤size → ¤idx
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let d: u32 ¤meter = 100
     let t: u32 ¤second = 5
     ※ a quotient, whose unit is worked out

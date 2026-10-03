@@ -6,8 +6,10 @@
 
 let count: mut u8 = 3u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     match count:
         u8(v):
             return v

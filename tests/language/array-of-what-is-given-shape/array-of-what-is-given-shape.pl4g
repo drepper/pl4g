@@ -5,8 +5,10 @@
 ※ one dimension picks out of a vector is a vector, not a table, and a number is
 ※ not an array at all.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let arr: u8⟦4⟧ = ⟦0u8, 1u8, 2u8, 3u8⟧ in ⎕static
     let x: ⟦,⟧ = arr⟦arr > 1⟧
     let y: ⟦⟧ = 5u8

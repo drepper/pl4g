@@ -14,6 +14,8 @@ let k := ⎕import("kinds")
 fn secret() → u8:
     9u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(⎕drop(#(k.describe(true))), ⌜u6⌝) ?? 1u6

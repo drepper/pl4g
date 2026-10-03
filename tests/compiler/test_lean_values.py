@@ -23,8 +23,10 @@ fn pick(c: bool, a: &mut arena, n: u64) \N{RIGHTWARDS ARROW} u64:
     let w: str = if c: "i" \N{DOUBLE PLUS} "j" in a else: "k" \N{DOUBLE PLUS} "l" in a
     \N{APL FUNCTIONAL SYMBOL QUAD}drop(#s + #t + #u + #w)
 
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let a: mut arena = \N{APL FUNCTIONAL SYMBOL QUAD}arena
     defer \N{APL FUNCTIONAL SYMBOL QUAD}empty(a)
     if pick(true, &mut a, 3u64) = 11u64: 0u6 else: 1u6

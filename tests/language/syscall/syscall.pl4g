@@ -39,8 +39,10 @@
 ※ A number no kernel has a call for, which every one of the three refuses.
 let NO_SUCH_CALL: i64 = 0x4000i64
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ one source, three architectures: `⎕sc@write` is 1 here and 64 there
     let message: u8⟦6⟧ = ⟦104u8, 101u8, 108u8, 108u8, 111u8, 10u8⟧ in ⎕static
     let wrote: i64 = ⎕syscall(⎕sc@write, 1i64, &message⟦0⟧, 6i64)

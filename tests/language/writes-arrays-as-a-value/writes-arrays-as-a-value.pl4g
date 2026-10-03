@@ -8,7 +8,9 @@
 fn clear(a: mut u8⟦⟧):
     a⟦0⟧ ← 0u8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let f: fn(u8⟦⟧) = clear
     0u6

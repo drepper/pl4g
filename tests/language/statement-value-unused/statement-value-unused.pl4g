@@ -4,7 +4,9 @@
 ※ A statement that is nothing but an expression computes a value and does
 ※ nothing else, so unless something takes the value the line does nothing.
 ※ A bare literal is as much such a line as anything computed is.
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     1u6
     0u6

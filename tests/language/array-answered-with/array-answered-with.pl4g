@@ -8,6 +8,8 @@
 fn four() → u8⟦4⟧:
     ⟦1u8, 2u8, 4u8, 8u8⟧
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

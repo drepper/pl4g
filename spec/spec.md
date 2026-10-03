@@ -295,7 +295,7 @@ else.
 
 **The three streams are `mut` fields of `Io`** (`mut output : Writer`; see [the fields of a record](#product-and-sum-types)), so
 `&mut init.io.output` may be lent from `init: std.Init`: the record is not changed, and a stream in it is lent to be written to.
-`mut` before `std.Init` is what lends the whole record by `&mut`.
+The parameter is never `mut` (4404); nothing in the record but its streams is the program's to change.
 
 **There is no other way to them.**  No variable at the top level holds the streams: a function that writes is handed the device it
 writes to, by `&mut`, which is what its signature then says.  A program that wants an ambient one may make a variable of its own,
@@ -1888,7 +1888,7 @@ does nothing at all, so it is refused.
 
 ```
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     1u6                    ※ refused: this value is not used
     count = 1u8            ※ refused, and the same mistake C makes easy
     count & mask           ※ refused
@@ -2796,7 +2796,7 @@ a dangling reference is a program nobody notices is wrong; Go and Java move what
 collector.  Where a reference does not leave the call none of this is written, which is most of what references are for:
 
 ```
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: mut i8 = 1i8
     bump(&mut n)                 ※ the call says a place is handed over
     …
@@ -5112,7 +5112,7 @@ fn say(name: str, what: u8⟦⟧) ⇉ std.Pending ⇇ std.Answer:
             return
 
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     std.spawn(⎕start(say("one.txt", ⎕bytes("one\n")) in ⎕heap))
     std.spawn(⎕start(say("two.txt", ⎕bytes("two\n")) in ⎕heap))
     if std.run() = 2u64: 0u6 else: 1u6
@@ -5323,7 +5323,7 @@ happens when the diagnostic does not arise.
 
 ```
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[expect(4006)]
     let a: mut u8 = 5u8
     a ← 4u8
@@ -5495,7 +5495,7 @@ last statement is:
 let counter: mut u8 = 1u8
 
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     counter ← 42u6     ※ the program exits with status 42
 ```
 
@@ -6869,13 +6869,9 @@ has to decide something.  **Bazel** and **Buck**, whose build files are a real l
 language being built.  What this has that none of them has is that the build is written in the language, checked by the compiler
 that checks the program, and run by the compiler that compiles it.
 
-The startup function takes what the program was started with, or nothing, and returns `u8`:
+**The startup function is written one way**: `fn NAME(NAME: std.Init) → u6`, the names being the program's own.
 
 ```
-@[startup]
-fn main() → u6:
-    0
-
 let std := ⎕import("std")
 
 @[startup, impure]
@@ -6885,23 +6881,39 @@ fn main(init: std.Init) → u6:
     0u6
 ```
 
-The value it returns becomes the exit status of the process.  The one parameter it may take is **the record the `std` module
-calls `Init`** -- the record itself, written `init: std.Init`, or `init: mut std.Init` where the program lends the whole of it by
-`&mut` -- and no other: the entry point has the devices the process inherited to hand over and nothing else, so
-a parameter of any other type would be left undefined (4404).  It is `Init` rather than the descriptors themselves so that the
-arguments, the environment and whatever else a program is started with have somewhere to go without changing the one signature
-every program writes.  Which type that is is settled by where it was written down -- the `std` module the installation provides --
-and not by its shape, so a record a program defines for itself and calls `Init` is a record it defined for itself.
+The value it returns becomes the exit status of the process.  Its one parameter is **the record the `std` module calls `Init`**,
+the record itself and not `mut`, and anything else is refused (4404): no parameter at all, a second one, `mut std.Init`, a
+reference to it, or a record of another type.  The entry point has the devices the process inherited to hand over and nothing else,
+so another parameter would be left undefined; and a program whose startup function asked for nothing would still be handed what it
+was started with, so it says so.  It is `Init` rather than the descriptors themselves so that the arguments, the environment and
+whatever else a program is started with have somewhere to go without changing the one signature every program writes.  Which type
+that is is settled by where it was written down -- the `std` module the installation provides -- and not by its shape, so a record
+a program defines for itself and calls `Init` is a record it defined for itself.
+
+**`mut` is not written because nothing needs it.**  What changes in the record are its streams, and they are `mut` fields of `Io`,
+written and lent from a record that is not `mut` (see [the fields of a record](#product-and-sum-types)); the arguments are the
+program's to read.  With one spelling, a reader knows what any program's entry is from its first line.
+
+**Every program therefore imports `std`**, and `std`'s destructor -- the one that waits for what is still outstanding -- is in every
+image, with the ring and the runtime under it.  An image is not smaller for using less of `std`; it is that much and then what the
+program uses.
 
 **What is handed over is where it is.**  The record is an object the image carries, in the writable data; the entry point fills it
 in and passes its address.  That is what lets the record *grow* without this signature changing, and what lets a program **change
-what it was started with** -- `init⌖.io.output ← std.Writer(.fd ← 2i32)` makes what it writes go where it reports.
+what it was started with** -- `init.io.output ← std.Writer(.fd ← 2i32)` makes what it writes go where it reports.
 
 **The entry point reads the arguments into it.**  What the kernel leaves at the stack pointer is the count, then that many
-pointers, then a null, and that is the only moment the stack pointer says so -- everything after it puts something there.  A
-program that takes no parameter carries no such object, reads no arguments and asks the system for nothing.
+pointers, then a null, and that is the only moment the stack pointer says so -- everything after it puts something there.
 
-`init⌖.io.input`, `init⌖.io.output` and `init⌖.io.errors` are what the process inherited open.  Taking `&mut init⌖.io.output` is
+Compare: **C**, whose `main` may take nothing, `(argc, argv)` or, as an extension, `envp` as well; **C++** and **D**, likewise, D
+also allowing `string[] args`; **Rust** and **Go**, whose `main` takes nothing and reaches the arguments and the streams through
+the library's globals (`std::env::args`, `os.Args`, `os.Stdout`); **Zig**, whose `main` takes nothing and asks `std.process` and
+`std.io` for them, and whose newer `std.process.Init` handed to `main` is the nearest thing to this; **Odin**, whose `os.args` and
+`os.stdout` are package globals; **Haskell**, whose `main :: IO ()` takes nothing and has `getArgs`.  Every one of them allows
+several shapes or none, because the arguments are reachable some other way.  Here they are reachable no other way -- there are no
+globals holding them -- so the one shape is the only one that works.
+
+`init.io.input`, `init.io.output` and `init.io.error` are what the process inherited open.  Taking `&mut init.io.output` is
 exclusive by the rule that already refuses a second `&mut` to a place, so **two names for one device is a thing the compiler
 refuses rather than a thing a lock prevents**, and nothing is checked while the program runs.
 
@@ -7207,7 +7219,7 @@ The name a function is known by in the generated program is its signature writte
 parentheses separated by commas, and then the result type.
 
 ```
-fn main() → u8                            main()u8
+fn main(init: std.Init) → u8                            main()u8
 fn absdiff(a: i32, b: i32) → i32          absdiff(i32,i32)i32
 fn take(p: ptr<u8>, n: u64) → void        take(ptr<u8>,u64)void
 fn apply(f: fn(i32) → i32, x: i32) → i32  apply(fn(i32)i32,i32)i32

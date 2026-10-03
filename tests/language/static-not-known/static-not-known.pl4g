@@ -3,8 +3,10 @@
 ※ What is in the image is laid out while compiling, so every part of it is
 ※ something the compiler knows: a name is worked out while the program runs.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = 3u8
     let some: u8⟦2⟧ = ⟦1u8, n⟧ in ⎕static
     0u6

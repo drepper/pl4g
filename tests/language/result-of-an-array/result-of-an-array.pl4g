@@ -21,8 +21,10 @@ fn walked(it: ⇉u8⟦⟧ ? i32) → u64:
                 t ← t + (⎕narrow(e, ⌜u64⌝) ?? 0u64)
     t
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let here: mut u64 = 0u64
     foreach x := parts(1u64):
         match x:

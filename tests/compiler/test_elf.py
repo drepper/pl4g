@@ -19,8 +19,10 @@ from conftest import (ARCH_TOOLS, ELFLINT, architecture_of, check_conformance,
                       compiler_targets, describe, run_compiler, runner_for)
 
 SOURCE = """\N{REFERENCE MARK} A program that exits with status 0.
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     0
 """
 
@@ -29,41 +31,75 @@ READELF = "eu-readelf"
 #: The symbol the startup function above is known by.  A mangled name is the
 #: signature written out, so it needs no demangler to read -- which is the point
 #: of it, and is why the expectations below can simply state it.
-MAIN = "main()u6"
+MAIN = "main(ptr<Init>)u6"
 
 #: What each backend is expected to emit for the program above, and the machine
 #: number the image must carry.  Writing the instructions out is the point: a
 #: change in code generation should have to be acknowledged here.
 EXPECTED = {
     "x86_64": (62, [
-        "xor eax,eax",
-        "ret",
-        "xor ebp,ebp",
-        "".join(("call <", MAIN, ">")),
-        "mov edi,eax",
-        "mov eax,0xe7",
-        "syscall",
-        "ud2",
+        'mov rcx,rax',
+        'xor eax,eax',
+        'ret',
+        'mov r13,rsp',
+        'xor ebp,ebp',
+        'mov rdi,r13',
+        'lea <__pl4g_init>',
+        'add rsi,0x10',
+        'call <pl4g_args>',
+        'lea <__pl4g_init>',
+        "".join(('call <', MAIN, '>')),
+        'mov r12d,eax',
+        'call <std.finish()void>',
+        'mov edi,r12d',
+        'mov eax,0xe7',
+        'syscall',
+        'ud2',
     ]),
     "aarch64": (183, [
-        "mov w0, #0x0",
-        "ret",
-        "mov x29, xzr",
-        "mov x30, xzr",
-        "".join(("bl <", MAIN, ">")),
-        "mov x8, #0x5e",
-        "svc #0x0",
-        "udf #1",
+        'mov w0, #0x0',
+        'ret',
+        'mov x21, sp',
+        'mov x29, xzr',
+        'mov x30, xzr',
+        'mov x0, x21',
+        'adrp <page>',
+        'add x1, x1, <offset>',
+        'add x1, x1, #0x10',
+        'bl <pl4g_args>',
+        'adrp <page>',
+        'add x0, x0, <offset>',
+        "".join(('bl <', MAIN, '>')),
+        'mov x19, x0',
+        'bl <std.finish()void>',
+        'mov x0, x19',
+        'mov x8, #0x5e',
+        'svc #0x0',
+        'udf #1',
     ]),
     "riscv64": (243, [
-        "li a0,0",
-        "ret",
-        "li s0,0",
-        "li ra,0",
-        "".join(("jal <", MAIN, ">")),
-        "li a7,94",
-        "ecall",
-        "unimp",
+        'li a0,0',
+        'ret',
+        'mv s3,sp',
+        'li s0,0',
+        'li ra,0',
+        'mv a0,s3',
+        'auipc t0,<page>',
+        'addi <__pl4g_init>',
+        'mv a1,t0',
+        'li t0,16',
+        'add a1,a1,t0',
+        'jal <pl4g_args>',
+        'auipc t0,<page>',
+        'addi <__pl4g_init>',
+        'mv a0,t0',
+        "".join(('jal <', MAIN, '>')),
+        'mv s1,a0',
+        'jal <std.finish()void>',
+        'mv a0,s1',
+        'li a7,94',
+        'ecall',
+        'unimp',
     ]),
 }
 
@@ -199,11 +235,17 @@ def test_sections_and_symbols_are_present(built: Built) -> None:
     # architecture has to say in the file because its base is small and
     # everything else is an extension.
     extra = [".riscv.attributes"] if built.arch == "riscv64" else []
+    # AArch64's compiler of the runtime puts its sixteen-byte constants in a
+    # section of their own.
+    constants = [".pl4grt.rodata.cst16"] if built.arch == "aarch64" else []
     # The bill of materials comes before the code because it is read-only and
     # the code is not: sections are grouped by what may be done to them, and a
-    # group is one mapping.
+    # group is one mapping.  Every program imports `std`, whose destructor drains
+    # the ring before the process ends -- so the ring is in the data, and the
+    # runtime's code and data beside the program's own.
     assert [s.name for s in built.image.sections] == \
-        ["", ".sbom", ".sbomstr", ".text", *extra,
+        ["", *constants, ".pl4grt.rodata", ".sbom", ".sbomstr",
+         ".text", ".pl4grt.text", ".data", ".pl4grt.bss", *extra,
          ".shstrtab", ".symtab", ".strtab"]
     start = built.image.symbol("_start")
     main = built.image.symbol(MAIN)
@@ -261,7 +303,18 @@ def test_disassembles_to_the_expected_code(built: Built) -> None:
     assert proc.returncode == 0, describe(proc)
 
     body: list[str] = []
+    # The program's own code and the entry point that calls it: what `std`
+    # brings with it -- its destructor, the runtime under it -- is checked by
+    # what the image holds (`test_sections_and_symbols_are_present`) and not
+    # instruction by instruction here.
+    wanted = False
     for line in proc.stdout.splitlines():
+        if line.endswith(">:"):
+            name = line[line.index("<") + 1:-2]
+            wanted = name in (MAIN, "_start")
+            continue
+        if not wanted:
+            continue
         parts = line.split("\t")
         if len(parts) < 3 or not parts[2].strip():
             continue
@@ -274,7 +327,16 @@ def test_disassembles_to_the_expected_code(built: Built) -> None:
         if "<" in text:
             text = "".join((text[:text.index("<")].split()[0], " ",
                             text[text.index("<"):].split()[0]))
-        body.append(text.split("//")[0].strip())
+        text = text.split("//")[0].strip()
+        # Where the data lands moves with everything laid out before it, so the
+        # page an address is formed from and the offset into it are not compared.
+        if text.startswith("adrp "):
+            text = "adrp <page>"
+        elif text.startswith("auipc "):
+            text = "".join((text[:text.index(",") + 1], "<page>"))
+        elif body and body[-1] == "adrp <page>" and text.startswith("add "):
+            text = "".join((text[:text.rindex(",") + 1], " <offset>"))
+        body.append(text)
 
     _, expected = EXPECTED[built.arch]
     assert body == expected, proc.stdout
@@ -298,7 +360,10 @@ def test_the_image_is_small(built: Built) -> None:
     apart = (".riscv.attributes", ".sbom", ".sbomstr")
     said = sum(s.sh_size for s in built.image.sections if s.name in apart)
     said += 2 * elfcheck.SHDR.size + elfcheck.PHDR.size
-    assert built.path.stat().st_size - said < 1024
+    # Every program imports `std` and carries its destructor, which drains the
+    # ring through the runtime: most of what is counted is the runtime's code,
+    # about eight kilobytes of it, and the program's own is a few instructions.
+    assert built.path.stat().st_size - said < 9 * 1024
 
 
 def test_asking_the_processor_is_what_a_level_costs(tmp_path: Path) -> None:
@@ -355,7 +420,10 @@ def test_making_a_stack_is_what_it_costs(built: Built, tmp_path: Path) -> None:
     assert not stack.p_flags & elfcheck.PF_X
     names = [s.name for s in image.sections]
     assert ".data" in names, names
-    assert [n for n in names if n.startswith(".pl4grt")] == [], \
+    # The runtime is there already, for `std`'s destructor; the stack takes
+    # nothing more of it -- it is emitted, not carried.
+    assert [n for n in names if n.startswith(".pl4grt")] == \
+        [s.name for s in built.image.sections if s.name.startswith(".pl4grt")], \
         "nothing of this is carried; it is emitted"
     grown = output.stat().st_size - built.path.stat().st_size
     assert 0 < grown < 1024, grown
@@ -364,13 +432,15 @@ def test_making_a_stack_is_what_it_costs(built: Built, tmp_path: Path) -> None:
 def test_a_group_with_nothing_in_it_costs_no_segment(built: Built) -> None:
     """An empty segment would still take a page, so it is not produced.
 
-    The program above has no variables, so nothing is writable and there is no
-    writable segment.  Two remain: the bill of materials, which every image
-    carries and which is read-only, and the code.
+    Three groups are not empty: what is read -- the bill of materials, which
+    every image carries, and the constants -- the code, and what is written,
+    which is `std`'s ring and the runtime's state, every program importing `std`.
+    Nothing is both written and run, so there is no fourth.
     """
     loads = [s for s in built.image.segments if s.p_type == elfcheck.PT_LOAD]
     assert [s.p_flags for s in loads] == \
-        [elfcheck.PF_R, elfcheck.PF_R | elfcheck.PF_X]
+        [elfcheck.PF_R, elfcheck.PF_R | elfcheck.PF_X,
+         elfcheck.PF_R | elfcheck.PF_W]
 
 
 def test_a_section_both_writable_and_executable_is_refused() -> None:

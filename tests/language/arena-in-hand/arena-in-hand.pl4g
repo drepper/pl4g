@@ -24,8 +24,10 @@ fn joined(a: &mut arena, first: str, second: str) → str in a:
 fn `⍕`(v: bool, a: &mut arena) → str in a:
     if v: "yes" ⧺ "!" in a else: "no" ⧺ "!" in a
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let scratch: mut arena = ⎕arena
     defer ⎕empty(scratch)
     if joined(&mut scratch, "ab", "cd") ≠ "abcd":

@@ -10,6 +10,8 @@
 fn total(a: T', n: u64) → T' pre(n > 0u64 ∧ T' ⊞ T' → T'):
     a
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(total(3u8, 1u64), ⌜u6⌝) ?? 1u6

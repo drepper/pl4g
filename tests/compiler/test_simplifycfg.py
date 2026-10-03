@@ -215,8 +215,10 @@ def test_what_the_inliner_leaves_is_merged_away(compile_source) -> None:  # noqa
 fn add(a: u8, b: u8) \N{RIGHTWARDS ARROW} u8:
     a + b
 
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(add(1u8, 2u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """
     proc, output = compile_source(source, "--emit=ir", "-O1")

@@ -20,8 +20,10 @@
 ※ carries the sum and there is no reading in which `⊥ a` is the left side of
 ※ anything.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let plain: u8? = nothing()
     let carried: u8?u16 = saying(700u16)
     let summed: u8?u16 = adding(300u16, 400u16)

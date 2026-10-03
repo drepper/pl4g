@@ -7,8 +7,10 @@
 let two_hundred: u8 = 200u8
 let one_hundred: u8 = 100u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ what this used to say through the exit status, which is six bits now
     if two_hundred ⊞ one_hundred ≠ 255u8:
         1u6

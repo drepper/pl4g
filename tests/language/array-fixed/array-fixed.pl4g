@@ -12,8 +12,10 @@
 ※ An element is read and written with the same brackets the type is written
 ※ with, so that a type, a value of it and a lookup in it all look alike.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: mut u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
     a⟦0⟧ ← 5u8
     ※ an index written down is checked while compiling, and one worked out

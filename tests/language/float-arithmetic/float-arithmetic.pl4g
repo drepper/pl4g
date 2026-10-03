@@ -21,8 +21,10 @@ fn stop_unless(ok: bool):
 fn twice(x: f64) → f64:
     x + x
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     @[ignore(4217)]
     stop_unless(twice(three) = 6f64)
     @[ignore(4217)]

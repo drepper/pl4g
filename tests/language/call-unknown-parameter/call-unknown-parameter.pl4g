@@ -4,8 +4,10 @@
 ※ that is not one of them is nearly always a spelling, and the parameters are
 ※ where to look for the right one.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let n: u8 = plus(.nope ← 1u8)
     0u6
 

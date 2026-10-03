@@ -7,8 +7,10 @@
 ※ and where an array is asked for -- a name of an array type, `#`, an index --
 ※ the array is built there, in this call's room.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let arr: u8⟦4⟧ = ⟦0u8, 1u8, 2u8, 3u8⟧ in ⎕static
     let q := arr⟦arr > 1⟧
     let n: mut u8 = 0u8

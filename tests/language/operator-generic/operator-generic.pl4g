@@ -17,8 +17,10 @@ fn `+`(p: T', q: T') → T':
 fn `⍴`(p: Point) → u64:
     ⎕widen(p.x, ⌜u64⌝) + ⎕widen(p.y, ⌜u64⌝)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let p: Point = Point(.x ← 1u8, .y ← 2u8)
     let q: Pair = Pair(.a ← 5u8, .b ← 6u8)
     let r: Point = p + p

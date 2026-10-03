@@ -17,8 +17,10 @@ fn ping(x: T', n: u8) → u8:
 fn pong(x: T', n: u8) → u8:
     if n = 0u8: 1u8 else: ping(x, n - 1u8)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if countdown(100000u32, 1u32, 0u32) ≠ 0u32: return 1u6
     if fact(5u32, 1u32) ≠ 120u32 ∨ fact(4u8, 1u8) ≠ 24u8: return 2u6
     if ping(1u8, 5u8) ≠ 1u8 ∨ ping(true, 4u8) ≠ 0u8: return 3u6

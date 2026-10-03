@@ -29,12 +29,12 @@ STOPPED = statuses.OVERFLOW
 
 OVERFLOWS = "".join((
     "let fifty: u6 = 50u6\nlet forty: u6 = 40u6\n\n",
-    "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
     "    fifty + forty\n"))
 
 FITS = "".join((
     "let twenty: u6 = 20u6\nlet three: u6 = 3u6\n\n",
-    "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
     "    twenty ", TIMES, " three\n"))
 
 
@@ -66,7 +66,7 @@ def test_it_says_what_happened_and_where(triple: str, tmp_path) -> None:  # noqa
     assert "addition that does not fit" in said, said
     assert "in 'main'" in said, said
     # The place, in the form the compiler's own diagnostics use.
-    assert "t.pl4g:6:5:" in said, said
+    assert "t.pl4g:7:5:" in said, said
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
@@ -82,7 +82,7 @@ def test_a_program_that_cannot_fault_carries_nothing(triple: str, tmp_path) -> N
     """The helper and the messages are emitted only where something asked for
     them, so a program with no arithmetic in it is the size it always was."""
     path = tmp_path / "t.pl4g"
-    path.write_text("".join(("@[startup, impure]\nfn main() ", ARROW, " u6:\n    0u6\n")),
+    path.write_text("".join(("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    0u6\n")),
                     encoding="utf-8")
     output = tmp_path / "out"
     proc = run_compiler(["-o", str(output), "".join(("--target=", triple)), str(path)])
@@ -100,15 +100,15 @@ def test_each_fault_names_its_own_place(triple: str, tmp_path) -> None:  # noqa:
         "let a: u6 = 50u6\nlet b: u6 = 40u6\n\n",
         "@[visible]\nlet first: mut u6 = 0u6\n",
         "@[visible]\nlet second: mut u6 = 0u6\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    first \N{LEFTWARDS ARROW} a + b\n",
         "    second \N{LEFTWARDS ARROW} a + b\n    0u6\n")), encoding="utf-8")
     output = tmp_path / "out"
     proc = run_compiler(["-o", str(output), "".join(("--target=", triple)), str(path)])
     assert proc.returncode == 0, describe(proc)
     image = output.read_bytes()
-    assert b"t.pl4g:11:13" in image, "the first fault does not say where it is"
-    assert b"t.pl4g:12:14" in image, "the second fault does not say where it is"
+    assert b"t.pl4g:12:13" in image, "the first fault does not say where it is"
+    assert b"t.pl4g:13:14" in image, "the second fault does not say where it is"
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
@@ -138,20 +138,26 @@ KINDS = {
 let fifty: u6 = 50u6
 let forty: u6 = 40u6
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     fifty + forty
 """,
     statuses.NOT_A_CODE_POINT: """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 let past: u32 = 1114112u32
 
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(⎕ord(⎕chr(past)), ⌜u6⌝) ?? 1u6
 """,
     statuses.OUT_OF_RANGE: """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let row: u6⟦3⟧ = ⟦1u6, 2u6, 3u6⟧ in ⎕static
     let at: u6 ¤idx = 7
     row⟦at⟧

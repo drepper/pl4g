@@ -7,7 +7,9 @@ let kept: mut u8 = 0u8
 fn prepare():
     return
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     kept ← prepare()
     kept

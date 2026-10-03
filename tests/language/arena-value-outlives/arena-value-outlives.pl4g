@@ -13,6 +13,8 @@ fn kept(c: bool) → bool:
         held ← "a" ⧺ "b" in pool
     held = "ab"
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if kept(true): 0u6 else: 1u6

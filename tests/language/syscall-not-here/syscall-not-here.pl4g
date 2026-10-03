@@ -10,7 +10,9 @@
 ※ what is refused here is the one written the other way round -- a call the
 ※ generic table has and x86-64 does not would read the same.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let answer: i64 = ⎕syscall(⎕sc@fadvise64_64, 1i64)
     if answer < 0i64: 0u6 else: 1u6

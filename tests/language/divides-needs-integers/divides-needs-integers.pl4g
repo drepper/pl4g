@@ -6,8 +6,10 @@
 ※ multiple of another is a different question, and one a program asks by writing
 ※ the division it means.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let x: f64 = 12.0f64
     let y: f64 = 3.0f64
     if y ∣ x:

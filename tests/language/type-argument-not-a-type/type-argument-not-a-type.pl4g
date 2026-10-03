@@ -6,7 +6,9 @@
 fn zero(kind: ⌜T'⌝) → u8:
     0u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let z := zero(3u8)
     if z = 0u8: 0u6 else: 1u6

@@ -11,9 +11,11 @@
 ※ tuple; the ones an array is looked in with; the `@[` of an attribute list;
 ※ and the braces of a block written in the explicit notation.
 
+let std := ⎕import("std")
+
 @[startup,
   impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ an array written down the page
     let v: u8⟦4⟧ = ⟦10u8,
                     20u8,

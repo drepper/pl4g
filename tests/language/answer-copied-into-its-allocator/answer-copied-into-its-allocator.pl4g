@@ -35,7 +35,7 @@ fn literal() → str:
     "lit"
 
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let x: mut arena = ⎕arena
     defer ⎕empty(x)
     let y: mut arena = ⎕arena

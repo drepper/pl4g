@@ -24,7 +24,7 @@ fn either(c: bool, a: &mut arena, s: str in ⎕static) → str in a, ⎕static:
     if c: s else: "made" ⧺ "" in a
 
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let label: mut Label = Label(.text ← "")
     keep(&mut label, "kept")
     let pool: mut arena = ⎕arena

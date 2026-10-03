@@ -16,6 +16,8 @@ macro twice:
 macro outer:
     ⌜$x⌝ → ⌜twice⌜$x⌝⌝
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(outer⌜three⌜⌝⌝ × 2u8, ⌜u6⌝) ?? 1u6

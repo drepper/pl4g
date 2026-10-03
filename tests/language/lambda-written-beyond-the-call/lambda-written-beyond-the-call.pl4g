@@ -12,6 +12,8 @@ type Box = f: fn(u8) → u8
 fn keep(b: &mut Box, g: fn(u8) → u8):
     b⌖.f ← g
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

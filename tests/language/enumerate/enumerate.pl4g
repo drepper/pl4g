@@ -19,8 +19,10 @@
 ※ past the end of its type stops the program, which is what says the type was
 ※ too narrow for the thing being walked.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let v: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧ in ⎕static
     let l: [u8] = [1u8, 2u8, 3u8] in ⎕static
     let text: str = "abc"

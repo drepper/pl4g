@@ -8,8 +8,10 @@
 ※ changed: an operator answers with a value everywhere else in the language, and
 ※ a set is no different for being a place in memory.
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: ⸨u8⸩ = ⸨1u8, 2u8, 3u8⸩ in ⎕static
     let b: ⸨u8⸩ = ⸨3u8, 4u8⸩ in ⎕static
     let joined: ⸨u8⸩ = a | b

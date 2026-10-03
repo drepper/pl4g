@@ -8,6 +8,8 @@
 fn step(a: u8) → u8 pre(⎕answer > a):
     a
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(step(1u8), ⌜u6⌝) ?? 1u6

@@ -13,8 +13,10 @@
 let seen: mut ⸨u64⸩ = ⸨⸩
 let names: mut ⸨u64: str⸩ = ⸨⸩ in ⎕heap
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     if #seen ≠ 0 ∨ seen⸨3u64⸩: return 1u6
     if (names⸨1u64⸩ ?? "none") ≠ "none": return 2u6
     foreach i := 0u64…40u64:

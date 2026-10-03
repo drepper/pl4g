@@ -28,8 +28,10 @@ fn looped(a: u32, k: u32) → u32:
         n ← n + k
     total
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let s: u32 = seed()
     let twice: u32 = square(s) + square(s)
     if fib(20u32) ≠ 6765u32: return 1u6

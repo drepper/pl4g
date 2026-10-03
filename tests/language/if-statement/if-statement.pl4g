@@ -14,8 +14,10 @@ let b: mut u6 = 9u6
 @[visible]
 let kept: mut u6 = 0u6
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ a statement of its own, with no else
     if a < b:
         kept ← 1u6

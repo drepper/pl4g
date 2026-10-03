@@ -7,7 +7,9 @@
 fn count(n: u8) ⇉ u8:
     yield n
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: ⟦⟧ = count(1u8)
     0u6

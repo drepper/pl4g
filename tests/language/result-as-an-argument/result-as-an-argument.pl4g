@@ -34,8 +34,10 @@ fn alike(a: f64?, n: u8, b: f64, q: u8?) → bool:
 fn onward(q: u8?) → u8?:
     q? + 1u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     stop_unless(alike(six ÷ two, five, one, twelve ÷ three))
     stop_unless(¬ alike(six ÷ nought, five, one, twelve ÷ three))
     stop_unless(onward(twelve ÷ three) ?? 0u8 = 5u8)

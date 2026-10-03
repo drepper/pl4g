@@ -14,6 +14,8 @@ let private := ⎕import("private")
 fn smaller(a: T', b: T') → T' pre(private.secret(T')):
     a ⌊ b
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ⎕narrow(smaller(2u8, 3u8), ⌜u6⌝) ?? 1u6

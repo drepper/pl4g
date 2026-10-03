@@ -13,8 +13,10 @@
 ※ name at every signature; the language here answers with one reference and
 ※ needs no name at all.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6
 
 fn pair(a: &u8) → 〈&u8, u8〉:

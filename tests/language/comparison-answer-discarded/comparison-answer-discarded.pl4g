@@ -10,7 +10,9 @@
 let a: u8 = 1u8
 let b: u8 = 2u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → bool:
+fn main(init: std.Init) → bool:
     a = b
     a > b

@@ -9,7 +9,9 @@ let one: i8 = 1i8
 @[visible]
 let halved: mut i8 = 0i8
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     halved ← minus_eight » one
     0u6

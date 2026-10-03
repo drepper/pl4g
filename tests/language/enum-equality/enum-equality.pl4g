@@ -15,8 +15,10 @@ let same: mut bool = false
 @[visible]
 let differ: mut bool = false
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     same ← here = there
     differ ← here ≠ other
     0u6

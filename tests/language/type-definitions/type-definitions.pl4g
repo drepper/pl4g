@@ -39,6 +39,8 @@ type Number = { whole : i64 | fraction : f64 }
 type Outer = inner : Inner ; maybe : u8?
 type Inner = a : u8
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     0u6

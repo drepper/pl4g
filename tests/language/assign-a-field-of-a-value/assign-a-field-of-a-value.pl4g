@@ -9,7 +9,9 @@ type Point = x : u32 ; y : u32
 fn made() → Point:
     Point(.x ← 1u32, .y ← 2u32)
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     made().x ← 9u32
     0u6

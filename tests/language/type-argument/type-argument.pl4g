@@ -28,8 +28,10 @@ fn plain(kind: ⌜T'⌝, v: u8) → T':
     else:
         B(.n ← v + 1u8)
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let a: A = plain(⌜A⌝, 3u8)
     let b: B = Kinds.make(⌜B⌝, 3u8)
     let c: A = Kinds.make(⌜A⌝, 5u8)

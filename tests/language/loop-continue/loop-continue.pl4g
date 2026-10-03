@@ -5,8 +5,10 @@
 ※ takes where there is one, then the names the loop carries, then the memory.
 ※ A `while` has no step; its next turn is its condition again.
 
+let std := ⎕import("std")
+
 @[startup]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let total: mut u6 = 0u6
     foreach §counting i := 0u6…10u6:
         if i > 4u6:

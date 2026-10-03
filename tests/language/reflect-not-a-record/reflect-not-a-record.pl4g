@@ -9,8 +9,10 @@
 
 type Either = left: u8 | right: u16
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let e: Either = Either(.left ← 1u8)
     comptime foreach f := ⎕fields(e):
         ⎕drop(f⟦0⟧)

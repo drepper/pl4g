@@ -18,8 +18,10 @@ fn two(p: &mut In, q: &mut In) → u8:
     q⌖.a ← 2u8
     p⌖.a + q⌖.a
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     let o: mut Out = Out(.x ← In(.a ← 0u8, .b ← 0u8), .y ← In(.a ← 0u8, .b ← 0u8),
                          .z ← 5u8)
     let n := two(&mut o.x, &mut o.y)

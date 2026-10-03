@@ -19,8 +19,10 @@ let mine: mut Perm = Perm.read
 @[visible]
 let readable: mut bool = false
 
+let std := ⎕import("std")
+
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     mine ← mine | Perm.write
     readable ← (mine & Perm.read) = Perm.read
     let kept: u6 = match mine & Perm.write:
