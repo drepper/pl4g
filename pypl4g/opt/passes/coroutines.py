@@ -18,8 +18,10 @@ again, each call running from where the last stopped to the next stop:
   the end -- with every value read in another block than its own written to its
   room where it is made and read from it at the head of each block that wants
   it.
-- **each stop** becomes the stop's number written and `true` answered; each
-  return becomes "finished" written and `false` answered.
+- **each stop** becomes the stop's number written and one answered -- two
+  where it hands the walk on with `yield ⇉`, whose delegation the body left
+  in the frame's second word; each return becomes "finished" written and
+  nought answered.
 
 The memory chain is not carried across a stop: what a block after one reads,
 it reads with the chain's beginning.  Nothing below this pass orders memory by
@@ -73,14 +75,15 @@ class Coroutines:
         # Every frame is measured now, so room asked for one -- a walk whose
         # description is in an arena -- is a number.
         for func in module.functions.values():
+            numbers = {id(inst): module.int_const(U64, size_of(inst.held, LAYOUT))
+                       for block in func.blocks for inst in block.insts
+                       if isinstance(inst, SizeOfInst)}
+            if not numbers:
+                continue
+            self._rename(func, numbers)
             for block in func.blocks:
-                for at, inst in enumerate(block.insts):
-                    if isinstance(inst, SizeOfInst):
-                        number = module.int_const(U64, size_of(inst.held, LAYOUT))
-                        self._rename(func, {id(inst): number})
-                        block.insts[at] = None  # type: ignore[call-overload]
-                        changed = True
-                block.insts = [one for one in block.insts if one is not None]
+                block.insts = [one for one in block.insts if id(one) not in numbers]
+            changed = True
         return changed
 
     def _split(self, module: Module, func: Function) -> None:
@@ -102,7 +105,9 @@ class Coroutines:
                                      id(args_param): args_ptr}
         raw = builder.cast(CastKind.BITCAST, frame_ptr,
                            module.types.ptr_type(U8, mutable=True))
-        offset = 8
+        # The first word is where the body stopped; the second, where it leaves
+        # the walk's driver a delegation when it hands the walk on.
+        offset = 16
 
         def place(at: int, ty: Type) -> Value:
             """Where in the frame *at* bytes in is, as a pointer to *ty*."""
@@ -222,18 +227,18 @@ class Coroutines:
                 tail.position_at(block)
                 tail.set_memory(token)
                 tail.store(state, tail.int_const(U64, number))
-                tail.ret(tail.bool_const(True))
+                tail.ret(tail.int_const(U8, 2 if last.delegates else 1))
             elif isinstance(last, RetInst):
                 block.insts.pop()
                 tail = IRBuilder(module, func)
                 tail.position_at(block)
                 tail.set_memory(token)
                 tail.store(state, tail.int_const(U64, FINISHED))
-                tail.ret(tail.bool_const(False))
+                tail.ret(tail.int_const(U8, 0))
         done = func.add_block("finished")
         ending = IRBuilder(module, func)
         ending.position_at(done)
-        ending.ret(ending.bool_const(False))
+        ending.ret(ending.int_const(U8, 0))
         at = builder.load(state)
         builder.switch(at, [(0, old_entry),
                             *((number + 1, block) for number, block in enumerate(stops))],

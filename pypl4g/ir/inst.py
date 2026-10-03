@@ -922,16 +922,20 @@ class YieldInst(Terminator):
     body at its stops keeps in the generator's frame.  No back end sees one.
     """
 
-    __slots__ = ("target",)
+    __slots__ = ("target", "delegates")
 
-    def __init__(self, target: BlockTarget, span: Span = INVALID_SPAN) -> None:
+    def __init__(self, target: BlockTarget, span: Span = INVALID_SPAN,
+                 delegates: bool = False) -> None:
         super().__init__(VOID, (), span)
         self.target = target
+        #: Whether what stops here hands the walk on rather than a turn out:
+        #: `yield ⇉`, whose delegation is in the frame's second word.
+        self.delegates = delegates
 
     @property
     def opcode(self) -> str:
         """The mnemonic used in the textual form."""
-        return "yield"
+        return "yield.on" if self.delegates else "yield"
 
     def successors(self) -> Sequence[BlockTarget]:
         """Where the body goes on when it is resumed."""

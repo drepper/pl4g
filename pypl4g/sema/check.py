@@ -3025,6 +3025,7 @@ class Checker:
         self._generator_bodies: dict[int, _Generator] = {}
         self._generating: _Generator | None = None
         self._generating_out: Value | None = None
+        self._generating_frame: Value | None = None
         #: The generators being written into a loop just now, which a walk of
         #: one of them inside its own body may not be.
         self._writing_in: list[int] = []
@@ -4915,7 +4916,7 @@ class Checker:
         func = Function(
             name=name,
             ty=self._module.types.func_type((_ENVIRONMENT, _ENVIRONMENT,
-                                             _ENVIRONMENT), BOOL),
+                                             _ENVIRONMENT), U8),
             attrs=replace(func_attrs, impure=True, inline=InlineHint.NEVER,
                           extra={**func_attrs.extra, "coroutine": frame}),
             linkage=Linkage.INTERNAL, param_names=("frame", "out", "args"),
@@ -8439,11 +8440,12 @@ class Checker:
         if generating is not None:
             # A generator's body: where its frame is, where what it hands out
             # goes, and where its arguments are, which are read from there.
-            _, out, args = (block.add_param(_ENVIRONMENT, one)
-                            for one in ("frame", "out", "args"))
+            own, out, args = (block.add_param(_ENVIRONMENT, one)
+                              for one in ("frame", "out", "args"))
             arriving = self._arguments_from(builder, args, generating.params,
                                             node.span)
             self._generating, self._generating_out = generating, out
+            self._generating_frame = own
         else:
             arriving = [block.add_param(func.ty.params[index], param.name)
                         for index, param in enumerate(node.params)]
@@ -8517,7 +8519,7 @@ class Checker:
         if not builder.is_terminated:
             if generating is not None:
                 # The end of a generator's body is where it has nothing more.
-                self._returning(builder, builder.bool_const(False), node.span)
+                self._returning(builder, builder.int_const(U8, 0), node.span)
             elif func.ty.ret is VOID:
                 self._returning(builder, None, node.span)
             else:
@@ -14895,6 +14897,8 @@ class Checker:
         if found is None or self._generating_out is None:
             self._diags.emit(D.LANG_YIELD_OUTSIDE_A_GENERATOR, stmt.span)
             return
+        if stmt.delegates and self._delegated(builder, stmt):
+            return
         if stmt.delegates:
             name = self._each_name()
             self._lower_stmt(builder, ast.ExprStmt(span=stmt.span, value=ast.ForEach(
@@ -14909,21 +14913,100 @@ class Checker:
             return
         self._words_into(builder, self._generating_out, value, found.element,
                          stmt.span)
+        self._stopped(builder, False, stmt.span)
+
+    def _stopped(self, builder: IRBuilder, delegates: bool, span: Span) -> None:
+        """Stop the generator's body here, and go on after it when resumed --
+        or, resumed with nowhere to write to, finish: what was put off up to
+        here runs, and there is nothing more."""
+        assert self._generating_out is not None
         resumed = builder.new_block("resumed")
-        if _contains(found.node.body, ast.Defer):
-            # Resumed with nowhere to write to is being told to finish: what
-            # was put off up to here runs, and there is nothing more.
-            told = builder.new_block("told")
-            finishing = builder.new_block("finishing")
-            builder.yield_(told, stmt.span)
-            builder.position_at(told)
-            builder.condbr(_is_nowhere(builder, self._generating_out, stmt.span),
-                           finishing, resumed, span=stmt.span)
-            builder.position_at(finishing)
-            self._returning(builder, builder.bool_const(False), stmt.span)
-        else:
-            builder.yield_(resumed, stmt.span)
+        told = builder.new_block("told")
+        finishing = builder.new_block("finishing")
+        builder.yield_(told, span, delegates)
+        builder.position_at(told)
+        builder.condbr(_is_nowhere(builder, self._generating_out, span),
+                       finishing, resumed, span=span)
+        builder.position_at(finishing)
+        self._returning(builder, builder.int_const(U8, 0), span)
         builder.position_at(resumed)
+
+    #: How a delegation is described to the walk's driver: where the body that
+    #: takes the turns is, where its frame is, where its arguments are, and the
+    #: delegation it was made from.
+    def _delegation(self) -> TupleType:
+        return self._module.types.tuple_type((_ENVIRONMENT,) * 4)
+
+    def _delegated(self, builder: IRBuilder, stmt: ast.Yield) -> bool:
+        """`yield ⇉ g(…)` in a body split at its stops: hand the walk to `g` in
+        one step, and say whether it was a generator's call that could be.
+
+        The body does not take `g`'s turns and hand each one on: it tells the
+        walk's driver where `g`'s body, frame and arguments are -- a record in
+        its own frame, whose place is the frame's second word -- and stops.
+        The driver takes `g`'s turns straight from `g`'s body, and comes back
+        to this one once `g` has nothing more, so a turn from deep in a tree
+        is one resume and not one per level.
+        """
+        target = stmt.value
+        inner = target.value if isinstance(target, ast.Allocated) else target
+        if not (isinstance(inner, ast.Call)
+                and self._generator_named(inner.callee) is not None):
+            return False
+        outer = self._pick_in, self._pick_walked
+        self._pick_in, self._pick_walked = target, None
+        try:
+            self._lower_expr(builder, target, None)
+            walk = self._pick_walked
+        finally:
+            self._pick_in, self._pick_walked = outer
+        if not isinstance(walk, _Iterable) or walk.generator is None:
+            return True
+        found = walk.generator
+        current = self._generating
+        assert current is not None and self._generating_frame is not None
+        if found.element != current.element:
+            self._report_mismatch(stmt.value.span,
+                                  self._module.types.iter_type(found.element),
+                                  self._module.types.iter_type(current.element))
+            return True
+        if walk.arena is None and (found is current
+                                   or self._generator_reaches_itself(found)):
+            self._diags.emit(D.LANG_GENERATOR_RECURSION, stmt.value.span,
+                             name=found.node.name)
+            return True
+        if found.impure:
+            self._an_effect(D.LANG_PURE_CALLS_IMPURE, stmt.value.span,
+                            name=found.node.name)
+        place, offsets = self._description_made(builder, walk, stmt.span)
+        assert found.func is not None
+        frame = self._inside(builder, place, offsets[4], U8, stmt.span)
+        builder.store(builder.cast(CastKind.BITCAST, frame,
+                                   self._module.types.ptr_type(U64, mutable=True),
+                                   stmt.span),
+                      builder.int_const(U64, 0), stmt.span)
+        record = builder.frame(self._delegation(), stmt.span)
+        offsets_of_record = member_offsets_of(self._delegation(), _LAYOUT)
+        for at, word in enumerate((
+                builder.code_address(found.func, stmt.span),
+                builder.cast(CastKind.BITCAST, frame, _ENVIRONMENT, stmt.span),
+                self._inside(builder, place, offsets[3], U8, stmt.span),
+                builder.cast(CastKind.BITCAST, builder.int_const(U64, 0),
+                             _ENVIRONMENT, stmt.span))):
+            builder.store(self._inside(builder, record, offsets_of_record[at],
+                                       _ENVIRONMENT, stmt.span),
+                          builder.cast(CastKind.BITCAST, word, _ENVIRONMENT,
+                                       stmt.span), stmt.span)
+        builder.store(self._inside(builder, self._generating_frame, 8,
+                                   _ENVIRONMENT, stmt.span),
+                      builder.cast(CastKind.BITCAST, record, _ENVIRONMENT,
+                                   stmt.span), stmt.span)
+        self._report_iterator(found.node.name, "".join((
+            "'", found.node.name, "' is handed the walk in one step: its turns are "
+            "taken straight from its body, not through '", current.node.name,
+            "'")), stmt.span)
+        self._stopped(builder, True, stmt.span)
+        return True
 
     def _generator_named(self, callee: ast.Expr) -> _Generator | None:
         """The generator a call names, where it names one: by a bare name, or
@@ -15094,24 +15177,8 @@ class Checker:
             return UndefConst(ERROR)
         if found.impure:
             self._an_effect(D.LANG_PURE_CALLS_IMPURE, span, name=found.node.name)
-        record, offsets = self._description_of(found)
-        if walk.arena is not None:
-            # In the arena `in` named: how large is known once the generator's
-            # body is split, which is after this, so the room is asked for in a
-            # number the pass splitting it fills in.
-            place = builder.cast(
-                CastKind.BITCAST,
-                tables.allocate(builder, walk.arena, builder.size_of(record, span)),
-                self._module.types.ptr_type(record, mutable=True), span)
-        else:
-            place = builder.frame(record, span)
-        builder.store(self._inside(builder, place, offsets[0], U64, span),
-                      builder.int_const(U64, 0), span)
-        builder.store(self._inside(builder, place, offsets[1], U64, span),
-                      builder.int_const(U64, 0), span)
-        self._arguments_into(builder, self._inside(builder, place, offsets[2],
-                                                   U8, span),
-                             found.params, walk.args, span)
+        place, offsets = self._description_made(builder, walk, span)
+        record, _ = self._description_of(found)
         step = self._generator_next(found, record, offsets, span)
         self._report_iterator(name, "".join((
             "'", name, "' is walked through calls to '", step.name,
@@ -15129,21 +15196,68 @@ class Checker:
         is known only once its body is split, and where it is needs only how it
         is aligned."""
         arguments, _ = self._argument_record(found.params)
-        head = self._module.types.tuple_type((U64, U64, arguments))
+        head = self._module.types.tuple_type((U64, U64, _ENVIRONMENT, arguments))
         offsets = member_offsets_of(head, _LAYOUT)
-        end = offsets[2] + size_of(arguments, _LAYOUT)
+        end = offsets[3] + size_of(arguments, _LAYOUT)
         frame_at = (end + 15) // 16 * 16
-        return (self._module.types.tuple_type((U64, U64, arguments, found.frame)),
+        return (self._module.types.tuple_type((U64, U64, _ENVIRONMENT, arguments,
+                                               found.frame)),
                 [*offsets, frame_at])
+
+    def _description_made(self, builder: IRBuilder, walk: _Iterable,
+                          span: Span) -> tuple[Value, list[int]]:
+        """Room for a walk's description -- in this call's room, or the arena
+        `in` named -- with the counters at nought and the arguments in place.
+
+        Two counters that tell one walk from the next, the delegation the walk
+        is taking its turns from (nothing: the generator's own body), the
+        arguments, and the generator's frame.
+        """
+        found = walk.generator
+        assert found is not None
+        record, offsets = self._description_of(found)
+        if walk.arena is not None:
+            # In the arena `in` named: how large is known once the generator's
+            # body is split, which is after this, so the room is asked for in a
+            # number the pass splitting it fills in.
+            place = builder.cast(
+                CastKind.BITCAST,
+                tables.allocate(builder, walk.arena, builder.size_of(record, span)),
+                self._module.types.ptr_type(record, mutable=True), span)
+        else:
+            place = builder.frame(record, span)
+        for at in (0, 1):
+            builder.store(self._inside(builder, place, offsets[at], U64, span),
+                          builder.int_const(U64, 0), span)
+        builder.store(self._inside(builder, place, offsets[2], _ENVIRONMENT, span),
+                      builder.cast(CastKind.BITCAST, builder.int_const(U64, 0),
+                                   _ENVIRONMENT, span), span)
+        self._arguments_into(builder, self._inside(builder, place, offsets[3],
+                                                   U8, span),
+                             found.params, walk.args, span)
+        return place, offsets
 
     def _generator_next(self, found: _Generator, record: TupleType,
                         offsets: Sequence[int], span: Span) -> Function:
-        """The function that takes one turn of a generator's walk.
+        """The function that takes one turn of a generator's walk: the walk's
+        driver.
 
         A walk's state is the number of the walk: nought before it starts, when
         the next number is taken, the generator's frame told to start, and the
         number kept as the one walking.  A later turn whose number is not that
         one is a walk another walk overtook, and stops the program.
+
+        The driver resumes whichever body the walk is in: the generator's own,
+        or -- once a body has handed the walk on with `yield ⇉` -- the body it
+        handed it to, from the delegation it left in its frame's second word.
+        A body answering one has written a turn; two has handed the walk on, and
+        the driver goes on from the new delegation; nought has nothing more, and
+        the driver goes back to the delegation it came from, and from the first
+        to the generator's own body.  So a turn from deep in a tree is one
+        resume and not one per level.
+
+        Told to finish -- nowhere to write to -- it finishes every body the
+        walk is in, the innermost first, so that what each put off runs.
         """
         if found.step is not None:
             return found.step
@@ -15164,50 +15278,75 @@ class Checker:
         described, state, out = (entry.add_param(_ENVIRONMENT, ""),
                                  entry.add_param(slot, ""),
                                  entry.add_param(_ENVIRONMENT, ""))
+        record_offsets = member_offsets_of(self._delegation(), _LAYOUT)
         counter = self._inside(inner, described, offsets[0], U64, span)
         current = self._inside(inner, described, offsets[1], U64, span)
-        arguments = self._inside(inner, described, offsets[2], U8, span)
-        frame = self._inside(inner, described, offsets[3], U8, span)
+        top = self._inside(inner, described, offsets[2], _ENVIRONMENT, span)
+        arguments = self._inside(inner, described, offsets[3], U8, span)
+        frame = self._inside(inner, described, offsets[4], U8, span)
+        own = inner.cast(CastKind.BITCAST, frame, _ENVIRONMENT, span)
+        given = inner.cast(CastKind.BITCAST, arguments, _ENVIRONMENT, span)
+        nowhere = inner.cast(CastKind.BITCAST, inner.int_const(U64, 0),
+                             _ENVIRONMENT, span)
         walking = inner.load(state, span)
         token = inner.memory()
-        start = inner.new_block("start")
-        going = inner.new_block("going")
-        go = inner.new_block("go")
-        asked = inner.new_block("asked")
-        stopping = inner.new_block("stopping")
-        inner.condbr(_is_nowhere(inner, out, span), stopping, asked, span=span)
-        # Told to finish: a walk under way is resumed once more with nowhere to
-        # write to, which runs what the body put off where it stopped; a walk
-        # not started, or overtaken, or a generator putting nothing off, has
-        # nothing to finish.
-        inner.position_at(stopping)
-        if _contains(found.node.body, ast.Defer):
-            finishing = inner.new_block("finishing")
-            nothing = inner.new_block("nothing")
-            under_way = inner.binary(
-                BinOp.AND,
-                inner.compare(CmpPred.NE, walking, inner.int_const(U64, 0), span),
-                inner.compare(CmpPred.EQ, inner.load(current, span), walking,
-                              span), span)
-            inner.condbr(under_way, finishing, nothing, span=span)
-            inner.position_at(finishing)
+
+        def at(block: BasicBlock) -> None:
+            inner.position_at(block)
             inner.set_memory(token)
-            inner.call(found.func, (inner.cast(CastKind.BITCAST, frame,
-                                               _ENVIRONMENT, span),
-                                    out,
-                                    inner.cast(CastKind.BITCAST, arguments,
-                                               _ENVIRONMENT, span)),
-                       BOOL, span)
-            inner.store(state, inner.int_const(U64, 0), span)
-            inner.ret(inner.bool_const(False), span)
-            inner.position_at(nothing)
+
+        def part(of: Value, which: int) -> Value:
+            """One word of a delegation."""
+            return self._inside(inner, of, record_offsets[which], _ENVIRONMENT,
+                                span)
+
+        def is_null(value: Value) -> Value:
+            return inner.compare(CmpPred.EQ,
+                                 inner.cast(CastKind.BITCAST, value, U64, span),
+                                 inner.int_const(U64, 0), span)
+
+        def body(of: Value | None, told: Value) -> Value:
+            """Resume the generator's own body, or the one *of* says."""
+            if of is None:
+                return inner.call(found.func, (own, told, given), U8, span)
+            return inner.call(inner.load(part(of, 0), span),
+                              (inner.load(part(of, 1), span), told,
+                               inner.load(part(of, 2), span)), U8, span)
+
+        start, going, drive = (inner.new_block(one)
+                               for one in ("start", "going", "drive"))
+        asked, stopping = inner.new_block("asked"), inner.new_block("stopping")
+        inner.condbr(_is_nowhere(inner, out, span), stopping, asked, span=span)
+        # Told to finish: every body the walk is in, innermost first, then the
+        # generator's own -- where a walk is under way.
+        at(stopping)
+        finishing, chain, mine, nothing = (inner.new_block(one) for one in (
+            "finishing", "chain", "mine", "nothing"))
+        under_way = inner.binary(
+            BinOp.AND,
+            inner.compare(CmpPred.NE, walking, inner.int_const(U64, 0), span),
+            inner.compare(CmpPred.EQ, inner.load(current, span), walking, span),
+            span)
+        inner.condbr(under_way, finishing, nothing, span=span)
+        at(finishing)
+        here = inner.load(top, span)
+        inner.condbr(is_null(here), mine, chain, span=span)
+        at(chain)
+        body(here, nowhere)
+        inner.store(top, inner.load(part(here, 3), span), span)
+        inner.br(finishing, (), span)
+        at(mine)
+        body(None, nowhere)
+        inner.store(state, inner.int_const(U64, 0), span)
+        inner.br(nothing, (), span)
+        at(nothing)
         inner.ret(inner.bool_const(False), span)
-        inner.position_at(asked)
-        inner.set_memory(token)
+        # Asked for a turn.
+        at(asked)
         inner.condbr(inner.compare(CmpPred.EQ, walking,
                                    inner.int_const(U64, 0), span),
                      start, going, span=span)
-        inner.position_at(start)
+        at(start)
         number = inner.binary(BinOp.WRAP_ADD, inner.load(counter, span),
                               inner.int_const(U64, 1), span)
         inner.store(counter, number, span)
@@ -15215,22 +15354,49 @@ class Checker:
         inner.store(state, number, span)
         inner.store(inner.cast(CastKind.BITCAST, frame, slot, span),
                     inner.int_const(U64, 0), span)
-        inner.br(go, (), span)
-        inner.position_at(going)
-        inner.set_memory(token)
+        inner.store(top, nowhere, span)
+        inner.br(drive, (), span)
+        at(going)
         inner.check(inner.compare(CmpPred.EQ, inner.load(current, span),
                                   walking, span),
                     "a walk of a generator overtaken by another walk of it",
                     statuses.OUT_OF_RANGE, span)
-        inner.br(go, (), span)
-        inner.position_at(go)
-        inner.set_memory(token)
-        inner.ret(inner.call(found.func, (inner.cast(CastKind.BITCAST, frame,
-                                                     _ENVIRONMENT, span),
-                                          out,
-                                          inner.cast(CastKind.BITCAST, arguments,
-                                                     _ENVIRONMENT, span)),
-                             BOOL, span), span)
+        inner.br(drive, (), span)
+        # The walk is in the generator's own body or in a delegation.
+        at(drive)
+        here = inner.load(top, span)
+        own_turn, other_turn = inner.new_block("own"), inner.new_block("other")
+        yes, no = inner.new_block("yes"), inner.new_block("no")
+        inner.condbr(is_null(here), own_turn, other_turn, span=span)
+        at(own_turn)
+        answer = body(None, out)
+        handed = inner.new_block("handed")
+        inner.switch(answer, [(1, yes), (2, handed)], no, span)
+        at(handed)
+        # The generator's own body handed the walk on.
+        first = inner.load(self._inside(inner, frame, 8, _ENVIRONMENT, span), span)
+        inner.store(part(first, 3), nowhere, span)
+        inner.store(top, first, span)
+        inner.br(drive, (), span)
+        at(other_turn)
+        answer = body(here, out)
+        deeper, back = inner.new_block("deeper"), inner.new_block("back")
+        inner.switch(answer, [(1, yes), (2, deeper)], back, span)
+        at(deeper)
+        # Handed on again: the next delegation is in that body's frame.
+        further = inner.load(self._inside(
+            inner, inner.load(part(here, 1), span), 8, _ENVIRONMENT, span), span)
+        inner.store(part(further, 3), here, span)
+        inner.store(top, further, span)
+        inner.br(drive, (), span)
+        at(back)
+        # That body has nothing more: back to the one that handed it the walk.
+        inner.store(top, inner.load(part(here, 3), span), span)
+        inner.br(drive, (), span)
+        at(yes)
+        inner.ret(inner.bool_const(True), span)
+        at(no)
+        inner.ret(inner.bool_const(False), span)
         found.step = func
         self._module.reports.record(
             ReportKind.NAME_LAMBDA, name,
@@ -16607,7 +16773,7 @@ class Checker:
             if stmt.value is not None:
                 self._diags.emit(D.LANG_GENERATOR_RETURNS_A_VALUE, stmt.span,
                                  name=self._generating.node.name)
-            self._returning(builder, builder.bool_const(False), stmt.span)
+            self._returning(builder, builder.int_const(U8, 0), stmt.span)
             return
         if stmt.value is None:
             if func.ty.ret is not VOID:
@@ -17149,7 +17315,7 @@ class Checker:
             finished = builder.new_block("finished")
             builder.yield_(finished, expr.span)
             builder.position_at(finished)
-            self._returning(builder, builder.bool_const(False), expr.span)
+            self._returning(builder, builder.int_const(U8, 0), expr.span)
         else:
             self._returning(builder, failure, expr.span)
         builder.set_memory(token)

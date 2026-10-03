@@ -1131,7 +1131,8 @@ Runtime
 
 [x] let a generator walk itself.  Done on 2026-10-03, with the inner frames in the arena `in` names.  What was wanted: the inner frames in an arena the generator names, `yield ⇉ walk(child) in scratch`.
 
-[ ] hand out what `yield ⇉` delegates to in one step rather than one per level, C++23's `elements_of`: a walk of a tree through
+[x] hand out what `yield ⇉` delegates to in one step.  Done on 2026-10-03 for a generator's call.  What was wanted, C++23's
+    `elements_of`: a walk of a tree through
     calls resumes each level between the leaf and the root for every element.
 
 [ ] coroutines that take something back when resumed, and on them a scheduler over the `io_uring` ring: the third use in

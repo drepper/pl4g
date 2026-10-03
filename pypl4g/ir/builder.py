@@ -312,9 +312,11 @@ class IRBuilder:
             value, [(number, BlockTarget(block)) for number, block in cases],
             BlockTarget(default), span))
 
-    def yield_(self, block: BasicBlock, span: Span = INVALID_SPAN) -> Terminator:
+    def yield_(self, block: BasicBlock, span: Span = INVALID_SPAN,
+               delegates: bool = False) -> Terminator:
         """Append a generator's stop, going on at *block* when resumed."""
-        return self._append(YieldInst(BlockTarget(block, ()), span))  # type: ignore[return-value]
+        return self._append(YieldInst(BlockTarget(block, ()), span,  # type: ignore[return-value]
+                                      delegates))
 
     def unreachable(self, span: Span = INVALID_SPAN) -> Terminator:
         """Append an unreachable marker."""

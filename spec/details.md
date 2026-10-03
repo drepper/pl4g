@@ -4323,3 +4323,11 @@ stop tests the pointer when it has a `defer` in it -- runs what is pending and a
 takes its description out of the arena instead of the frame -- in a size no checker knows, so the room is asked for with a
 `SizeOfInst`, which the `coroutines` pass replaces with the number once every generator's frame is measured.
 
+**`yield ⇉ g(…)` in one step.**  A generator's body answers nought for no more, one for a turn and two for "handed on": at
+`yield ⇉` of a generator's call (`_delegated`) it makes `g`'s description, sets `g`'s frame to start, writes a delegation -- `g`'s
+body, its frame, its arguments, and the delegation it came from -- into a `frame` of its own, puts where that is in its frame's
+second word, and stops with `yield.on`, which the pass answers two for.  The description keeps the delegation the walk is in;
+`⎕next.g` resumes that body, or the generator's own where there is none, pushes on two and pops on nought.  Told to finish, it
+finishes every delegation from the innermost out and then its own body.  Every body tests for being told to finish after every
+stop, since a driver may tell any of them.
+

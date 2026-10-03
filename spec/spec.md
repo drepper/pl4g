@@ -4802,7 +4802,10 @@ which make one out of a block rather than a function.  This is C#'s and C++'s ch
 glyph rather than a type, since what a call answers is a walk and not a value.
 
 **`yield v` hands one value out and stops**; the next turn starts after it.  **`yield ⇉ g` hands out everything `g` gives**, in
-order -- Python's `yield from` and JavaScript's `yield*`.  **`return`, written alone, is having nothing more** (4672 for a value
+order -- Python's `yield from` and JavaScript's `yield*`.  Where `g` is a generator's call and the walk is through calls, it is
+handed the walk **in one step**: the walk's driver takes `g`'s turns straight from `g`'s body and comes back when `g` has nothing
+more, so a turn from the bottom of a recursion is one resume and not one per level -- C++23's `std::ranges::elements_of`, where
+Python's `yield from` and C#'s nested `foreach` pass every value up through every level.  **`return`, written alone, is having nothing more** (4672 for a value
 after it); so is reaching the end of the body.  A finished walk stays finished.  `yield` stands only in a generator (4673).
 
 **`?` in a generator hands the failure out as the last thing it gives**, so what it gives is a result with that error: the

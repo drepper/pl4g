@@ -1,0 +1,44 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ `yield ⇉ g(…)` in a generator walked through calls hands the walk to `g` in
+※ one step: the walk's driver takes `g`'s turns straight from `g`'s body and
+※ comes back once `g` has nothing more, so a turn from deep in a chain is one
+※ resume and not one per level.  Left part way, the walk finishes every level
+※ it is in, the innermost first, so each level's `defer` runs once.
+
+let closed: mut u8 = 0u8
+
+@[impure]
+fn close():
+    closed ← closed + 1u8
+
+@[impure]
+fn down(n: u8, a: &mut arena) ⇉ u8:
+    defer close()
+    yield n
+    if n > 0u8:
+        yield ⇉ down(n - 1u8, a) in a
+
+@[impure]
+fn sum(s: ⇉u8) → u8:
+    let t: mut u8 = 0u8
+    foreach x := s:
+        t ← t + x
+    t
+
+@[impure]
+fn until(s: ⇉u8, stop: u8) → u8:
+    let t: mut u8 = 0u8
+    foreach §u x := s:
+        if x = stop: break §u
+        t ← t + x
+    t
+
+@[startup, impure]
+fn main() → u6:
+    let pool: mut arena = ⎕arena
+    defer ⎕empty(pool)
+    let a := sum(down(10u8, &mut pool) in pool)
+    let after_full := closed
+    let b := until(down(10u8, &mut pool) in pool, 4u8)
+    if a = 55u8 ∧ after_full = 11u8 ∧ b = 45u8 ∧ closed = 18u8: 0u6 else: 1u6
