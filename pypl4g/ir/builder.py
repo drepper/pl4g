@@ -18,13 +18,13 @@ from .inst import (SyscallInst,
                    CastInst, CastKind,
                    CmpInst, CmpPred, CondBrInst, Instruction, LoadInst, MemStartInst, Ordering,
                    ErrorInst, ExtractInst, FailedInst, RetInst, StoreInst,
-                   SwitchInst, YieldInst,
+                   SizeOfInst, SwitchInst, YieldInst,
                    Terminator,
                    TupleInst, UnaryInst, UnOp,
                    UnreachableInst, UnwrapInst, WrapInst)
 from .module import Module
 from .types import (FloatType, BOOL, IntType, ListType, PtrType, ResultType, StrType, Type,
-                    U8, VecType, parts_of)
+                    U8, U64, VecType, parts_of)
 from .value import Value
 
 
@@ -236,6 +236,10 @@ class IRBuilder:
         """Append the taking of storage this function holds for as long as it runs."""
         return self._append(
             FrameInst(held, self._module.types.ptr_type(held, mutable=True), span))
+
+    def size_of(self, held: Type, span: Span = INVALID_SPAN) -> Value:
+        """Append how many bytes a value of *held* takes, worked out later."""
+        return self._append(SizeOfInst(held, U64, span))
 
     def check(self, condition: Value, what: str, status: int,
               span: Span = INVALID_SPAN, observing: bool = False) -> Value:

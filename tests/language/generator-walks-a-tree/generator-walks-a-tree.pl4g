@@ -1,0 +1,33 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ A generator may walk itself where its walks' frames are in an arena:
+※ `walk(child, scratch) in scratch` keeps the inner walk's frame in `scratch`,
+※ so the frame of a walk holds where the next one's is and not the frame
+※ itself, which would have no size.  A tree walked from the top, each node
+※ before its children.
+
+type Tree = { value : u8 ; children : [&Tree] }
+
+fn walk(t: &Tree, scratch: &mut arena) ⇉ u8:
+    yield t⌖.value
+    foreach child := t⌖.children:
+        yield ⇉ walk(child, scratch) in scratch
+
+fn sum(s: ⇉u8) → u8:
+    let total: mut u8 = 0u8
+    foreach x := s:
+        total ← total + x
+    total
+
+@[startup, impure]
+fn main() → u6:
+    let pool: mut arena = ⎕arena
+    defer ⎕empty(pool)
+    let leaf1: Tree = Tree(.value ← 3u8, .children ← [] in pool)
+    let leaf2: Tree = Tree(.value ← 4u8, .children ← [] in pool)
+    let mid: Tree = Tree(.value ← 2u8, .children ← [&leaf1, &leaf2] in pool)
+    let root: Tree = Tree(.value ← 1u8, .children ← [&mid] in pool)
+    let n: mut u8 = 0u8
+    foreach x := walk(&root, &mut pool) in pool:
+        n ← n + x
+    if n = 10u8 ∧ sum(walk(&root, &mut pool) in pool) = 10u8: 0u6 else: 1u6

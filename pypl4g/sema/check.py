@@ -2757,6 +2757,9 @@ class _Iterable:
     #: The generator whose call this is, and what it was called with.
     generator: "_Generator | None" = None
     args: tuple[Value, ...] = ()
+    #: Where a walk of it through calls keeps its frame, where `in` said: the
+    #: arena's state, or nothing for the room of the call that made it.
+    arena: Value | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -15043,6 +15046,35 @@ class Checker:
                     waiting.append(other)
         return False
 
+    def _generator_in(self, builder: IRBuilder, expr: ast.Allocated,
+                      place: Value, expected: Type | None) -> Value:
+        """`g(…) in a`: a walk of a generator whose frame, when it is walked
+        through calls, is in the arena *a* rather than in this call's room.
+
+        Which is what lets a generator walk itself: a frame holding its own walk's
+        frame would have no size, and one holding where that frame is has one.
+        """
+        assert isinstance(expr.value, ast.Call)
+        outer = self._pick_in, self._pick_walked
+        self._pick_in, self._pick_walked = expr.value, None
+        try:
+            self._lower_expr(builder, expr.value, None)
+            walk = self._pick_walked
+        finally:
+            self._pick_in, self._pick_walked = outer
+        if not isinstance(walk, _Iterable) or walk.generator is None:
+            return UndefConst(ERROR)
+        walk = replace(walk, written=expr, arena=place)
+        if self._pick_in is expr:
+            self._pick_walked = walk
+            return UndefConst(VOID)
+        if isinstance(expected, IterType):
+            return self._handed_on(builder, walk.generator.node.name, walk,
+                                   expected, expr.span)
+        self._diags.emit(D.LANG_ITERATOR_NOT_AN_ARRAY, expr.span,
+                         name=walk.generator.node.name)
+        return UndefConst(ERROR)
+
     def _generator_described(self, builder: IRBuilder, name: str,
                              walk: _Iterable, wanted: IterType,
                              span: Span) -> Value:
@@ -15056,14 +15088,23 @@ class Checker:
         """
         found = walk.generator
         assert found is not None
-        if self._generator_reaches_itself(found):
+        if walk.arena is None and self._generator_reaches_itself(found):
             self._diags.emit(D.LANG_GENERATOR_RECURSION, span,
                              name=found.node.name)
             return UndefConst(ERROR)
         if found.impure:
             self._an_effect(D.LANG_PURE_CALLS_IMPURE, span, name=found.node.name)
         record, offsets = self._description_of(found)
-        place = builder.frame(record, span)
+        if walk.arena is not None:
+            # In the arena `in` named: how large is known once the generator's
+            # body is split, which is after this, so the room is asked for in a
+            # number the pass splitting it fills in.
+            place = builder.cast(
+                CastKind.BITCAST,
+                tables.allocate(builder, walk.arena, builder.size_of(record, span)),
+                self._module.types.ptr_type(record, mutable=True), span)
+        else:
+            place = builder.frame(record, span)
         builder.store(self._inside(builder, place, offsets[0], U64, span),
                       builder.int_const(U64, 0), span)
         builder.store(self._inside(builder, place, offsets[1], U64, span),
@@ -15074,8 +15115,8 @@ class Checker:
         step = self._generator_next(found, record, offsets, span)
         self._report_iterator(name, "".join((
             "'", name, "' is walked through calls to '", step.name,
-            "': its frame is in this call's room, and each walk starts it "
-            "afresh")), span)
+            "': its frame is in ", "the arena 'in' named" if walk.arena is not None
+            else "this call's room", ", and each walk starts it afresh")), span)
         return builder.make_tuple(
             (builder.code_address(step, span),
              builder.cast(CastKind.BITCAST, place, _ENVIRONMENT, span),
@@ -20566,6 +20607,9 @@ class Checker:
                 # which is the one `in` names and nothing its operands were made in.
                 self._made_from[id(expr)] = (expr, self._last_made_in)
             return found
+        if isinstance(inside, ast.Call) \
+                and self._generator_named(inside.callee) is not None:
+            return self._generator_in(builder, expr, place, expected)
         handing = self._handing_callee(inside)
         if handing is not None:
             self._diags.emit(D.LANG_HANDED_OUT_IN_AFTER_CALL, expr.span,

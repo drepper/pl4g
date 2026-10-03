@@ -37,7 +37,7 @@ from __future__ import annotations
 from ...ir.function import BasicBlock, Function
 from ...ir.builder import IRBuilder
 from ...ir.inst import (BinOp, CastKind, FrameInst, MemStartInst, RetInst,
-                        Terminator, YieldInst)
+                        SizeOfInst, Terminator, YieldInst)
 from ...ir.layout import DataLayout, align_of, measured, size_of
 from ...ir.module import Module
 from ...ir.reports import ReportKind
@@ -70,6 +70,17 @@ class Coroutines:
                    for inst in block.insts):
                 self._split(module, func)
                 changed = True
+        # Every frame is measured now, so room asked for one -- a walk whose
+        # description is in an arena -- is a number.
+        for func in module.functions.values():
+            for block in func.blocks:
+                for at, inst in enumerate(block.insts):
+                    if isinstance(inst, SizeOfInst):
+                        number = module.int_const(U64, size_of(inst.held, LAYOUT))
+                        self._rename(func, {id(inst): number})
+                        block.insts[at] = None  # type: ignore[call-overload]
+                        changed = True
+                block.insts = [one for one in block.insts if one is not None]
         return changed
 
     def _split(self, module: Module, func: Function) -> None:

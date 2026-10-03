@@ -6059,7 +6059,7 @@
       "number": 4675,
       "name": "LANG_GENERATOR_RECURSION",
       "severity": "error",
-      "message": "'{name}' walks itself, which would need a frame holding a frame of its own",
+      "message": "'{name}' walks itself, which needs the inner walks' frames in an arena: '… in a'",
       "args": [
         {
           "name": "name",
@@ -6067,7 +6067,7 @@
           "description": "the generator"
         }
       ],
-      "cause": "A walk through calls keeps the generator's frame in the walker's room, and a generator whose body walks itself -- directly or through another -- would keep a frame of its own inside its frame, which has no size.  Saying which arena the inner frames go in is what would make it possible, and is not there yet.",
+      "cause": "A walk through calls keeps the generator's frame in the walker's room, and a generator whose body walks itself -- directly or through another -- would keep a frame of its own inside its frame, which has no size.  Written `walk(child, a) in a`, the inner walk's frame is in the arena `a`, and the frame of the walk holds where it is.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition",

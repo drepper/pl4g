@@ -582,6 +582,25 @@ class FrameInst(Instruction):
         return "frame"
 
 
+class SizeOfInst(Instruction):
+    """How many bytes a value of *held* takes, where that is not known until a
+    pass has run: a generator's frame is measured by the pass that splits its
+    body, and room for one taken out of an arena asks for it before then.  That
+    pass puts the number in its place; nothing below it sees one."""
+
+    __slots__ = ("held",)
+
+    def __init__(self, held: Type, result_ty: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(result_ty, (), span)
+        self.held = held
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "sizeof"
+
+
 class AssertInst(Instruction):
     """Stops the program where what it is given is false, saying what was wanted.
 
