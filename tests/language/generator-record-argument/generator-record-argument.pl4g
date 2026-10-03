@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A record of one field is handed to a generator the way any argument is: as
+※ the words it is made of, put back together into the record in its body.
+
+type W = fd : i32
+type V = fd : i32 ; x : i32
+
+fn g(to: W, v: V) ⇉ i32:
+    let out: W = to
+    let o2: V = v
+    yield out.fd + o2.x
+
+@[startup, impure]
+fn main() → u6:
+    let t: mut i32 = 0i32
+    foreach x := g(W(.fd ← 3i32), V(.fd ← 1i32, .x ← 2i32)):
+        t ← t + x
+    if t = 5i32: 0u6 else: 1u6

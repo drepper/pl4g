@@ -1136,7 +1136,13 @@ Runtime
     `elements_of`: a walk of a tree through
     calls resumes each level between the leaf and the root for every element.
 
-[ ] a scheduler over the `io_uring` ring, on coroutines that take something back -- which are done (2026-10-03, `⇉ T ⇇ U`,
-    `⎕start`, `⎕resume`): the third use in
-    [spec/coroutines.md](spec/coroutines.md).
+[x] a scheduler over the `io_uring` ring, on coroutines that take something back.  Done on 2026-10-03: `⌖⇉T ⇇ U in ⎕heap`,
+    `⎕await`, `std.spawn` and `std.run`, the third use in [spec/coroutines.md](spec/coroutines.md).
+
+[ ] let a task read.  `std.read` waits where it is called, so a task reading holds up every other; it wants a `read` answering a
+    `Pending` as `write` does, and the buffer it reads into kept where the task is -- in `⎕heap`, or the task's own frame.
+
+[ ] let a task wait in a function it calls.  `⎕await` is a `yield`, so only a task's own body waits; a helper that waits is a
+    generator delegated to with `yield ⇉`.  Whether that is enough, or the language wants a function that may wait without being
+    a generator -- Kotlin's `suspend`, Rust's `async fn` -- is open.
 

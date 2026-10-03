@@ -1,0 +1,24 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕await(v)` is `yield v` under the name of what a task does with it: hand
+※ out what it waits on and answer what it is handed back.  Written as a
+※ statement it drops the answer, as `yield v` does.
+※
+※ Compare: **C#**, **JavaScript**, **Python** and **Rust**, where `await` is a
+※ keyword of its own over a future or a promise; here it is the coroutine's own
+※ stop, and what is waited on is whatever the driver understands.
+
+fn summing() ⇉ u64 ⇇ u64:
+    let total: mut u64 = 0u64
+    while true:
+        let more := ⎕await(total)
+        total ← total + more
+        ⎕await(0u64)
+
+@[startup, impure]
+fn main() → u6:
+    let c := ⎕start(summing())
+    let a := ⎕resume(c, 0u64) ?? 9u64
+    let b := ⎕resume(c, 5u64) ?? 9u64
+    let d := ⎕resume(c, 7u64) ?? 9u64
+    if a = 0u64 ∧ b = 0u64 ∧ d = 5u64: 0u6 else: 1u6

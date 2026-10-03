@@ -1,0 +1,21 @@
+※ pl4g-test: compile=error diag=4670
+※ pl4g-test: expect-diag 4670 LANG_ITERATOR_DOES_NOT_LEAVE
+※ pl4g-test: expect-diag 4670 LANG_ITERATOR_DOES_NOT_LEAVE
+※ pl4g-test: expect-diag 4203 LANG_TYPE_INITIALIZER_MISMATCH
+
+※ A walk that does not say it is kept in `⎕heap` is described in the room of
+※ the call that started it: it is neither a field nor answered, and it does not
+※ stand where one kept in the heap is wanted.
+
+fn upto(n: u8) ⇉ u8:
+    yield n
+
+type J = walk : ⌖⇉u8
+
+fn out() → ⌖⇉u8:
+    ⎕start(upto(1u8))
+
+@[startup, impure]
+fn main() → u6:
+    let v: ⌖⇉u8 in ⎕heap = ⎕start(upto(2u8))
+    0u6

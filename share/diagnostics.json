@@ -6171,6 +6171,38 @@
       "option": null
     },
     {
+      "number": 4680,
+      "name": "LANG_LASTING_WALK_REACHES",
+      "severity": "error",
+      "message": "'{name}' is started in ⎕heap, so what it is handed has to last as long, and '{param}' is '{found}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the generator"
+        },
+        {
+          "name": "param",
+          "type": "string",
+          "description": "the parameter"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "its type"
+        }
+      ],
+      "cause": "A walk started in `⎕heap` keeps what it was called with beside its state, and may be resumed long after the call that started it has returned.  Text, a list, an array whose length its type does not say, a reference, an iterator and a lambda are where their contents are rather than being them, and where that is may be the room of a call that is gone by then.  A reference, a lambda or a walk whose own type says it is kept in `⎕heap` lasts, and is handed as it is.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "What a walk kept in `⎕heap` is handed lasts as long as it does."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

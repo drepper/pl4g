@@ -964,6 +964,76 @@ def _holds_a_lambda(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
             return False
 
 
+def _kept_anywhere(ty: Type) -> bool:
+    """Whether a value of *ty* reaches nothing that is gone before the program is,
+    whatever it was made from: it points nowhere, or what it points at is in
+    what its type says lasts."""
+    match ty:
+        case FuncType() | PtrType() | RunningType():
+            return ty.lasting
+        case IterType():
+            return False
+        case TupleType():
+            return all(_kept_anywhere(one) for one in ty.members)
+        case ResultType():
+            return _kept_anywhere(ty.ok) and (ty.err is None or _kept_anywhere(ty.err))
+        case ProductType():
+            return all(_kept_anywhere(one) for _, one in ty.fields)
+        case SumType():
+            return all(_kept_anywhere(one) for _, one in ty.variants)
+    return not _points_somewhere(ty)
+
+
+def _only_member(ty: Type) -> Type | None:
+    """The one field of a record, or member of a tuple, that has only one;
+    nothing for anything else."""
+    match ty:
+        case ProductType() if len(ty.fields) == 1:
+            return ty.fields[0][1]
+        case TupleType() if len(ty.members) == 1:
+            return ty.members[0]
+    return None
+
+
+def _plainly_lasting(expr: ast.Expr) -> bool:
+    """Whether what *expr* is written as is, by the look of it, in the image or
+    the heap: text written down, its bytes, or something `in ⎕static` or `in
+    ⎕heap`.  Asked of what a walk kept in `⎕heap` is handed where its type alone
+    does not say it lasts."""
+    match expr:
+        case ast.StringLit():
+            return True
+        case ast.Call(callee=ast.NameRef(name=name), args=(ast.StringLit(),)):
+            return name == BYTES_NAME
+        case ast.Allocated(arena=ast.NameRef(name=name)):
+            return name in (STATIC_NAME, HEAP_NAME)
+    return False
+
+
+def _short_lived(ty: Type) -> Type | None:
+    """The walk inside a value of *ty* that is described in the room of the call
+    that made it -- an iterator, or a walk under way not kept in `⎕heap` -- and
+    so may not outlive that call; nothing where there is none."""
+    match ty:
+        case IterType():
+            return ty
+        case RunningType():
+            return None if ty.lasting else ty
+        case TupleType():
+            members = ty.members
+        case ResultType():
+            members = (ty.ok,) if ty.err is None else (ty.ok, ty.err)
+        case ArrayType() | ListType():
+            members = (ty.element,)
+        case _:
+            return None
+    for one in members:
+        found = _short_lived(one)
+        if found is not None:
+            return found
+    return None
+
+
 def _lambdas_last(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
     """Whether every function a value of *ty* holds says what it brought in lasts
     (`fn(…) in ⎕heap → T`): such a value reaches nothing that is gone before the
@@ -1044,6 +1114,11 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
                 and found.hands_out == expected.hands_out
                 and found.params == expected.params
                 and found.ret is expected.ret)
+    if isinstance(expected, RunningType) and isinstance(found, RunningType):
+        # A walk kept in the heap is everything one kept in a call's room is,
+        # in the same four words, and lasts longer.
+        return (found.element is expected.element and found.given is expected.given
+                and found.lasting and not expected.lasting)
     if not isinstance(expected, PtrType) or not isinstance(found, PtrType) \
             or found.pointee is not expected.pointee:
         return False
@@ -3412,9 +3487,10 @@ class Checker:
                 ty = self._variable_type(node)
             finally:
                 self._defining_globally = False
-            if isinstance(ty, IterType):
+            short = _short_lived(ty) if ty is not None else None
+            if short is not None:
                 self._diags.emit(D.LANG_ITERATOR_DOES_NOT_LEAVE, node.span,
-                                 found=ty.written(),
+                                 found=short.written(),
                                  what="a variable at the top level")
                 ty = ERROR
             if ty is not None and _holds_a_lambda(ty):
@@ -4908,11 +4984,12 @@ class Checker:
         given = self._resolve_type(node.takes) if node.takes is not None else None
         if given is ERROR:
             return None
-        if isinstance(element, IterType):
+        short = _short_lived(element)
+        if short is not None:
             self._diags.emit(D.LANG_ITERATOR_DOES_NOT_LEAVE,
                              node.ret_type.span if node.ret_type is not None
                              else node.name_span,
-                             found=element.written(), what="handed out")
+                             found=short.written(), what="handed out")
             return None
         whole = _written_name(node)
         if bound:
@@ -6064,9 +6141,10 @@ class Checker:
                 continue
             seen[field.name] = field.name_span
             ty = self._resolve_type(field.type)
-            if isinstance(ty, IterType):
+            short = _short_lived(ty)
+            if short is not None:
                 self._diags.emit(D.LANG_ITERATOR_DOES_NOT_LEAVE, field.type.span,
-                                 found=ty.written(), what="a field")
+                                 found=short.written(), what="a field")
                 ty = ERROR
             if ty is VOID and node.kind is ast.TypeKind.PRODUCT:
                 # A field that carries nothing leaves the product meaning what
@@ -6273,6 +6351,17 @@ class Checker:
             if inner is ERROR:
                 return ERROR
             return self._module.types.iter_type(inner)
+        if isinstance(ref, ast.RunningTypeRef):
+            element = self._resolve_type(ref.element)
+            given = self._resolve_type(ref.given) if ref.given is not None else None
+            if element is ERROR or given is ERROR:
+                return ERROR
+            if ref.kept_in is not None and ref.kept_in[0] != HEAP_NAME:
+                self._diags.emit(D.LANG_KEPT_IN_NOT_HEAP, ref.kept_in[1],
+                                 name=ref.kept_in[0])
+                return ERROR
+            return self._module.types.running_type(
+                element, given, lasting=ref.kept_in is not None)
         if isinstance(ref, ast.FuncTypeRef):
             params = tuple(self._resolve_type(one) for one in ref.params)
             ret = self._return_type(ref.ret)
@@ -11405,7 +11494,7 @@ class Checker:
             local.read = True
             held = self._held_by(local)
             if local.iterable is not None \
-                    or isinstance(held, (IterType, RunningType)):
+                    or (held is not None and _short_lived(held) is not None):
                 # What it walks is described in this call's room, which a
                 # lambda may outlive.
                 self._diags.emit(D.LANG_ITERATOR_DOES_NOT_LEAVE, one.span,
@@ -14713,7 +14802,12 @@ class Checker:
                                                              mutable=True), span)]
         parts = parts_of(ty)
         if len(parts) == 1:
-            return [value]
+            inner = _only_member(ty)
+            if inner is None:
+                return [value]
+            # A record of one field is that field's word, and not the record.
+            return self._words_of(builder, builder.extract(value, 0, inner, span),
+                                  inner, span)
         return [builder.extract(value, at, part, span)
                 for at, part in enumerate(parts)]
 
@@ -14729,7 +14823,11 @@ class Checker:
         if isinstance(ty, ArrayType) and ty.fixed:
             return builder.cast(CastKind.BITCAST, words[0], ty, span)
         if len(words) == 1:
-            return words[0]
+            inner = _only_member(ty)
+            if inner is None:
+                return words[0]
+            return builder.make_tuple(
+                (self._from_words(builder, words, inner, span),), ty, span)
         return builder.make_tuple(tuple(words), ty, span)
 
     def _handed_on(self, builder: IRBuilder, name: str, found: _Iterable,
@@ -15235,9 +15333,23 @@ class Checker:
         given_place: Value = builder.cast(CastKind.BITCAST,
                                           builder.int_const(U64, 0),
                                           _ENVIRONMENT, span)
+        # `⎕start(g(…) in ⎕heap)`: the description and the state in the heap,
+        # and a walk that may go wherever a value may.
+        lasting = isinstance(walked, _Iterable) and walked.generator is not None \
+            and walked.arena is not None and tables.is_heap(walked.arena)
         if isinstance(walked, _Iterable) and walked.generator is not None:
             found = walked.generator
             name = found.node.name
+            if lasting:
+                call = written.value if isinstance(written, ast.Allocated) else written
+                assert isinstance(call, ast.Call)
+                for param, ty, arg in zip(found.node.params, found.params,
+                                          call.args):
+                    if not _kept_anywhere(ty) and not _plainly_lasting(arg):
+                        self._diags.emit(D.LANG_LASTING_WALK_REACHES, written.span,
+                                         name=name, param=param.name,
+                                         found=ty.written())
+                        return UndefConst(ERROR)
             walk = self._generator_described(
                 builder, name, walked,
                 self._module.types.iter_type(found.element), span, driven=True)
@@ -15277,16 +15389,22 @@ class Checker:
             if self._value_type_of(walk) is ERROR:
                 return UndefConst(ERROR)
         assert element is not None
-        slot = builder.frame(U64, span)
+        if lasting:
+            assert isinstance(walked, _Iterable) and walked.arena is not None
+            slot = builder.cast(CastKind.BITCAST, tables.allocate(
+                builder, walked.arena, builder.int_const(U64, 8)),
+                self._module.types.ptr_type(U64, mutable=True), span)
+        else:
+            slot = builder.frame(U64, span)
         builder.store(slot, builder.extract(walk, 2, U64, span), span)
-        ty = self._module.types.running_type(element, given_type)
+        ty = self._module.types.running_type(element, given_type, lasting)
         made = builder.make_tuple(
             (builder.extract(walk, 0, _ENVIRONMENT, span),
              builder.extract(walk, 1, _ENVIRONMENT, span), slot, given_place),
             ty, span)
         self._report_iterator(START_NAME, "".join((
-            "a walk under way, driven by '", RESUME_NAME, "': its state is in this "
-            "call's room")), span)
+            "a walk under way, driven by '", RESUME_NAME, "': its state is in ",
+            HEAP_NAME if lasting else "this call's room")), span)
         if not self._accepts(expected, ty):
             self._report_mismatch(span, ty, expected)
             return UndefConst(ERROR)
@@ -16531,12 +16649,15 @@ class Checker:
 
         Taking something out is the other: `†d⸨k⸩`, `†l⟦i⟧` and `†it` all take
         it out whether or not anyone wants what was there, so a program that
-        only wants it gone writes the line and reads nothing.
+        only wants it gone writes the line and reads nothing.  And `⎕await(p)`
+        stops the coroutine, which is what it is written for, as a `yield` that
+        answers nothing is.
         """
         if isinstance(expr, ast.Call):
             self._answer_is_taken(expr)
             return
-        if isinstance(expr, (ast.Take, ast.TakeAt, ast.TakeThrough, _Emit)):
+        if isinstance(expr, (ast.Take, ast.TakeAt, ast.TakeThrough, _Emit,
+                             ast.YieldValue)):
             return
         found = self._diags.emit(D.LANG_STMT_VALUE_DISCARDED, expr.span)
         if isinstance(expr, ast.Binary) and expr.op is ast.BinaryOp.EQUAL:
@@ -16942,11 +17063,12 @@ class Checker:
             self._diags.emit(D.LANG_TYPE_NOTHING_IS_NOT_WRITTEN, ref.span)
             return VOID
         found = self._resolve_type(ref)
-        if isinstance(found, IterType):
+        short = _short_lived(found)
+        if short is not None:
             # What it walks is described in the room of the call that made it,
             # which is gone by the time the caller would walk it.
             self._diags.emit(D.LANG_ITERATOR_DOES_NOT_LEAVE, ref.span,
-                             found=found.written(), what="answered")
+                             found=short.written(), what="answered")
             return ERROR
         if isinstance(found, ArrayType):
             # What a value of an array type is, is where its elements are, and
@@ -22592,7 +22714,7 @@ class Checker:
         found = self._value_type_of(value)
         if not _promises_as_much(expected, found):
             return value
-        if isinstance(expected, FuncType):
+        if isinstance(expected, (FuncType, RunningType)):
             # A function is three words and not one, so there is nothing for
             # one instruction to read differently: the three are taken out and
             # put back under the type that promises less, which is the same

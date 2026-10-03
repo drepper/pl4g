@@ -4877,13 +4877,91 @@ out of anything a loop walks -- a generator, an iterator, a pick, an array -- an
 turn** as a result, failed once the walk has nothing more; a walk that takes nothing back is resumed with `⎕resume(c)` alone (4678).
 What the first resume hands in is not seen, the body having reached no `yield` yet.  Such a coroutine is never walked by a loop,
 which hands nothing in (4677), and `yield` answers nothing in a generator without `⇇` (4676).  A walk under way is a handle: two
-names for it are one walk.  Its state is in the room of the call that started it, so it does not leave that call either.
+names for it are one walk.  Its state is in the room of the call that started it, unless it was started in `⎕heap` (below).
 
 Compare: **Python**'s `x = yield v` and `send`, whose first `send` must be `None` for the same reason the first value here is not
 seen; **JavaScript**'s `next(u)`, which ignores its first argument likewise; **Lua**'s `coroutine.resume(co, u)`, whose first
 resume hands the function its arguments instead; **C#**, which has no two-way iterator and uses channels; **Kotlin**'s
 `Channel.send` and `receive`.  What is written here and none of them write is what comes back, in the signature: `⇇ U`, as C# and
 Kotlin say it in a channel's type.
+
+**A walk under way is written `⌖⇉T ⇇ U`**: the mark of a reference, because what it holds is where a walk has got to, and then
+the walk -- what each turn gives and, where it takes something, what a resume hands in.  `⌖⇉u8` is one that takes nothing.  Written
+so, it may be a parameter, and a callee resumes it; what it may not be is a field, an answer, or a variable at the top level
+(4670), its state being in the room of the call that started it.
+
+**`⎕start(g(…) in ⎕heap)` keeps the walk in the heap, and `⌖⇉T ⇇ U in ⎕heap` is its type.**  Its description, its state and the
+arguments it was called with are all in `⎕heap`, so a value of it goes wherever a value may: answered, kept in a field, kept in a
+list at the top level, and resumed long after the call that started it returned.  It stands where `⌖⇉T ⇇ U` is wanted, the same
+four words promising more; the other way is refused (4203).  As in a lambda's type, `⎕heap` is the one name a type may write
+(4642) -- an arena lasts as long as its maker keeps it, which a type cannot say -- and a walk started `in` an arena has the type that
+says nothing.  The `in` after the type is the type's only where `⎕heap` follows it; any other name after a definition's type is
+the arena it receives, as before.
+
+```
+type Job = walk : ⌖⇉u64 ⇇ u64 in ⎕heap ; n : u8
+
+fn started(from: u64) → ⌖⇉u64 ⇇ u64 in ⎕heap:
+    ⎕start(running_total(from) in ⎕heap)
+```
+
+**What such a walk is handed has to last as long** (4680): it keeps its arguments beside its state.  A number, a record of numbers,
+and a reference, a lambda or a walk whose own type says it is kept in `⎕heap` last as they are.  Text, a list, an array whose
+length its type does not say, an iterator and anything else that is where its contents are rather than being them are taken only
+where what is written is plainly in the image or the heap -- text written down, `⎕bytes` of it, or something `in ⎕static` or `in
+⎕heap`.  A parameter of the caller's says nothing about where it was made, and is refused.
+
+Compare: **Python** and **JavaScript**, whose generators are objects on a collected heap and go anywhere; **Rust**, whose
+coroutine is a value moved where it is wanted and boxed (`Box::pin`) to be kept, its borrow of anything shorter-lived refused by
+the borrow checker as 4680 refuses it here; **C++20**, whose coroutine frame is allocated by `operator new` unless the compiler
+proves it need not be, and whose dangling reference parameters are the program's problem; **Kotlin**, whose continuations are heap
+objects.  None writes in the type where the walk is kept, because each has one place for it; this language has two, and says
+which.
+
+**`⎕await(v)` is `yield v` under the name of what a task does with it**: hand out what it waits on, stop, and answer what the
+driver hands back.  It is read as a `yield` wherever a coroutine's stops are asked about, and written as a statement it drops the
+answer as `yield v` does.  Compare **C#**, **JavaScript**, **Python** and **Rust**, where `await` is a keyword over a future or a
+promise and the scheduler is what a future is polled by; here what is waited on is whatever the driver understands, and the
+driver is a function in a module.
+
+##### Tasks: `std.spawn` and `std.run`
+
+**A task is a coroutine `⇉ std.Pending ⇇ std.Answer`**: it hands out each request it starts and is handed back what the kernel
+said about it.  `std.spawn(w)` takes one started `in ⎕heap`; `std.run()` drives every task handed to it until each has run to its
+end, and answers how many did.  `std.done(a)` reads an answer as `std.flush` reads a request: how many bytes went, or the error.
+
+```
+let std := ⎕import("std")
+
+fn say(to: std.Writer, what: u8⟦⟧) ⇉ std.Pending ⇇ std.Answer:
+    let out: mut std.Writer = to
+    foreach _ := 0u8…3u8:
+        match std.write(&mut out, what):
+            std.Pending(p):
+                let sent := std.done(⎕await(p))
+            ⊥:
+                return
+
+@[startup, impure]
+fn main(init: mut std.Init) → u6:
+    std.spawn(⎕start(say(init.io.error, ⎕bytes("one\n")) in ⎕heap))
+    std.spawn(⎕start(say(init.io.error, ⎕bytes("two\n")) in ⎕heap))
+    if std.run() = 2u64: 0u6 else: 1u6
+```
+
+**A round goes through the tasks in the order they were handed over.**  One not yet started takes its first turn; one whose
+request the kernel has answered is resumed with the answer; the rest wait for the next round.  A round in which none could go on
+waits for the kernel to answer something -- anything -- and that is the only waiting there is.  A task may hand over another, which
+is taken on in the round after.  The tasks share the one thread: none runs while another does, so nothing they share needs a lock,
+and none holds up the others while it waits.  A task that stops without handing out a request -- one whose `write` was refused,
+say -- has run to its end.
+
+Compare: **Python**'s `asyncio.create_task` and `asyncio.run`, the same shape over an event loop; **Rust**'s `spawn` and an
+executor's `block_on` (tokio's current-thread runtime), where a future is polled rather than resumed and a waker says which to poll
+-- the ring's own table says it here; **C#**'s `Task.Run` and `await`, over a thread pool; **Go**, whose goroutines are scheduled by
+the runtime over threads with no `await` written at all; **Kotlin**'s `launch` and `runBlocking`; **C** with liburing, where the
+loop over `io_uring_wait_cqe` is the program's own.  What this has and they mostly do not is that a task is an ordinary coroutine:
+the driver is a few dozen lines of the language in `std`, and a program wanting another policy writes another.
 
 #### Attributes
 

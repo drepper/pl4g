@@ -359,6 +359,12 @@ module.exports = grammar({
       // Something a loop can walk, and what each turn gives -- or, written
       // alone in a definition, whatever the value it is given gives.
       prec.right(seq('\u21c9', optional(field('element', $.type)))),
+      // A walk under way, as `\u2395start` makes one: the mark of a reference,
+      // since what it is is where a walk has got to, then what each turn gives,
+      // what a resume hands in, and `in \u2395heap` where it is kept in the heap.
+      prec.right(seq('\u2316', '\u21c9', field('element', $.type),
+                     optional(seq('\u21c7', field('takes', $.type))),
+                     optional(seq('in', field('kept_in', $.identifier))))),
       // A function written where a value is wanted.  The keyword one is
       // defined with, and then what it takes and what it answers; the
       // parameter names are not here because a type is not a definition.  It

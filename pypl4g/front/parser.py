@@ -14,8 +14,8 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine
 from ..source.location import INVALID_SPAN, Span
 from . import ast
-from .token import (COMMENT_GLYPH, IMPORT_NAME, LASTING_WORD,
-                    TokKind, Token, WILDCARD_NAME)
+from .token import (AWAIT_NAME, COMMENT_GLYPH, HEAP_NAME, IMPORT_NAME,
+                    LASTING_WORD, TokKind, Token, WILDCARD_NAME)
 
 #: Tokens at which error recovery stops, because a new definition can begin there.
 _RECOVERY: Final[frozenset[TokKind]] = frozenset(
@@ -948,6 +948,8 @@ class Parser:
                                D.LANG_SYNTAX_EXPECTED_CLOSING_ARRAY).span
             return ast.ArrayTypeRef(span=start.to(end), element=None,
                                     shape=tuple(shape))
+        if self._check(TokKind.DEREF) and self._peek().kind is TokKind.ITER:
+            return self._parse_running_type()
         if self._check(TokKind.ITER):
             # Something a loop can walk, and what it gives -- or, where no type
             # follows, whatever the definition is given gives.
@@ -1274,7 +1276,32 @@ class Parser:
         kind = self._peek(ahead).kind if ahead else self._current.kind
         return kind in (TokKind.IDENT, TokKind.SET_OPEN, TokKind.TUPLE_OPEN,
                         TokKind.LBRACKET, TokKind.AMPERSAND, TokKind.KW_FN,
-                        TokKind.AT_LBRACKET, TokKind.ITER)
+                        TokKind.AT_LBRACKET, TokKind.ITER, TokKind.DEREF)
+
+    def _parse_running_type(self) -> ast.RunningTypeRef:
+        """Parse ``'⌖' '⇉' TYPE ['⇇' TYPE] ['in' '⎕heap']``: a walk under way.
+
+        The `in` is this type's only where `⎕heap` follows it, which is the one
+        place a type can say anything lasts in; any other name after an `in` is
+        the definition's, saying which arena it receives.
+        """
+        start = self._expect(TokKind.DEREF).span
+        self._expect(TokKind.ITER)
+        element = self._parse_type_ref()
+        end = element.span
+        given: ast.TypeExpr | None = None
+        if self._accept(TokKind.TAKES) is not None:
+            given = self._parse_type_ref()
+            end = given.span
+        kept_in: tuple[str, Span] | None = None
+        if self._check(TokKind.KW_IN) and self._peek().kind is TokKind.IDENT \
+                and self._peek().text == HEAP_NAME:
+            self._advance()
+            kept = self._advance()
+            kept_in = (kept.text, kept.span)
+            end = kept.span
+        return ast.RunningTypeRef(span=start.to(end), element=element,
+                                  given=given, kept_in=kept_in)
 
     def _parse_list_type(self) -> ast.ListTypeRef:
         """Parse ``'[' TYPE ']'``, which is written the way a value of one is."""
@@ -2363,6 +2390,12 @@ class Parser:
                 if self._accept(TokKind.COMMA) is None:
                     break
         end = self._expect(TokKind.RPAREN, D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN).span
+        if isinstance(callee, ast.NameRef) and callee.name == AWAIT_NAME \
+                and len(args) == 1 \
+                and not isinstance(args[0], (ast.Named, ast.Spread)):
+            # `yield` by another name, and read as one so that everything
+            # asking where a coroutine stops finds it.
+            return ast.YieldValue(span=callee.span.to(end), value=args[0])
         return ast.Call(span=callee.span.to(end), callee=callee, args=tuple(args))
 
     def _parse_named(self) -> ast.Expr:

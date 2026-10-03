@@ -366,6 +366,11 @@ ITER_NAME: Final[str] = "".join((BUILTIN_GLYPH, "iter"))
 START_NAME: Final[str] = "".join((BUILTIN_GLYPH, "start"))
 RESUME_NAME: Final[str] = "".join((BUILTIN_GLYPH, "resume"))
 
+#: What a task waits with: `⎕await(p)` hands the request *p* to whatever drives
+#: it and answers what that hands back -- `yield p` under the name of what it is
+#: for, the way C#, JavaScript, Python and Rust spell the same stop.
+AWAIT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "await"))
+
 #: The logical operators, which work on truth values and on nothing else.  Each
 #: is a glyph, and none has an ASCII substitute: the candidates would be `&&`,
 #: `||` and `!`, and spelling two of them with the characters the *bitwise*

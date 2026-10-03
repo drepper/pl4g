@@ -9455,6 +9455,43 @@ other entries -- generators with type parameters, from another file, with `defer
 themselves with the inner frames `in` an arena, and `yield ⇉` handing the walk on in one step (C++23's `elements_of`) -- had
 their designs in [coroutines.md](coroutines.md) already.
 
+## 2026-10-03T22:00+02:00 — language
+
+**A scheduler of tasks over the ring: walks kept in the heap, `⎕await`, `std.spawn` and `std.run`**
+
+The last entry of the generator to-do list.  Three questions were put and answered as recommended:
+
+- **How a walk under way is written: `⌖⇉T ⇇ U`.**  The mark of a reference before the walk, since what it holds is where a walk
+  has got to.  Against `⇉T ⇇ U` alone, which is what a parameter walked by a loop already means, and a named type (`Cursor(T, U)`),
+  which would be the language's first built-in generic name.  Rust writes `Pin<Box<dyn Coroutine<U, Yield = T>>>`, C++
+  `std::coroutine_handle<P>` with the types in the promise, Python `Generator[T, U, None]`, Kotlin `Channel<T>`.
+- **Where a walk that outlives its call is kept: `… in ⎕heap`, as a lambda's environment is.**  `⎕start(g(…) in ⎕heap)` makes one
+  and `⌖⇉T ⇇ U in ⎕heap` is its type; it stands where the plain one is wanted.  Against a separate builtin (`⎕spawn`) that always
+  allocates, and against copying the walk out of the frame when it leaves.  Python, JavaScript and Kotlin keep every coroutine
+  on a collected heap; Rust boxes one to keep it; C++ allocates the frame unless it can prove it need not.  None of them writes
+  where in the type, having one place; this language has two.
+- **What a task is: `⇉ std.Pending ⇇ std.Answer`.**  It hands out the request it waits on and is handed back what the kernel said.
+  Against a task that hands out nothing and asks the scheduler through a global, and against `⎕await` taking a request type the
+  compiler knows.  Python's `asyncio` tasks await futures, Rust's futures are polled with a waker, C#'s awaitables have a
+  `GetAwaiter`; here a task is an ordinary coroutine and the driver understands one kind of request.
+
+Taken without asking, each the smallest thing that does the job:
+
+- **`std.Answer` is a record of one field**, `got : i64`, the number the kernel gave, and `std.done` reads it as `flush` reads a
+  request.  The language has no type aliases, and making `Answer` one of `u64 ¤size ? i32` would have added them for one use.
+- **`⎕await(v)` is `yield v`**, made a `YieldValue` by the parser.  C#, JavaScript, Python and Rust make `await` a keyword over a
+  future; here it is the coroutine's own stop under the name a task's reader expects.  As a statement it drops the answer.
+- **What a kept walk is handed has to last (4680)**, checked on the parameter's type and, where that says nothing, on what is
+  written: text written down, its bytes, or something `in ⎕static` or `in ⎕heap`.  Conservative -- a parameter of the caller's is
+  refused even where it was made in the heap -- with a reach analysis like a lambda's left in the to-do list.  Rust refuses the
+  same through lifetimes; C++ lets it dangle.
+- **`std.run` goes round the tasks in order**, resuming the ones not yet started and the ones whose request is answered, and waits
+  for the kernel only when a round moved none.  It answers how many tasks ran to their end.  Fair in the way a round-robin is, with
+  no priorities -- tokio's current-thread runtime and Python's event loop are the same shape; Go's scheduler preempts and steals
+  work, which needs threads.
+- **Two runtime functions**, `pl4g_io_ready` and `pl4g_io_step`, rather than one that answers which slot was answered: the
+  scheduler holds the slots and asking each is eight loads.
+
 
 Open questions
 --------------

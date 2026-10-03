@@ -509,6 +509,11 @@ The order to build it in
    a task stops at "wait for this completion" and a loop resumes whichever task's completion arrived.  That is a separate proposal;
    nothing in 1–3 closes it off, and stackful coroutines are reconsidered there if anywhere.
 
+All four are built (2026-10-03).  The fourth stayed stackless: a task is a coroutine `⇉ std.Pending ⇇ std.Answer` started `in
+⎕heap`, which keeps its frame where a stack would have been, and waiting is `⎕await`, a `yield` -- so a task waits only in its own
+body and never in a function it calls, which is the price stackful coroutines would not have charged.  A function that wants to
+wait is written as a generator and delegated to with `yield ⇉`, as Python's `yield from` and `await` of a coroutine do.
+
 
 Questions for the user
 ----------------------

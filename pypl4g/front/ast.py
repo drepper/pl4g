@@ -227,9 +227,25 @@ class IterTypeRef(Node):
     element: TypeExpr | None
 
 
+@dataclass(frozen=True, slots=True)
+class RunningTypeRef(Node):
+    """`⌖⇉T ⇇ U in ⎕heap`: a walk under way, as `⎕start` makes one.
+
+    The mark of a reference before the walk, because what it is is where a walk
+    has got to; what it gives, what a resume hands in where it takes something,
+    and where it is kept where that is somewhere it lasts.
+    """
+
+    element: TypeExpr
+    given: TypeExpr | None = None
+    #: `in ⎕heap`: its description and state are in the heap, so a value of it
+    #: may go wherever a value may.
+    kept_in: tuple[str, Span] | None = None
+
+
 type TypeExpr = (TypeRef | CollectionTypeRef | TupleTypeRef | ArrayTypeRef
                  | ListTypeRef | RefTypeRef | UnitTypeRef | FuncTypeRef
-                 | IterTypeRef)
+                 | IterTypeRef | RunningTypeRef)
 
 
 @dataclass(frozen=True, slots=True)

@@ -427,30 +427,37 @@ class RunningType(Type):
 
     Four words: the code taking a turn, where the walk is described, where its
     state is, and where what a resume hands in goes -- nothing where the walk
-    takes nothing back.  It has no spelling: a name is given one by `⎕start`.
+    takes nothing back.  Written `⌖⇉T ⇇ U`, and `⌖⇉T ⇇ U in ⎕heap` where all
+    four are in the heap and the walk may go wherever a value may.
     """
 
     element: Type
     given: Type | None
+    #: Whether its description and state are in `⎕heap`, so that it lasts as long
+    #: as the program rather than as long as the call that started it.
+    lasting: bool = False
 
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
         return "".join(("running<", self.element.render(),
                         "" if self.given is None else
-                        "".join((", ", self.given.render())), ">"))
+                        "".join((", ", self.given.render())),
+                        ", lasting" if self.lasting else "", ">"))
 
     def written(self) -> str:
         """The name of this type as a program writes it."""
-        return "".join(("a walk of \N{RIGHTWARDS PAIRED ARROWS}", self.element.written(),
+        return "".join(("\N{POSITION INDICATOR}\N{RIGHTWARDS PAIRED ARROWS}",
+                        self.element.written(),
                         "" if self.given is None else
                         "".join((" \N{LEFTWARDS PAIRED ARROWS} ", self.given.written())),
-                        " under way"))
+                        " in \N{APL FUNCTIONAL SYMBOL QUAD}heap" if self.lasting else ""))
 
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name."""
         return "".join(("running<", self.element.mangled(),
                         "" if self.given is None else
-                        "".join((",", self.given.mangled())), ">"))
+                        "".join((",", self.given.mangled())),
+                        ",lasting" if self.lasting else "", ">"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -1183,7 +1190,7 @@ class TypeContext:
         self._pointers: dict[tuple[Type, bool, bool], PtrType] = {}
         self._functions: dict[tuple[tuple[Type, ...], Type], FuncType] = {}
         self._iterators: dict[Type | None, IterType] = {}
-        self._running: dict[tuple[Type, Type | None], RunningType] = {}
+        self._running: dict[tuple[Type, Type | None, bool], RunningType] = {}
         self._integers: dict[tuple[int, bool], IntType] = {
             (t.bits, t.signed): t for t in (I8, I16, I32, I64, U8, U16, U32, U64)}
 
@@ -1300,12 +1307,14 @@ class TypeContext:
             self._functions[key] = found
         return found
 
-    def running_type(self, element: Type, given: Type | None) -> RunningType:
-        """Return the type of a walk of *element* under way, taking *given*."""
-        key = (element, given)
+    def running_type(self, element: Type, given: Type | None,
+                     lasting: bool = False) -> RunningType:
+        """Return the type of a walk of *element* under way, taking *given*, and
+        kept in `⎕heap` where *lasting* says so."""
+        key = (element, given, lasting)
         found = self._running.get(key)
         if found is None:
-            found = RunningType(element, given)
+            found = RunningType(element, given, lasting)
             self._running[key] = found
         return found
 

@@ -1,0 +1,22 @@
+※ pl4g-test: compile=error diag=4680
+※ pl4g-test: expect-diag 4680 LANG_LASTING_WALK_REACHES
+
+※ A walk kept in `⎕heap` keeps what it was called with, and may be resumed
+※ after the call that started it is gone: text a caller handed in may be in
+※ that caller's room, and is not something it may keep.  Text written down is
+※ in the image and is.
+
+fn count(s: str) ⇉ u64 ¤size:
+    yield #s
+
+@[impure]
+fn started(s: str) → ⌖⇉u64 ¤size in ⎕heap:
+    let fine := ⎕start(count("abc") in ⎕heap)
+    let first := ⎕resume(fine) ?? 0
+    if first ≠ 3: return ⎕start(count("") in ⎕heap)
+    ⎕start(count(s) in ⎕heap)
+
+@[startup, impure]
+fn main() → u6:
+    let w := started("x")
+    if ⎕resume(w) ?? 0 = 1: 0u6 else: 1u6

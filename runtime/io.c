@@ -535,6 +535,29 @@ i64 pl4g_io_wait(struct pl4g_ring *r, i64 slot)
   return answer;
 }
 
+/* Whether the request in `slot` has been answered, without waiting for it:
+ * whatever answers the kernel has put in the completion ring are taken in
+ * first.  The slot stays the program's, to be read with `pl4g_io_wait`, which
+ * then does not wait.  What a scheduler asks of every task it holds before
+ * deciding whether to resume it. */
+i64 pl4g_io_ready(struct pl4g_ring *r, i64 slot)
+{
+  if (slot < 0 || slot >= ENTRIES)
+    return 1;
+  if (r->held[slot] == SUBMITTED && r->state == READY)
+    reap(r);
+  return r->held[slot] != SUBMITTED;
+}
+
+/* Hand the kernel what has been written and wait until it has answered at least
+ * one request -- any one.  What a scheduler does when no task it holds can go
+ * on: whichever answer comes first is the task that goes next. */
+void pl4g_io_step(struct pl4g_ring *r)
+{
+  if (r->state == READY && outstanding(r) > 0 && enter(r, 1) >= 0)
+    reap(r);
+}
+
 /* Wait for every request that is outstanding, and give its slot back.
  *
  * What a program does before it ends: a request the kernel has not answered is

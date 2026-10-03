@@ -4331,3 +4331,34 @@ second word, and stops with `yield.on`, which the pass answers two for.  The des
 finishes every delegation from the innermost out and then its own body.  Every body tests for being told to finish after every
 stop, since a driver may tell any of them.
 
+**`⎕start` and `⎕resume`** (`_lower_start`, `_lower_resume`).  A walk under way is a `RunningType`, four words: the next
+function, the description, where the state word is, and where what a resume hands in goes -- nothing for a walk that takes nothing.
+`⎕start` lowers its argument with `_pick_in` set, so a generator's call, a pick, an iterator or an array comes back as the walk it
+describes; a generator's is made with `_generator_described(…, driven=True)`, and the given place is the generator's own slot
+inside the description.  The state word is a `frame` of the caller's.  `⎕resume(c, u)` writes `u`'s words to the given place,
+calls the next function with the description, the state word and an out record, and wraps what came out as a result failed where
+the call answered `false`.
+
+**Kept in the heap.**  `⎕start(g(…) in ⎕heap)` arrives with the walk's arena set by `_generator_in`; where that arena is the heap
+(`tables.is_heap`) the state word is allocated there too -- the description already is -- and the type is
+`running_type(element, given, lasting=True)`, which renders `running<T, U, lasting>`.  The parser reads `⌖⇉T ⇇ U in ⎕heap` as
+`RunningTypeRef`, taking the `in` only where `⎕heap` follows.  `_promises_as_much` lets a lasting walk stand for a plain one, and
+`_shorter_life` re-tuples its four words under the plainer type, as it does a lambda's three.  `_short_lived` finds an iterator or
+a plain walk inside a type -- through tuples, results, arrays and lists -- for the field, answer, top-level and capture checks
+(4670).  The arguments are checked against `_kept_anywhere` of the parameter's type and, failing that, `_plainly_lasting` of what
+is written (4680): a reach analysis like a lambda's (`_reached_by`) would admit more and is in `TODO-pypl4g.md`.
+
+**`⎕await(v)`** never reaches the checker as a call: `_parse_call` makes it the `YieldValue` that `yield v` in an expression is,
+so `_count`, `_contains` and the strategy choosing how to lower a generator see it as the stop it is.  `_check_value_is_used`
+exempts a `YieldValue`, which is what lets it stand as a statement.
+
+**`std.run`** is written in the language (`modules/std.pl4g`).  Its tasks are a list at the top level of `std`, each a record of
+the lasting walk and the slot it waits on (−1 before its first turn); a round moves the list aside, resumes the tasks that may go
+on and puts the rest, and the ones that handed out another request, back.  Two runtime functions are new in `runtime/io.c`:
+`pl4g_io_ready`, which reaps what the completion ring holds and says whether a slot is still submitted, and `pl4g_io_step`, which
+enters the ring waiting for one completion -- that being also what hands the kernel the requests written since the last enter.
+`pl4g_io_wait` of a slot that is ready returns at once.
+
+**A record of one field** is one word, its field's, and `_words_of` and `_from_words` step into it: `_word_types` already said the
+word is the field's type, and an argument record of a generator with such a parameter read the field back as the record.
+

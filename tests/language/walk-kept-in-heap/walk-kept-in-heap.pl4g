@@ -1,0 +1,41 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕start(g(…) in ⎕heap)` keeps the walk's description and state in the heap,
+※ and says so in its type, `⌖⇉T ⇇ U in ⎕heap`: such a walk may be answered,
+※ kept in a field, and kept in a list at the top level, and resumed long after
+※ the call that started it has returned.  It stands where a walk that says
+※ nothing about where it is kept is wanted.
+※
+※ Compare: **Python** and **JavaScript**, whose generators are objects on the
+※ garbage-collected heap and go anywhere; **Rust**, whose coroutine is a value
+※ that is boxed (`Box::pin`) to be kept; **C++20**, whose coroutine frame is
+※ allocated by `operator new` unless the compiler can prove it need not be.
+
+fn running_total(start: u64) ⇉ u64 ⇇ u64:
+    let total: mut u64 = start
+    while true:
+        let more := yield total
+        total ← total + more
+
+type Job = walk : ⌖⇉u64 ⇇ u64 in ⎕heap ; n : u8
+
+let jobs: mut [Job] = []
+
+@[impure]
+fn started(from: u64) → ⌖⇉u64 ⇇ u64 in ⎕heap:
+    ⎕start(running_total(from) in ⎕heap)
+
+fn resumed(c: ⌖⇉u64 ⇇ u64, by: u64) → u64:
+    ⎕resume(c, by) ?? 0u64
+
+@[startup, impure]
+fn main() → u6:
+    jobs ← jobs ⧺ [Job(.walk ← started(10u64), .n ← 1u8)]
+    jobs ← jobs ⧺ [Job(.walk ← started(100u64), .n ← 2u8)]
+    let total: mut u64 = 0u64
+    foreach one: Job = jobs:
+        let a := ⎕resume(one.walk, 0u64) ?? 0u64
+        let b := ⎕resume(one.walk, 5u64) ?? 0u64
+        let d := resumed(one.walk, 7u64)
+        total ← total + a + b + d
+    if total = 47u64 + 317u64: 0u6 else: 1u6

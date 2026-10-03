@@ -1,0 +1,50 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `std.spawn` hands `std.run` a task: a coroutine that hands out each request
+※ it starts and is handed back, by `⎕await`, what the kernel said about it.
+※ `std.run` drives them all on the one thread, resuming whichever has been
+※ answered and waiting for the kernel only when none has, and answers how many
+※ ran to their end.  Each task here writes a line three times and notes every
+※ turn it takes, so both started before either went on is what shows they
+※ share the thread.
+※
+※ Compare: **Python**'s `asyncio.create_task` and `asyncio.run`; **Rust**'s
+※ `spawn` and an executor's `block_on`; **C#**'s `Task.Run` and `await`;
+※ **Go**, whose goroutines are scheduled by the runtime with no `await` to
+※ write; **C**, where the loop over `io_uring_wait_cqe` is the program's own.
+
+let std := ⎕import("std")
+
+let turns: mut [u8] = []
+
+@[impure]
+fn say(to: std.Writer, what: u8⟦⟧, who: u8) ⇉ std.Pending ⇇ std.Answer:
+    let out: mut std.Writer = to
+    foreach _ := 0u8…3u8:
+        turns ← turns ⧺ [who]
+        match std.write(&mut out, what):
+            std.Pending(p):
+                match std.done(⎕await(p)):
+                    u64 ¤size(n):
+                        if n ≠ 4:
+                            return
+                    ⊥:
+                        return
+            ⊥:
+                return
+
+@[startup, impure]
+fn main(init: mut std.Init) → u6:
+    std.spawn(⎕start(say(init.io.error, ⎕bytes("one\n"), 1u8) in ⎕heap))
+    std.spawn(⎕start(say(init.io.error, ⎕bytes("two\n"), 2u8) in ⎕heap))
+    if std.run() ≠ 2u64:
+        return 1u6
+    let ones: mut u8 = 0u8
+    let twos: mut u8 = 0u8
+    let at: mut u8 = 0u8
+    let second: mut u8 = 0u8
+    foreach one: u8 = turns:
+        if one = 1u8: ones ← ones + 1u8 else: twos ← twos + 1u8
+        if at = 1u8: second ← one
+        at ← at + 1u8
+    if ones = 3u8 ∧ twos = 3u8 ∧ second = 2u8: 0u6 else: 2u6

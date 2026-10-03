@@ -139,6 +139,12 @@ fn io_wait(r: &mut Ring, slot: i64) → i64
 @[external("pl4g_io_drain"), io]
 fn io_drain(r: &mut Ring)
 
+@[external("pl4g_io_ready"), io]
+fn io_ready(r: &mut Ring, slot: i64) → i64
+
+@[external("pl4g_io_step"), io]
+fn io_step(r: &mut Ring)
+
 ※※ A request that has been started, and may not have been answered yet.
 ※
 ※ What it holds is where the runtime is keeping the request, and nothing else:
@@ -199,6 +205,73 @@ fn flush(of: Pending) → u64 ¤size ? i32:
 @[export, io]
 fn write_sync(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
     flush(write(to, what)?)
+
+※※ What a task is handed back when it is resumed: what the kernel said about the
+※※ request it waited for, as the kernel said it.  `done` reads it.
+@[export]
+type Answer = got : i64
+
+※※ What an answer says: how many bytes went, or what the kernel refused with --
+※※ what `flush` answers for the same request.
+@[export]
+fn done(of: Answer) → u64 ¤size ? i32:
+    if of.got < 0i64:
+        ⊥ refusal(of.got)
+    else:
+        ⎕unit(⎕narrow(of.got, ⌜u64⌝) ?? 0u64, ⌜size⌝)
+
+※※ A task as `run` holds it: the walk, and the request it is waiting on --
+※※ none, before its first turn.
+type Task = walk : ⌖⇉Pending ⇇ Answer in ⎕heap ; waiting : i64
+
+※※ What `run` has still to drive, in the order the tasks were handed over.
+let tasks: mut [Task] = []
+
+※※ Hand a task to `run`.
+※※
+※※ \param walk a coroutine that hands out each request it starts and is handed
+※※ back what the kernel said about it, started in `⎕heap` so that it lasts as
+※※ long as `run` needs it
+※
+※ Nothing runs yet: a task takes its first turn in `run`.  A task may hand over
+※ another, which `run` takes on in the round after.
+@[export, io]
+fn spawn(walk: ⌖⇉Pending ⇇ Answer in ⎕heap):
+    tasks ← tasks ⧺ [Task(.walk ← walk, .waiting ← 0i64 - 1i64)]
+
+※※ Drive every task handed to `spawn` until each has run to its end.
+※※
+※※ \return how many tasks ran to their end
+※
+※ A round goes through the tasks in order.  One not yet started takes its first
+※ turn; one whose request has been answered is resumed with the answer; the rest
+※ wait for the next round.  A round in which none could go on waits for the
+※ kernel to answer something -- anything -- and that is the only waiting there
+※ is.  So the tasks share the one thread, each going on as soon as what it waits
+※ for has come and none holding up the others: what `asyncio.run` does for
+※ Python's coroutines and an executor for Rust's futures, over the one ring this
+※ module already keeps.
+@[export, io]
+fn run() → u64:
+    let ended: mut u64 = 0u64
+    while #tasks ≠ 0:
+        let now: [Task] = tasks
+        tasks ← []
+        let moved: mut bool = false
+        foreach one: Task = now:
+            if one.waiting < 0i64 ∨ io_ready(&mut ring, one.waiting) ≠ 0i64:
+                moved ← true
+                let got: i64 = if one.waiting < 0i64: 0i64 else: io_wait(&mut ring, one.waiting)
+                match ⎕resume(one.walk, Answer(.got ← got)):
+                    Pending(p):
+                        tasks ← tasks ⧺ [Task(.walk ← one.walk, .waiting ← p.slot)]
+                    ⊥:
+                        ended ← ended + 1u64
+            else:
+                tasks ← tasks ⧺ [one]
+        if ¬moved:
+            io_step(&mut ring)
+    ended
 
 ※※ Read from a device into a run of bytes.
 ※※

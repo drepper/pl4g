@@ -227,6 +227,7 @@ GROUPS: tuple[Group, ...] = (
            "iterator-handed-on": "iterators handed on: picks, records, rows, an array and a list, walked through calls",
            "generator-written-in": "generators written into the loops that walk them",
            "generator-through-calls": "generators split at their stops and walked through calls",
+           "tasks-interleave": "two tasks kept in the heap, awaiting the ring under std.run",
            "divides": "dividing without a remainder, both forms and over an array",
            "failure-written-out": "failures written out, carrying a value and not",
            "named-arguments": "defaults, arguments named at the call, and one across a module",

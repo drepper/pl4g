@@ -606,3 +606,7 @@ Optimizations
     wants every value it reads already selected, so `samevalues` shares a value only from a block laid out earlier, however it
     dominates; giving every instruction its register before any block is selected would lift that.
 
+
+[ ] ask where an argument of a walk kept in `⎕heap` was made (4680) the way a lambda's captures are asked (`_reached_by`).  Today
+    the parameter's type decides, and where it says nothing only what is written does -- text written down, `⎕bytes` of it, `in
+    ⎕static`, `in ⎕heap` -- so text a caller made in the heap and handed on is refused.
