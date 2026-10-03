@@ -81,10 +81,12 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
     # The value a function returns is already in the register a system call
     # takes its first argument in, so nothing has to be moved -- unless a
     # destructor runs in between and is free to clobber it.
-    if module.dtors:
+    drains = started.ring_at(module, layout) is not None
+    if module.dtors or drains:
         asm.loadreg(S1, asm.reg(status))
         for dtor in module.dtors:
             asm.call(symbol_name(dtor))
+        _drain(asm, module, layout)
         asm.loadreg(status, asm.reg(S1))
     asm.loadreg(A7, asm.imm(NR_EXIT_GROUP, 12))
     asm.op(rvops.ENVIRONMENT_CALL)
@@ -271,6 +273,25 @@ def _read_arguments(asm: Assembler, module: Module,
         asm.op(ops.PLUS, theirs.int_arg_regs[1],
                asm.reg(theirs.int_arg_regs[1]), asm.imm(at, 12, signed=False))
     asm.call(started.READS_ARGUMENTS)
+
+
+def _drain(asm: Assembler, module: Module, layout: DataLayout) -> None:
+    """Wait for every request still outstanding, once the program is done.
+
+    The ring is in the record the program was started with, so the runtime is
+    handed where in it that is -- what a destructor of `std` did while the ring
+    was a variable at the top level, which it no longer is.  A program that
+    started no request pays the one test the runtime makes.
+    """
+    at = started.ring_at(module, layout)
+    if at is None:
+        return
+    theirs = lookup_cconv(SYSTEM_CCONV)
+    asm.address(theirs.int_arg_regs[0], started.SYMBOL)
+    if at:
+        asm.op(ops.PLUS, theirs.int_arg_regs[0],
+               asm.reg(theirs.int_arg_regs[0]), asm.imm(at, 12, signed=False))
+    asm.call(started.DRAINS)
 
 
 def _read_environment(asm: Assembler, module: Module,

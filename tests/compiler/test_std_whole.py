@@ -52,11 +52,12 @@ def test_every_body_of_std_checks() -> None:
 
 
 def test_a_program_compiles_only_what_it_names() -> None:
-    """Naming nothing of `std`, a program lowers only what runs anyway: the
-    destructor that drains the ring, and what it calls."""
+    """Naming nothing of `std`, a program lowers nothing of it that does I/O: the
+    ring is drained by the entry point, which calls the runtime itself."""
     module, errors = _checked(False)
     assert errors == [], errors
     lowered = {f.name for f in module.functions.values() if f.blocks}
-    assert "std.finish" in lowered or any("finish" in one for one in lowered), lowered
+    assert "main" in lowered and not any("drain" in one or "finish" in one
+                                         for one in lowered), lowered
     assert not any("read_lines" in one for one in lowered), lowered
     assert not any("error_name" in one for one in lowered), lowered

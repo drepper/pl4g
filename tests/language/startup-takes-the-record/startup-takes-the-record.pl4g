@@ -32,7 +32,7 @@ fn main(init: std.Init) → u6:
     if init.io.output.fd ≠ 1i32:
         return 3u6
     ※ And written, which is what `mut` says may be done.
-    init.io.output ← std.Writer(.fd ← 2i32)
+    init.io.output ← std.fs.Writer(.fd ← 2i32, .ring ← init.io.error.ring)
     if init.io.output.fd ≠ 2i32:
         return 4u6
     0u6

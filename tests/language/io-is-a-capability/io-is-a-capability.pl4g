@@ -19,13 +19,13 @@
 let std := ⎕import("std")
 
 ※ No attribute of any kind: the `&mut Writer` is the permission.
-fn quiet(to: &mut std.Writer) → u64 ¤size ? i32:
+fn quiet(to: &mut std.fs.Writer) → u64 ¤size ? i32:
     std.Io.print(to, ⎕bytes(""))
 
 ※ And one handed the whole record, which carries three of them: the permission is found
 ※ by looking inside, which is what makes the startup function's signature enough.
 ※ A record of the program's own holding a device somewhere inside it.
-type Held = n : u8 ; out : std.Writer
+type Held = n : u8 ; out : std.fs.Writer
 
 fn through(held: &mut Held) → u64 ¤size ? i32:
     quiet(&mut held⌖.out)
@@ -34,7 +34,7 @@ fn through(held: &mut Held) → u64 ¤size ? i32:
 fn main(init: std.Init) → u6:
     if ⎕drop(quiet(&mut init.io.output) ?? 1) ≠ 0u64:
         return 1u6
-    let held: mut Held = Held(.n ← 0u8, .out ← std.Writer(.fd ← 2i32))
+    let held: mut Held = Held(.n ← 0u8, .out ← std.fs.Writer(.fd ← 2i32, .ring ← init.io.error.ring))
     if ⎕drop(through(&mut held) ?? 1) ≠ 0u64:
         return 2u6
     0u6

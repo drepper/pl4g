@@ -81,7 +81,8 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
     # is going to run, and the one the system call wants where none is: a
     # destructor is an ordinary call and may use that one for its own argument,
     # and a program with no destructor should not pay a move for the question.
-    held = HELD_STATUS if module.dtors else EDI
+    drains = started.ring_at(module, layout) is not None
+    held = HELD_STATUS if module.dtors or drains else EDI
     if module.test_plan:
         # A binary built to run tests and nothing else: every one of them
         # passed, or it left through the helper above and never arrived here.
@@ -97,7 +98,8 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
         asm.loadreg(held, asm.reg(status32))
     for dtor in module.dtors:
         asm.call(symbol_name(dtor))
-    if module.dtors:
+    _drain(asm, module, layout)
+    if module.dtors or drains:
         asm.loadreg(EDI, asm.reg(HELD_STATUS))
     asm.loadreg(EAX, asm.imm(NR_EXIT_GROUP, 32, signed=False))
     asm.op(x86ops.SYSCALL)
@@ -212,6 +214,25 @@ def _read_arguments(asm: Assembler, module: Module,
         asm.op(ops.PLUS, theirs.int_arg_regs[1],
                asm.reg(theirs.int_arg_regs[1]), asm.imm(at, 32, signed=True))
     asm.call(started.READS_ARGUMENTS)
+
+
+def _drain(asm: Assembler, module: Module, layout: DataLayout) -> None:
+    """Wait for every request still outstanding, once the program is done.
+
+    The ring is in the record the program was started with, so the runtime is
+    handed where in it that is -- what a destructor of `std` did while the ring
+    was a variable at the top level, which it no longer is.  A program that
+    started no request pays the one test the runtime makes.
+    """
+    at = started.ring_at(module, layout)
+    if at is None:
+        return
+    theirs = lookup_cconv(SYSTEM_CCONV)
+    asm.address(theirs.int_arg_regs[0], started.SYMBOL)
+    if at:
+        asm.op(ops.PLUS, theirs.int_arg_regs[0],
+               asm.reg(theirs.int_arg_regs[0]), asm.imm(at, 32, signed=True))
+    asm.call(started.DRAINS)
 
 
 def _read_environment(asm: Assembler, module: Module,

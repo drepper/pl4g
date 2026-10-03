@@ -86,7 +86,7 @@ def test_every_patch_names_a_fixup_the_target_has(architecture: str) -> None:
 
 
 def std_ring() -> object:
-    """The record `modules/std.pl4g` hands the runtime, as the compiler sees it.
+    """The record `modules/fs.pl4g` hands the runtime, as the compiler sees it.
 
     Checked as a program, with a second file beside it naming the type: the
     files given on the command line share one namespace, so a function there may
@@ -104,7 +104,7 @@ def std_ring() -> object:
     from pypl4g.source.manager import SourceManager
 
     sources = SourceManager()
-    std = ROOT / "modules" / "std.pl4g"
+    std = ROOT / "modules" / "fs.pl4g"
     units = []
     engine, collected = collecting_engine(None)
     for path, text in ((std, std.read_text(encoding="utf-8")),

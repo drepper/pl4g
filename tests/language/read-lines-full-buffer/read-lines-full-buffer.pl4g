@@ -8,9 +8,9 @@
 let std := ⎕import("std")
 
 @[impure]
-fn filled(out: std.Writer) → u6:
-    let w: mut std.Writer = out
-    defer std.Writer.close(w)
+fn filled(out: std.fs.Writer) → u6:
+    let w: mut std.fs.Writer = out
+    defer std.fs.Writer.close(w)
     ※ in pieces of 256, so that no frame holds a kilobyte of its own
     let piece: mut u8⟦256⟧ = 256 ⍴ 121u8
     foreach _ := 0u8…3u8:
@@ -23,9 +23,9 @@ fn filled(out: std.Writer) → u6:
     0u6
 
 @[impure]
-fn walked(from: std.Reader) → u6:
-    let r: mut std.Reader = from
-    defer std.Reader.close(r)
+fn walked(from: std.fs.Reader) → u6:
+    let r: mut std.fs.Reader = from
+    defer std.fs.Reader.close(r)
     let lines: mut u64 = 0u64
     foreach line := std.read_lines(&mut r):
         match line:
@@ -42,8 +42,8 @@ fn main(init: std.Init) → u6:
     let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
     if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
         return 6u6
-    let wrote := filled(std.Writer(.fd ← ends⟦1⟧))
+    let wrote := filled(std.fs.Writer(.fd ← ends⟦1⟧, .ring ← init.io.error.ring))
     if wrote ≠ 0u6:
-        std.Reader.close(std.Reader(.fd ← ends⟦0⟧))
+        std.fs.Reader.close(std.fs.Reader(.fd ← ends⟦0⟧, .ring ← init.io.error.ring))
         return wrote
-    walked(std.Reader(.fd ← ends⟦0⟧))
+    walked(std.fs.Reader(.fd ← ends⟦0⟧, .ring ← init.io.error.ring))

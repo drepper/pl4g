@@ -2898,13 +2898,16 @@ the process exited with it still in flight.  To a terminal or a pipe it landed
 anyway and to a file it did not, which is what made the bug look like a
 difference between devices rather than a race.
 
-**A destructor in `std` drains before the process ends**, which is what "exits
-normally" means: a destructor runs when the startup function returns.  That is
-also what first exercised a destructor that *calls* anything, and it found a
-second bug -- on x86-64 the exit status was moved into the register a system
+**The ring is drained before the process ends**, which is what "exits normally"
+means.  It was a destructor in `std` while the ring was a variable at the top
+level of `std`; since 2026-10-04 the ring is a field of the record a program is
+started with, and the entry point calls `pl4g_io_drain` with where it is, after
+the destructors.  The destructor was what first exercised one that *calls*
+anything, and it found a second bug -- on x86-64 the exit status was moved into the register a system
 call takes its first argument in *before* the destructors ran, and an ordinary
 call puts its own first argument there.  The status now waits in a register a
-call leaves alone, and only where a destructor is going to run.
+call leaves alone, and only where a destructor or the drain is going to run --
+which is every program now.
 
 **qemu-user answers `io_uring_setup` with `ENOSYS`**, so a ring can never run
 under the emulators two of the three targets are tested with.  The runtime
@@ -2959,9 +2962,9 @@ was written down -- `modules/std.pl4g` beside the compiler, found through
 without one -- and not by its shape, so a record a program defines for itself
 and calls `Init` is a record it defined for itself and is refused.
 
-Every program therefore imports `std`, and **`std.finish`, its destructor, is a
-root of every program**: it drains the ring, so `std.ring`, `std.drain` and the
-packaged runtime are in every image.  The runtime is placed whole, so an image
+Every program therefore imports `std`, and **the entry point drains the ring in
+every program** -- the ring being a field of the record, `init.fs.ring` -- so the
+packaged runtime is in every image.  The runtime is placed whole, so an image
 holds all of it -- some four kilobytes of code on x86-64 -- however little of it
 the program calls.
 `dropunreached` keeps no variable for a function whose body is elsewhere -- what
@@ -2969,12 +2972,16 @@ is compiled elsewhere names only what the image offers, which is a root anyway -
 so `std`'s variables nothing reached are not carried, and the ones the compiler
 made for itself are dropped without a report, nobody having written them.
 
-`Init` holds an `Io`, which holds three descriptors, and the words the program
-was named with.  **What the image carries is the record**, an object in the
-writable data called `__pl4g_init`, laid out by the program's own declaration of
-the type.  The fields are found **by name**: `io`, whose every part is a
-descriptor whose number is known before anything runs and is written into the
-image; and `args`, whose two words the runtime fills in when the program starts.
+`Init` holds an `Io`, which holds three devices, the `std.fs.State` holding the
+ring, and the words the program was named with.  **What the image carries is the
+record**, an object in the writable data called `__pl4g_init`, laid out by the
+program's own declaration of the type.  The fields are found **by name**
+(`target/started.py`): `io`, whose every member is a device whose `fd` is known
+before anything runs and is written into the image, and whose `ring` is the
+address of `fs.ring` inside the same object -- an `ABS64` fixup, settled when the
+image is laid out, so nothing is worked out at start; `fs`, all noughts, which is
+a ring not yet made and an empty task list; and `args`, whose two words the
+runtime fills in when the program starts.
 `offsets_of` and `part_offsets_of` say where they go, which is the same place a
 field read anywhere else comes from, so a field added to `Io` is one the entry
 point reaches without being told where.
@@ -4373,8 +4380,9 @@ is written (4680): a reach analysis like a lambda's (`_reached_by`) would admit 
 so `_count`, `_contains` and the strategy choosing how to lower a generator see it as the stop it is.  `_check_value_is_used`
 exempts a `YieldValue`, which is what lets it stand as a statement.
 
-**`std.run`** is written in the language (`modules/std.pl4g`).  Its tasks are a list at the top level of `std`, each a record of
-the lasting walk and the slot it waits on (−1 before its first turn); a round moves the list aside, resumes the tasks that may go
+**`std.run`** is written in the language (`modules/std.pl4g`).  Its tasks are a list in the `std.fs.State` it is handed -- at the
+top level of `std` until 2026-10-04 -- each a record of the lasting walk and the `Pending` it waits on (a slot of −1 before its
+first turn); a round moves the list aside, resumes the tasks that may go
 on and puts the rest, and the ones that handed out another request, back.  Two runtime functions are new in `runtime/io.c`:
 `pl4g_io_ready`, which reaps what the completion ring holds and says whether a slot is still submitted, and `pl4g_io_step`, which
 enters the ring waiting for one completion -- that being also what hands the kernel the requests written since the last enter.
@@ -4422,8 +4430,9 @@ that took a result apart by position now take it apart by what it is made of: `_
 A generator written into its walk binds what each `yield` gives with the generator's element type (`_types_renamed`), so a `yield`
 of an answer and one of a failure are both the result.
 
-**`std.Io.open` and the closes** are `pl4g_io_open` and `pl4g_io_close` in `runtime/io.c`: the name copied to a buffer on the
-stack with a nul added, `openat(AT_FDCWD, …)` with `O_CLOEXEC` and the flags of the kind; a close enters the ring until nothing is
+**`std.fs.Dir.open` and the closes** are `pl4g_io_open` and `pl4g_io_close` in `runtime/io.c`: the name copied to a buffer on the
+stack with a nul added, `openat(dir, …)` with the directory's descriptor -- `AT_FDCWD` for what `State.cwd` answers --
+`O_CLOEXEC` and the flags of the kind; a close enters the ring until nothing is
 outstanding and then calls `close`.  Every request the ring is handed now carries the offset −1, the file's own position: a nought
 there is the absolute offset nought, which a pipe ignores and a file does not.
 
@@ -4507,3 +4516,17 @@ lies on the path (`_behind_a_reader`), the types along the path read off the def
 (`_has_mutable_field`), which is what places it in writable data.  `std.Io`'s three streams are `mut`, and `std` has no `io`
 variable any more.
 
+
+What `std.fs` is built from
+---------------------------
+
+**`modules/fs.pl4g` is the ring and the devices**, and `std` imports it with `@[export]` so a program reaches it as `std.fs`.
+Every device record -- `Dir`, `Reader`, `Writer`, `ReadWriter`, and `Pending` for a request -- is its number and `ring : u64`,
+the address of the `Ring` record inside the program's `init.fs`.  A function of `fs` hands the runtime `⎕at(x.ring, ⌜&mut
+Ring⌝)`, so the C sees the same `struct pl4g_ring *` it always did and nothing in the language names a variable at the top level.
+`State` is `@[device]`, so `std.run`, `std.spawn` and `std.drain`, which are handed one, need no `@[io]`; they still say
+`@[impure]` where they write the task list through the reference.
+
+**Several values in a result.**  `Dir.open` answers `Reader ? i32`, four registers, which the code generator did not do before:
+`leaves_of` spreads a result's answer into registers (see above), and a coroutine holding such a result in its frame needed
+`extract` of a result to count the answer's registers and `tuple` to give a member of several values that many.

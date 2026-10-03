@@ -1153,3 +1153,11 @@ Runtime
     generator delegated to with `yield ⇉`.  Whether that is enough, or the language wants a function that may wait without being
     a generator -- Kotlin's `suspend`, Rust's `async fn` -- is open.
 
+
+[ ] open a directory.  `std.fs.Dir` is made only by `std.fs.State.cwd`, which answers `AT_FDCWD`; a `Dir.open_dir` answering a
+    `Dir` with a descriptor of its own, closed like the devices it opens (`@[closed_by]`), is what makes `openat` worth having
+    beyond the one directory.  Zig's `Dir.openDir` and `Dir.close` are the shape.
+
+[ ] make a device out of a descriptor without spelling out the ring.  A program that has a descriptor from somewhere else -- a
+    pipe made with `⎕syscall` -- writes `std.fs.Writer(.fd ← n, .ring ← init.io.error.ring)`, copying the address from a device
+    it holds.  A `State.adopt(&init.fs, n, ⌜Writer⌝)` would say it once.

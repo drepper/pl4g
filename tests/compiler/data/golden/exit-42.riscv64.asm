@@ -2,5 +2,6 @@
 
 section .text executable
 main(ptr<Init>)u6:
+                             ※ align 16
     13 05 a0 02              li a0, 42
     67 80 00 00              ret

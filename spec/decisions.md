@@ -9692,6 +9692,33 @@ then at most a type and a name, so `std.fs.Dir.open` has four parts; a type is w
 handed on exports are in force where it was imported and no further; a module asked for names a program wrote passes them on to the
 modules it hands on, so that lowering on demand reaches through it.
 
+## 2026-10-04T09:00+02:00 — std
+
+**`std.fs`: the ring in `init.fs`, a directory to open files in, and devices that carry where the ring is**
+
+The user asked for a module `fs`, imported by `std` and handed on, holding a `State` with the ring, its descriptor and a `cwd()`
+answering a `std.fs.Dir` whose descriptor is `AT_FDCWD`; `std.Io.open` moved to `Dir.open`, implemented with `openat`; `Reader` and
+`Writer` moved into `std.fs`, each carrying what it needs of the ring; and the reading and writing functions reaching no variable at
+the top level.  Asked, the user decided that **a device carries the address of the ring** -- `⎕address` of the `Ring` record, a
+`u64` -- against a `&mut` field, which the one-`&mut` rule refuses as soon as two devices exist, and against the ring's descriptor
+alone with its state moved into the runtime, which would have made every program set up a ring at start; that **the one `State`
+is the field `fs` of `std.Init`**, the record keeping its name; that **the entry point drains `init.fs`** when the startup function
+has returned, `std`'s destructor going away; and that **`std.spawn` and `std.run` take the `State`**, which keeps the task list.
+
+Compare: **Zig**'s new I/O, which hands an `Io` value to whatever does I/O and whose `std.fs.Dir`, `cwd()` and `openFile` this
+follows; **C**'s `FILE *`, a handle to state every copy shares; **Go**'s `os.File` and **Rust**'s `std::fs::File`, which reach a
+runtime the process has once and so carry nothing of it.
+
+Taken without asking: `Dir.open` keeps the type as its argument, `⌜Reader⌝`, `⌜Writer⌝` or `⌜ReadWriter⌝`, as `Io.open` had it;
+`Pending` carries the ring's address too, so that `std.flush` needs nothing else; `Pending`, `Answer` and the task record moved to
+`std.fs` with the ring they are about, and `std.write`, `std.read`, `std.flush`, `std.read_lines`, `std.Io.print` and `println`
+stay in `std`, built on a few functions of the device types (`Writer.start`, `Reader.start`, `Pending.wait`, …); `State` and `Dir`
+are `@[device]`, so nothing handed one says `@[io]`; `@[io]` and `@[impure]` came off every reading and writing function, and stay
+on `spawn` and `run`, which write the task list through the reference, and on `error_name`, which fills its table; the address in
+the three streams is written into the image as a relocation; `cwd()` is `State.cwd(&init.fs)`, the language having no
+`value.f()`.  Two code-generator limits came up and were lifted rather than worked round: a result whose answer is several values
+(`Reader ? i32`), and a coroutine holding one.
+
 Open questions
 --------------
 

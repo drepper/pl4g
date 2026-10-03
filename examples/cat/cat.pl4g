@@ -21,8 +21,7 @@ let std := ⎕import("std")
 type State = numbered : bool ; blank_too : bool ; count : u64 ; at_start : bool
 
 ※※ Write `n` six columns wide and a tab after it.
-@[io]
-fn number(out: &mut std.Writer, n: u64) → bool:
+fn number(out: &mut std.fs.Writer, n: u64) → bool:
     let text: mut u8⟦7⟧ = 7 ⍴ 32u8
     text⟦6⟧ ← 9u8
     let left: mut u64 = n
@@ -35,8 +34,8 @@ fn number(out: &mut std.Writer, n: u64) → bool:
 
 ※※ Copy everything `from` holds to `out` a line at a time, numbering as `state`
 ※※ says, and answer what went wrong: nought where nothing did.
-@[io]
-fn copied(from: &mut std.Reader, out: &mut std.Writer, state: &mut State) → i32:
+@[impure]
+fn copied(from: &mut std.fs.Reader, out: &mut std.fs.Writer, state: &mut State) → i32:
     foreach line := std.read_lines(from):
         match line:
             u8⟦⟧(text):
@@ -82,6 +81,7 @@ fn main(init: std.Init) → u6:
         return reported(copied(&mut init.io.input, &mut init.io.output, &mut state), "-",
                         &mut init.io.error)
     options ← true
+    let here: std.fs.Dir = std.fs.State.cwd(&init.fs)
     foreach arg: str = init.args⟦1…#init.args⟧:
         let bytes: u8⟦⟧ = ⎕bytes(arg)
         if options ∧ arg = "--":
@@ -92,10 +92,10 @@ fn main(init: std.Init) → u6:
                             arg, &mut init.io.error) ≠ 0u6:
                     failed ← true
             else:
-                match std.Io.open(arg, ⌜std.Reader⌝):
-                    std.Reader(r):
-                        let from: mut std.Reader = r
-                        defer std.Reader.close(from)
+                match std.fs.Dir.open(here, arg, ⌜std.fs.Reader⌝):
+                    std.fs.Reader(r):
+                        let from: mut std.fs.Reader = r
+                        defer std.fs.Reader.close(from)
                         if reported(copied(&mut from, &mut init.io.output, &mut state), arg,
                                     &mut init.io.error) ≠ 0u6:
                             failed ← true
@@ -107,7 +107,7 @@ fn main(init: std.Init) → u6:
 ※※ Say what went wrong with `name`, where `code` says something did, and answer the
 ※※ status that comes to.
 @[impure]
-fn reported(code: i32, name: str, err: &mut std.Writer) → u6:
+fn reported(code: i32, name: str, err: &mut std.fs.Writer) → u6:
     if code = 0i32:
         return 0u6
     ⎕drop(std.println⌜err, "cat: {}: {}", name, std.error_name(code)⌝ ?? 0)

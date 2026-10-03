@@ -53,7 +53,7 @@ fn main(init: std.Init) → u6:
                     ※ what the program was started with may be changed, it
                     ※ being an object the program holds and not a value it was
                     ※ handed: `output` is made to be where `errors` goes
-                    init.io.output ← std.Writer(.fd ← 2i32)
+                    init.io.output ← std.fs.Writer(.fd ← 2i32, .ring ← init.io.error.ring)
                     if init.io.output.fd = 2i32: 0u6 else: 6u6
             ⊥:
                 5u6

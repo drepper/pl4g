@@ -75,10 +75,10 @@ BLOB = Blob(
                   "0000634d050403b5820383b50204084190410f003002630ec50283b5"
                   "820483b7020503e705009d48094821a005256301a602b375e5009205"
                   "b386b7008c62e3e7b8fe94468e059695d4ed23bc0505f9bf328583b5"
-                  "82030f00100388c182809356c60081c61305c0fd82808566c1063301"
-                  "d14001ce1408328783c70500a9c32380f6007d178505850665fb0c08"
-                  "b2950946238005006365a6020e0597050000938505002e9510619308"
-                  "80030c089306601b1305c0f9014781477300000011a029558565c105"
+                  "82030f00100388c1828013d7c60001c71305c0fd8280056741073301"
+                  "e14089ce13080101b6870347060021c32300e800fd1705060508e5fb"
+                  "1008369689462300060063e4a6020e05170600001306060032951061"
+                  "930880032e850c089306601b014781477300000011a029558565c105"
                   "2e918280aa82086105432e88631e650c9d43094e9308a01a19a82e85"
                   "83b582030f00100388c103b50200631f650a03b5820583b5020603b6"
                   "820683b602077d15fd157d16fd161335150093b515001336160093b6"
@@ -157,9 +157,9 @@ BLOB = Blob(
               target=1, addend=224),
         Patch(piece=0, offset=1044, kind="riscv_pcrel_lo12_i",
               target=1, addend=224, measured_from=-12),
-        Patch(piece=0, offset=1750, kind="riscv_pcrel_hi20",
+        Patch(piece=0, offset=1752, kind="riscv_pcrel_hi20",
               target=1, addend=240),
-        Patch(piece=0, offset=1754, kind="riscv_pcrel_lo12_i",
+        Patch(piece=0, offset=1756, kind="riscv_pcrel_lo12_i",
               target=1, addend=240, measured_from=-4),
         Patch(piece=0, offset=2416, kind="riscv_pcrel_hi20",
               target=2, addend=0),

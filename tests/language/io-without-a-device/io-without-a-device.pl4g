@@ -5,18 +5,17 @@
 ※
 ※ Permission to do input or output travels with a device: the startup function
 ※ is handed `init`, which holds three, and a function it hands one to may use it.
-※ A function handed none that does input or output anyway -- here by waiting on
-※ every request in flight, which `std.drain` does -- is doing something its
+※ A function handed none that does input or output anyway -- here by making a
+※ request out of two numbers and waiting for it -- is doing something its
 ※ signature does not account for, and says so with `@[io]`.
 ※
 ※ What it is *not* is `@[impure]`, and the note says which attribute would answer it.
 
 let std := ⎕import("std")
 
-fn tidy():
-    std.drain()
+fn tidy(slot: i64, ring: u64) → i64:
+    std.fs.Pending.wait(std.fs.Pending(.slot ← slot, .ring ← ring))
 
 @[startup]
 fn main(init: std.Init) → u6:
-    tidy()
-    0u6
+    ⎕narrow(tidy(0i64, init.io.error.ring), ⌜u6⌝) ?? 0u6

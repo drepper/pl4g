@@ -570,7 +570,7 @@ void pl4g_io_step(struct pl4g_ring *r)
 /* -- opening and closing ---------------------------------------------------- */
 
 /* How `pl4g_io_open` is asked to open: the numbers the language passes, one per
- * type `std.Io.open` makes.  The flags are the kernel's, and the same on the
+ * type `std.fs.Dir.open` makes.  The flags are the kernel's, and the same on the
  * three architectures. */
 #define OPEN_READING 0
 #define OPEN_WRITING 1
@@ -580,20 +580,20 @@ void pl4g_io_step(struct pl4g_ring *r)
 #define O_CREAT 0100
 #define O_TRUNC 01000
 #define O_CLOEXEC 02000000
-#define AT_FDCWD (-100)
 #define ENAMETOOLONG 36
 #define NAME_MAX_BYTES 4096
 
-/* Open the file named by the `len` bytes at `at`, relative to the directory the
- * process is in.  Answers the descriptor, or what the kernel refused with as a
- * negative number.
+/* Open the file named by the `len` bytes at `at`, relative to the directory
+ * `dir` -- a descriptor of one, or `AT_FDCWD` for the one the process is in, which
+ * is what `std.fs.State.cwd` hands out.  Answers the descriptor, or what the
+ * kernel refused with as a negative number.
  *
  * The name the language holds is counted and the one the kernel wants ends in a
  * nul, so it is copied here, once, with one added -- refusing a name with a nul
  * inside it, which the kernel would read as a shorter one, and one too long for
  * any file system to have.  A file opened for writing is made if it is not
  * there and emptied if it is; one opened for both is made and left as it is. */
-i64 pl4g_io_open(i32 how, u64 at, u64 len)
+i64 pl4g_io_open(i32 how, i32 dir, u64 at, u64 len)
 {
   unsigned char name[NAME_MAX_BYTES];
   if (len >= NAME_MAX_BYTES)
@@ -612,7 +612,7 @@ i64 pl4g_io_open(i32 how, u64 at, u64 len)
     flags |= O_RDWR | O_CREAT;
   else if (how != OPEN_READING)
     return -EINVAL;
-  return sys(NR_OPENAT, AT_FDCWD, (i64) name, flags, 0666, 0, 0);
+  return sys(NR_OPENAT, dir, (i64) name, flags, 0666, 0, 0);
 }
 
 /* Close `fd`, once every request the ring holds has been answered: one still in

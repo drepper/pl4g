@@ -26,8 +26,8 @@ fn main(init: std.Init) → u6:
     let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
     if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
         return 4u6
-    let out: mut std.Writer = std.Writer(.fd ← ends⟦1⟧)
-    defer std.Writer.close(out)
+    let out: mut std.fs.Writer = std.fs.Writer(.fd ← ends⟦1⟧, .ring ← init.io.error.ring)
+    defer std.fs.Writer.close(out)
     if ⎕drop(std.println⌜&mut out, "{}", 7u8⌝ ?? 0) ≠ 2u64:
         return 5u6
     ※ And the real devices are places that can be written to.  Nothing is written:

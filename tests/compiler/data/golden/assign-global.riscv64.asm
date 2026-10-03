@@ -8,6 +8,7 @@ counter:
 
 section .text executable
 main(ptr<Init>)u6:
+                             ※ align 16
     93 02 70 00              li t0, 7
     17 03 00 00              auipc.hi20 t1, counter   ※ fixup riscv_pcrel_hi20 → counter
     13 03 03 00              addi.lo12 t1, t1, counter   ※ fixup riscv_pcrel_lo12_i → counter

@@ -1,9 +1,14 @@
 ※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
 
-※ `std.Io.open(name, ⌜T⌝)` opens a file for what the type it is handed says --
-※ `⌜std.Reader⌝`, `⌜std.Writer⌝` or `⌜std.ReadWriter⌝` -- and answers that type,
-※ or the number the kernel refused with.  What it answers is closed by whoever
-※ holds it: `std.Writer.close` and its two siblings, here put off with `defer`.
+※ `std.fs.Dir.open(dir, name, ⌜T⌝)` opens a file in a directory for what the type it
+※ is handed says -- `⌜std.fs.Reader⌝`, `⌜std.fs.Writer⌝` or `⌜std.fs.ReadWriter⌝` -- and
+※ answers that type, or the number the kernel refused with.  The directory here is
+※ the one the process is in, which `std.fs.State.cwd(&init.fs)` answers; a name that
+※ begins with `/` does not depend on it.  What it answers is closed by whoever holds
+※ it: `std.fs.Writer.close` and its two siblings, here put off with `defer`.
+※
+※ Nothing here says `@[impure]` or `@[io]`: a directory is a device, and a function
+※ handed one may open files in it, and what it opens carries the ring with it.
 ※
 ※ Compare: **Go**'s `os.OpenFile` and **Zig**'s `openFile`, which take a mode and
 ※ answer one type that may or may not be writable; **Rust**'s `File::open` and
@@ -13,52 +18,57 @@
 
 let std := ⎕import("std")
 
-@[impure]
-fn written() → u6:
-    match std.Io.open("/dev/null", ⌜std.Writer⌝):
-        std.Writer(w):
-            let out: mut std.Writer = w
-            defer std.Writer.close(out)
+fn written(dir: std.fs.Dir) → u6:
+    match std.fs.Dir.open(dir, "/dev/null", ⌜std.fs.Writer⌝):
+        std.fs.Writer(w):
+            let out: mut std.fs.Writer = w
+            defer std.fs.Writer.close(out)
             if ⎕drop(std.write_sync(&mut out, ⎕bytes("gone\n")) ?? 0) = 5u64: 0u6 else: 1u6
         ⊥:
             2u6
 
-@[impure]
-fn read() → u6:
-    match std.Io.open("/dev/null", ⌜std.Reader⌝):
-        std.Reader(r):
-            let from: mut std.Reader = r
-            defer std.Reader.close(from)
+fn read(dir: std.fs.Dir) → u6:
+    match std.fs.Dir.open(dir, "/dev/null", ⌜std.fs.Reader⌝):
+        std.fs.Reader(r):
+            let from: mut std.fs.Reader = r
+            defer std.fs.Reader.close(from)
             let room: mut u8⟦4⟧ = 4 ⍴ 0u8
             if ⎕drop(std.read(&mut from, room) ?? 9) = 0u64: 0u6 else: 3u6
         ⊥:
             4u6
 
-@[impure]
-fn both() → u6:
-    match std.Io.open("/dev/null", ⌜std.ReadWriter⌝):
-        std.ReadWriter(rw):
-            let held: std.ReadWriter = rw
-            std.ReadWriter.close(held)
+fn both(dir: std.fs.Dir) → u6:
+    match std.fs.Dir.open(dir, "/dev/null", ⌜std.fs.ReadWriter⌝):
+        std.fs.ReadWriter(rw):
+            let held: std.fs.ReadWriter = rw
+            std.fs.ReadWriter.close(held)
             0u6
         ⊥:
             5u6
 
-@[impure]
-fn missing() → u6:
-    match std.Io.open("/nonexistent/pl4g", ⌜std.Reader⌝):
-        std.Reader(r):
-            std.Reader.close(r)
+fn missing(dir: std.fs.Dir) → u6:
+    match std.fs.Dir.open(dir, "/nonexistent/pl4g", ⌜std.fs.Reader⌝):
+        std.fs.Reader(r):
+            std.fs.Reader.close(r)
             6u6
         ⊥(code):
             if code = 2i32: 0u6 else: 7u6
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
-    let a := written()
+    let here: std.fs.Dir = std.fs.State.cwd(&init.fs)
+    let a := written(here)
     if a ≠ 0u6: return a
-    let b := read()
+    let b := read(here)
     if b ≠ 0u6: return b
-    let c := both()
+    let c := both(here)
     if c ≠ 0u6: return c
-    missing()
+    let d := missing(here)
+    if d ≠ 0u6: return d
+    ※ and a name relative to the directory, which is the one the test runs in
+    match std.fs.Dir.open(here, ".", ⌜std.fs.Reader⌝):
+        std.fs.Reader(r):
+            std.fs.Reader.close(r)
+            0u6
+        ⊥:
+            8u6

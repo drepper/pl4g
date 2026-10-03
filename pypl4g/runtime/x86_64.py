@@ -113,11 +113,11 @@ BLOB = Blob(
                   "4983f90777184901f84d6340084e8984c9980000004ac744c9580200"
                   "0000ffc04189c04121f049c1e0044e8b0c074983f90777b84901f84d"
                   "6340084e8984c9980000004ac744c95802000000eb9e66666666662e"
-                  "0f1f84000000000048c7c0dcffffff4881faff0f000077714881ec88"
-                  "0f00004885d2741831c066900fb60c0684c9744b884c048048ffc048"
-                  "39c275ecc64414800048c7c0eaffffff83ff02773589f8488d0d0000"
-                  "0000488b14c1488d742480b80101000041bab601000048c7c79cffff"
-                  "ff4531c04531c90f05eb0748c7c0eaffffff4881c4880f0000c36666"
+                  "0f1f84000000000048c7c0dcffffff4881f9ff0f000077704881ec88"
+                  "0f00004885c9741b31c06690440fb604024584c07448448844048048"
+                  "ffc04839c175e9c6440c800048c7c0eaffffff83ff02773189f8488d"
+                  "0d00000000488b14c14863fe488d742480b80101000041bab6010000"
+                  "4531c04531c90f05eb0748c7c0eaffffff4881c4880f0000c3666666"
                   "6666662e0f1f84000000000041565389f348833f010f858301000049"
                   "89fe41ba01000000eb18660f1f44000089c8498b4e38890149833e01"
                   "0f856001000031c049837e58010f94c031c949837e60010f94c101c1"
@@ -209,7 +209,7 @@ BLOB = Blob(
               target=1, addend=220),
         Patch(piece=0, offset=1575, kind="pcrel32_at_field",
               target=1, addend=220),
-        Patch(piece=0, offset=2826, kind="pcrel32_at_field",
+        Patch(piece=0, offset=2829, kind="pcrel32_at_field",
               target=1, addend=236),
         Patch(piece=0, offset=3914, kind="pcrel32_at_field",
               target=2, addend=-4),

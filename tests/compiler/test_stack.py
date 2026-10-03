@@ -116,10 +116,10 @@ def test_the_entry_point_makes_it_itself(triple: str, tmp_path: Path) -> None:
 
     The making of the stack was compiled from C once and carried in the image;
     it is now emitted like any other code.  The packaged runtime is in every
-    image all the same -- every program imports `std`, whose destructor drains
-    the ring -- so what this looks for is the four calls in the entry point
+    image all the same -- every program imports `std`, and the entry point
+    drains the ring -- so what this looks for is the four calls in the entry point
     itself, and nothing of the runtime called from there but what reads the
-    arguments.
+    arguments and what drains the ring when the program is done.
     """
     output = tmp_path / "out.asm"
     source = tmp_path / "exit0.pl4g"
@@ -132,8 +132,8 @@ def test_the_entry_point_makes_it_itself(triple: str, tmp_path: Path) -> None:
     for number in (MMAP[architecture_of(triple)], MPROTECT[architecture_of(triple)]):
         assert _mentions(entry, number), entry
     assert HANDLER_SYMBOL in text, "the handler was not emitted"
-    assert set(re.findall(r"\N{RIGHTWARDS ARROW} (pl4g_\w+)", entry)) <= {"pl4g_args"}, \
-        "the packaged runtime makes the stack"
+    assert set(re.findall(r"\N{RIGHTWARDS ARROW} (pl4g_\w+)", entry)) <= \
+        {"pl4g_args", "pl4g_io_drain"}, "the packaged runtime makes the stack"
 
 
 def _mentions(text: str, number: int) -> bool:

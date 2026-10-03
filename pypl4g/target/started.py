@@ -16,11 +16,13 @@ from __future__ import annotations
 
 from typing import Final
 
-from ..ir.layout import (DataLayout, align_of, offsets_of, part_offsets_of,
+from ..ir.layout import (DataLayout, align_of, offsets_of,
                          size_of)
 from ..ir.module import Module
-from ..ir.types import IntType, ProductType, PtrType, Type, parts_of
+from ..ir.types import IntType, ProductType, PtrType, Type
 from ..mc.asmbuilder import Assembler
+from ..mc.operand import BinExpr, ConstExpr, SymExpr
+from ..mc.fixup import ABS64, MCFixup
 from ..mc.symbol import SymBinding, SymKind, SymVisibility
 
 #: The descriptors every process starts with open, in the order `std.Io` writes
@@ -41,6 +43,18 @@ SECTION: Final[str] = ".data"
 #: which fields it has to reach, not where they are.
 DEVICES: Final[str] = "io"
 ARGUMENTS: Final[str] = "args"
+
+#: The field holding what the program does its I/O with, the ring among it, and
+#: the fields of a device: its descriptor and where that ring is.  Every device
+#: the process inherits carries the ring's address, which is known once the
+#: image is laid out and so is written into it rather than worked out at start.
+STATE: Final[str] = "fs"
+RING: Final[str] = "ring"
+DESCRIPTOR: Final[str] = "fd"
+
+#: What the runtime is called that waits for every request still outstanding,
+#: which the entry point calls when the startup function has returned.
+DRAINS: Final[str] = "pl4g_io_drain"
 
 #: What the runtime is called that reads the arguments off the stack, and what
 #: the one that reads the environment off it is called.  The second answers with
@@ -100,6 +114,19 @@ def arguments_at(module: Module, layout: DataLayout) -> int | None:
     return where_in(found, ARGUMENTS, layout)[0]
 
 
+def ring_at(module: Module, layout: DataLayout) -> int | None:
+    """How far into the record the ring is, which the entry point drains.
+
+    Nothing where the program takes no such record.
+    """
+    found = wanted_by(module)
+    if found is None:
+        return None
+    start, state = where_in(found, STATE, layout)
+    assert isinstance(state, ProductType), state
+    return start + where_in(state, RING, layout)[0]
+
+
 def entry_wants_runtime(module: Module) -> bool:
     """Whether the entry point itself calls into the packaged runtime.
 
@@ -134,19 +161,26 @@ def emit(asm: Assembler, module: Module, layout: DataLayout) -> None:
     if found is None:
         return
     out = bytearray(size_of(found, layout))
+    ring = ring_at(module, layout)
+    assert ring is not None
     start, devices = where_in(found, DEVICES, layout)
     assert isinstance(devices, ProductType), devices
-    parts = parts_of(devices)
-    assert len(parts) == len(INHERITED), (len(parts), len(INHERITED))
-    for number, one, offset in zip(INHERITED, parts,
-                                   part_offsets_of(devices, layout)):
-        assert isinstance(one, IntType), one
-        width = one.bits // 8
-        out[start + offset:start + offset + width] = \
-            number.to_bytes(width, "little", signed=one.signed)
+    assert len(devices.fields) == len(INHERITED), (devices.fields, INHERITED)
+    fixups: list[MCFixup] = []
+    for number, (_, one), offset in zip(INHERITED, devices.fields,
+                                        offsets_of(devices, layout)):
+        assert isinstance(one, ProductType), one
+        at, held = where_in(one, DESCRIPTOR, layout)
+        assert isinstance(held, IntType), held
+        width = held.bits // 8
+        out[start + offset + at:start + offset + at + width] = \
+            number.to_bytes(width, "little", signed=held.signed)
+        fixups.append(MCFixup(
+            offset=start + offset + where_in(one, RING, layout)[0], kind=ABS64,
+            target=BinExpr("+", SymExpr(asm.symbol_named(SYMBOL)), ConstExpr(ring))))
     asm.section(SECTION, writable=True, alignment=align_of(found, layout))
     asm.align(align_of(found, layout))
     symbol = asm.label(SYMBOL, binding=SymBinding.LOCAL, kind=SymKind.OBJECT,
                        visibility=SymVisibility.HIDDEN)
-    asm.bytes(bytes(out))
+    asm.bytes(bytes(out), tuple(fixups))
     asm.end_label(symbol)
