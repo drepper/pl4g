@@ -4434,3 +4434,8 @@ new run from the heap and leaves the old one; nothing hands a table's runs back.
 **`std.error_name`** fills the top-level `error_names: mut ⸨Error: str⸩` with `comptime foreach` over `⎕fields(⌜Error⌝)` when it is
 empty, and looks up `as_error(code)`.
 
+**`dropunreached` runs second**, right after `dropignored`, at every level, and again at the end.  A module brings every function it
+defines into the program's module, and the passes before it used to work on all of them -- `largeanswers`, `coroutines` and
+`leanvalues` over the whole of `std` for a program that called one function of it.  After `dropignored` so that an ignored answer in
+a function nothing calls is still reported.
+

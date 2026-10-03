@@ -95,9 +95,15 @@ def pipeline_for(level: int) -> Sequence[str]:
     # for, so it runs whatever was asked for.  It goes last, after everything
     # that could make such an edge and after everything that might otherwise
     # take the block it puts there straight back out again.
+    # What nothing reaches is dropped right after that, before anything else
+    # looks at it: a module brings every function it defines, and a pass that
+    # works on one nothing calls is work on bytes no image will hold.  After
+    # `dropignored` and not before, so that what it reports about a function is
+    # reported whether or not anything calls the function.  It runs again at the
+    # end, inlining being what leaves more of them behind.
     if level <= 0:
-        return ("dropignored", "tailcalls", "largeanswers", "coroutines",
-                "leanvalues", "dropunreached", "splitedges")
+        return ("dropignored", "dropunreached", "tailcalls", "largeanswers",
+                "coroutines", "leanvalues", "dropunreached", "splitedges")
     # Inlining goes after the two that are not optimizations and before the
     # rest: what it leaves behind is a call gone and a body in its place, which
     # is what folding, simplifying and sweeping are for -- and a function
@@ -117,7 +123,8 @@ def pipeline_for(level: int) -> Sequence[str]:
     # shape they keep, and before anything else looks at it: nothing below
     # this pass knows what a stop is, and every pass after it sees ordinary
     # functions.
-    return ("dropignored", "tailcalls", "largeanswers", "coroutines", "inline",
+    return ("dropignored", "dropunreached", "tailcalls", "largeanswers",
+            "coroutines", "inline",
             "leanvalues",
             "constfold", "samevalues", "purecalls",
             "simplifycfg",
