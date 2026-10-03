@@ -4837,7 +4837,11 @@ object from two loops interleaves them silently; Rust, whose borrow checker refu
 **What is refused through calls, and why:** a generator that puts something off with `defer` (4674), since a walk that stops early
 leaves it stopped part way and what it put off would never run -- written into a loop, its `defer` runs as the loop leaves; and a
 generator whose body walks itself (4675), whose frame would hold a frame of its own -- which is what naming an arena for the inner
-frames will allow, as Rust needs a `Box::pin` for a recursive `async fn`.  A generator does not take type parameters yet.
+frames will allow, as Rust needs a `Box::pin` for a recursive `async fn`.  **A generator may take type parameters**, and is compiled once per set of types a call gives it, as a generic function is --
+written into the loop that walks it with the type parameters renamed and bound there, or walked through calls.  **One exported
+from another file** is called through that file's name and walked through calls: its body means what its own file's names mean,
+and the loop's body cannot be written into it.  Compare: **C++**'s `std::generator<T>` templates and **Rust**'s generic `impl
+Iterator`, compiled per type as this is; **C#** and **Python**, where a generic generator is one generator.
 
 #### Attributes
 

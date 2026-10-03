@@ -690,7 +690,8 @@ class _Generator:
     """
 
     node: ast.FuncDef
-    func: Function
+    #: Nothing for a template, which is compiled per set of types.
+    func: Function | None
     #: What it takes, in order.
     params: tuple[Type, ...]
     #: What each turn gives.
@@ -698,10 +699,23 @@ class _Generator:
     #: Whether walking it is impure.
     impure: bool
     #: The room a walk of it takes, sized once the body is split.
-    frame: CoroutineFrame
+    frame: CoroutineFrame | None
     path: str
     #: Its own `next`, once a walk through calls has asked for one.
     step: Function | None = None
+    #: Whether a file importing this one may call it.
+    exported: bool = False
+    #: The names of the file that wrote it, which its body means what it means
+    #: in -- and the bundles beside them, for the same reason a generic keeps them.
+    scope: dict[str, object] | None = None
+    siblings: dict[str, object] | None = None
+    #: Its type parameters, where it has any: then it is a template, compiled
+    #: once per set of types a call gives it, into *instances*.
+    parameters: tuple[str, ...] = ()
+    attrs: list[BoundAttr] = field(default_factory=list)
+    instances: dict[tuple[Type, ...], "_Generator"] = field(default_factory=dict)
+    #: For an instance, the types its parameters stand for.
+    bound: dict[str, Type] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -1266,11 +1280,16 @@ def _rebuilt(node: object, change, into_lambdas: bool = True) -> object:  # noqa
 
 
 def _renamed(body: ast.Block, names: dict[str, str],
-             labels: dict[str, str]) -> ast.Block:
-    """*body* with the names and loop names in *names* and *labels* renamed."""
+             labels: dict[str, str],
+             types: dict[str, str] | None = None) -> ast.Block:
+    """*body* with the names, loop names and type parameters in *names*,
+    *labels* and *types* renamed."""
 
     def change(node: object) -> object | None:
         match node:
+            case ast.TypeRef() if types and node.module is None \
+                    and node.name in types:
+                return replace(node, name=types[node.name])
             case ast.NameRef() if node.name in names:
                 return replace(node, name=names[node.name])
             case ast.VarDef() | ast.ForEach() | ast.AssignStmt():
@@ -4817,14 +4836,36 @@ class Checker:
         its arguments are -- answering whether it handed one out, which the
         `coroutines` pass makes resumable.
         """
-        if generic:
-            self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, node.name_span,
-                             feature="a generator with type parameters")
-            return None
         if node.body is None:
             self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, node.name_span,
                              feature="a generator defined somewhere else")
             return None
+        func_attrs, _ = self._function_attrs(attrs)
+        if generic:
+            # Its types are what a call gives it, so nothing of it is compiled
+            # here: each set of types makes an instance of its own.
+            written: list[str] = []
+            for param in node.params:
+                _parameters_in(param.type, written)
+            self._top[node.name] = _Generator(
+                node=node, func=None, params=(), element=ERROR,
+                impure=func_attrs.impure or func_attrs.io, frame=None, path=path,
+                exported=self._is_export(attrs), scope=self._top,
+                siblings=self._bundles, parameters=tuple(written), attrs=attrs)
+            return None
+        made = self._generator_function(node, path, func_attrs, {})
+        if made is None:
+            return None
+        made.exported = self._is_export(attrs)
+        made.scope, made.siblings = self._top, self._bundles
+        self._top[node.name] = made
+        return _Collected(node=node, attrs=attrs, func=made.func)
+
+    def _generator_function(self, node: ast.FuncDef, path: str,
+                            func_attrs: FuncAttrs,
+                            bound: dict[str, Type]) -> _Generator | None:
+        """The function a generator's body is, for the types *bound* gives its
+        type parameters -- none, where it has none."""
         params = tuple(self._resolve_type(p.type) for p in node.params)
         element = self._resolve_type(node.ret_type) \
             if node.ret_type is not None else ERROR
@@ -4836,8 +4877,11 @@ class Checker:
                              else node.name_span,
                              found=element.written(), what="handed out")
             return None
-        func_attrs, _ = self._function_attrs(attrs)
         whole = _written_name(node)
+        if bound:
+            whole = "".join((whole, "\N{TOP LEFT CORNER}",
+                             ",".join(one.mangled() for one in bound.values()),
+                             "\N{TOP RIGHT CORNER}"))
         frame = CoroutineFrame(whole)
         name = "".join((ITER_GLYPH, whole))
         func = Function(
@@ -4853,10 +4897,79 @@ class Checker:
         self._owned.append(func)
         found = _Generator(node=node, func=func, params=params, element=element,
                            impure=func_attrs.impure or func_attrs.io,
-                           frame=frame, path=path)
-        self._top[node.name] = found
+                           frame=frame, path=path, bound=dict(bound))
         self._generator_bodies[id(func)] = found
-        return _Collected(node=node, attrs=attrs, func=func)
+        return found
+
+    #: What the checker keeps about the body it is lowering, which a body
+    #: lowered in the middle of another -- a generator's instance, made by a call
+    #: -- sets aside and puts back.
+    _BODY_STATE: Final = (
+        "_scopes", "_addressed", "_answering", "_impure", "_carried", "_loops",
+        "_outside", "_initializing", "_assigning", "_operand_of",
+        "_handing_over", "_deferred", "_emptied", "_answer_made_in",
+        "_out_of_arena", "_out_of_arenas", "_made_from", "_answer_kinds",
+        "_thin_to", "_answer_arms", "_yield_answer", "_hands_out",
+        "_hands_out_local", "_receiving", "_unscanned", "_borrows", "_places",
+        "_iterator_loans", "_pick_in", "_pick_walked", "_demanding",
+        "_writing_in")
+
+    def _lower_set_aside(self, entry: _Collected) -> None:
+        """Lower a body in the middle of another, with that one set aside."""
+        saved = {name: getattr(self, name) for name in self._BODY_STATE}
+        self._scopes, self._addressed = [], set()
+        self._deferred, self._emptied = [], []
+        self._carried, self._loops, self._outside = set(), [], []
+        self._borrows, self._places, self._iterator_loans = [], {}, []
+        self._writing_in = []
+        self._initializing = self._assigning = self._operand_of = None
+        self._handing_over = self._pick_in = self._pick_walked = None
+        self._answer_arms = self._yield_answer = None
+        self._hands_out = self._hands_out_local = self._receiving = None
+        self._out_of_arena, self._out_of_arenas = None, frozenset({_HEAP})
+        self._made_from = {}
+        try:
+            self._lower_function(entry)
+        finally:
+            for name, value in saved.items():
+                setattr(self, name, value)
+
+    def _generator_instance(self, template: _Generator, bound: dict[str, Type],
+                            span: Span) -> _Generator | None:
+        """The generator *template* comes to for these types, compiled once per
+        set of them as a generic function's instances are."""
+        missing = [name for name in template.parameters if name not in bound]
+        if missing:
+            self._diags.emit(D.LANG_GENERIC_NOT_DETERMINED, span, name=missing[0])
+            return None
+        key = tuple(bound[name] for name in template.parameters)
+        found = template.instances.get(key)
+        if found is not None:
+            return found
+        outer = self._bound
+        self._bound = dict(bound)
+        try:
+            with self._in_scope_of(template):  # type: ignore[arg-type]
+                attrs, _ = self._function_attrs(template.attrs)
+                found = self._generator_function(template.node, template.path,
+                                                 attrs, bound)
+                if found is None:
+                    return None
+                found.scope, found.siblings = template.scope, template.siblings
+                found.exported = template.exported
+                template.instances[key] = found
+                self._module.reports.record(
+                    ReportKind.INSTANTIATE, template.node.name,
+                    "".join(("compiled for ",
+                             ", ".join(one.written() for one in key),
+                             ", which is what a call gave it")), span)
+                assert found.func is not None
+                self._lower_set_aside(_Collected(node=template.node,
+                                                 attrs=template.attrs,
+                                                 func=found.func))
+        finally:
+            self._bound = outer
+        return found
 
     def _check_external(self, node: ast.FuncDef, attrs: FuncAttrs) -> None:
         """Check a function said to be defined somewhere else, and one not.
@@ -14629,7 +14742,7 @@ class Checker:
             self._pick_in, self._pick_walked = outer
         name = (expr.name if isinstance(expr, ast.NameRef)
                 else expr.callee.name if isinstance(expr, ast.Call)
-                and isinstance(expr.callee, ast.NameRef)
+                and isinstance(expr.callee, (ast.NameRef, ast.Member))
                 else "what is written here")
         if walked is None:
             ty = self._value_type_of(value)
@@ -14748,12 +14861,75 @@ class Checker:
         builder.position_at(resumed)
 
     def _generator_named(self, callee: ast.Expr) -> _Generator | None:
-        """The generator a call names, where it names one."""
+        """The generator a call names, where it names one: by a bare name, or
+        through the module that exports it."""
+        if isinstance(callee, ast.Member) and isinstance(callee.base, ast.NameRef):
+            held = self._top.get(callee.base.name)
+            if isinstance(held, LoadedModule) \
+                    and self._find_local(callee.base.name) is None:
+                found = held.exports.get(callee.name)
+                return found if isinstance(found, _Generator) else None
+            return None
         if not isinstance(callee, ast.NameRef) \
                 or self._find_local(callee.name) is not None:
             return None
         found = self._top.get(callee.name)
         return found if isinstance(found, _Generator) else None
+
+    def _generator_arguments(self, builder: IRBuilder, expr: ast.Call,
+                             found: _Generator
+                             ) -> tuple[_Generator, list[Value]] | None:
+        """The arguments of a call to a generator, worked out -- and, where it
+        has type parameters, what they read off them and the instance that
+        makes."""
+        name = found.node.name
+        if len(expr.args) != len(found.node.params):
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=name, expected=len(found.node.params),
+                             found=len(expr.args))
+            return None
+        for arg in expr.args:
+            if isinstance(arg, (ast.Named, ast.Spread)):
+                self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, arg.span,
+                                 feature="a named or spread argument of a generator")
+                return None
+        if not found.parameters:
+            values: list[Value] = []
+            for arg, ty in zip(expr.args, found.params):
+                value = self._lower_into(builder, arg, ty, arg.span)
+                if self._value_type_of(value) is ERROR:
+                    return None
+                values.append(value)
+            return found, values
+        bound: dict[str, Type] = {}
+        lowered: list[Value] = []
+        for arg, param in zip(expr.args, found.node.params):
+            with self._in_scope_of(found):  # type: ignore[arg-type]
+                wanted = self._worked_out(param.type, bound)
+            value = (self._lower_into(builder, arg, wanted, arg.span)
+                     if wanted is not None
+                     else self._lower_into(builder, arg,
+                                           self._module.types.iter_type(None),
+                                           arg.span)
+                     if isinstance(param.type, ast.IterTypeRef)
+                     else self._lower_expr(builder, arg, None))
+            ty = self._value_type_of(value)
+            if ty is ERROR:
+                return None
+            if wanted is None:
+                with self._in_scope_of(found):  # type: ignore[arg-type]
+                    if not self._reading(param.type, ty, bound, arg.span,
+                                         param.name):
+                        return None
+            lowered.append(value)
+        made = self._generator_instance(found, bound, expr.span)
+        if made is None:
+            return None
+        values = [self._as_wanted(builder, value, ty, arg.span)
+                  for value, ty, arg in zip(lowered, made.params, expr.args)]
+        if any(self._value_type_of(one) is ERROR for one in values):
+            return None
+        return made, values
 
     def _lower_generator_call(self, builder: IRBuilder, expr: ast.Call,
                               found: _Generator, expected: Type | None) -> Value:
@@ -14765,21 +14941,10 @@ class Checker:
         they get; where an iterator is wanted, it is handed on.  Nothing else
         takes one: there is no array in it to build.
         """
-        if len(expr.args) != len(found.params):
-            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
-                             name=found.node.name, expected=len(found.params),
-                             found=len(expr.args))
+        given = self._generator_arguments(builder, expr, found)
+        if given is None:
             return UndefConst(ERROR)
-        values: list[Value] = []
-        for arg, ty in zip(expr.args, found.params):
-            if isinstance(arg, (ast.Named, ast.Spread)):
-                self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, arg.span,
-                                 feature="a named or spread argument of a generator")
-                return UndefConst(ERROR)
-            value = self._lower_into(builder, arg, ty, arg.span)
-            if self._value_type_of(value) is ERROR:
-                return UndefConst(ERROR)
-            values.append(value)
+        found, values = given
         ty = self._module.types.iter_type(found.element)
         walk = _Iterable(element=found.element, written=expr,
                          base=UndefConst(ty), ty=ty, generator=found,
@@ -14884,7 +15049,8 @@ class Checker:
         if found.step is not None:
             return found.step
         slot = self._module.types.ptr_type(U64, mutable=True)
-        name = "".join((BUILTIN_GLYPH, "next.", found.node.name))
+        assert found.func is not None
+        name = "".join((BUILTIN_GLYPH, "next.", found.func.name[1:]))
         func = Function(
             name=name,
             ty=self._module.types.func_type((_ENVIRONMENT, slot, _ENVIRONMENT),
@@ -14981,6 +15147,8 @@ class Checker:
         """Why *found* is not written into a loop, or nothing where it is."""
         body = found.node.body
         assert body is not None
+        if found.scope is not None and found.scope is not self._top:
+            return "since it is written in another file, whose names its body means"
         if id(found) in self._writing_in:
             return "since it would be written into itself"
         if _contains(body, ast.Try):
@@ -15012,13 +15180,25 @@ class Checker:
         """
         node = found.node
         assert node.body is not None
+        if isinstance(given, ast.Call):
+            made = self._generator_arguments(builder, given, found)
+            if made is None:
+                return UndefConst(ERROR)
+            found, values = made
+        else:
+            assert isinstance(given, _Local) and given.iterable is not None
+            given.read = True
+            values = list(given.iterable.args)
         number = self._each_count + 1
         self._each_count += 1
         prefix = "".join((ITER_GLYPH, str(number), "."))
         bound = _names_bound_in(node)
         renamed = {name: "".join((prefix, name)) for name in bound}
         labels = {name: "".join((prefix, name)) for name in _labels_in(node.body)}
-        body = _renamed(node.body, renamed, labels)
+        # Its type parameters too, and bound to what this walk's call gave them,
+        # so that they mean that inside it and nothing outside it.
+        types = {name: "".join((prefix, name)) for name in found.bound}
+        body = _renamed(node.body, renamed, labels, types)
         outer = stmt.label or ast.Label(span=stmt.span,
                                         name="".join((prefix, "walk")))
         span = stmt.span
@@ -15063,22 +15243,6 @@ class Checker:
                            keyword=stmt.keyword,
                            label=outer if named else None,
                            alternative=stmt.alternative)
-        if isinstance(given, ast.Call):
-            values: list[Value] = []
-            for arg, ty in zip(given.args, found.params):
-                value = self._lower_into(builder, arg, ty, arg.span)
-                if self._value_type_of(value) is ERROR:
-                    return UndefConst(ERROR)
-                values.append(value)
-            if len(given.args) != len(found.params):
-                self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, given.span,
-                                 name=node.name, expected=len(found.params),
-                                 found=len(given.args))
-                return UndefConst(ERROR)
-        else:
-            assert isinstance(given, _Local) and given.iterable is not None
-            given.read = True
-            values = list(given.iterable.args)
         if found.impure:
             self._an_effect(D.LANG_PURE_CALLS_IMPURE, stmt.iterable.span,
                             name=node.name)
@@ -15087,6 +15251,10 @@ class Checker:
             "the loop's body runs, and no coroutine is made")), stmt.iterable.span)
         self._push_scope()
         self._writing_in.append(id(found))
+        outer_bound = self._bound
+        if found.bound:
+            self._bound = {**(outer_bound or {}),
+                           **{types[name]: ty for name, ty in found.bound.items()}}
         try:
             for param, value in zip(node.params, values):
                 self._bind_local(renamed[param.name], value, param.span,
@@ -15096,6 +15264,7 @@ class Checker:
                     local.read = True
             return self._lower_foreach(builder, loop, func, expected, produces)
         finally:
+            self._bound = outer_bound
             self._writing_in.pop()
             self._pop_scope()
 

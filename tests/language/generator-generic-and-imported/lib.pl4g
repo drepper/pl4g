@@ -1,0 +1,13 @@
+※ pl4g-test: module
+
+※ A generator exported from this file, and a generic one.
+
+@[export]
+fn upto(n: u8) ⇉ u8:
+    foreach i := 0u8…n:
+        yield i
+
+@[export]
+fn repeat(x: T', n: u8) ⇉ T':
+    foreach _ := 0u8…n:
+        yield x

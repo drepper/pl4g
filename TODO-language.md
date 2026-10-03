@@ -1119,10 +1119,11 @@ Runtime
 [ ] let a variable at the top level be an array of whatever it is given, `let g: ⟦⟧ = …`.  A top-level variable's type is read
     before its value is worked out, so the element has nothing to come from yet; it is refused as not implemented.
 
-[ ] let a generator take type parameters.  Refused as not implemented: its body is compiled once, as a function, and one per set
+[x] let a generator take type parameters.  Done on 2026-10-03: compiled once per set of types, written into a loop with them
+    renamed and bound, or walked through calls.  What follows was the reason it was not done at first.  Refused as not implemented: its body is compiled once, as a function, and one per set
     of types is what a generic function's instances already are -- the two have to be put together.
 
-[ ] let a generator from another module be called.  A call resolves only a generator of the same file: one written into a loop
+[x] let a generator from another module be called.  Done on 2026-10-03: through the module's name, walked through calls.  A call resolves only a generator of the same file: one written into a loop
     would be its syntax lowered with this file's names, and one walked through calls a function of the other module.
 
 [ ] let a generator with `defer` be walked through calls (4674): a walk that stops early has to finish the generator, which wants
