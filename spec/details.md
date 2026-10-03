@@ -4439,3 +4439,15 @@ defines into the program's module, and the passes before it used to work on all 
 `leanvalues` over the whole of `std` for a program that called one function of it.  After `dropignored` so that an ignored answer in
 a function nothing calls is still reported.
 
+**A module is lowered as far as it is named.**  A module read by something else (`run(…, whole_program=False)`) checks every
+definition's signature, as before, and lowers only its roots -- the constructors, destructors and tests, what the image offers
+outside, and whatever the initializers of its variables name -- keeping every other `_Collected` in `_waiting` and every generic in
+`_waiting_generics`.  `LoadedModule.want` is the module checker's `want(names)`: it takes every waiting function and generic whose
+simple name is one of `names`, and every operator, adds what their definitions mention (`_mentioned`: bare names, the last part of
+a path, operator glyphs), repeats until nothing more is taken, asks the modules it reads in turn, and lowers what it took callees
+first.  A checker that lowers everything -- the program's own, one for the macros, one feeding the language server, or any when
+`whole_modules` is asked for -- hands every name its units mention to the modules it reads before lowering a body of its own, so
+that callees are lowered before callers across files as within one.  The names are an over-approximation: every `close` of every
+type is lowered for one `close` written anywhere.  Nothing reaches a function without its name being written, so nothing is
+missed; `tests/compiler/test_std_whole.py` checks `std` whole, so that a body no program reaches is still checked.
+

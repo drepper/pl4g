@@ -1353,6 +1353,25 @@ def _count(node: object, kind: type) -> int:
     return found
 
 
+def _mentioned(node: object, into: set[str]) -> None:
+    """Every name written below *node* that could stand for a function: a bare
+    name, the last part of a path, an operator's glyph.  More than are called,
+    which is what makes it safe to lower no more than these."""
+    match node:
+        case ast.NameRef():
+            into.add(node.name)
+        case ast.Member():
+            into.add(node.name)
+        case ast.Fresh():
+            into.add(node.glyph)
+    if isinstance(node, ast.Node):
+        for one in fields_of(node):
+            _mentioned(getattr(node, one.name), into)
+    elif isinstance(node, (tuple, list)):
+        for one in node:
+            _mentioned(one, into)
+
+
 def _called_in(node: object) -> list[str]:
     """The names called anywhere below *node*."""
     found: list[str] = []
@@ -3031,9 +3050,20 @@ class Checker:
                  notes: Notes | None = None,
                  conditions: Conditions = Conditions.CHECK,
                  for_macros: bool = False,
-                 quoted: list[ast.Quote] | None = None) -> None:
+                 quoted: list[ast.Quote] | None = None,
+                 whole_modules: bool = False) -> None:
         self._module = module
         self._diags = diags
+        #: Whether a module read from here is lowered whole rather than as far as
+        #: what names it.  Asked for by whatever has to see every body of one --
+        #: the test that `std` checks as a whole -- and handed on to the modules
+        #: such a module reads in turn.
+        self._whole_modules = whole_modules
+        #: For a module lowered as far as it is asked: the functions whose bodies
+        #: nothing has asked for yet, and the generic ones not yet checked where
+        #: they are written.
+        self._waiting: list[_Collected] = []
+        self._waiting_generics: list[_Generic] = []
         #: What a condition written in a signature does in this build, which is
         #: the command line's to say and nothing the program can change.
         self._conditions = conditions
@@ -3468,14 +3498,88 @@ class Checker:
         # Callees before their callers, as far as the call tree goes: what a
         # body shows of where its answer is made is written on the function, and
         # a caller checked after it relies on it.
-        for entry in _callees_first(collected):
-            self._lower_function(entry)
-        for one in self._generics_here:
-            self._check_generic(one)
+        if whole_program or self._whole_modules or self._for_macros \
+                or self._notes is not None:
+            # Everything here is lowered, so everything it names in a module has
+            # to be there first: the modules are asked before anything of this
+            # file is, which is callees before callers across files.
+            wanted: set[str] = set()
+            _mentioned(units, wanted)
+            self._ask_the_modules(wanted)
+            for entry in _callees_first(collected):
+                self._lower_function(entry)
+            for one in self._generics_here:
+                self._check_generic(one)
+        else:
+            # A module read by something else is lowered as far as something
+            # names it, and no further: a program that uses one function of a
+            # module compiles that function and what it reaches, not the rest.
+            # What runs whatever names it -- a constructor, a destructor, a test,
+            # what the image offers outside -- and what the variables here are
+            # given are lowered now; everything else waits to be named.
+            self._waiting = list(collected)
+            self._waiting_generics = list(self._generics_here)
+            roots: set[str] = set()
+            for item in self._top_written.values():
+                _mentioned(item.value, roots)
+            for entry in collected:
+                if entry.func.attrs.special is not None \
+                        or entry.func.linkage is not Linkage.INTERNAL:
+                    roots.add(entry.node.name)
+            self.want(roots)
         self._build_the_tables()
         if whole_program:
             self._check_program()
         return self._module
+
+    def want(self, names: set[str]) -> None:
+        """Lower every function of this module that one of *names* may name, and
+        everything those reach.
+
+        Read off what is written rather than worked out: a name stands for every
+        function by that name -- in any type, as any member -- so what is asked
+        for is never less than what a body could call, and sometimes more.  An
+        operator this module defines is always lowered, there being no name to
+        ask it by.  The modules this one reads are asked first, and what is
+        lowered here goes callees before callers, as a whole file would.
+        """
+        names = set(names)
+        chosen: list[_Collected] = []
+        generics: list[_Generic] = []
+        while True:
+            grew = False
+            for entry in list(self._waiting):
+                if entry.node.name in names or not entry.node.name.isidentifier():
+                    self._waiting.remove(entry)
+                    chosen.append(entry)
+                    _mentioned(entry.node, names)
+                    grew = True
+            for one in list(self._waiting_generics):
+                if one.node.name in names or not one.node.name.isidentifier():
+                    self._waiting_generics.remove(one)
+                    generics.append(one)
+                    _mentioned(one.node, names)
+                    if one.written_params is not None:
+                        _mentioned(one.written_params, names)
+                    grew = True
+            if not grew:
+                break
+        if not chosen and not generics:
+            return
+        self._ask_the_modules(names)
+        for entry in _callees_first(chosen):
+            self._lower_function(entry)
+        for one in generics:
+            self._check_generic(one)
+
+    def _ask_the_modules(self, names: set[str]) -> None:
+        """Have every module this file reads lower what *names* may name."""
+        asked: set[int] = set()
+        for held in list(self._top.values()):
+            if isinstance(held, LoadedModule) and id(held) not in asked:
+                asked.add(id(held))
+                if held.want is not None:
+                    held.want(names)
 
     def _check_closers(self) -> None:
         """Check that what every `@[closed_by(f)]` names is a function `T.f` of
@@ -3792,8 +3896,10 @@ class Checker:
                             self._sources, self._top_level,
                             conditions=self._conditions,
                             for_macros=self._for_macros,
-                            quoted=self.quoted)
+                            quoted=self.quoted,
+                            whole_modules=self._whole_modules)
             inner.run([unit], whole_program=False)
+            loaded.want = inner.want
             loaded.exports = {name: what for name, what in inner._top.items()
                               if _is_exported(what)}
             # Every one of them and not only the exported ones: which it is, is
@@ -23715,16 +23821,21 @@ def check(module: Module, units: Sequence[ast.SourceUnit], diags: DiagEngine,
           registry: ModuleRegistry | None = None,
           sources: SourceManager | None = None,
           notes: Notes | None = None,
-          conditions: Conditions = Conditions.CHECK) -> Module:
+          conditions: Conditions = Conditions.CHECK,
+          whole_modules: bool = False) -> Module:
     """Check *units* and lower them into *module*.
 
     The units are the files named on the command line, which share one
     namespace and are the program's own module; anything they import is read
     from here, and every module's name is settled once all of them are read.
+    A module is lowered as far as the program names it, unless *whole_modules*
+    asks for every body of every module -- which is how a module is checked as
+    a whole.
     """
     found = registry if registry is not None else ModuleRegistry()
     path = Path(units[0].path) if units else None
     result = Checker(module, diags, found, path, "", sources,
-                     notes=notes, conditions=conditions).run(units)
+                     notes=notes, conditions=conditions,
+                     whole_modules=whole_modules).run(units)
     found.settle_names()
     return result

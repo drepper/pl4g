@@ -30,7 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from hashlib import blake2b
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence
 
 #: What a module file is called.  A name that does not end in this gets it.
 SUFFIX = ".pl4g"
@@ -92,6 +92,10 @@ class LoadedModule:
     #: The definitions whose symbol carries the module's name, so that the name
     #: can be settled after all the loading rather than while it is going on.
     owned: list[object] = field(default_factory=list)
+    #: What lowers the functions of this module a set of names may name, and what
+    #: they reach -- the module's checker, which keeps every body nothing has
+    #: asked for yet.  Nothing for a module lowered whole.
+    want: Callable[[set[str]], None] | None = None
 
     def add_candidate(self, prefix: str, base: str) -> str:
         """Record a name this module could go by, and return it."""
