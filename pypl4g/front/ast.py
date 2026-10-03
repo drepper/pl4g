@@ -213,8 +213,21 @@ class UnitTypeRef(Node):
     unit: UnitRef
 
 
+@dataclass(frozen=True, slots=True)
+class IterTypeRef(Node):
+    """`⇉T`: something a loop can walk, giving a `T` each turn.
+
+    Written alone, `⇉`, the element is left to what the definition is given,
+    which is what lets generic code name an iterator without naming what it
+    gives.
+    """
+
+    element: TypeExpr | None
+
+
 type TypeExpr = (TypeRef | CollectionTypeRef | TupleTypeRef | ArrayTypeRef
-                 | ListTypeRef | RefTypeRef | UnitTypeRef | FuncTypeRef)
+                 | ListTypeRef | RefTypeRef | UnitTypeRef | FuncTypeRef
+                 | IterTypeRef)
 
 
 @dataclass(frozen=True, slots=True)

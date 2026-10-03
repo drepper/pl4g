@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4670
+※ pl4g-test: expect-diag 4670 LANG_ITERATOR_DOES_NOT_LEAVE
+
+※ What an iterator walks is described in the room of the call that made it,
+※ which is gone when the caller would walk it.
+
+fn give(v: u8⟦4⟧) → ⇉u8:
+    v⟦v > 1u8⟧
+
+@[startup]
+fn main() → u6:
+    0u6

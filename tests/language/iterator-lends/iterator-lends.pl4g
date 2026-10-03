@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4667
+※ pl4g-test: expect-diag 4667 LANG_ITERATOR_LENDS
+※ pl4g-test: expect-diag 4668 LANG_ITERATOR_MADE_HERE
+
+※ An iterator reads what it walks when it walks it, so the names it reads are
+※ lent to it while it is in scope, and writing one meanwhile is refused: every
+※ walk then reads what the first would have.
+
+@[startup, impure]
+fn main() → u6:
+    let arr: mut u8⟦4⟧ = ⟦0u8, 1u8, 2u8, 3u8⟧
+    let q := arr⟦arr > 1⟧
+    arr⟦0⟧ ← 5u8
+    let n: mut u8 = 0u8
+    foreach x := q:
+        n ← n + x
+    if n = 5u8: 0u6 else: 1u6

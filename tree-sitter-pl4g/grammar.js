@@ -351,6 +351,9 @@ module.exports = grammar({
       seq('&', optional($.mutable),
           optional(choice($.lasting, $.lifetime)),
           field('pointee', $.type)),
+      // Something a loop can walk, and what each turn gives -- or, written
+      // alone in a definition, whatever the value it is given gives.
+      prec.right(seq('\u21c9', optional(field('element', $.type)))),
       // A function written where a value is wanted.  The keyword one is
       // defined with, and then what it takes and what it answers; the
       // parameter names are not here because a type is not a definition.  It
@@ -1338,7 +1341,7 @@ module.exports = grammar({
     operator_name: _ => token(seq(
       '`',
       choice(
-        /[[\p{Sm}\p{So}\-^&%#\u2308\u230a\u00ab\u00bb\u207f]--[?\u207b\u2190\u2192\u2227\u2228\u22a5\u2316\u231c\u231d\u2395\u29d6]]/,
+        /[[\p{Sm}\p{So}\-^&%#\u2308\u230a\u00ab\u00bb\u207f]--[?\u207b\u2190\u2192\u21c9\u2227\u2228\u22a5\u2316\u231c\u231d\u2395\u29d6]]/,
         // Or a pair: an opening bracket and a closing one written together, which
         // is what a pair is called.  The brackets the grammar needs for itself are
         // out, and so are the two Unicode calls brackets and this language calls
@@ -1350,7 +1353,7 @@ module.exports = grammar({
     // A glyph the language gives no meaning, standing where an operator stands.
     // What it means is what a program said it means; the grammar only says where
     // one may be written and how tightly it binds.
-    fresh_operator: _ => token(/[[\p{Sm}\p{So}]--[+<=>|~\u00ac\u00d7\u00f7\u207b\u2190-\u2193\u2195\u21ba\u21bb\u21d5\u21e7\u21e9\u2223\u2224\u2227\u2228\u2245\u2247\u2260\u2264\u2265\u2295\u229e-\u22a0\u22a5\u22bc\u22bd\u2316\u231c\u231d\u2374\u2395\u29d6\u29fa\u2a85\u2a86\u2a89\u2a8a]]/),
+    fresh_operator: _ => token(/[[\p{Sm}\p{So}]--[+<=>|~\u00ac\u00d7\u00f7\u207b\u2190-\u2193\u2195\u21ba\u21bb\u21c9\u21d5\u21e7\u21e9\u2223\u2224\u2227\u2228\u2245\u2247\u2260\u2264\u2265\u2295\u229e-\u22a0\u22a5\u22bc\u22bd\u2316\u231c\u231d\u2374\u2395\u29d6\u29fa\u2a85\u2a86\u2a89\u2a8a]]/),
 
     // The two halves of a pair the language gives no meaning.  The brackets it
     // needs for itself are out, its own two operator glyphs are out, and so are

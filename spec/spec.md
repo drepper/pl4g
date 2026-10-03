@@ -3244,7 +3244,9 @@ foreach x := v⟦v > 25u8⟧:        ※ two turns, 30 and 40, read where they a
 foreach i, x := ⎕enumerate(v⟦v > 25u8⟧):   ※ counted 0 and 1: what is counted is what was picked
 ```
 
-Anywhere else -- a name, an argument, an operand -- an array is what is asked for, and what picking answers with is one.
+Bound to a name with nothing asking for an array -- `let q := v⟦v > 25u8⟧` -- it is an iterator too, which the section on
+iterators as values says more about.  Where an array is asked for -- a name of an array type, an argument of one, an operand,
+`#`, an index -- what picking answers with is one.
 
 **An array picked from into an array states its shape** (4485).  What picking answers with is held in room enough for everything
 that could have been picked, and room enough for that is what the shape says; where the type does not say it, the room would have
@@ -4609,6 +4611,7 @@ bound to what there was, and a loop over something with nothing in it runs no tu
 | an array of one dimension | each element |
 | an array of more | each row of the outermost dimension |
 | an array picked from with a mask | each element, or row, the mask picks |
+| an iterator, `⇉T` | each `T` it gives |
 | a set | each key it holds |
 | a dictionary | a key and what it stands for, as a tuple |
 
@@ -4655,8 +4658,8 @@ one, which is what counting is.
 **The count goes up by one and the addition is an addition**, with the check every other one carries.  So counting a hundred
 things from a `u6` stops the program, which is what says the type was too narrow rather than quietly starting again from zero.
 
-**It stands where a loop takes its values from and nowhere else** (4515).  What it makes is an iterator, and a loop is the only
-thing that takes one: there is no type for an iterator here and nothing else to do with one.
+**It stands where a loop takes its values from and nowhere else** (4515).  What it makes is an iterator for the loop it stands in;
+an iterator a program names and hands around is the subject of the next section.
 
 A dictionary is the one thing it cannot count, and not for a reason of its own: a dictionary's turn is already a pair, so
 counting it would make a tuple holding a tuple, and a value of one of those is not a thing this compiler can hold yet.
@@ -4688,6 +4691,72 @@ two-name form over a dictionary comes from; Rust's `for x in r` over anything th
 which spells the pair as two results rather than as one tuple; Zig's `for (0..n) |i|`.  What none of them has is the second
 spelling, and what this has instead of Rust's trait is a single iterator protocol the compiler knows -- until a program can write
 one, there is nothing for a trait to abstract over.
+
+##### Iterators as values
+
+**`⇉T` is the type of something a loop walks that gives a `T` each turn.**  A pick bound to a name with nothing asking for an
+array is one, and so is a parameter of that type:
+
+```
+let arr: u8⟦4⟧ = ⟦0u8, 1u8, 2u8, 3u8⟧ in ⎕static
+let q := arr⟦arr > 1⟧              ※ ⇉u8: nothing is built
+let r: ⇉ = arr⟦arr < 2⟧            ※ ⇉ alone: what it gives is read off the value
+let s: ⇉u8 = arr                   ※ an array walked as an iterator
+
+fn total(s: ⇉u8) → u8:             ※ takes any of them
+    …
+fn count(s: ⇉T') → u64:            ※ and generic code takes anything walkable
+    …
+```
+
+**An iterator is a walk described, not a walk under way.**  Binding the name works out what the walk needs -- where the array is,
+the mask or what it is asked from -- and builds nothing; each `foreach` over the name walks it from the start, so it may be walked
+twice and gives the same thing twice.  `⎕enumerate` over it counts what it gives.  Compare: **C#**, which separates an
+`IEnumerable` -- what may be walked, any number of times -- from the `IEnumerator` a walk uses, and this is the first; **Python**,
+whose `range` is walked again and again and whose generators and `filter` objects only once, which is the mistake people make with
+them; **Rust**, whose iterators are walks under way, used up by one `for` unless cloned; **C++20**'s views, which are multi-pass and
+are this; **Java**'s `Iterable` and `Iterator`, C#'s two again; **Kotlin**'s `Sequence`, which may or may not be walked twice, its
+`constrainOnce` saying which; **Go 1.23**'s `iter.Seq`, a function a walk calls, so walking twice calls it twice.
+
+**`⇉` alone** says that a definition is an iterator and lets the value say what it gives: `let r: ⇉ = …`.  Generic code then names
+an iterator without naming its element, which is what C++'s `auto`, Java's `var` and Swift's `some Sequence` are for.  Rust has no
+way to write the type of a `filter` in a `let` at all and says nothing (`let r = …`), or `impl Iterator<Item = _>` where a type
+must be written; Kotlin writes `Sequence<*>`.  `⟦⟧` alone was the other candidate, and was not taken: the brackets already mean an
+array, and an array asked for is an array built.  `⇉` alone stands only in a definition (4671): a parameter has no value to read
+the element off, so its type says it, as `⇉u8` or `⇉T'`.
+
+**What an iterator reads, it borrows.**  It reads what it walks when it walks it, so the names it was made from are lent to it
+while it is in scope, and writing one meanwhile is refused (4667) -- which makes every walk of it read what the first would have,
+and what an array built from it would have held.  Compare: **Rust**, whose borrow checker refuses the same write for the same
+reason, for as long as the iterator is used; **C++**, where writing a container an iterator walks invalidates the iterator and
+using it is undefined; **Java** and **C#**, which find out at run time and throw (`ConcurrentModificationException`,
+`InvalidOperationException`); **Python**, which lets a list change under a walk and walks whatever it has become, and raises only
+for a dictionary that changed size.
+
+**An iterator does not leave the call that made it** (4670).  What it walks is described in that call's room, so it may be handed
+to a call, which ends first, and not answered, kept in a field, put at the top level or brought into a lambda.  Compare: **Rust**,
+where an iterator borrowing a local cannot be returned either -- its lifetime says so -- and one that owns what it walks can;
+**C++**, where a view of a local returned from a function dangles and nothing says so; **Swift**'s non-escaping closures, which
+the compiler keeps from leaving the call they were handed to, for the same reason.
+
+**Where an array is asked for, the array is built.**  A name of an array type, an argument of one, `#`, an index: each builds the
+array the walk would give, there, in the call's room, as picking anywhere else does.  Compare: **Python 3**, whose `filter` became
+lazy and whose `len(filter(…))` stopped working, the program writing `list(…)`; **Rust**'s `.collect()` and **C++23**'s
+`ranges::to`, written out every time; **NumPy**, which never has the lazy form and builds every time.  Here it is built where the
+program asked for an array, which a reader sees in the type asked for -- and the report log says so.  An iterator handed in cannot
+be built into one (4669): it says nothing about how many turns there are, so there is no room to take for them.
+
+**Handing one on.**  A parameter of `⇉T` takes anything a loop walks that gives a `T`: an iterator, a pick written in place, an
+array, a list, a string, a table.  What is walked is described in the caller's room, and the value is three words: the code that
+takes one turn, where the description is, and the state a walk starts from.  The callee, which cannot see what it walks, takes each
+turn through a call; where the walk is in the function that made it, there is no call, and it is the loop it always was.  Compare:
+**Rust**'s `dyn Iterator`, which is this -- a call through a table per turn -- and its `impl Iterator` and generics, which compile
+the callee again for each kind of walk and make no call; **C++**'s type-erased `any_view`, the same choice; **Go**'s `iter.Seq`,
+a function value called with the loop body; **Java**'s `Iterator`, an interface call per element.  Generic code, `⇉T'`, is
+compiled once per element type and walks through a call too.
+
+**Every one of these decisions is in the report log**, under `iterator`: that a name is a walk described and what it borrows, each
+walk in place, each array built, each iterator handed on and through which function, and each walk of one handed in.
 
 #### Attributes
 

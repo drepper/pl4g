@@ -33,7 +33,8 @@ from ..ir.function import Function
 from ..ir.inst import BinOp, CastKind, CmpPred
 from ..ir.layout import DataLayout, parts_of, stride_of
 from ..ir.module import Module
-from ..ir.types import (ARENA, MEM, DictType, FuncType, ListType, PtrType, SetType,
+from ..ir.types import (ARENA, MEM, DictType, FuncType, IterType, ListType, PtrType,
+                        SetType,
                         StrType, Type, U8, U64, VOID)
 from ..ir.value import Value
 from . import strings, tables
@@ -64,7 +65,7 @@ def points(ty: Type) -> bool:
     match ty:
         case StrType() | ListType():
             return True
-        case PtrType() | SetType() | DictType() | FuncType():
+        case PtrType() | SetType() | DictType() | FuncType() | IterType():
             # A reference has lifetimes of its own, and a table is not yet held
             # to any of this: its keys and values go in as they are.  A lambda's
             # environment is never copied and never given back, so where it is

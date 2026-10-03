@@ -16,7 +16,7 @@ from .types import (ArrayType, BoolType, CharType, DictType, EnumType,
                     SyntaxType,
                     FloatType,
                     IntType, MemType,
-                    FuncType, OpaqueType, ProductType, PtrType, SetType, TupleType,
+                    FuncType, IterType, OpaqueType, ProductType, PtrType, SetType, TupleType,
                     CursorType,
                     ListType, ResultType, StrType, SumType, Type, VecType,
                     VoidType, parts_of)
@@ -89,7 +89,7 @@ def size_of(ty: Type, layout: DataLayout) -> int:
             # an enumeration as whatever holds its values, and a piece of the
             # program as the handle it is.
             return size_of(ty.holder, layout)
-        case FuncType():
+        case FuncType() | IterType():
             # Where the code is, where what it brought in is, and the allocator
             # that came from: three words.
             return 3 * layout.pointer_size
@@ -182,7 +182,7 @@ def align_of(ty: Type, layout: DataLayout) -> int:
             return 1
         case CharType() | EnumType() | SyntaxType():
             return align_of(ty.holder, layout)
-        case FuncType() | OpaqueType():
+        case FuncType() | IterType() | OpaqueType():
             return layout.pointer_size
         case TupleType():
             return max((align_of(m, layout) for m in ty.members), default=1)

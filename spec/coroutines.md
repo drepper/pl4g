@@ -1,6 +1,13 @@
 Coroutines
 ==========
 
+**Since 2026-10-03, `⇉T` exists** as the type of anything a loop walks -- a pick bound to a name, a parameter -- with the
+representation this document calls B for a walk handed on: three words, a function taking one turn, the description, and the
+state a walk starts from (spec, *Iterators as values*).  A generator, if it comes, makes a `⇉T` like any other, and what follows
+about where its frame lives and how a loop over it is compiled still holds.  What changed is that the turn's state is carried by
+the walk rather than kept in the coroutine's frame, which is what lets one iterator be walked twice; a generator's frame would be
+the description, and starting a walk would make the state.
+
 **A proposal, not a decision.**  Nothing here is settled until the user says so.  What is here is what a coroutine would have to
 be in this language, the ways it could be built, how each compares with what other languages did, a recommendation, and -- as
 asked -- what building iterators as coroutines would gain and cost against the way they are built today.  The questions the user

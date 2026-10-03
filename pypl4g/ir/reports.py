@@ -109,6 +109,10 @@ class ReportKind(StrEnum):
     #: parameter's lifetime, and which one that came to is worked out at the
     #: call; the program says it in neither place.
     LIFETIME = "lifetime"
+    #: What became of something a loop can walk: walked where it was made,
+    #: built into an array where one was asked for, or handed on to a call
+    #: with its description in the caller's frame -- and what it borrows.
+    ITERATOR = "iterator"
 
 
 #: What the severities of the diagnostic catalog are called here.  One name for

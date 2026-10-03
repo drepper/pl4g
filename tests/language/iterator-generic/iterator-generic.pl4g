@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ Generic code walks without naming what it walks: a parameter of `⇉T'` reads
+※ `T'` off whatever it is handed -- an iterator, a pick written in place, an
+※ array, a list of strings, the characters of a string.
+
+fn count(s: ⇉T') → u64:
+    let n: mut u64 = 0u64
+    foreach _ := s:
+        n ← n + 1u64
+    n
+
+@[startup, impure]
+fn main() → u6:
+    let arr: u8⟦4⟧ = ⟦0u8, 1u8, 2u8, 3u8⟧ in ⎕static
+    let q: ⇉ = arr⟦arr > 1⟧
+    let names: [str] = ["a", "b", "c"] in ⎕static
+    let w: ⇉ = names
+    if count(q) = 2u64 ∧ count(w) = 3u64 ∧ count(arr) = 4u64 ∧ count(arr⟦arr < 1⟧) = 1u64 ∧ count("héllo") = 5u64: 0u6 else: 1u6

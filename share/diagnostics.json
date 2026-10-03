@@ -5888,6 +5888,120 @@
       "option": null
     },
     {
+      "number": 4667,
+      "name": "LANG_ITERATOR_LENDS",
+      "severity": "error",
+      "message": "'{name}' may not be written while '{iterator}', which walks it, is in scope",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "what is written"
+        },
+        {
+          "name": "iterator",
+          "type": "string",
+          "description": "the iterator that reads it"
+        }
+      ],
+      "cause": "An iterator is a walk described and not made: each walk of it reads what it walks when it walks it.  So the names it reads are lent to it for as long as it is in scope, as a place is lent to a reference, and writing one meanwhile is refused -- which is what makes every walk of the iterator read what the first would have, and what an array built from it would have held.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / foreach",
+        "requirement": "A name an iterator in scope reads is not written."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4668,
+      "name": "LANG_ITERATOR_MADE_HERE",
+      "severity": "note",
+      "message": "'{iterator}' is made here",
+      "args": [
+        {
+          "name": "iterator",
+          "type": "string",
+          "description": "the iterator"
+        }
+      ],
+      "cause": "Attached to the report of a write to something an iterator reads, to point at where the iterator was made and so where the loan began.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / foreach",
+        "requirement": "A name an iterator in scope reads is not written."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4669,
+      "name": "LANG_ITERATOR_NOT_AN_ARRAY",
+      "severity": "error",
+      "message": "'{name}' gives its elements one at a time and holds no array",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the iterator"
+        }
+      ],
+      "cause": "An iterator handed in is walked through a call per turn and says nothing about how many turns there are, so nothing can build an array out of it in room taken before the walk.  Where an array is wanted, it is the caller that has one to hand over.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / foreach",
+        "requirement": "An iterator handed in is walked, not used as an array."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4670,
+      "name": "LANG_ITERATOR_DOES_NOT_LEAVE",
+      "severity": "error",
+      "message": "'{found}' does not leave the call it was made in, so it is not {what}",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the iterator type"
+        },
+        {
+          "name": "what",
+          "type": "string",
+          "description": "where it was to go"
+        }
+      ],
+      "cause": "What an iterator walks is described in the room of the call that made it, and the iterator reads the names it was made from for as long as it is in scope.  It may be handed to a call, which ends before the room does; it may not be answered, kept in a record, put at the top level or brought into a lambda, each of which would outlive the room.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / foreach",
+        "requirement": "An iterator does not outlive the call that made it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4671,
+      "name": "LANG_ITERATOR_ELEMENT_LEFT_OUT",
+      "severity": "error",
+      "message": "'⇉' alone is written only in a definition, which takes what it gives from its value",
+      "args": [],
+      "cause": "`let q: ⇉ = …` says that `q` is something a loop walks and lets the value say what each turn gives, which is what generic code wants.  Anywhere else -- a parameter, an answer -- there is no value there to say it, so the type has to.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / foreach",
+        "requirement": "'⇉' without an element type stands only in a definition."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

@@ -9383,6 +9383,35 @@ comes.  A constant that reaches itself is reported as such (4666) rather than as
 through to.  Comparable: Go and Rust, whose constants and statics may be used before they are declared and whose compilers resolve
 them on demand with a cycle check; C, where a name must be declared above its use.
 
+## 2026-10-03T19:00+02:00 — language
+
+**Iterators as values: `⇉T`**
+
+The user asked that `arr⟦arr > 1⟧` produce an iterator, and whether the iterator inside has to surface or a coroutine should be
+made silently.  Answered: it surfaces at the type, `⇉T` -- an iterator answers different questions from an array (`#`, an index,
+walking twice, what it reads) and Python 3's `filter` is what not saying so costs -- while the coroutine stays the compiler's
+business, made only where the walk leaves the place it was described.  Four questions were then put and answered as recommended,
+with every decision to be in the report log:
+
+1. *Walking twice*: an iterator is a description, each walk from the start -- C#'s `IEnumerable` and Python's `range`, not C#'s
+   `IEnumerator`, Python's generators or Rust's iterators, which a walk uses up.  A cursor over one, `⎕iter(q)`, was part of the
+   answer and is a to-do: a cursor has no type yet, and the list's cursor is built for a list.
+2. *Writes to what it reads*: lent to it while it is in scope, writing refused (4667) -- Rust's borrow checker, against C++'s
+   undefined iterator invalidation, Java's and C#'s exceptions at run time, and Python's walking whatever the list became.
+3. *Leaving the call*: never answered, kept, put at the top level or brought into a lambda (4670), its description being in the
+   call's room; handed to a call it may be -- Rust's lifetimes, against C++'s dangling views.
+4. *An array where one is asked for*: built there, silently but reported -- against Rust's `.collect()` and C++23's `ranges::to`,
+   which the program writes, and Python's `list(…)`.
+
+The user also asked for a way to leave the element type out in a definition, suggesting `let q: ⟦⟧ = …`, with leave to work around
+the syntax if it caused problems.  It parses, but `⟦⟧` already says "array", and an array asked for is an array built -- the
+opposite of what was wanted -- so `⇉` alone is the spelling: `let q: ⇉ = …`, and only in a definition (4671).  C++'s `auto`,
+Java's `var`, Swift's `some Sequence` and Kotlin's `Sequence<*>` are the comparisons.
+
+How one is handed on is the compiler's: a record of what is walked in the caller's frame and a `⎕nextN` function taking a turn,
+the element written through memory -- Rust's `dyn Iterator` and C++'s `any_view`, a call per turn, where `impl Iterator` and
+templates compile the callee again per kind of walk.
+
 
 Open questions
 --------------

@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4669
+※ pl4g-test: expect-diag 4669 LANG_ITERATOR_NOT_AN_ARRAY
+
+※ An iterator handed in is walked through a call per turn and says nothing about
+※ how many turns there are, so no array can be built from it.
+
+fn first(s: ⇉u8) → u8:
+    let r: ⇉ = s
+    r⟦0⟧
+
+@[startup]
+fn main() → u6:
+    0u6

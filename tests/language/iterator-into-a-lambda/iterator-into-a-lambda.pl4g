@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4670
+※ pl4g-test: expect-diag 4670 LANG_ITERATOR_DOES_NOT_LEAVE
+
+※ A lambda may outlive the call it was made in, and an iterator may not.
+
+@[startup, impure]
+fn main() → u6:
+    let arr: u8⟦4⟧ = ⟦0u8, 1u8, 2u8, 3u8⟧ in ⎕static
+    let q := arr⟦arr > 1⟧
+    let f: fn(u8) → u8 = λ a: u8 [q] → u8 { a }
+    let n: u8 = f(0u8)
+    0u6

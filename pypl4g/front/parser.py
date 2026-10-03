@@ -920,6 +920,14 @@ class Parser:
             # What a caller reads off a function type is written before it, the
             # way it is written before the function itself.
             return self._parse_function_type()
+        if self._check(TokKind.ITER):
+            # Something a loop can walk, and what it gives -- or, where no type
+            # follows, whatever the definition is given gives.
+            start = self._advance().span
+            if not self._begins_a_type():
+                return ast.IterTypeRef(span=start, element=None)
+            element = self._parse_type_ref()
+            return ast.IterTypeRef(span=start.to(element.span), element=element)
         if self._check(TokKind.SET_OPEN):
             found: ast.TypeExpr = self._parse_collection_type()
         elif self._check(TokKind.TUPLE_OPEN):
@@ -1228,15 +1236,15 @@ class Parser:
     def _begins_a_type(self, ahead: int = 0) -> bool:
         """Whether a type is written here rather than left out.
 
-        Six things begin one: a name, a collection, a tuple, a list, the mark of
-        a reference, and what a function type says about itself, which stands
-        before the `fn`.  It is asked wherever a type may be written and may
+        Seven things begin one: a name, a collection, a tuple, a list, the mark of
+        a reference, what a function type says about itself, which stands
+        before the `fn`, and the mark of something a loop can walk.  It is asked wherever a type may be written and may
         equally be absent, which is a variable and a binding in a loop.
         """
         kind = self._peek(ahead).kind if ahead else self._current.kind
         return kind in (TokKind.IDENT, TokKind.SET_OPEN, TokKind.TUPLE_OPEN,
                         TokKind.LBRACKET, TokKind.AMPERSAND, TokKind.KW_FN,
-                        TokKind.AT_LBRACKET)
+                        TokKind.AT_LBRACKET, TokKind.ITER)
 
     def _parse_list_type(self) -> ast.ListTypeRef:
         """Parse ``'[' TYPE ']'``, which is written the way a value of one is."""

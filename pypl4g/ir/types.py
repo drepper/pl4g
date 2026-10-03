@@ -393,6 +393,37 @@ class PtrType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class IterType(Type):
+    """`⇉T`: something a loop can walk, giving a `T` each turn.
+
+    A value of it is three words: where the code that takes the next turn is,
+    where what the walk walks is described, and the state a walk starts from.
+    The description is read and never written, so a walk carries its own state
+    and the same value may be walked again from the start.
+
+    *element* is nothing for `⇉` written alone in a definition, which takes the
+    element from what it is given.
+    """
+
+    element: Type | None
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return "".join(("\N{RIGHTWARDS PAIRED ARROWS}",
+                        self.element.render() if self.element is not None else ""))
+
+    def written(self) -> str:
+        """The name of this type as a program writes it."""
+        return "".join(("\N{RIGHTWARDS PAIRED ARROWS}",
+                        self.element.written() if self.element is not None else ""))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name."""
+        return "".join(("iter<", self.element.mangled()
+                        if self.element is not None else "", ">"))
+
+
+@dataclass(frozen=True, slots=True)
 class FuncType(Type):
     """The type of a function."""
 
@@ -1090,6 +1121,7 @@ class TypeContext:
         self._dicts: dict[tuple[Type, Type, bool], DictType] = {}
         self._pointers: dict[tuple[Type, bool, bool], PtrType] = {}
         self._functions: dict[tuple[tuple[Type, ...], Type], FuncType] = {}
+        self._iterators: dict[Type | None, IterType] = {}
         self._integers: dict[tuple[int, bool], IntType] = {
             (t.bits, t.signed): t for t in (I8, I16, I32, I64, U8, U16, U32, U64)}
 
@@ -1204,6 +1236,14 @@ class TypeContext:
         if found is None:
             found = FuncType(params, ret, listable, hands_out, lasting)
             self._functions[key] = found
+        return found
+
+    def iter_type(self, element: Type | None) -> IterType:
+        """Return the iterator type giving *element* each turn."""
+        found = self._iterators.get(element)
+        if found is None:
+            found = IterType(element)
+            self._iterators[element] = found
         return found
 
     def builtin(self, name: str) -> Type | None:
@@ -1339,6 +1379,10 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
         # Where the list is -- the place, not the elements -- and how far along
         # the walk is.
         return (_pointer_to(ListType(ty.element)), U64)
+    if isinstance(ty, IterType):
+        # Where the code taking a turn is, where the description of what is
+        # walked is, and the state a walk starts from.
+        return (_pointer_to(U8), _pointer_to(U8), U64)
     if isinstance(ty, FuncType):
         # A function written where a value is wanted is three words: where its
         # code is, where what it brought in with it is, and the allocator that

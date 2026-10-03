@@ -1624,6 +1624,27 @@ what the answers are.  A write (`_assign_each`) is a `foreach` over a range of `
 loop's own code: the place written is named again each turn, `B⟦i⟧`, with an `if` around it where a mask picks, which is why
 the place has to be something naming does nothing to.
 
+**An iterator bound to a name** is an `_Iterable` on the `_Local` rather than a value: the element type, what was written, the
+array or value walked, its type, the mask (a value, or `_pick_per_place`'s function), and the names lent.  `let` with no type and
+`let q: ⇉…` lower the value with `_pick_in` set to it, so a pick leaves its pieces in `_pick_walked` instead of building the array,
+and a name bound to an iterator does the same when it is named where a loop, or another definition, takes it (`_iterator_named`).
+A walk of it is `_walk_of`, built afresh each time from what was kept -- which is what makes it a description.  Where an array is
+asked for, `_built_from` builds it with `_lower_picked`, building the mask first by asking it a place at a time where that is how
+it was described (`_mask_built`, which needs the array's shape stated).  The names it reads are kept in `_iterator_loans` with the
+depth of its scope, dropped by `_pop_scope`, and asked by `_lent_to_an_iterator` from `_record_may_change` (every element and field
+write), an assignment, and an array handed to a `mut` parameter.
+
+**`⇉T` as a value** (`IterType`, three words, laid out as a function value is) is made by `_handed_on` where `_lower_into` is asked
+for one -- an argument of a `⇉T` parameter, and of a generic `⇉T'` one, which `_lower_generic` asks for `⇉` with the element left
+open and `_reading` reads `T'` off.  What is walked is written word by word (`_words_of`: an array of a stated shape as where its
+elements are, anything else as its parts) into a record in the frame; the value is the code of a `⎕nextN` function, that record,
+and the walk's first state, which `_Iteration.start` must be one `u64` of.  `⎕nextN` (`_next_function`, one per shape of what is
+walked) takes the record, where the walk's state is and where to write the element, reads the record back, builds the same
+`_Iteration` the loop would have -- a pick's without the shape checks, made when the iterator was -- and runs one turn: past the
+places not picked, then the element written word by word, the state moved on, and `true`; `false` where there are no more.  The
+element comes back through memory rather than as a result because a result of a string is four words, more than an indirect call
+answers in registers.  `_over_an_iterator` walks a `⇉T` value: the state and the element each in the frame, and a call per turn.
+
 Everything that does not change from turn to turn -- where an array's elements are, how many there are, where a table's entries
 are -- is worked out once before the loop and read from where it was left.  That is what keeps a turn of an array to a comparison,
 an addition and a read.

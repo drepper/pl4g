@@ -67,7 +67,7 @@ from ..ir.types import (ARENA, ARENA_NAME, StrType, ArrayType, BOOL, BoolType, B
                         ERROR, EnumType,
                         I64, U16, U32, U64,
                         F64,
-                        FloatType, IntType, MEM, ProductType, PtrType,
+                        FloatType, IntType, IterType, MEM, ProductType, PtrType,
                         ResultType,
                         ListType, SetType, STR, SumType, TupleType, Type,
                         NARROWING, NO_UNIT, OpaqueType, Unit, VecType, VOID,
@@ -188,6 +188,10 @@ class _Local:
     #: Whether this is the arena the body hands out with its answer, which it
     #: makes and does not give back.
     handed_out: bool = False
+    #: What a loop would walk, where the name stands for that rather than for
+    #: a value: `let q := arr⟦arr > 1⟧` binds `q` to the description of a walk,
+    #: and each walk of `q` starts it afresh.
+    iterable: "_Iterable | None" = None
 
 
 @dataclass(slots=True)
@@ -2448,6 +2452,32 @@ class _Entries:
     wanted_value: Type | None
 
 
+@dataclass(slots=True)
+class _Iterable:
+    """What a name bound to something a loop can walk stands for.
+
+    Not a value: a description of a walk, worked out where the name was bound
+    and walked wherever the name is walked -- from the start each time, which is
+    what makes it a description and not a cursor.  What it walks is either what
+    a mask picks out of an array (*mask* the mask, or a function asking it a
+    place at a time) or a value a loop walks as it is: an array, a list, a
+    string, a table, or an iterator handed in.
+    """
+
+    #: What each turn gives.
+    element: Type
+    #: What was written for it, which the messages about it point at.
+    written: ast.Expr
+    #: The array picked from, or the value walked.
+    base: Value
+    #: Its type.
+    ty: Type
+    #: The mask, where it picks; nothing where it walks a value.
+    mask: "Value | Callable[[IRBuilder, Value], Value] | None" = None
+    #: The names it reads, which may not be written while it is in scope.
+    lent: tuple[str, ...] = ()
+
+
 @dataclass(frozen=True, slots=True)
 class _Folded:
     """A whole number an expression comes to while compiling.
@@ -2692,6 +2722,13 @@ class Checker:
         #: The constants being worked out that way just now, which is what
         #: keeps one defined in terms of itself from being asked forever.
         self._constants_asked: set[str] = set()
+        #: The names an iterator in scope reads, which may not be written while
+        #: it is: the name, the iterator's, where it was made, and the depth of
+        #: the scope it goes with.
+        self._iterator_loans: list[tuple[str, str, Span, int]] = []
+        #: The functions that take one turn of an iterator handed on, one per
+        #: shape of what is walked.
+        self._next_functions: dict[tuple[object, ...], Function] = {}
         #: How many names `¨` has made up, so that each one is new.
         self._each_count = 0
         self._pick_in: ast.Expr | None = None
@@ -3066,6 +3103,11 @@ class Checker:
         expectation = self._begin_expecting(pairs)
         try:
             ty = self._variable_type(node)
+            if isinstance(ty, IterType):
+                self._diags.emit(D.LANG_ITERATOR_DOES_NOT_LEAVE, node.span,
+                                 found=ty.written(),
+                                 what="a variable at the top level")
+                ty = ERROR
             if ty is not None and _holds_a_lambda(ty):
                 self._diags.emit(D.LANG_LAMBDA_AT_TOP_LEVEL, node.span)
                 ty = ERROR
@@ -4130,6 +4172,8 @@ class Checker:
         # the place it named is free to be lent again.
         depth = len(self._scopes)
         self._borrows = [b for b in self._borrows if b.depth < depth]
+        self._iterator_loans = [one for one in self._iterator_loans
+                                if one[3] < depth]
         self._unit_scopes.pop()
         for local in self._scopes.pop().values():
             self._report_unused(local)
@@ -4449,6 +4493,12 @@ class Checker:
         expectation = self._begin_expecting(pairs)
         try:
             params = tuple(self._resolve_type(p.type) for p in node.params)
+            for param, ty in zip(node.params, params):
+                if isinstance(ty, IterType) and ty.element is None:
+                    self._diags.emit(D.LANG_ITERATOR_ELEMENT_LEFT_OUT,
+                                     param.type.span)
+            params = tuple(ERROR if isinstance(ty, IterType) and ty.element is None
+                           else ty for ty in params)
             params = self._as_the_entry_hands_over(node, attrs, params)
             ret = self._return_type(node.ret_type)
             borrows = self._borrowed_from(node, ret)
@@ -4836,6 +4886,9 @@ class Checker:
                                  arena=func.param_names[arena_at])
                 break
         for at in func.writes_arrays:
+            if at in written and self._lent_to_an_iterator(written[at],
+                                                           written[at].span):
+                continue
             if at in written and not self._may_write(written[at]):
                 self._diags.emit(D.LANG_ARRAY_HANDED_NOT_WRITABLE,
                                  written[at].span, param=func.param_names[at],
@@ -5551,6 +5604,10 @@ class Checker:
                 continue
             seen[field.name] = field.name_span
             ty = self._resolve_type(field.type)
+            if isinstance(ty, IterType):
+                self._diags.emit(D.LANG_ITERATOR_DOES_NOT_LEAVE, field.type.span,
+                                 found=ty.written(), what="a field")
+                ty = ERROR
             if ty is VOID and node.kind is ast.TypeKind.PRODUCT:
                 # A field that carries nothing leaves the product meaning what
                 # it would have meant without it.  A *variant* of this type may
@@ -5749,6 +5806,13 @@ class Checker:
             return self._reference_type(ref)
         if isinstance(ref, ast.UnitTypeRef):
             return self._united_type(ref)
+        if isinstance(ref, ast.IterTypeRef):
+            if ref.element is None:
+                return self._module.types.iter_type(None)
+            inner = self._resolve_type(ref.element)
+            if inner is ERROR:
+                return ERROR
+            return self._module.types.iter_type(inner)
         if isinstance(ref, ast.FuncTypeRef):
             params = tuple(self._resolve_type(one) for one in ref.params)
             ret = self._return_type(ref.ret)
@@ -9716,6 +9780,8 @@ class Checker:
                     return False
                 return True
             case ast.NameRef():
+                if self._lent_to_an_iterator(expr, where):
+                    return False
                 local = self._find_local(expr.name)
                 if local is not None:
                     if local.mutable:
@@ -10237,9 +10303,15 @@ class Checker:
                 wanted = self._worked_out(param.type, bound)
             outer = self._handing_over
             self._handing_over = (written.node.name, at + 1)
+            if wanted is None and isinstance(param.type, ast.IterTypeRef):
+                # What it walks is not settled, but that it walks is: the
+                # argument is made an iterator, and what it gives is read off.
+                wanted_now: Type | None = self._module.types.iter_type(None)
+            else:
+                wanted_now = wanted
             try:
-                value = (self._lower_into(builder, one, wanted, one.span)
-                         if wanted is not None
+                value = (self._lower_into(builder, one, wanted_now, one.span)
+                         if wanted_now is not None
                          else self._lower_expr(builder, one, None))
             finally:
                 self._handing_over = outer
@@ -10347,6 +10419,10 @@ class Checker:
                 return self._reading(param.element, found.element, bound, span,
                                      name)
             case ast.ListTypeRef() if isinstance(found, ListType):
+                return self._reading(param.element, found.element, bound, span,
+                                     name)
+            case ast.IterTypeRef() if isinstance(found, IterType) \
+                    and param.element is not None and found.element is not None:
                 return self._reading(param.element, found.element, bound, span,
                                      name)
             case ast.RefTypeRef() if isinstance(found, PtrType):
@@ -10838,6 +10914,16 @@ class Checker:
                 spoiled = True
                 continue
             local.read = True
+            held = self._held_by(local)
+            if local.iterable is not None or isinstance(held, IterType):
+                # What it walks is described in this call's room, which a
+                # lambda may outlive.
+                self._diags.emit(D.LANG_ITERATOR_DOES_NOT_LEAVE, one.span,
+                                 found=(held.written() if held is not None
+                                        else "an iterator"),
+                                 what="brought into a lambda")
+                spoiled = True
+                continue
             found.append((one, local))
         return None if spoiled else found
 
@@ -13446,25 +13532,29 @@ class Checker:
         if ty is ERROR:
             return None
         found: _Iteration | None
-        if picked is not None:
+        if isinstance(picked, _Iterable):
+            found = self._walk_of(builder, picked, stmt.iterable.span)
+            if found is not None and isinstance(stmt.iterable, ast.NameRef):
+                self._report_iterator(stmt.iterable.name, "".join((
+                    "'", stmt.iterable.name, "' is walked here, in place and "
+                    "from the start: nothing is built and no call is made")),
+                    stmt.iterable.span)
+        elif picked is not None:
             found = self._over_a_pick(builder, stmt.iterable, *picked)
-            if found is None:
-                return None
-        elif isinstance(ty, ArrayType):
-            found = self._over_an_array(builder, value, ty, stmt.span)
-        elif isinstance(ty, ListType):
-            found = self._over_a_list(builder, value, ty, stmt.span)
-        elif ty is STR:
-            found = self._over_a_string(builder, value, stmt.span)
-        elif isinstance(ty, (SetType, DictType)):
-            found = self._over_a_table(builder, value, ty, stmt.span)
         elif isinstance(ty, TupleType):
             self._diags.emit(D.LANG_FOREACH_TUPLE_NEEDS_COMPTIME,
                              stmt.iterable.span)
             return None
         else:
-            self._diags.emit(D.LANG_LOOP_NOT_AN_ITERATOR, stmt.iterable.span,
-                             found=ty.written())
+            found = self._over_a_value(builder, value, ty, stmt.iterable.span)
+            if found is not None and isinstance(ty, IterType):
+                self._report_iterator(
+                    stmt.iterable.name if isinstance(stmt.iterable, ast.NameRef)
+                    else ty.written(), "".join((
+                        "a ", ty.written(), " handed in is walked through a call "
+                        "per turn: what it walks is not seen here")),
+                    stmt.iterable.span)
+        if found is None:
             return None
         if declared is not None and declared is not found.element:
             self._report_mismatch(stmt.iterable.span, found.element, declared)
@@ -13558,8 +13648,8 @@ class Checker:
 
     def _over_a_pick(self, builder: IRBuilder, written: ast.Element,
                      base: Value, ty: ArrayType,
-                     mask: Value | Callable[[IRBuilder, Value], Value]
-                     ) -> _Iteration | None:
+                     mask: Value | Callable[[IRBuilder, Value], Value],
+                     checked: bool = True) -> _Iteration | None:
         """Walk what a mask picks out of an array, where it stands.
 
         Picking where a loop takes its turns from is an iterator and not an
@@ -13604,7 +13694,7 @@ class Checker:
             return None
         start, lengths = self._shape_of(builder, base, ty, span)
         marks, told = self._shape_of(builder, mask, held, span)
-        for at in range(depth):
+        for at in range(depth if checked else 0):
             if held.shape[at] is None or ty.shape[at] is None:
                 builder.check(
                     builder.compare(CmpPred.EQ, told[at], lengths[at], span),
@@ -13791,6 +13881,500 @@ class Checker:
 
         self._pick_walked = (base, ty, at_place)
         return True
+
+    def _over_a_value(self, builder: IRBuilder, value: Value, ty: Type,
+                      span: Span) -> _Iteration | None:
+        """Walk a value of a type a loop walks as it is, or say it is not one."""
+        if isinstance(ty, ArrayType):
+            return self._over_an_array(builder, value, ty, span)
+        if isinstance(ty, ListType):
+            return self._over_a_list(builder, value, ty, span)
+        if ty is STR:
+            return self._over_a_string(builder, value, span)
+        if isinstance(ty, (SetType, DictType)):
+            return self._over_a_table(builder, value, ty, span)
+        if isinstance(ty, IterType) and ty.element is not None:
+            return self._over_an_iterator(builder, value, ty, span)
+        self._diags.emit(D.LANG_LOOP_NOT_AN_ITERATOR, span, found=ty.written())
+        return None
+
+    # -- iterators as names: `let q := arr⟦arr > 1⟧` --------------------------
+
+    def _picked_element(self, ty: ArrayType, mask: object) -> Type:
+        """What a turn of a pick out of *ty* gives: an element where the mask
+        covers every dimension, a row where it covers the leading ones."""
+        held = self._value_type_of(mask) if isinstance(mask, Value) else None
+        depth = held.rank if isinstance(held, ArrayType) else 1
+        return ty.element if depth == ty.rank else self._row_type(ty, depth)
+
+    def _lower_iterator_definition(self, builder: IRBuilder, node: ast.VarDef,
+                                   declared: IterType) -> None:
+        """Lower `let q: ⇉T = …` and `let q: ⇉ = …`: a name for a walk.
+
+        What is picked with a mask is described rather than built, as it is
+        where nothing says; a value a loop walks -- an array, a list, a string,
+        a table, an iterator handed in -- is walked as it is.  Anything else is
+        not something to walk.
+        """
+        outer = self._pick_in, self._pick_walked
+        self._pick_in, self._pick_walked = node.value, None
+        self._initializing = node.name
+        try:
+            value = self._lower_expr(builder, node.value, None)
+            walked = self._pick_walked
+        finally:
+            self._initializing = None
+            self._pick_in, self._pick_walked = outer
+        if walked is None:
+            ty = self._value_type_of(value)
+            if ty is ERROR:
+                self._bind_local(node.name, UndefConst(ERROR), node.name_span,
+                                 value_span=node.span)
+                return
+            found = self._over_a_value(builder, value, ty, node.value.span) \
+                if not isinstance(ty, TupleType) else None
+            if found is None:
+                if isinstance(ty, TupleType):
+                    self._diags.emit(D.LANG_LOOP_NOT_AN_ITERATOR,
+                                     node.value.span, found=ty.written())
+                self._bind_local(node.name, UndefConst(ERROR), node.name_span,
+                                 value_span=node.span)
+                return
+            walked = _Iterable(element=found.element, written=node.value,
+                               base=value, ty=ty)
+        self._bind_iterator(builder, node, walked, declared)
+
+    def _bind_iterator(self, builder: IRBuilder, node: ast.VarDef,
+                       walked: object, declared: IterType | None) -> None:
+        """Bind *node*'s name to a walk, lending it what the walk reads."""
+        if isinstance(walked, _Iterable):
+            # Another name for a walk already described, or a value walked as
+            # it is: the same walk, lending what that one lends -- or, for a
+            # value named here for the first time, what the value reads.
+            found = replace(walked, lent=walked.lent
+                            or tuple(self._names_read(node.value)))
+        else:
+            base, ty, mask = walked  # type: ignore[misc]
+            found = _Iterable(element=self._picked_element(ty, mask),
+                              written=node.value, base=base, ty=ty, mask=mask,
+                              lent=tuple(self._names_read(node.value)))
+        if declared is not None and declared.element is not None \
+                and declared.element != found.element:
+            self._diags.emit(
+                D.LANG_TYPE_INITIALIZER_MISMATCH, node.value.span,
+                name=node.name, expected=declared.written(),
+                found=self._module.types.iter_type(found.element).written())
+            self._bind_local(node.name, UndefConst(ERROR), node.name_span,
+                             value_span=node.span)
+            return
+        ty = self._module.types.iter_type(found.element)
+        self._bind_local(node.name, UndefConst(ty), node.name_span,
+                         value_span=node.span, builder=builder)
+        local = self._scopes[-1].get(node.name)
+        if local is None:
+            return
+        local.iterable = found
+        depth = len(self._scopes) - 1
+        for name in found.lent:
+            self._iterator_loans.append((name, node.name, node.span, depth))
+        self._report_iterator(node.name, "".join((
+            "'", node.name, "' is ", ty.written(),
+            ": a walk described and not made -- nothing is built, and every walk"
+            " of it starts from the start")), node.span)
+        if found.lent:
+            self._report_iterator(node.name, "".join((
+                "'", node.name, "' borrows ",
+                ", ".join("".join(("'", one, "'")) for one in found.lent),
+                " while it is in scope: writing ",
+                "it" if len(found.lent) == 1 else "them",
+                " meanwhile is refused, so that every walk reads what the first"
+                " would have")), node.span)
+
+    def _names_read(self, expr: ast.Expr) -> list[str]:
+        """The names of arrays and collections *expr* reads, which a walk of it
+        goes on reading after it was described."""
+        found: list[str] = []
+
+        def visit(node: object) -> None:
+            if isinstance(node, ast.NameRef):
+                local = self._find_local(node.name)
+                held = self._held_by(local) if local is not None else None
+                if held is None:
+                    top = self._provided(node.name)
+                    held = top.value_type if isinstance(top, GlobalVar) else None
+                if isinstance(held, (ArrayType, ListType, SetType, DictType)) \
+                        and node.name not in found:
+                    found.append(node.name)
+                return
+            if isinstance(node, ast.Node):
+                for one in fields_of(node):
+                    visit(getattr(node, one.name))
+            elif isinstance(node, tuple):
+                for one in node:
+                    visit(one)
+
+        visit(expr)
+        return found
+
+    def _report_iterator(self, name: str, reason: str, span: Span) -> None:
+        """Say in the report log what became of an iterator."""
+        self._module.reports.record(ReportKind.ITERATOR, name, reason, span)
+
+    def _lent_to_an_iterator(self, expr: ast.Expr, where: Span) -> bool:
+        """Refuse writing a name an iterator in scope reads, and say whether
+        that was refused."""
+        root = expr
+        while isinstance(root, (ast.Member, ast.Element)):
+            root = root.base
+        if not isinstance(root, ast.NameRef):
+            return False
+        for name, iterator, span, _ in reversed(self._iterator_loans):
+            if name == root.name:
+                self._diags.emit(D.LANG_ITERATOR_LENDS, where, name=name,
+                                 iterator=iterator).note(
+                    D.LANG_ITERATOR_MADE_HERE, span, iterator=iterator)
+                return True
+        return False
+
+    def _iterator_named(self, builder: IRBuilder, ref: ast.NameRef,
+                        local: _Local, expected: Type | None) -> Value:
+        """A name bound to a walk, where it is mentioned.
+
+        Where a loop takes its turns from it, the walk is handed to the loop.
+        Where an iterator is wanted -- a parameter of an iterator type -- it is
+        handed on.  Anywhere else an array is what is asked for, and it is
+        built, here, in this call's room.
+        """
+        local.read = True
+        found = local.iterable
+        assert found is not None
+        if self._pick_in is ref:
+            self._pick_walked = found
+            return UndefConst(VOID)
+        if isinstance(expected, IterType):
+            return self._handed_on(builder, ref.name, found, expected, ref.span)
+        return self._built_from(builder, ref.name, found, ref.span, expected)
+
+    def _walk_of(self, builder: IRBuilder, found: _Iterable,
+                 span: Span) -> _Iteration | None:
+        """The walk a name stands for, started afresh."""
+        if found.mask is not None:
+            assert isinstance(found.ty, ArrayType) \
+                and isinstance(found.written, ast.Element)
+            return self._over_a_pick(builder, found.written, found.base,
+                                     found.ty, found.mask)
+        return self._over_a_value(builder, found.base, found.ty, span)
+
+    def _built_from(self, builder: IRBuilder, name: str, found: _Iterable,
+                    span: Span, expected: Type | None) -> Value:
+        """The array a walk would give, where an array is asked for."""
+        if found.mask is None:
+            if isinstance(found.ty, IterType):
+                self._diags.emit(D.LANG_ITERATOR_NOT_AN_ARRAY, span, name=name)
+                return UndefConst(ERROR)
+            if not self._accepts(expected, found.ty):
+                self._report_mismatch(span, found.ty, expected)
+                return UndefConst(ERROR)
+            return found.base
+        assert isinstance(found.ty, ArrayType) \
+            and isinstance(found.written, ast.Element)
+        mask = self._mask_built(builder, found)
+        if mask is None:
+            return UndefConst(ERROR)
+        made = self._lower_picked(builder, replace(found.written, span=span),
+                                  found.base, found.ty, mask, expected)
+        if self._value_type_of(made) is not ERROR:
+            self._report_iterator(name, "".join((
+                "'", name, "' is built into an array here, in this call's room:"
+                " an array was asked for, and the walk gives one element at a"
+                " time")), span)
+        return made
+
+    def _mask_built(self, builder: IRBuilder, found: _Iterable) -> Value | None:
+        """The mask of a pick as an array of truth values, asking it a place at
+        a time where that is how it was described."""
+        if isinstance(found.mask, Value):
+            return found.mask
+        ty = found.ty
+        assert isinstance(ty, ArrayType) and isinstance(found.written, ast.Element)
+        along = ty.shape[0]
+        if along is None:
+            self._diags.emit(D.LANG_MASK_NEEDS_A_STATED_SHAPE,
+                             found.written.base.span, found=ty.written())
+            return None
+        held = self._module.types.array_type(BOOL, (along,))
+        place = builder.frame(held, found.written.span)
+        marks = builder.cast(CastKind.BITCAST, place,
+                             self._module.types.ptr_type(BOOL, mutable=True),
+                             found.written.span)
+        asked = found.mask
+        assert callable(asked)
+        for at in range(along):
+            builder.store(self._element_place(builder, marks, BOOL,
+                                              builder.int_const(U64, at),
+                                              found.written.span),
+                          asked(builder, builder.int_const(U64, at)),
+                          found.written.span)
+        return builder.cast(CastKind.BITCAST, place, held, found.written.span)
+
+    # -- handing an iterator on ----------------------------------------------
+
+    def _words_of(self, builder: IRBuilder, value: Value, ty: Type,
+                  span: Span) -> list[Value]:
+        """*value* as the words it is made of, an array of a stated shape as
+        where its elements are."""
+        if isinstance(ty, ArrayType) and ty.fixed:
+            return [builder.cast(CastKind.BITCAST, value,
+                                 self._module.types.ptr_type(ty.element,
+                                                             mutable=True), span)]
+        parts = parts_of(ty)
+        if len(parts) == 1:
+            return [value]
+        return [builder.extract(value, at, part, span)
+                for at, part in enumerate(parts)]
+
+    def _word_types(self, ty: Type) -> list[Type]:
+        """The types of the words `_words_of` makes of a value of *ty*."""
+        if isinstance(ty, ArrayType) and ty.fixed:
+            return [self._module.types.ptr_type(ty.element, mutable=True)]
+        return list(parts_of(ty))
+
+    def _from_words(self, builder: IRBuilder, words: Sequence[Value], ty: Type,
+                    span: Span) -> Value:
+        """A value of *ty* put back together from its words."""
+        if isinstance(ty, ArrayType) and ty.fixed:
+            return builder.cast(CastKind.BITCAST, words[0], ty, span)
+        if len(words) == 1:
+            return words[0]
+        return builder.make_tuple(tuple(words), ty, span)
+
+    def _handed_on(self, builder: IRBuilder, name: str, found: _Iterable,
+                   wanted: IterType, span: Span) -> Value:
+        """An iterator as a value, where a call takes one.
+
+        What is walked is described in this call's room -- where the array is,
+        and the mask, built where it was asked a place at a time -- and the
+        value is three words: the function that takes one turn, where the
+        description is, and the state a walk starts in.  The callee walks it
+        with a call per turn, since it cannot see what it walks; the room is
+        this call's, which is why an iterator does not leave the call that made
+        it.
+        """
+        ty = self._module.types.iter_type(found.element)
+        if wanted.element is not None and wanted.element != found.element:
+            self._report_mismatch(span, ty, wanted)
+            return UndefConst(ERROR)
+        if found.mask is None and isinstance(found.ty, IterType):
+            # Handed in, and handed on as it came.
+            return found.base
+        mask = self._mask_built(builder, found) if found.mask is not None else None
+        if found.mask is not None and mask is None:
+            return UndefConst(ERROR)
+        held = [(found.base, found.ty)]
+        if mask is not None:
+            held.append((mask, self._value_type_of(mask)))
+        types = [one for _, kind in held for one in self._word_types(kind)]
+        record = self._module.types.tuple_type(tuple(types))
+        offsets = member_offsets_of(record, _LAYOUT)
+        place = builder.frame(record, span)
+        words = [one for value, kind in held
+                 for one in self._words_of(builder, value, kind, span)]
+        for word, kind, offset in zip(words, types, offsets):
+            builder.store(self._inside(builder, place, offset, kind, span), word,
+                          span)
+        start = self._walk_of(builder, _Iterable(
+            element=found.element, written=found.written, base=found.base,
+            ty=found.ty, mask=mask), span)
+        if start is None:
+            return UndefConst(ERROR)
+        if len(start.start) != 1 or self._value_type_of(start.start[0]) is not U64:
+            self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, span,
+                             feature="".join(("handing on a walk of '",
+                                              found.ty.written(), "'")))
+            return UndefConst(ERROR)
+        step = self._next_function(found, [kind for _, kind in held], span)
+        self._report_iterator(name, "".join((
+            "'", name, "' is handed on as ", ty.written(),
+            ": what it walks is described in this call's room, and the callee"
+            " takes each turn through '", step.name, "', a call per turn")), span)
+        return builder.make_tuple(
+            (builder.code_address(step, span),
+             builder.cast(CastKind.BITCAST, place, _ENVIRONMENT, span),
+             start.start[0]), ty, span)
+
+    def _as_an_iterator(self, builder: IRBuilder, expr: ast.Expr,
+                        wanted: IterType, span: Span) -> Value:
+        """*expr* where an iterator is wanted: a parameter of `⇉T`.
+
+        A name bound to a walk is handed on, and so is a pick written in place;
+        a value a loop walks as it is -- an array, a list, a string, a table --
+        is walked through the same kind of value; an iterator handed in is
+        handed on as it came.
+        """
+        outer = self._pick_in, self._pick_walked
+        self._pick_in, self._pick_walked = expr, None
+        try:
+            value = self._lower_expr(builder, expr, None)
+            walked = self._pick_walked
+        finally:
+            self._pick_in, self._pick_walked = outer
+        name = expr.name if isinstance(expr, ast.NameRef) else "what is written here"
+        if walked is None:
+            ty = self._value_type_of(value)
+            if ty is ERROR:
+                return UndefConst(ERROR)
+            if isinstance(ty, IterType):
+                if wanted.element is not None and ty.element != wanted.element:
+                    self._report_mismatch(span, ty, wanted)
+                    return UndefConst(ERROR)
+                return value
+            if isinstance(ty, TupleType):
+                self._report_mismatch(span, ty, wanted)
+                return UndefConst(ERROR)
+            if not isinstance(ty, (ArrayType, ListType, SetType, DictType)) \
+                    and ty is not STR:
+                self._report_mismatch(span, ty, wanted)
+                return UndefConst(ERROR)
+            found = self._over_a_value(builder, value, ty, span)
+            if found is None:
+                return UndefConst(ERROR)
+            walked = _Iterable(element=found.element, written=expr, base=value,
+                               ty=ty)
+        elif not isinstance(walked, _Iterable):
+            base, ty, mask = walked
+            walked = _Iterable(element=self._picked_element(ty, mask),
+                               written=expr, base=base, ty=ty, mask=mask)
+        return self._handed_on(builder, name, walked, wanted, span)
+
+    def _words_into(self, builder: IRBuilder, place: Value, value: Value,
+                    ty: Type, span: Span) -> None:
+        """Write *value* at *place* word by word, as the description is."""
+        types = self._word_types(ty)
+        record = self._module.types.tuple_type(tuple(types))
+        for word, kind, offset in zip(self._words_of(builder, value, ty, span),
+                                      types, member_offsets_of(record, _LAYOUT)):
+            builder.store(self._inside(builder, place, offset, kind, span), word,
+                          span)
+
+    def _words_from(self, builder: IRBuilder, place: Value, ty: Type,
+                    span: Span) -> Value:
+        """A value of *ty* read back from *place* word by word."""
+        types = self._word_types(ty)
+        record = self._module.types.tuple_type(tuple(types))
+        return self._from_words(
+            builder, [builder.load(self._inside(builder, place, offset, kind,
+                                                span), span)
+                      for kind, offset in zip(types,
+                                              member_offsets_of(record, _LAYOUT))],
+            ty, span)
+
+    def _next_function(self, found: _Iterable, kinds: list[Type],
+                       span: Span) -> Function:
+        """The function that takes one turn of a walk handed on.
+
+        It is handed where the description is and where the walk's state is,
+        reads what is walked back out of the description, asks the walk the
+        loop would have asked -- is there another, is this place picked, what
+        is here -- and answers the turn as a result, failed where there is none,
+        with the state moved on.  One per shape of what is walked.
+        """
+        key = (tuple(id(one) for one in kinds), found.mask is not None)
+        made = self._next_functions.get(key)
+        if made is not None:
+            return made
+        element = found.element
+        slot = self._module.types.ptr_type(U64, mutable=True)
+        name = "".join((BUILTIN_GLYPH, "next", str(len(self._next_functions))))
+        func = Function(
+            name=name,
+            ty=self._module.types.func_type((_ENVIRONMENT, slot, _ENVIRONMENT),
+                                            BOOL),
+            attrs=FuncAttrs(impure=True), linkage=Linkage.INTERNAL,
+            span=span, name_span=span, source_path=self._path.as_posix(),
+            param_names=("", "", ""))
+        self._module.add_function(func, key=self._key(name))
+        self._owned.append(func)
+        entry = func.add_block()
+        inner = IRBuilder(self._module, func)
+        described, state, out = (entry.add_param(_ENVIRONMENT, ""),
+                                 entry.add_param(slot, ""),
+                                 entry.add_param(_ENVIRONMENT, ""))
+        types = [one for kind in kinds for one in self._word_types(kind)]
+        record = self._module.types.tuple_type(tuple(types))
+        offsets = member_offsets_of(record, _LAYOUT)
+        words = [inner.load(self._inside(inner, described, offset, kind, span), span)
+                 for kind, offset in zip(types, offsets)]
+        values: list[Value] = []
+        at = 0
+        for kind in kinds:
+            count = len(self._word_types(kind))
+            values.append(self._from_words(inner, words[at:at + count], kind, span))
+            at += count
+        base = values[0]
+        mask = values[1] if len(values) > 1 else None
+        if mask is not None:
+            assert isinstance(found.written, ast.Element) \
+                and isinstance(found.ty, ArrayType)
+            walk = self._over_a_pick(inner, found.written, base, found.ty, mask,
+                                     checked=False)
+        else:
+            walk = self._over_a_value(inner, base, found.ty, span)
+        assert walk is not None
+        first = inner.load(state, span)
+        loop = inner.new_block("loop")
+        here = loop.add_param(U64, "at")
+        inner.br(loop, (first,), span)
+        inner.position_at(loop)
+        asks = inner.new_block("pick") if walk.wanted is not None else None
+        give = inner.new_block("give")
+        done = inner.new_block("done")
+        inner.condbr(walk.more(inner, (here,)), asks or give, done, span=span)
+        if asks is not None and walk.wanted is not None:
+            skip = inner.new_block("skip")
+            inner.position_at(asks)
+            inner.condbr(walk.wanted(inner, (here,)), give, skip, span=span)
+            inner.position_at(skip)
+            inner.br(loop, tuple((walk.passed or walk.step)(inner, (here,))), span)
+        inner.position_at(give)
+        taken = walk.take(inner, (here,))
+        (moved,) = walk.step(inner, (here,))
+        inner.store(state, moved, span)
+        self._words_into(inner, out, taken, element, span)
+        inner.ret(inner.bool_const(True), span)
+        inner.position_at(done)
+        inner.ret(inner.bool_const(False), span)
+        self._next_functions[key] = func
+        self._module.reports.record(
+            ReportKind.NAME_LAMBDA, name,
+            "".join(("code that takes one turn of a walk giving ",
+                     element.written(), ", for a callee that is handed it")), span)
+        return func
+
+    def _over_an_iterator(self, builder: IRBuilder, value: Value, ty: IterType,
+                          span: Span) -> _Iteration:
+        """Walk an iterator handed in: a call per turn.
+
+        The value is not changed -- its third word is where every walk starts --
+        so the walk's state is kept in this call's room, and each turn asks the
+        function the value names for the next element and moves the state on.
+        """
+        element = ty.element
+        assert element is not None
+        code = builder.extract(value, 0, _ENVIRONMENT, span)
+        described = builder.extract(value, 1, _ENVIRONMENT, span)
+        start = builder.extract(value, 2, U64, span)
+        slot = builder.frame(U64, span)
+        builder.store(slot, start, span)
+        # Where each turn's element is written: as many words as it takes, so
+        # that an element of any size comes back the same way.
+        given = builder.frame(self._module.types.tuple_type(
+            tuple(self._word_types(element))), span)
+        out = builder.cast(CastKind.BITCAST, given, _ENVIRONMENT, span)
+        return _Iteration(
+            element=element, start=(slot,),
+            more=lambda b, s: b.call(code, (described, s[0], out), BOOL, span),
+            take=lambda b, s: self._words_from(b, out, element, span),
+            step=lambda b, s: (s[0],))
 
     def _over_a_list(self, builder: IRBuilder, value: Value, ty: ListType,
                      span: Span) -> _Iteration:
@@ -14542,6 +15126,9 @@ class Checker:
             return
         declared = (self._resolve_type(node.type) if node.type is not None
                     else self._variable_type(node))
+        if isinstance(declared, IterType) and not node.more:
+            self._lower_iterator_definition(builder, node, declared)
+            return
         if declared is None or not self._literal_matches(node, declared):
             # The error is reported; binding the name anyway keeps every later
             # mention of it from reporting the same thing again as undefined.
@@ -14592,10 +15179,19 @@ class Checker:
     def _lower_derived(self, builder: IRBuilder, node: ast.VarDef) -> None:
         """Lower a variable whose type is whatever its value turns out to be."""
         self._initializing = node.name
+        outer = self._pick_in, self._pick_walked
+        self._pick_in, self._pick_walked = (None if node.more else node.value), None
         try:
             value = self._lower_expr(builder, node.value, None)
+            walked = self._pick_walked
         finally:
             self._initializing = None
+            self._pick_in, self._pick_walked = outer
+        if walked is not None:
+            # What a mask picks, with nothing asking for an array: the name is
+            # the walk, described and not made.
+            self._bind_iterator(builder, node, walked, None)
+            return
         if node.more:
             self._bind_apart(builder, node, value)
             return
@@ -14673,6 +15269,9 @@ class Checker:
             return None
         if node.name == WILDCARD_NAME:
             return self._dropped(builder, node, wants_value)
+        if self._lent_to_an_iterator(ast.NameRef(span=node.name_span,
+                                                  name=node.name), node.span):
+            return None
         local = self._find_local(node.name)
         if local is not None and local.placed:
             # A name with storage of its own is written the way a variable at
@@ -14833,6 +15432,12 @@ class Checker:
             self._diags.emit(D.LANG_TYPE_NOTHING_IS_NOT_WRITTEN, ref.span)
             return VOID
         found = self._resolve_type(ref)
+        if isinstance(found, IterType):
+            # What it walks is described in the room of the call that made it,
+            # which is gone by the time the caller would walk it.
+            self._diags.emit(D.LANG_ITERATOR_DOES_NOT_LEAVE, ref.span,
+                             found=found.written(), what="answered")
+            return ERROR
         if isinstance(found, ArrayType):
             # What a value of an array type is, is where its elements are, and
             # the elements of an array a function made are in that function's
@@ -20326,6 +20931,8 @@ class Checker:
                 tuple(builder.int_const(U64, 0) for _ in ARENA.fields),
                 ARENA, ref.span)
         local = self._find_local(ref.name)
+        if local is not None and local.iterable is not None:
+            return self._iterator_named(builder, ref, local, expected)
         if local is None and isinstance(self._top.get(ref.name), _Generic):
             # Written once and compiled once per set of types, and which sets
             # those are is what the calls ask for.  There is no call here to
@@ -20402,6 +21009,8 @@ class Checker:
         """
         if isinstance(expected, ArrayType) and not expected.fixed:
             return self._spread(builder, expr, expected, span)
+        if isinstance(expected, IterType):
+            return self._as_an_iterator(builder, expr, expected, span)
         if not isinstance(expected, ResultType):
             return self._shorter_life(builder,
                                       self._lower_expr(builder, expr, expected),

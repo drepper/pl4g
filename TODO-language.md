@@ -1096,3 +1096,24 @@ Runtime
     `yield`, a coroutine value `⇉T` placed by the rule a lambda's environment follows, `⎕next`, and `foreach` over one -- with a
     comparison of building iterators as coroutines against the compiler-known iterators there are now.
     Question: the seven listed at the end of that document, beginning with stackless against stackful.
+
+[ ] a cursor over an iterator, `⎕iter(q)`: part of the decision that an iterator is a description each walk starts afresh, so that
+    stepping one by hand has something of its own to step.  The cursor a list has is built for a list -- where the list is and how
+    far along -- and has no spelling as a type; an iterator's would be its description and a state, and wants the cursor's
+    operators (`⌖`, `⇧`) and its truth value, and a type to hold it in.
+
+[ ] let an iterator leave the call that made it, where what it walks does: its description in `⎕heap` or `in a` instead of the
+    frame, and the lifetime of what it reads in its type -- `⇉u8 in a`, as a lambda's environment says where it lasts.  Refused
+    today (4670).
+
+[ ] hand on a pick whose mask is asked a place at a time over an array of no stated length.  Handing on builds the mask, which needs
+    room for one truth value per element; describing the mask's operands instead, and asking them in `⎕nextN`, would need the
+    expression lowered again inside that function.
+
+[ ] hand on a walk whose state is more than one word: a range, whose state is a number of its own type, and `⎕enumerate`, which
+    adds a count.  Neither can be a value yet (4443, 4515), so nothing asks.
+
+[ ] read a field of a record taken out of a tuple by several names.  `foreach i, p := ⎕enumerate(ps)` over an array of records
+    refuses `p.age` (4103, "not a module"), the name taken apart not counting as one holding a record; a tuple member of a record
+    type read through a name has the same gap.
+
