@@ -4319,3 +4319,7 @@ own around the loop -- for every way out that leaves more than the loop.  A plai
 a generator's resumes a walk under way, if its body puts anything off, with the null pointer, and the body -- which after each
 stop tests the pointer when it has a `defer` in it -- runs what is pending and answers `false`.
 
+**`g(…) in a`** is caught in `_lower_allocated` (`_generator_in`): the walk carries the arena's state, and a walk through calls
+takes its description out of the arena instead of the frame -- in a size no checker knows, so the room is asked for with a
+`SizeOfInst`, which the `coroutines` pass replaces with the number once every generator's frame is measured.
+

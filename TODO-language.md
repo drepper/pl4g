@@ -1129,7 +1129,7 @@ Runtime
 [x] let a generator with `defer` be walked through calls.  Done on 2026-10-03; 4674 is retired.  What was wanted: a walk that stops early has to finish the generator, which wants
     the loop's way out to resume it once more with "finish now" -- Python's `GeneratorExit`, C++'s `destroy`.
 
-[ ] let a generator walk itself (4675): the inner frames in an arena the generator names, `yield ⇉ walk(child) in scratch`.
+[x] let a generator walk itself.  Done on 2026-10-03, with the inner frames in the arena `in` names.  What was wanted: the inner frames in an arena the generator names, `yield ⇉ walk(child) in scratch`.
 
 [ ] hand out what `yield ⇉` delegates to in one step rather than one per level, C++23's `elements_of`: a walk of a tree through
     calls resumes each level between the leaf and the root for every element.

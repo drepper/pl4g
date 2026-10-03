@@ -4841,8 +4841,13 @@ Compare: **Python**, whose `close` raises `GeneratorExit` at the stopped `yield`
 collected -- at some point; **C++**, whose `coroutine_handle::destroy` runs the destructors of what is live; **C#**, whose `foreach`
 disposes the enumerator, running the `finally` blocks, exactly when the loop is left -- which is this.
 
-**What is refused through calls, and why:** a generator whose body walks itself (4675), whose frame would hold a frame of its own -- which is what naming an arena for the inner
-frames will allow, as Rust needs a `Box::pin` for a recursive `async fn`.  **A generator may take type parameters**, and is compiled once per set of types a call gives it, as a generic function is --
+**A generator may walk itself where the inner walks' frames are in an arena**: `yield ⇉ walk(child, scratch) in scratch` keeps
+the inner walk's description and frame in `scratch`, so the frame of a walk holds where the next one's is rather than the frame
+itself.  Without `in`, a generator whose body walks itself is refused (4675), its frame having to hold a frame of its own.
+Compare: **Rust**, which needs `Box::pin` for a recursive `async fn` for exactly this reason; **C++**, whose coroutine frames are
+on the heap anyway; **Python**, whose generator objects are.
+
+**A generator may take type parameters**, and is compiled once per set of types a call gives it, as a generic function is --
 written into the loop that walks it with the type parameters renamed and bound there, or walked through calls.  **One exported
 from another file** is called through that file's name and walked through calls: its body means what its own file's names mean,
 and the loop's body cannot be written into it.  Compare: **C++**'s `std::generator<T>` templates and **Rust**'s generic `impl
