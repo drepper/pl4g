@@ -1656,6 +1656,22 @@
       "option": null
     },
     {
+      "number": 3053,
+      "name": "LANG_SYNTAX_ARRAY_ELEMENT_LEFT_OUT",
+      "severity": "error",
+      "message": "'⟦⟧' with nothing before it is written only in a definition, which takes the element from its value",
+      "args": [],
+      "cause": "`let a: ⟦⟧ = …` builds an array of whatever the value gives -- what a mask picks, what an iterator walks -- without naming what that is, which is what generic code wants.  Anywhere else -- a parameter, an answer, a field -- there is no value there to say it, so the type has to.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / foreach",
+        "requirement": "An array type without its element stands only in a definition."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",

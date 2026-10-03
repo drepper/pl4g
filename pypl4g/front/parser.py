@@ -384,8 +384,8 @@ class Parser:
         # the variable keeps whatever it was given.
         mutable = self._accept(TokKind.KW_MUT) is not None
         declared: ast.TypeExpr | None = None
-        if self._begins_a_type():
-            declared = _writable(self._parse_type_ref(), mutable)
+        if self._begins_a_type() or self._check(TokKind.ARRAY_OPEN):
+            declared = _writable(self._parse_type_ref(definition=True), mutable)
         # `in kept` after the type receives the arena a call hands out with its
         # answer: the definition makes the arena, under that name.
         received: tuple[str, Span] | None = None
@@ -884,7 +884,7 @@ class Parser:
         end = self._expect(TokKind.LIFT_CLOSE, D.LANG_SYNTAX_EXPECTED_CLOSING_LIFT)
         return ast.Quote(span=start.to(end.span), pieces=tuple(pieces))
 
-    def _parse_type_ref(self) -> ast.TypeExpr:
+    def _parse_type_ref(self, definition: bool = False) -> ast.TypeExpr:
         """Parse a type, which may be a collection written the way a value is.
 
         An array is written after what it holds -- `i32\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}4\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` -- and more than one
@@ -920,6 +920,22 @@ class Parser:
             # What a caller reads off a function type is written before it, the
             # way it is written before the function itself.
             return self._parse_function_type()
+        if self._check(TokKind.ARRAY_OPEN):
+            # An array of whatever the value gives, in a definition: the
+            # brackets with nothing before them, so that a walk is built into
+            # an array without naming what it gives.  Anywhere else there is no
+            # value to give it, and saying so here is what keeps a lifted
+            # `⌜⟦1, 2⟧⌝` the array it is -- this is never asked for there.
+            start = self._advance().span
+            if not definition:
+                self._diags.emit(D.LANG_SYNTAX_ARRAY_ELEMENT_LEFT_OUT, start)
+            shape = [self._parse_dimension()]
+            while self._accept(TokKind.COMMA) is not None:
+                shape.append(self._parse_dimension())
+            end = self._expect(TokKind.ARRAY_CLOSE,
+                               D.LANG_SYNTAX_EXPECTED_CLOSING_ARRAY).span
+            return ast.ArrayTypeRef(span=start.to(end), element=None,
+                                    shape=tuple(shape))
         if self._check(TokKind.ITER):
             # Something a loop can walk, and what it gives -- or, where no type
             # follows, whatever the definition is given gives.
@@ -1238,7 +1254,9 @@ class Parser:
 
         Seven things begin one: a name, a collection, a tuple, a list, the mark of
         a reference, what a function type says about itself, which stands
-        before the `fn`, and the mark of something a loop can walk.  It is asked wherever a type may be written and may
+        before the `fn`, and the mark of something a loop can walk.  The
+        brackets of an array whose element is left to the value begin one too,
+        but only where a definition's type is read, which asks for them itself.  It is asked wherever a type may be written and may
         equally be absent, which is a variable and a binding in a loop.
         """
         kind = self._peek(ahead).kind if ahead else self._current.kind

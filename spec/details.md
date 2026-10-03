@@ -1634,6 +1634,11 @@ it was described (`_mask_built`, which needs the array's shape stated).  The nam
 depth of its scope, dropped by `_pop_scope`, and asked by `_lent_to_an_iterator` from `_record_may_change` (every element and field
 write), an assignment, and an array handed to a `mut` parameter.
 
+**`let a: ⟦⟧ = …`** is an `ArrayTypeRef` whose element is nothing, which the parser makes only where `_parse_variable` reads a
+definition's type (`_parse_type_ref(definition=True)`) and refuses anywhere else (3053) -- a lift tries a type first, and the bare
+brackets there are an array literal.  `_lower_array_definition` lowers the value with `_pick_in` set, builds what a walk gives with
+`_built_from`, and holds the array's rank and stated dimensions to the ones written.
+
 **`⇉T` as a value** (`IterType`, three words, laid out as a function value is) is made by `_handed_on` where `_lower_into` is asked
 for one -- an argument of a `⇉T` parameter, and of a generic `⇉T'` one, which `_lower_generic` asks for `⇉` with the element left
 open and `_reading` reads `T'` off.  What is walked is written word by word (`_words_of`: an array of a stated shape as where its

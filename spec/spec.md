@@ -4721,9 +4721,8 @@ are this; **Java**'s `Iterable` and `Iterator`, C#'s two again; **Kotlin**'s `Se
 **`⇉` alone** says that a definition is an iterator and lets the value say what it gives: `let r: ⇉ = …`.  Generic code then names
 an iterator without naming its element, which is what C++'s `auto`, Java's `var` and Swift's `some Sequence` are for.  Rust has no
 way to write the type of a `filter` in a `let` at all and says nothing (`let r = …`), or `impl Iterator<Item = _>` where a type
-must be written; Kotlin writes `Sequence<*>`.  `⟦⟧` alone was the other candidate, and was not taken: the brackets already mean an
-array, and an array asked for is an array built.  `⇉` alone stands only in a definition (4671): a parameter has no value to read
-the element off, so its type says it, as `⇉u8` or `⇉T'`.
+must be written; Kotlin writes `Sequence<*>`.  `⇉` alone stands only in a definition (4671): a parameter has no value to read the element off,
+so its type says it, as `⇉u8` or `⇉T'`.
 
 **What an iterator reads, it borrows.**  It reads what it walks when it walks it, so the names it was made from are lent to it
 while it is in scope, and writing one meanwhile is refused (4667) -- which makes every walk of it read what the first would have,
@@ -4738,6 +4737,25 @@ to a call, which ends first, and not answered, kept in a field, put at the top l
 where an iterator borrowing a local cannot be returned either -- its lifetime says so -- and one that owns what it walks can;
 **C++**, where a view of a local returned from a function dangles and nothing says so; **Swift**'s non-escaping closures, which
 the compiler keeps from leaving the call they were handed to, for the same reason.
+
+**`⟦⟧` alone builds the array without naming what it holds.**  It is the other half of `⇉` alone: where `let r: ⇉ = …` keeps
+the walk, `let a: ⟦⟧ = …` asks for the array, and what the element is -- and how many dimensions there are -- is the value's to
+say.  Dimensions written between the brackets are held to it: `⟦,⟧` asks for a table, which is what a mask picks out of one's
+rows, and `⟦4⟧` for four; `⟦⟧` alone asks only for an array, of any rank.
+
+```
+let a: ⟦⟧ = arr⟦arr > 1⟧          ※ u8⟦⟧, built
+let b: ⟦⟧ = q                      ※ the same, out of an iterator
+let rows: ⟦,⟧ = m⟦⟦true, false, true⟧⟧   ※ u8⟦,2⟧
+```
+
+Like `⇉` alone it stands only in a definition (3053), where a value says what it holds; it is refused by the parser anywhere
+else, which is also what keeps a lifted `⌜⟦1, 2⟧⌝` the array written there.  Compare: **Rust**'s `.collect::<Vec<_>>()`, which is
+exactly this -- the container named and the element left to `_`; **C++23**'s `std::ranges::to<std::vector>()`, whose template
+template argument leaves the element to deduction; **Java**'s `.toList()` and **Kotlin**'s `.toList()`, **C#**'s `.ToArray()`,
+**Python**'s `list(…)` and **Julia**'s `collect`, which never name an element and are calls rather than types; **NumPy**'s
+`np.fromiter`, which has to be told the element type.  Here it is a type, written where the name is defined, because building an
+array is a question about where the result is kept rather than a step in an expression.
 
 **Where an array is asked for, the array is built.**  A name of an array type, an argument of one, `#`, an index: each builds the
 array the walk would give, there, in the call's room, as picking anywhere else does.  Compare: **Python 3**, whose `filter` became

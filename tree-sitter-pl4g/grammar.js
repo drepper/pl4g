@@ -294,7 +294,7 @@ module.exports = grammar({
       repeat(seq(',', field('name', $.identifier))),
       ':',
       optional($.mutable),
-      optional(seq(field('type', $.type),
+      optional(seq(field('type', choice($.type, $.array_of_what_is_given)),
                    // `in kept`: the arena a call hands out with its answer,
                    // received under that name.
                    optional(seq('in', field('made_in', $.identifier))))),
@@ -407,6 +407,11 @@ module.exports = grammar({
       repeat(seq(choice('\u00d7', '\u00f7'),
                  choice($.integer_literal, $.unit_factor))),
     ),
+
+    // An array of whatever a definition's value gives: the brackets with
+    // nothing before them, which only a definition may write, its value being
+    // what says what the element is.
+    array_of_what_is_given: $ => $._array_suffix,
 
     _array_suffix: $ => seq('\u27e6', sepBy(',', optional(field('length', $._expression))),
                             '\u27e7'),
@@ -532,7 +537,7 @@ module.exports = grammar({
     _trailing_variable: $ => seq(
       'let', field('name', $.identifier),
       repeat(seq(',', field('name', $.identifier))), ':', optional($.mutable),
-      optional(field('type', $.type)), '=', field('value', $._block_expression),
+      optional(field('type', choice($.type, $.array_of_what_is_given))), '=', field('value', $._block_expression),
     ),
 
     _trailing_assignment: $ => seq(
@@ -700,7 +705,7 @@ module.exports = grammar({
       repeat(seq(',', field('name', $.identifier))),
       ':',
       optional($.mutable),
-      optional(seq(field('type', $.type),
+      optional(seq(field('type', choice($.type, $.array_of_what_is_given)),
                    // `in kept`: the arena a call hands out with its answer.
                    optional(seq('in', field('made_in', $.identifier))))),
       '=',

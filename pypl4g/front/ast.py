@@ -152,7 +152,9 @@ class ArrayTypeRef(Node):
     is the rank, so `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}3,4\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` is a table and `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET},\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` a table of no stated shape.
     """
 
-    element: TypeExpr
+    #: What it holds, or nothing for `⟦⟧` written alone in a definition,
+    #: which takes it from the value: an array of whatever that gives.
+    element: "TypeExpr | None"
     shape: tuple[Expr | None, ...] = (None,)
 
 

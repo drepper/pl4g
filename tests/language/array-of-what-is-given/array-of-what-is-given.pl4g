@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ `⟦⟧` with nothing before it, in a definition, builds an array of whatever the
+※ value gives without naming what that is: what a mask picks, what an iterator
+※ walks, an array as it is.  Dimensions written between the brackets are held to
+※ the value -- `⟦,⟧` for the rows a mask picks out of a table -- and `⟦⟧` alone
+※ asks only for an array, however many dimensions it has.
+
+fn first(v: u8⟦⟧) → u8:
+    v⟦0⟧
+
+@[startup, impure]
+fn main() → u6:
+    let arr: u8⟦4⟧ = ⟦0u8, 1u8, 2u8, 3u8⟧ in ⎕static
+    let q := arr⟦arr > 1⟧
+    let a: ⟦⟧ = arr⟦arr > 1⟧
+    let b: ⟦⟧ = q
+    let m: u8⟦3,2⟧ = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧, ⟦5u8, 6u8⟧⟧ in ⎕static
+    let rows: ⟦,⟧ = m⟦⟦true, false, true⟧⟧
+    let same: ⟦⟧ = arr
+    if #a = 2 ∧ b⟦1⟧ = 3u8 ∧ rows⟦1,1⟧ = 6u8 ∧ first(same) = 0u8 ∧ first(a) = 2u8: 0u6 else: 1u6

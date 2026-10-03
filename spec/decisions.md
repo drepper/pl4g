@@ -9403,10 +9403,16 @@ with every decision to be in the report log:
 4. *An array where one is asked for*: built there, silently but reported -- against Rust's `.collect()` and C++23's `ranges::to`,
    which the program writes, and Python's `list(…)`.
 
-The user also asked for a way to leave the element type out in a definition, suggesting `let q: ⟦⟧ = …`, with leave to work around
-the syntax if it caused problems.  It parses, but `⟦⟧` already says "array", and an array asked for is an array built -- the
-opposite of what was wanted -- so `⇉` alone is the spelling: `let q: ⇉ = …`, and only in a definition (4671).  C++'s `auto`,
-Java's `var`, Swift's `some Sequence` and Kotlin's `Sequence<*>` are the comparisons.
+The user also asked for `let q: ⟦⟧ = …`, with leave to work around the syntax if it caused problems.  It was first misread as a
+way to name an *iterator* without its element, and `⇉` alone was made for that (`let q: ⇉ = …`, only in a definition, 4671;
+compare C++'s `auto`, Java's `var`, Swift's `some Sequence`, Kotlin's `Sequence<*>`).  What was meant is the other thing: a way to
+*build the array* out of an iterator without naming what it holds.  So `⟦⟧` alone is that -- an array of whatever the value
+gives, built, with any dimensions written between the brackets held to it (`⟦,⟧` for rows).  The syntax caused one problem: in a
+lifted `⌜…⌝` a type is tried first, so `⌜⟦1, 2⟧⌝` would have become a type.  Worked around by reading the bare brackets as a type
+only where a definition's type is read; anywhere else the parser refuses them (3053), which also keeps the tree-sitter grammar --
+which has them only in a definition's type -- and the compiler agreeing.  Compare Rust's `.collect::<Vec<_>>()`, the closest,
+C++23's `ranges::to<std::vector>()`, and the `toList`/`ToArray`/`list`/`collect` calls of Java, Kotlin, C#, Python and Julia.
+Both forms stay: `⇉` alone keeps the walk, `⟦⟧` alone builds the array.
 
 How one is handed on is the compiler's: a record of what is walked in the caller's frame and a `⎕nextN` function taking a turn,
 the element written through memory -- Rust's `dyn Iterator` and C++'s `any_view`, a call per turn, where `impl Iterator` and

@@ -1254,8 +1254,17 @@
                   "type": "FIELD",
                   "name": "type",
                   "content": {
-                    "type": "SYMBOL",
-                    "name": "type"
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "SYMBOL",
+                        "name": "type"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "array_of_what_is_given"
+                      }
+                    ]
                   }
                 },
                 {
@@ -1853,6 +1862,10 @@
           }
         }
       ]
+    },
+    "array_of_what_is_given": {
+      "type": "SYMBOL",
+      "name": "_array_suffix"
     },
     "_array_suffix": {
       "type": "SEQ",
@@ -2626,8 +2639,17 @@
               "type": "FIELD",
               "name": "type",
               "content": {
-                "type": "SYMBOL",
-                "name": "type"
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "type"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "array_of_what_is_given"
+                  }
+                ]
               }
             },
             {
@@ -3504,8 +3526,17 @@
                   "type": "FIELD",
                   "name": "type",
                   "content": {
-                    "type": "SYMBOL",
-                    "name": "type"
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "SYMBOL",
+                        "name": "type"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "array_of_what_is_given"
+                      }
+                    ]
                   }
                 },
                 {

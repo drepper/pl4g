@@ -1117,3 +1117,6 @@ Runtime
     refuses `p.age` (4103, "not a module"), the name taken apart not counting as one holding a record; a tuple member of a record
     type read through a name has the same gap.
 
+[ ] let a variable at the top level be an array of whatever it is given, `let g: ⟦⟧ = …`.  A top-level variable's type is read
+    before its value is worked out, so the element has nothing to come from yet; it is refused as not implemented.
+

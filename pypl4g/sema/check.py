@@ -2712,6 +2712,8 @@ class Checker:
         #: The program's files and its functions as written, which is what a
         #: call in a constant is run over.
         self._units: Sequence[ast.SourceUnit] = ()
+        #: Whether a type being read is a variable's at the top level.
+        self._defining_globally = False
         #: Whether a constant is only welcome, and what is wrong with one is
         #: left to be said where the program would say it.
         self._constant_quiet = False
@@ -3102,7 +3104,11 @@ class Checker:
         pairs = self._expected_numbers(attrs)
         expectation = self._begin_expecting(pairs)
         try:
-            ty = self._variable_type(node)
+            self._defining_globally = True
+            try:
+                ty = self._variable_type(node)
+            finally:
+                self._defining_globally = False
             if isinstance(ty, IterType):
                 self._diags.emit(D.LANG_ITERATOR_DOES_NOT_LEAVE, node.span,
                                  found=ty.written(),
@@ -5967,6 +5973,15 @@ class Checker:
         compiler can read and not an expression the program works out: a type
         that depended on a value would be a different language.
         """
+        if ref.element is None:
+            # Only a definition has a value to read the element off, and one in
+            # a function is lowered before it would get here; anywhere else the
+            # parser said so already.  At the top level it is not done yet.
+            if self._defining_globally:
+                self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, ref.span,
+                                 feature="an array of whatever it is given, at "
+                                 "the top level")
+            return ERROR
         element = self._resolve_type(ref.element)
         if element is ERROR:
             return ERROR
@@ -13944,6 +13959,61 @@ class Checker:
                                base=value, ty=ty)
         self._bind_iterator(builder, node, walked, declared)
 
+    def _lower_array_definition(self, builder: IRBuilder, node: ast.VarDef,
+                                written: ast.ArrayTypeRef) -> None:
+        """Lower `let a: ⟦⟧ = …`: an array of whatever the value gives, built.
+
+        What a walk gives is built into an array here -- a pick, a name bound to
+        an iterator -- and an array is the array it is; what each element is,
+        and how many dimensions there are, is the value's to say.  Dimensions
+        written between the brackets are held to it: `⟦,⟧` asks for a table,
+        `⟦4⟧` for four.  `⟦⟧` alone asks only for an array.
+        """
+        outer = self._pick_in, self._pick_walked
+        self._pick_in, self._pick_walked = node.value, None
+        self._initializing = node.name
+        try:
+            value = self._lower_expr(builder, node.value, None)
+            walked = self._pick_walked
+        finally:
+            self._initializing = None
+            self._pick_in, self._pick_walked = outer
+        if walked is not None:
+            if not isinstance(walked, _Iterable):
+                base, ty, mask = walked
+                walked = _Iterable(element=self._picked_element(ty, mask),
+                                   written=node.value, base=base, ty=ty, mask=mask)
+            name = node.value.name if isinstance(node.value, ast.NameRef) \
+                else node.name
+            value = self._built_from(builder, name, walked, node.value.span, None)
+        found = self._value_type_of(value)
+        if found is ERROR:
+            self._bind_local(node.name, UndefConst(ERROR), node.name_span,
+                             node.mutable, value_span=node.span)
+            return
+        asked = [None if one is None else self._constant_number(one)
+                 for one in written.shape]
+        fits = isinstance(found, ArrayType) and (
+            written.shape == (None,) or (
+                len(asked) == found.rank
+                and all(one is None or one == along
+                        for one, along in zip(asked, found.shape))))
+        if not fits:
+            self._diags.emit(D.LANG_TYPE_INITIALIZER_MISMATCH, node.value.span,
+                             name=node.name, expected="".join((
+                                 "\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}",
+                                 ",".join("" if one is None else str(one)
+                                          for one in asked),
+                                 "\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}")),
+                             found=found.written())
+            self._bind_local(node.name, UndefConst(ERROR), node.name_span,
+                             node.mutable, value_span=node.span)
+            return
+        self._kept_by_a_name(found)
+        self._name_value(value, node.name, node.name_span)
+        self._bind_local(node.name, value, node.name_span, node.mutable,
+                         value_span=node.span, builder=builder)
+
     def _bind_iterator(self, builder: IRBuilder, node: ast.VarDef,
                        walked: object, declared: IterType | None) -> None:
         """Bind *node*'s name to a walk, lending it what the walk reads."""
@@ -15116,6 +15186,10 @@ class Checker:
         if not self._image_definition(node, None):
             self._bind_local(node.name, UndefConst(ERROR), node.name_span,
                              node.mutable, value_span=node.span)
+            return
+        if isinstance(node.type, ast.ArrayTypeRef) and node.type.element is None \
+                and not node.more:
+            self._lower_array_definition(builder, node, node.type)
             return
         if node.type is None and not _says_its_type(node.value):
             # Nothing written and nothing to read off the value: it is lowered
