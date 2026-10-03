@@ -282,6 +282,27 @@ class DiagEngine:
         self._record(note)
         self._sink(note)
 
+    def replay(self, diag: Diagnostic) -> None:
+        """Report here what another engine caught: a diagnostic said while a
+        piece of the work ran on its own, kept until it is its turn to be said.
+
+        Counted, written down and handed on exactly as `emit` would have; a note
+        is handed on as one.  What it was caught with was this engine's control,
+        so nothing that should not be said reaches here.
+        """
+        if diag.info.severity == "note":
+            self.report_note(diag)
+            return
+        info = diag.info
+        if info.is_error or (info.severity == "warning"
+                             and self._control.warnings_are_errors):
+            self.error_count += 1
+        elif info.severity == "warning":
+            self.warning_count += 1
+        diag.reported = True
+        self._record(diag)
+        self._sink(diag)
+
     def internal(self, detail: str) -> Diagnostic:
         """Report an internal compiler error."""
         return self.emit(D.IMPL_INTERNAL_ERROR, detail=detail)

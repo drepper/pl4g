@@ -570,17 +570,18 @@ Optimizations
     discipline already relies on, for every sample, as the recording itself -- accurate and twice the work per column.  The first
     is the one to do: one extra checkout per run and one extra column, and it makes the table answer the question it is for.
 
-[ ] A program pays for the whole of `std` whether it names any of it or not.  Measured on 2026-10-01: parsing `modules/std.pl4g`
-    costs 4.2 ms at 348 lines and 6.2 ms at 528, and the format macros landing took every program that imports `std` from 33.2 ms
-    to 36.2 -- the 2 ms being the parse and nothing else, since the parse of an imported module happens inside what the report calls
-    semantic analysis.
+[x] A program pays for the whole of `std` whether it names any of it or not.  Done on 2026-10-04: `dropunreached` runs before the
+    other passes, a module's bodies are lowered only as far as the program names them, and parsed only when read -- each body a job
+    of its own.  `startup-takes-the-record` went from 82 ms to about 27.
 
-    Nothing is wrong with the code; the cost is that a module is read whole.  What would fix it, in rising order of cost: parse a
-    module lazily, definition by definition, which needs the parser to be able to skip a body it is not asked for; cache the parsed
-    tree of a module between compilations, which the incremental entry wants anyway; or split `std` so that a program importing it
-    for one thing does not read the rest, which is the answer that needs no compiler work and the one that gives the least.
+[ ] lex a module as far as it is read.  What is left of reading `std` for a program that names one function of it is lexing the
+    whole file -- 7.6 ms of `std`'s 853 lines, where the signatures take 1.7 ms to parse.  The lexer could find where each top-level
+    definition ends from the indentation of its lines alone and leave the rest as text, as the parser now leaves a body as tokens.
 
-    It is worth doing before `std` is much bigger: every feature that lands in `std` from here is paid for by every program.
+[ ] run the body jobs side by side.  The structure is there (`run_jobs`, `--jobs`), and the bootstrap compiler's interpreter runs
+    one thread at a time; a compiler written in another language gets the parallelism from the same structure.  The same shape fits
+    the checking of bodies, which share less than they appear to: what one body needs of another is its signature and the facts
+    `callees first` orders.
 
 [x] fold a multiplication by one.  Done on 2026-10-03, with the rest of what leaves a number unchanged (`constfold`).
 

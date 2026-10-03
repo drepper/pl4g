@@ -160,11 +160,20 @@ class Driver:
             # Not reported here: the checker resolves imports too and says so with
             # the span and the places it looked, which is the message worth having.
             return None
+        earlier = self.sources.parsed(path)
+        if earlier is not None:
+            return earlier[1]
         try:
             text = self.sources.read(path)
         except Exception:  # noqa: BLE001 - the checker reports it
             return None
-        return parse(tokenize(text, self.diags), path.as_posix(), self.diags)
+        # What the expander wants of it is its macros; a function's body is
+        # parsed only if something reads it.  Kept for the checker, which reads
+        # the same file for the rest.
+        tokens = tokenize(text, self.diags)
+        unit = parse(tokens, path.as_posix(), self.diags, defer=True)
+        self.sources.remember(path, tokens, unit)
+        return unit
 
     def _macro_module(self, units: Sequence[ast.SourceUnit]) -> object:
         """Check and lower the macros, for the expander to run.
@@ -290,7 +299,8 @@ class Driver:
                 self.diags.emit(D.LANG_SYNTAX_INVALID_UTF8, offset=exc.byte_offset)
                 continue
             tokens = tokenize(source, self.diags)
-            unit = parse(tokens, path.as_posix(), self.diags)
+            unit = parse(tokens, path.as_posix(), self.diags,
+                         workers=self.options.jobs)
             self.sources.record(path, tokens, unit)
             units.append(unit)
             self._timed("".join(("parse ", path.as_posix())), start)

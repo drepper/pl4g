@@ -188,6 +188,7 @@ class CommandLine:
         parser.add_argument("--module-path", dest="module_path",
                             action="append", default=[])
         parser.add_argument("-D", dest="defines", action="append", default=[])
+        parser.add_argument("-j", "--jobs", dest="jobs")
         parser.add_argument("--stack-size", dest="stack_size")
         parser.add_argument("--guard-size", dest="guard_size")
         parser.add_argument("--report-log", dest="report_log")
@@ -268,6 +269,12 @@ class CommandLine:
             # every option here does.
             name, sep, value = given.partition("=")
             options.defines[name] = value if sep else "true"
+        if found.jobs is not None:
+            if found.jobs.isdigit() and int(found.jobs) > 0:
+                options.jobs = int(found.jobs)
+            else:
+                self._diags.emit(D.IMPL_CLI_BAD_ARGUMENT, value=found.jobs,
+                                 option="--jobs", expected="1, 2, 3, ...")
         if found.stack_size is not None:
             options.stack_size = self._size("--stack-size", found.stack_size,
                                             options.stack_size)

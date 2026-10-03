@@ -232,13 +232,81 @@ _OPERATOR_SPELLINGS.update({kind: op.value
                             for kind, op in _UNARY_OPERATORS.items()
                             if kind not in _OPERATOR_SPELLINGS})
 
+@dataclass(frozen=True, slots=True)
+class BodyJob:
+    """One function's body, to be parsed on its own.
+
+    Everything it needs is here and nothing is shared: the file's tokens, read
+    and never written; where the body begins and ends among them; whether it
+    runs while the compiler does, which is what the lifting marks mean inside
+    it.  So two of them may run at once, on two threads, and what each says is
+    kept by it until it is that body's turn to be said -- which is what keeps the
+    order of the messages the order of the source whichever ran first.
+    """
+
+    tokens: Sequence[Token]
+    start: int
+    end: int
+    path: str
+    quoting: bool
+    diags: DiagEngine
+
+    def parse(self) -> tuple[tuple[ast.Stmt, ...] | None, list[object]]:
+        """The body's statements -- nothing where they could not be read -- and
+        everything said while reading them."""
+        said: list[object] = []
+        quiet = DiagEngine(said.append, self.diags.control, self.diags.catalog)
+        last = self.tokens[self.end - 1]
+        piece = [*self.tokens[self.start:self.end],
+                 Token(TokKind.EOF, Span(last.span.end, last.span.end))]
+        parser = Parser(piece, self.path, quiet)
+        parser._quoting = self.quoting
+        try:
+            found = parser._parse_body()
+        except _Bail:
+            return None, said
+        return found.stmts, said
+
+    def replay(self, said: list[object]) -> None:
+        """Say in the compilation's own engine what the parse said."""
+        for one in said:
+            self.diags.replay(one)  # type: ignore[arg-type]
+
+
+def run_jobs(blocks: Sequence[ast.DeferredBlock], workers: int = 1) -> None:
+    """Parse every one of *blocks* not yet parsed, on *workers* threads.
+
+    The jobs share nothing, so they may run in any order and at once; what they
+    say is said afterwards, in the order of the blocks, which is the order of the
+    source.  One worker is the default: the bootstrap compiler's interpreter runs
+    one thread at a time, so more buys nothing here -- the structure is what is
+    wanted, for a compiler that can run them side by side.
+    """
+    waiting = [one for one in blocks if not one.parsed]
+    if not waiting:
+        return
+    if workers <= 1:
+        results = [one._job.parse() for one in waiting]  # type: ignore[union-attr]
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(lambda one: one._job.parse(), waiting))
+    for block, (stmts, said) in zip(waiting, results):
+        block.settle(stmts, said)
+
+
 class Parser:
     """Parses the tokens of one source file."""
 
-    def __init__(self, tokens: Sequence[Token], path: str, diags: DiagEngine) -> None:
+    def __init__(self, tokens: Sequence[Token], path: str, diags: DiagEngine,
+                 defer_bodies: bool = False) -> None:
         self._tokens = tokens
         self._path = path
         self._diags = diags
+        #: Whether a function's body is set aside as a job rather than read
+        #: where it stands, and the bodies set aside so far.
+        self._defer_bodies = defer_bodies
+        self.deferred: list[ast.DeferredBlock] = []
         self._pos = 0
         #: Whether a block written on one line is being read.  What closes such
         #: a block is the end of the line, so a second one opened inside it
@@ -637,7 +705,8 @@ class Parser:
         # mean there where they hold no type.
         outer, self._quoting = self._quoting, at_compile_time
         try:
-            body = self._parse_body()
+            body = (self._set_aside(at_compile_time) if self._defer_bodies
+                    else None) or self._parse_body()
         finally:
             self._quoting = outer
         return ast.FuncDef(span=start.to(body.span), name=name_token.text,
@@ -1645,6 +1714,57 @@ class Parser:
             if self._accept(TokKind.COMMA) is None:
                 break
         return tuple(params)
+
+    def _set_aside(self, quoting: bool) -> ast.DeferredBlock | None:
+        """Find where the body that begins here ends, and set it aside as a job.
+
+        Where it ends is read off the tokens the lexer already counted: a brace
+        and the one that closes it, an indent and the dedent that matches it, or
+        the end of the line for a body written on one.  Nothing where the body
+        is not in one of the three shapes -- reading it now is what reports that.
+        """
+        start = self._pos
+        first = self._current
+        tokens = self._tokens
+        at = start + 1
+        if first.kind is TokKind.LBRACE:
+            depth = 1
+            while at < len(tokens) and depth:
+                kind = tokens[at].kind
+                if kind is TokKind.LBRACE:
+                    depth += 1
+                elif kind is TokKind.RBRACE:
+                    depth -= 1
+                elif kind is TokKind.EOF:
+                    return None
+                at += 1
+            style = ast.BlockStyle.EXPLICIT
+        elif first.kind is TokKind.COLON and at + 1 < len(tokens) \
+                and tokens[at].kind is TokKind.NEWLINE \
+                and tokens[at + 1].kind is TokKind.INDENT:
+            at += 2
+            depth = 1
+            while at < len(tokens) and depth:
+                kind = tokens[at].kind
+                if kind is TokKind.INDENT:
+                    depth += 1
+                elif kind is TokKind.DEDENT:
+                    depth -= 1
+                elif kind is TokKind.EOF:
+                    break
+                at += 1
+            style = ast.BlockStyle.LAYOUT
+        else:
+            return None
+        end = at
+        if end <= start + 1 or tokens[end - 1].kind is TokKind.EOF:
+            return None
+        self._pos = end
+        block = ast.DeferredBlock(
+            span=first.span.to(tokens[end - 1].span), style=style,
+            job=BodyJob(tokens, start, end, self._path, quoting, self._diags))
+        self.deferred.append(block)
+        return block
 
     def _parse_body(self) -> ast.Block:
         """Parse a function body in either notation."""
@@ -2724,6 +2844,18 @@ def _ends_inline(expr: ast.Expr) -> bool:
         and last.style is ast.BlockStyle.INLINE
 
 
-def parse(tokens: Sequence[Token], path: str, diags: DiagEngine) -> ast.SourceUnit:
-    """Parse the tokens of one source file."""
-    return Parser(tokens, path, diags).parse_unit()
+def parse(tokens: Sequence[Token], path: str, diags: DiagEngine,
+          defer: bool = False, workers: int = 1) -> ast.SourceUnit:
+    """Parse the tokens of one source file.
+
+    In two steps: every definition's signature, with each function's body set
+    aside as a job; then the jobs (`run_jobs`), on *workers* threads.  Where
+    *defer* says so the second step is left out and a body is parsed when
+    something first reads it -- which is how a module is read, so that a function
+    nothing names is never parsed at all.
+    """
+    parser = Parser(tokens, path, diags, defer_bodies=True)
+    unit = parser.parse_unit()
+    if not defer:
+        run_jobs(parser.deferred, workers)
+    return unit

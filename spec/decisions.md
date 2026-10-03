@@ -9588,6 +9588,25 @@ Taken without asking: **`Error` names the refusals opening a file can give** -- 
 long line with) -- since `Io.open` exists now and `cat missing` would otherwise say `other`.  The names follow the ones already
 there.
 
+## 2026-10-04T03:00+02:00 — compiler
+
+**A program pays for the parts of a module it names**
+
+The user asked that a program pay only for the parts of `std` it uses.  Measured, a program naming one function of `std` spent
+13 ms parsing it, 19 ms checking and lowering every body, and 23 ms in passes over every function before `dropunreached` removed
+the unused ones.  Asked which of four remedies to take, the user chose three: **drop what nothing reaches before the other passes**;
+**lower a module's bodies only as far as something names them** (Zig's lazy analysis, against C's and Rust's whole-unit
+compilation); and **parse a body only when it is read**, with the signature -- a generic function's requirements included --
+parsed as before, and **each body a job of its own that could run on a thread**: the structure established here even where the
+interpreter gains nothing, so that a compiler written in another language can run the jobs side by side.  Caching the parsed tree
+between compilations was not taken.
+
+Taken without asking: what a module lowers is decided by names written rather than by a call graph worked out -- a name stands for
+every function by that name, which costs a few functions more and never misses one -- and a test checks `std` whole, so that a body
+no program reaches is still checked.  `--jobs N` says how many threads parse the program's bodies, one by default.  A body that
+fails to parse drops its function, as a definition the parser could not read always was, rather than leaving an empty one to report
+again.
+
 
 Open questions
 --------------

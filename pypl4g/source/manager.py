@@ -92,6 +92,19 @@ class SourceManager:
         #: because the files are read from two places -- the command line and an
         #: import -- and neither knows about the other.
         self.read_units: list[ReadUnit] = []
+        #: A module's tokens and its tree, by where it was read from, for a second
+        #: reader of it: the expander reads a module for its macros and the
+        #: checker for the rest, and the two are one file read once.
+        self._parsed: dict[Path, tuple[object, object]] = {}
+
+    def parsed(self, path: Path) -> tuple[object, object] | None:
+        """The tokens and the tree of the module at *path*, where it was read."""
+        return self._parsed.get(path)
+
+    def remember(self, path: Path, tokens: object, unit: object) -> None:
+        """Keep the tokens and the tree of the module at *path* for a second
+        reader of it."""
+        self._parsed[path] = (tokens, unit)
 
     def record(self, path: Path, tokens: object, unit: object) -> None:
         """Record that *path* was read and what came of reading it."""

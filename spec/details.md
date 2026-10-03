@@ -4451,3 +4451,18 @@ that callees are lowered before callers across files as within one.  The names a
 type is lowered for one `close` written anywhere.  Nothing reaches a function without its name being written, so nothing is
 missed; `tests/compiler/test_std_whole.py` checks `std` whole, so that a body no program reaches is still checked.
 
+**A function's body is a job** (`parser.BodyJob`, `ast.DeferredBlock`).  The parser reads every definition's signature -- the
+parameters, the answer, the clauses, which a generic function's requirements are -- and, where the body is a braced block or an
+indented one, finds where it ends from the tokens the lexer already counted (a brace and the one closing it; an indent and the
+dedent matching it) and sets it aside: a `DeferredBlock` holding a job of the file's tokens, the body's first and one-past-last
+index, the path, and whether the marks quote there.  A body written on one line is parsed where it stands.  The job parses with a
+`Parser` of its own over its slice and an engine of its own; what it said is replayed into the compilation's engine
+(`DiagEngine.replay`) when its block takes the statements, so that bodies parsed in any order, or at once, say what they say in
+the order of the source.  A body that cannot be read leaves the block marked `failed`, and the checker drops the function, as the
+parser did with a definition it could not read.
+
+`parse(…, defer=False, workers=N)` reads a program's files: signatures, then every job (`run_jobs`), on `--jobs` threads -- one by
+default, the interpreter running one at a time; the structure is the point.  `parse(…, defer=True)` reads a module: a body is
+parsed the first time anything reads its `stmts`, which collecting a definition never does, so a function nothing names is never
+parsed.  The expander's read of a module and the checker's are one read (`SourceManager.remember`/`parsed`).
+

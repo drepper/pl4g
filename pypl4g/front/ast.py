@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
+from typing import Protocol
 
 from ..source.location import INVALID_SPAN, Span
 
@@ -1235,6 +1236,75 @@ class Block(Node):
 
     style: BlockStyle
     stmts: tuple[Stmt, ...] = ()
+
+
+class BodyParse(Protocol):
+    """What parses a body that was set aside: `parser.BodyJob`, named here by what
+    it does so that the tree does not depend on the parser."""
+
+    def parse(self) -> "tuple[tuple[Stmt, ...] | None, list[object]]":
+        """The statements -- nothing where they could not be read -- and what
+        was said while reading them."""
+        ...
+
+    def replay(self, said: list[object]) -> None:
+        """Say, where the compilation says things, what was said while parsing."""
+        ...
+
+
+class DeferredBlock(Block):
+    """A function's body whose statements are read when something first asks
+    for them.
+
+    The parser read the signature and found where the body ends, and nothing
+    more: what the statements are is a job of its own -- its own tokens, its own
+    parser, nothing shared with any other body -- run the first time `stmts` is
+    read.  So a function nothing asks about is never parsed, and the bodies that
+    are wanted may be parsed in any order or all at once.  To everything that
+    reads a tree it is a `Block` like any other.
+    """
+
+    __slots__ = ("_job", "_parsed", "_failed")
+
+    def __init__(self, span: Span, style: BlockStyle,
+                 stmts: tuple[Stmt, ...] | None = None,
+                 job: BodyParse | None = None) -> None:
+        object.__setattr__(self, "span", span)
+        object.__setattr__(self, "style", style)
+        object.__setattr__(self, "_job", job)
+        object.__setattr__(self, "_parsed", stmts)
+        object.__setattr__(self, "_failed", False)
+
+    @property  # type: ignore[override]
+    def stmts(self) -> tuple[Stmt, ...]:
+        """The statements, parsed now if they have not been."""
+        if self._parsed is None:
+            assert self._job is not None
+            found, said = self._job.parse()
+            self.settle(found, said)
+        return self._parsed  # type: ignore[return-value]
+
+    @property
+    def parsed(self) -> bool:
+        """Whether the statements have been read."""
+        return self._parsed is not None
+
+    @property
+    def failed(self) -> bool:
+        """Whether reading them failed -- said where it did -- so that the
+        function is one nothing should be asked about, as a definition the
+        parser could not read at all is not there to be asked about."""
+        _ = self.stmts
+        return self._failed
+
+    def settle(self, stmts: tuple[Stmt, ...] | None, said: list[object]) -> None:
+        """Take what a job parsed, and say what it said."""
+        if self._parsed is not None:
+            return
+        object.__setattr__(self, "_failed", stmts is None)
+        object.__setattr__(self, "_parsed", stmts if stmts is not None else ())
+        if self._job is not None:
+            self._job.replay(said)
 
 
 # -- definitions ---------------------------------------------------------------

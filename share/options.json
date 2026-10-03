@@ -175,6 +175,14 @@
       "help": "tell the build function something: `std.option` answers with VALUE, or with 'true' where only NAME was written"
     },
     {
+      "short": "-j",
+      "long": "--jobs",
+      "arg": "required",
+      "metavar": "N",
+      "since": "0.1",
+      "help": "how many threads parse the bodies of the program's functions, each body being a job of its own (default: 1)"
+    },
+    {
       "short": null,
       "long": "--stack-size",
       "arg": "required",

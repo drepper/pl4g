@@ -3929,6 +3929,12 @@ class Checker:
         from ..front.lexer import tokenize
         from ..front.parser import parse
 
+        earlier = self._sources.parsed(path)
+        if earlier is not None:
+            # Read already, for its macros: one file is read once.
+            tokens, found = earlier
+            self._sources.record(path, tokens, found)
+            return found  # type: ignore[return-value]
         try:
             source = self._sources.read(path)
         except Exception as exc:  # noqa: BLE001 - reported, not handled
@@ -3936,7 +3942,10 @@ class Checker:
                              name=node.source, reason=str(exc))
             return None
         tokens = tokenize(source, self._diags)
-        found = parse(tokens, path.as_posix(), self._diags)
+        # A body is parsed when something asks for it: a module is lowered as
+        # far as the program names it, and what is not named is not read either.
+        found = parse(tokens, path.as_posix(), self._diags, defer=True)
+        self._sources.remember(path, tokens, found)
         # A module read here is a source of the program like any other, and the
         # bill of materials has to name it.
         self._sources.record(path, tokens, found)
@@ -8958,6 +8967,12 @@ class Checker:
         node, func = entry.node, entry.func
         if node.body is None:
             return
+        if isinstance(node.body, ast.DeferredBlock) and node.body.failed:
+            # Its body could not be read, which was said where it could not:
+            # there is nothing to check, and saying what an empty body lacks
+            # would be saying the same thing again.
+            self._discard(func)
+            return
         previous = self._discard_function
         self._discard_function = False
         # Which function this is, for the one rule that is about where a call is
@@ -11284,6 +11299,9 @@ class Checker:
         of another body, and what is being checked has to be this one while its
         body is.
         """
+        if isinstance(node.body, ast.DeferredBlock) and node.body.failed:
+            # Said where its body could not be read; there is nothing to check.
+            return
         block = func.add_block()
         inner = IRBuilder(self._module, func)
         outer = (self._scopes, self._addressed, self._answering, self._impure,

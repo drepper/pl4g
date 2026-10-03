@@ -86,6 +86,10 @@ class Options:
     #: space sits below it.  A stack of the program's own means running off the
     #: bottom is a fault at a known address rather than a quiet write into
     #: whatever was mapped next, which is what the kernel's own stack gives.
+    #: How many threads parse the bodies of the program's functions.  Each body
+    #: is a job of its own; one thread is the default, the bootstrap compiler's
+    #: interpreter running one at a time.
+    jobs: int = 1
     stack_size: int = 1 << 20
     guard_size: int = 1 << 16
     report_log: Path | None = None
