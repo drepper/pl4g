@@ -589,11 +589,17 @@ class Parser:
         # there is no name to write for that, which is what keeps the two from
         # being two ways of saying one thing.
         ret_type: ast.TypeExpr | None = None
+        generates = False
         if self._accept(TokKind.ARROW) is not None:
             # `mut` before what a function answers with says the same of it:
             # what comes back is a collection whose entries may be written.
             writable = self._accept(TokKind.KW_MUT) is not None
             ret_type = _writable(self._parse_type_ref(), writable)
+        elif self._accept(TokKind.ITER) is not None:
+            # The arrow doubled: what follows is given out more than once, and
+            # the function is a generator.
+            generates = True
+            ret_type = self._parse_type_ref()
         # `in a, b` after the answer says which arenas it was made in: the `in` an
         # expression is written with, said of what the call comes to.
         made_in: tuple[tuple[str, Span], ...] = ()
@@ -619,7 +625,7 @@ class Parser:
                                ret_type=ret_type, body=None, clauses=clauses,
                                made_in=made_in, attrs=attrs, doc=doc, doc_lines=doc_lines,
                                at_compile_time=at_compile_time,
-                               is_macro=is_macro,
+                               is_macro=is_macro, generates=generates,
                                held=None if held is None else held.text,
                                held_span=None if held is None else held.span)
         # A body that runs while the compiler does may quote, which is what the marks
@@ -635,6 +641,7 @@ class Parser:
                            made_in=made_in, attrs=attrs, doc=doc,
                            doc_lines=doc_lines,
                            at_compile_time=at_compile_time, is_macro=is_macro,
+                           generates=generates,
                            held=None if held is None else held.text,
                            held_span=None if held is None else held.span)
 
@@ -1750,6 +1757,14 @@ class Parser:
             start = self._advance().span
             later = self._parse_bare_statement()
             return ast.Defer(span=start.to(later.span), stmt=later)
+        if self._check(TokKind.KW_YIELD):
+            # One value handed out of a generator, or with the doubled arrow
+            # every value something else gives.
+            start = self._advance().span
+            delegates = self._accept(TokKind.ITER) is not None
+            value = self._parse_expression()
+            return ast.Yield(span=start.to(value.span), value=value,
+                             delegates=delegates)
         if self._check(TokKind.KW_RETURN):
             start = self._advance().span
             if self._check(TokKind.NEWLINE) or self._check(TokKind.SEMICOLON) \

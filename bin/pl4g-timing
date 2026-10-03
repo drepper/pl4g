@@ -225,6 +225,8 @@ GROUPS: tuple[Group, ...] = (
            "each-mask-in-a-loop": "masks asked a place at a time, over unstated lengths",
            "constant-expressions": "constants worked out from operators and from calls run while compiling",
            "iterator-handed-on": "iterators handed on: picks, records, rows, an array and a list, walked through calls",
+           "generator-written-in": "generators written into the loops that walk them",
+           "generator-through-calls": "generators split at their stops and walked through calls",
            "divides": "dividing without a remainder, both forms and over an array",
            "failure-written-out": "failures written out, carrying a value and not",
            "named-arguments": "defaults, arguments named at the call, and one across a module",

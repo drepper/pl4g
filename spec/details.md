@@ -4286,3 +4286,30 @@ specially -- the check against the length while compiling, the exemption from `�
 A constant at the top level named before its definition has been reached is not a `GlobalVar` yet.  `_constant_not_yet_defined`
 works it out from the definition as written (`self._top_written`), quietly, with `self._constants_asked` holding the ones being
 worked out so that a cycle ends; `_reaches_itself` is what tells the definition, when its turn comes, that it found one.
+
+Generators
+----------
+
+A generator (`fn g(…) ⇉ T`) is a `_Generator` in the top-level names, not a `Function`: what a call to it makes is a walk.  Its
+body is compiled once, as the function `⇉g` of three pointers -- its frame, where to write what it hands out, and its arguments --
+answering whether it handed one out; `_lower_body` binds the parameters from the argument record (`_arguments_from`, the words
+`_words_of` makes) and lowers `yield v` as the value written to the out pointer and a `YieldInst`, a terminator going on in a
+block of its own.  A `return` is `false`; `?` writes the failure out and stops at a block that answers `false` when resumed.
+
+**A call** (`_lower_generator_call`) works the arguments out and is an `_Iterable` with the generator and them.  **A loop that can
+see it** (`_written_in`, asked before the loop's own lowering) is lowered as syntax rewritten: the generator's names renamed with a
+prefix no program can write, each `yield v` a loop of one turn binding the loop's names to `v` around the loop's body -- whose
+`continue` of the outer loop becomes a `continue` of that one -- and the whole a loop of one turn taking the loop's name, `break`
+and `else`, the generator's `return` a `continue` of it.  The arguments are bound to the renamed parameters in a scope of their
+own.  **Anything else** (`_generator_described`) keeps, in the caller's frame, two counters, the argument record, and a
+`CoroutineFrame` the size the pass measures; the value is `⎕next.g`, that record, and nought.  `⎕next.g` takes the walk's
+number: nought is a new walk, which takes the next number, keeps it as the one walking and sets the frame's first word to nought;
+anything else must be the one walking, or the program stops.  Then it calls `⇉g`.
+
+**The `coroutines` pass** (`opt/passes/coroutines.py`, after `largeanswers` at every level) gives `⇉g` a new first block taking
+the three pointers: it reads the stop number and switches -- nought to the old first block, each stop's number to the block after
+it, anything else to `false`.  Every value read outside the block that made it gets a room in the frame, written where it is made
+and read back at the head of each block that reads it; every `frame` the body took is a place in the frame; the memory chain
+starts afresh after a stop.  A stop writes its number and answers `true`; a return writes all ones and answers `false`.  The
+size goes to `layout.measured`, which is what `size_of` asks for a `CoroutineFrame`.
+

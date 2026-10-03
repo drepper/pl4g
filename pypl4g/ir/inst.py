@@ -894,6 +894,31 @@ class SwitchInst(Terminator):
         return [t for _, t in self.cases] + [self.default]
 
 
+class YieldInst(Terminator):
+    """Stops a generator's body here, to go on at *target* when it is resumed.
+
+    What is handed out has been written already; this is only the stop.  The
+    body goes on in a block of its own, which takes nothing: everything it needs
+    is a value from before the stop, and those are what the pass splitting the
+    body at its stops keeps in the generator's frame.  No back end sees one.
+    """
+
+    __slots__ = ("target",)
+
+    def __init__(self, target: BlockTarget, span: Span = INVALID_SPAN) -> None:
+        super().__init__(VOID, (), span)
+        self.target = target
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "yield"
+
+    def successors(self) -> Sequence[BlockTarget]:
+        """Where the body goes on when it is resumed."""
+        return (self.target,)
+
+
 class UnreachableInst(Terminator):
     """Marks a point control has been proved never to reach."""
 

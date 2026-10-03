@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok run=native,qemu exit=82 diag=none
+
+※ A generator walked through calls keeps its frame with the walk's description,
+※ so a second walk of the same description started inside the first takes the
+※ frame from it.  The first walk's next turn finds that out and stops the
+※ program, rather than handing out what the second walk left.
+
+fn count(n: u8) ⇉ u8:
+    foreach i := 0u8…n:
+        yield i
+
+fn pairs(s: ⇉u8) → u8:
+    let t: mut u8 = 0u8
+    foreach a := s:
+        foreach b := s:
+            t ← t ⊞ (a ⊞ b)
+    t
+
+@[startup, impure]
+fn main() → u6:
+    if pairs(count(3u8)) = 0u8: 0u6 else: 1u6

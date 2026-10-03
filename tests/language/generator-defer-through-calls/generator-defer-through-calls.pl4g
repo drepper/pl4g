@@ -1,0 +1,26 @@
+※ pl4g-test: compile=error diag=4674
+※ pl4g-test: expect-diag 4674 LANG_GENERATOR_DEFER_THROUGH_CALLS
+
+※ A walk through calls may stop part way, and what a generator put off with
+※ `defer` would then never run.
+
+@[impure]
+fn guarded(n: u8) ⇉ u8:
+    defer bump()
+    yield n
+
+@[impure]
+fn bump():
+    pass_through()
+
+@[impure]
+fn pass_through():
+    return
+
+fn sum(s: ⇉u8) → u8:
+    0u8
+
+@[startup, impure]
+fn main() → u6:
+    let b := sum(guarded(1u8))
+    0u6

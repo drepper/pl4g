@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4673
+※ pl4g-test: expect-diag 4673 LANG_YIELD_OUTSIDE_A_GENERATOR
+
+※ `yield` hands a value out of a generator, and nothing else has anything to
+※ hand it to.
+
+@[startup]
+fn main() → u6:
+    yield 3u8
+    0u6

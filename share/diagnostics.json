@@ -6018,6 +6018,88 @@
       "option": null
     },
     {
+      "number": 4672,
+      "name": "LANG_GENERATOR_RETURNS_A_VALUE",
+      "severity": "error",
+      "message": "'{name}' is a generator, which gives what it gives by 'yield' and returns nothing",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the generator"
+        }
+      ],
+      "cause": "A generator's answer is the walk its call describes, and each value of that walk is handed out by `yield`.  Returning is having nothing more to hand out, so `return` is written alone; a value after it would be a second way of handing one out that a loop would never see.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A generator's `return` carries no value."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4673,
+      "name": "LANG_YIELD_OUTSIDE_A_GENERATOR",
+      "severity": "error",
+      "message": "'yield' hands a value out of a generator, and this is not one",
+      "args": [],
+      "cause": "Only a function whose answer is written with `⇉` stops part way and is resumed, and `yield` is where it stops.  Anywhere else there is nothing to hand the value to.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "`yield` stands only in a generator's body."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4674,
+      "name": "LANG_GENERATOR_DEFER_THROUGH_CALLS",
+      "severity": "error",
+      "message": "'{name}' puts something off with 'defer', and a walk of it through calls may stop before it runs",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the generator"
+        }
+      ],
+      "cause": "A walk that cannot see the generator takes each turn through a call, and the loop doing it may stop early -- a `break`, a `return` -- with the generator stopped part way.  What its body put off would then never run, which is what `defer` exists to rule out.  Written into a loop that can see it, a generator's `defer` runs as the loop leaves; walked through calls, it is refused until stopping a walk early can finish the generator.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A generator with `defer` is walked only where the loop can see it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4675,
+      "name": "LANG_GENERATOR_RECURSION",
+      "severity": "error",
+      "message": "'{name}' walks itself, which would need a frame holding a frame of its own",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the generator"
+        }
+      ],
+      "cause": "A walk through calls keeps the generator's frame in the walker's room, and a generator whose body walks itself -- directly or through another -- would keep a frame of its own inside its frame, which has no size.  Saying which arena the inner frames go in is what would make it possible, and is not there yet.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A generator walked through calls does not walk itself."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

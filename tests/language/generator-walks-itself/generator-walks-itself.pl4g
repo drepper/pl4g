@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4675
+※ pl4g-test: expect-diag 4675 LANG_GENERATOR_RECURSION
+
+※ A generator walked through calls keeps its frame in the walker's room; one
+※ whose body walks itself would keep a frame inside its own frame.
+
+fn r(n: u8) ⇉ u8:
+    yield ⇉ r(n)
+
+@[startup]
+fn main() → u6:
+    0u6

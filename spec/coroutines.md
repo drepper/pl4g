@@ -1,6 +1,14 @@
 Coroutines
 ==========
 
+**Implemented on 2026-10-03, stackless as recommended**: `fn g(…) ⇉ T` with `yield`, `yield ⇉`, `?` handing the failure out
+and finishing, a generator written into the loop that can see it (D below) and otherwise its body split at its stops by the
+`coroutines` pass and walked through a `⎕next` function (B).  How each of the seven questions at the end was answered is in
+[decisions.md](decisions.md); the specification's *Generators* section is what the language now says.  Two things differ from
+what follows.  A generator's call is a `⇉T` description, walked afresh each time, so its frame is kept with the description and
+a walk overtaken by another walk of the same description stops the program.  And recursion and `defer` through calls are refused
+rather than given an arena and an abandon path, which are to-dos.
+
 **Since 2026-10-03, `⇉T` exists** as the type of anything a loop walks -- a pick bound to a name, a parameter -- with the
 representation this document calls B for a walk handed on: three words, a function taking one turn, the description, and the
 state a walk starts from (spec, *Iterators as values*).  A generator, if it comes, makes a `⇉T` like any other, and what follows

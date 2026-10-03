@@ -4776,6 +4776,69 @@ compiled once per element type and walks through a call too.
 **Every one of these decisions is in the report log**, under `iterator`: that a name is a walk described and what it borrows, each
 walk in place, each array built, each iterator handed on and through which function, and each walk of one handed in.
 
+##### Generators
+
+**A function whose answer is written with `⇉` is a generator**: calling it describes a walk, and its body hands the walk's
+values out with `yield`.
+
+```
+fn evens(n: u64) ⇉ u64:
+    foreach i := 0u64…n:
+        if 2u64 ∣ i:
+            yield i
+
+foreach x := evens(10u64):          ※ 0, 2, 4, 6, 8
+let g := evens(7u64)                ※ ⇉u64, walked afresh each time
+total(evens(5u64))                  ※ handed to a ⇉u64 parameter
+```
+
+**`⇉` is the arrow of a signature doubled**: what follows is given out more than once.  The call runs nothing: it works its
+arguments out and keeps them, and is a `⇉T` like any other iterator -- a description, each walk of which starts the generator
+afresh from those arguments, which may be bound to a name, walked twice, handed to a `⇉T` parameter and nothing else (4669 for an
+array asked of it).  Compare: **Python**'s `def` with `yield` and **JavaScript**'s `function*`, where the body says it is a
+generator and the signature does not; **C#**'s `IEnumerable<T>` answer with `yield return`, and **C++23**'s `std::generator<T>`
+answer with `co_yield`, where the answer type says it; **Rust**'s `gen` blocks, still unstable, and **Kotlin**'s `sequence { }`,
+which make one out of a block rather than a function.  This is C#'s and C++'s choice -- the signature says it -- spelled with a
+glyph rather than a type, since what a call answers is a walk and not a value.
+
+**`yield v` hands one value out and stops**; the next turn starts after it.  **`yield ⇉ g` hands out everything `g` gives**, in
+order -- Python's `yield from` and JavaScript's `yield*`.  **`return`, written alone, is having nothing more** (4672 for a value
+after it); so is reaching the end of the body.  A finished walk stays finished.  `yield` stands only in a generator (4673).
+
+**`?` in a generator hands the failure out as the last thing it gives**, so what it gives is a result with that error: the
+walk's turns are results, and the loop over it decides about each.  Compare: Rust's iterators of `Result`, which is this; Python
+and C#, where an exception thrown inside the generator leaves through the loop instead.
+
+**How a walk is compiled is the compiler's, and the report log says which, and why:**
+
+- **Written into the loop**, where the loop can see the generator: `foreach x := evens(10u64)`, or over a name bound to such a
+  call.  The generator's body is lowered in place, each `yield v` being `let x := v` and the loop's body -- so no coroutine is
+  made and the walk costs what the loop written by hand would.  `continue` goes on after the `yield`, `break` leaves the generator
+  (running what it put off with `defer`), and the generator returning is the walk running out, so `else` runs.  The generator's
+  own names are renamed, so nothing of it hides a name of the loop's.  Not done where the loop counts its turns, where the body
+  uses `?`, where a name the generator reads would mean one of the loop's, where it would be written into itself, or where it is
+  too large to copy at each of its stops (more than eight, or a body of more than four hundred pieces once for each).  Compare:
+  **Kotlin**'s `inline` functions and **Ruby**'s blocks, which put the loop's body where the iterator calls it; **Go 1.23**'s
+  range-over-func, which reaches the same where the compiler inlines the iterator; **Rust** and **C++**, where an inlined generator's
+  state machine is optimized down to the loop, or is not.
+- **Through calls**, where it cannot see it: a `⇉T` parameter, `⎕enumerate`.  The body is split at its stops into a function
+  resumed where it stopped -- the `coroutines` pass: every value it still needs kept in its frame, and the stop it is at in the
+  frame's first word -- and its frame is kept with the walk's description, in the room of the call that made it, as a lambda's
+  environment is where it stays.  A walk of it takes each turn through a `⎕next` function and a call.  Compare: **C#** and
+  **Python**, whose generators are always this; **C++20**, whose frames start on the heap and are moved to the caller's frame only
+  where the optimizer proves they do not escape; **Rust**, whose state machine is a value of a type the compiler sizes.
+
+**A walk through calls that another walk of the same description overtakes stops the program** (status 82).  The frame is the
+description's, so a second walk started inside the first -- `foreach a := s: foreach b := s:` over a `⇉T` parameter -- takes it;
+the first walk's next turn finds that out rather than handing out what the second left.  Walks one after another are fine, and so
+is every walk of a generator written into its loop, which has no frame.  Compare: Python and C#, where walking one generator
+object from two loops interleaves them silently; Rust, whose borrow checker refuses the second walk.
+
+**What is refused through calls, and why:** a generator that puts something off with `defer` (4674), since a walk that stops early
+leaves it stopped part way and what it put off would never run -- written into a loop, its `defer` runs as the loop leaves; and a
+generator whose body walks itself (4675), whose frame would hold a frame of its own -- which is what naming an arena for the inner
+frames will allow, as Rust needs a `Box::pin` for a recursive `async fn`.  A generator does not take type parameters yet.
+
 #### Attributes
 
 An attribute states something about an object that is not part of the object's own description: how a function takes part in the

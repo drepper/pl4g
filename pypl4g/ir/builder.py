@@ -18,7 +18,7 @@ from .inst import (SyscallInst,
                    CastInst, CastKind,
                    CmpInst, CmpPred, CondBrInst, Instruction, LoadInst, MemStartInst, Ordering,
                    ErrorInst, ExtractInst, FailedInst, RetInst, StoreInst,
-                   SwitchInst,
+                   SwitchInst, YieldInst,
                    Terminator,
                    TupleInst, UnaryInst, UnOp,
                    UnreachableInst, UnwrapInst, WrapInst)
@@ -307,6 +307,10 @@ class IRBuilder:
         return self._append(SwitchInst(  # type: ignore[return-value]
             value, [(number, BlockTarget(block)) for number, block in cases],
             BlockTarget(default), span))
+
+    def yield_(self, block: BasicBlock, span: Span = INVALID_SPAN) -> Terminator:
+        """Append a generator's stop, going on at *block* when resumed."""
+        return self._append(YieldInst(BlockTarget(block, ()), span))  # type: ignore[return-value]
 
     def unreachable(self, span: Span = INVALID_SPAN) -> Terminator:
         """Append an unreachable marker."""

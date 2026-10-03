@@ -96,8 +96,8 @@ def pipeline_for(level: int) -> Sequence[str]:
     # that could make such an edge and after everything that might otherwise
     # take the block it puts there straight back out again.
     if level <= 0:
-        return ("dropignored", "tailcalls", "largeanswers", "leanvalues",
-                "dropunreached", "splitedges")
+        return ("dropignored", "tailcalls", "largeanswers", "coroutines",
+                "leanvalues", "dropunreached", "splitedges")
     # Inlining goes after the two that are not optimizations and before the
     # rest: what it leaves behind is a call gone and a body in its place, which
     # is what folding, simplifying and sweeping are for -- and a function
@@ -113,7 +113,12 @@ def pipeline_for(level: int) -> Sequence[str]:
     # the index once the one is gone -- and before the second, which then sees
     # a length compared with itself.  What a branch settled is used after that,
     # once the values it compares are the ones the checks compare.
-    return ("dropignored", "tailcalls", "largeanswers", "inline", "leanvalues",
+    # A generator's body is split at its stops as soon as its calls have the
+    # shape they keep, and before anything else looks at it: nothing below
+    # this pass knows what a stop is, and every pass after it sees ordinary
+    # functions.
+    return ("dropignored", "tailcalls", "largeanswers", "coroutines", "inline",
+            "leanvalues",
             "constfold", "samevalues", "purecalls",
             "simplifycfg",
             "constfold", "facts", "dce", "dropunreached", "splitedges")
@@ -122,6 +127,7 @@ def pipeline_for(level: int) -> Sequence[str]:
 def build_manager(level: int) -> PassManager:
     """Build the pass manager for optimization level *level*."""
     from .passes.constfold import ConstantFolding
+    from .passes.coroutines import Coroutines
     from .passes.dce import DeadCodeElimination
     from .passes.dropignored import DropIgnoredCalls
     from .passes.dropunreached import DropUnreached
@@ -137,6 +143,7 @@ def build_manager(level: int) -> PassManager:
 
     available: dict[str, Pass] = {
         "constfold": ConstantFolding(),
+        "coroutines": Coroutines(),
         "purecalls": PureCalls(),
         "dce": DeadCodeElimination(),
         "dropignored": DropIgnoredCalls(),

@@ -534,6 +534,7 @@ class TokKind(StrEnum):
 
     KW_FN = "'fn'"
     KW_RETURN = "'return'"
+    KW_YIELD = "'yield'"
     KW_BREAK = "'break'"
     KW_CONTINUE = "'continue'"
     KW_DEFER = "'defer'"
@@ -727,6 +728,7 @@ OPERATORS_NOT_NAMEABLE: Final[frozenset[str]] = frozenset({
 KEYWORDS: Final[dict[str, TokKind]] = {
     "fn": TokKind.KW_FN,
     "return": TokKind.KW_RETURN,
+    "yield": TokKind.KW_YIELD,
     "let": TokKind.KW_LET,
     "mut": TokKind.KW_MUT,
     "unit": TokKind.KW_UNIT,

@@ -1,0 +1,53 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ A generator walked by something that cannot see it -- a `⇉T` parameter, or
+※ `⎕enumerate` counting its turns -- is walked through calls: its body is split
+※ at its stops into a function resumed where it stopped, and its frame is in the
+※ room of the call that made the walk.  Each walk starts it afresh, so one walk
+※ after another gives the same thing twice.  `?` in its body hands the failure
+※ out as the last thing it gives.
+
+type Pair = { a : u8 ; b : u16 }
+
+fn pairs(n: u8) ⇉ Pair:
+    let k: mut u16 = 100u16
+    foreach i := 0u8…n:
+        foreach j := 0u8…2u8:
+            k ← k + 1u16
+            yield Pair(.a ← i × 2u8 + j, .b ← k)
+
+fn halves(v: u8⟦⟧) ⇉ u8?:
+    foreach x := v:
+        yield (x ÷ 2u8)?
+
+fn count(n: u8) ⇉ u8:
+    foreach i := 0u8…n:
+        yield i
+
+fn through(s: ⇉Pair) → u16:
+    let t: mut u16 = 0u16
+    foreach p := s:
+        t ← t + p.b + ⎕widen(p.a, ⌜u16⌝)
+    t
+
+fn sum(s: ⇉u8) → u8:
+    let t: mut u8 = 0u8
+    foreach x := s:
+        t ← t ⊞ x
+    t
+
+fn sum_of(s: ⇉u8?) → u8:
+    let t: mut u8 = 0u8
+    foreach r := s:
+        t ← t ⊞ (r ?? 100u8)
+    t
+
+@[startup, impure]
+fn main() → u6:
+    let v: u8⟦3⟧ = ⟦4u8, 6u8, 8u8⟧ in ⎕static
+    let n: mut u64 = 0u64
+    foreach i, _ := ⎕enumerate(count(4u8)):
+        n ← n + i
+    let twice := count(5u8)
+    let w := sum(twice) + sum(twice)
+    if through(pairs(2u8)) = 416u16 ∧ sum_of(halves(v)) = 9u8 ∧ n = 6u64 ∧ w = 20u8: 0u6 else: 1u6

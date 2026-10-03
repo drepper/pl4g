@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4669
+※ pl4g-test: expect-diag 4669 LANG_ITERATOR_NOT_AN_ARRAY
+
+※ A generator gives its values one at a time; nothing says how many there
+※ will be, so there is no array to build out of its call.
+
+fn count(n: u8) ⇉ u8:
+    yield n
+
+@[startup]
+fn main() → u6:
+    let a: ⟦⟧ = count(1u8)
+    0u6

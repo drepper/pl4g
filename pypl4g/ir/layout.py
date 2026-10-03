@@ -16,7 +16,7 @@ from .types import (ArrayType, BoolType, CharType, DictType, EnumType,
                     SyntaxType,
                     FloatType,
                     IntType, MemType,
-                    FuncType, IterType, OpaqueType, ProductType, PtrType, SetType, TupleType,
+                    CoroutineFrame, FuncType, IterType, OpaqueType, ProductType, PtrType, SetType, TupleType,
                     CursorType,
                     ListType, ResultType, StrType, SumType, Type, VecType,
                     VoidType, parts_of)
@@ -68,6 +68,17 @@ def _as_the_system_would(ty: Type, layout: DataLayout) -> DataLayout:
     return replace(layout, system=True)
 
 
+#: How large each generator's frame is, by the frame type's identity, once the
+#: pass splitting the generator's body has measured it.
+_FRAME_SIZES: dict[int, int] = {}
+
+
+def measured(frame: object, size: int) -> None:
+    """Say how large a generator's frame is, which only the pass splitting its
+    body at its stops can know."""
+    _FRAME_SIZES[id(frame)] = size
+
+
 def size_of(ty: Type, layout: DataLayout) -> int:
     """The number of bytes a value of *ty* occupies."""
     layout = _as_the_system_would(ty, layout)
@@ -89,6 +100,10 @@ def size_of(ty: Type, layout: DataLayout) -> int:
             # an enumeration as whatever holds its values, and a piece of the
             # program as the handle it is.
             return size_of(ty.holder, layout)
+        case CoroutineFrame():
+            found = _FRAME_SIZES.get(id(ty))
+            assert found is not None, "a generator's frame laid out before it is measured"
+            return found
         case FuncType() | IterType():
             # Where the code is, where what it brought in is, and the allocator
             # that came from: three words.
@@ -182,6 +197,8 @@ def align_of(ty: Type, layout: DataLayout) -> int:
             return 1
         case CharType() | EnumType() | SyntaxType():
             return align_of(ty.holder, layout)
+        case CoroutineFrame():
+            return 16
         case FuncType() | IterType() | OpaqueType():
             return layout.pointer_size
         case TupleType():

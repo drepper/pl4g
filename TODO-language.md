@@ -1092,10 +1092,9 @@ Runtime
     itself), but a function it runs cannot: the evaluator refuses it (7000), and a call to such a function in a constant is
     refused with it.
 
-[?] coroutines.  A design is in [spec/coroutines.md](spec/coroutines.md): stackless generators -- `fn evens(n: u64) ⇉ u64:` with
-    `yield`, a coroutine value `⇉T` placed by the rule a lambda's environment follows, `⎕next`, and `foreach` over one -- with a
-    comparison of building iterators as coroutines against the compiler-known iterators there are now.
-    Question: the seven listed at the end of that document, beginning with stackless against stackful.
+[x] coroutines.  Done on 2026-10-03, stackless, as [spec/coroutines.md](spec/coroutines.md) proposed and with its seven
+    questions taken at their recommendations: `fn g(…) ⇉ T` with `yield` and `yield ⇉`, written into a loop that can see it and
+    otherwise split at its stops and walked through calls.  What is left is in the entries below.
 
 [ ] a cursor over an iterator, `⎕iter(q)`: part of the decision that an iterator is a description each walk starts afresh, so that
     stepping one by hand has something of its own to step.  The cursor a list has is built for a list -- where the list is and how
@@ -1119,4 +1118,21 @@ Runtime
 
 [ ] let a variable at the top level be an array of whatever it is given, `let g: ⟦⟧ = …`.  A top-level variable's type is read
     before its value is worked out, so the element has nothing to come from yet; it is refused as not implemented.
+
+[ ] let a generator take type parameters.  Refused as not implemented: its body is compiled once, as a function, and one per set
+    of types is what a generic function's instances already are -- the two have to be put together.
+
+[ ] let a generator from another module be called.  A call resolves only a generator of the same file: one written into a loop
+    would be its syntax lowered with this file's names, and one walked through calls a function of the other module.
+
+[ ] let a generator with `defer` be walked through calls (4674): a walk that stops early has to finish the generator, which wants
+    the loop's way out to resume it once more with "finish now" -- Python's `GeneratorExit`, C++'s `destroy`.
+
+[ ] let a generator walk itself (4675): the inner frames in an arena the generator names, `yield ⇉ walk(child) in scratch`.
+
+[ ] hand out what `yield ⇉` delegates to in one step rather than one per level, C++23's `elements_of`: a walk of a tree through
+    calls resumes each level between the leaf and the root for every element.
+
+[ ] coroutines that take something back when resumed, and on them a scheduler over the `io_uring` ring: the third use in
+    [spec/coroutines.md](spec/coroutines.md).
 

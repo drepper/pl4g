@@ -813,6 +813,16 @@ class ReturnStmt(Stmt):
 
 
 @dataclass(frozen=True, slots=True)
+class Yield(Stmt):
+    """`yield v`: hand one value out of a generator and stop until asked for the
+    next; `yield ⇉ g`: hand out every value `g` gives, in order."""
+
+    value: Expr
+    #: Whether what follows is walked and each of its values handed out.
+    delegates: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class ExprStmt(Stmt):
     """An expression evaluated for its effect."""
 
@@ -1368,6 +1378,9 @@ class FuncDef(Node):
     #: for `fn Walk.next`, and nothing for an ordinary definition.  The name
     #: itself is the part after the dot, so everything that reads a name reads the
     #: same thing whichever this is.
+    #: Whether its answer was written with `⇉`: a generator, whose call makes
+    #: something a loop walks and whose body hands values out with `yield`.
+    generates: bool = False
     held: str | None = None
     #: And where that part of the name is, for a message about the type rather
     #: than about the function.

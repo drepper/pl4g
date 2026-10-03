@@ -1,0 +1,78 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ A function whose answer is written with `⇉` is a generator: calling it makes
+※ a walk, and its body hands values out with `yield`.  A loop that can see the
+※ generator is written with the generator's body in place -- each `yield` is
+※ where the loop's body runs, and no coroutine is made.  `continue` goes on
+※ after the `yield`, `break` leaves the generator and runs what it put off with
+※ `defer`, the generator returning is the walk running out, so the loop's
+※ `else` runs, and `yield ⇉` hands out everything another walk gives.
+
+type Pair = { a : u8 ; b : u16 }
+
+fn evens(n: u64) ⇉ u64:
+    foreach i := 0u64…n:
+        if 2u64 ∣ i:
+            yield i
+
+fn pairs(n: u8) ⇉ Pair:
+    let k: mut u16 = 100u16
+    foreach i := 0u8…n:
+        foreach j := 0u8…2u8:
+            k ← k + 1u16
+            yield Pair(.a ← i × 2u8 + j, .b ← k)
+
+fn count(n: u8) ⇉ u8:
+    foreach i := 0u8…n:
+        if i = 3u8:
+            return
+        yield i
+
+fn chain(n: u8) ⇉ u8:
+    yield ⇉ count(n)
+    yield 99u8
+
+let bumps: mut u8 = 0u8
+
+@[impure]
+fn bump():
+    bumps ← bumps + 1u8
+
+@[impure]
+fn guarded(n: u8) ⇉ u8:
+    defer bump()
+    foreach i := 0u8…n:
+        yield i
+
+@[startup, impure]
+fn main() → u6:
+    let a: mut u64 = 0u64
+    foreach x := evens(10u64):
+        a ← a + x
+    ※ a name for the walk, and `continue`
+    let g := evens(7u64)
+    let b: mut u64 = 0u64
+    foreach §w x := g:
+        if x = 4u64: continue §w
+        b ← b + x
+    let t: mut u16 = 0u16
+    foreach p := pairs(2u8):
+        t ← t + p.b
+    let c: mut u8 = 0u8
+    foreach x := chain(9u8):
+        c ← c + x
+    ※ `break` with a value, and `else` where the generator returned
+    let found := foreach §f x := count(9u8):
+        if x = 2u8: break §f x
+    else:
+        0u8
+    let none := foreach §n x := count(9u8):
+        if x = 7u8: break §n x
+    else:
+        42u8
+    foreach §d x := guarded(3u8):
+        if x = 1u8: break §d
+    if a = 20u64 ∧ b = 8u64 ∧ t = 410u16 ∧ c = 102u8 ∧ found = 2u8 ∧ none = 42u8 ∧ bumps = 1u8:
+        0u6
+    else:
+        1u6

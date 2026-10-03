@@ -9418,6 +9418,29 @@ How one is handed on is the compiler's: a record of what is walked in the caller
 the element written through memory -- Rust's `dyn Iterator` and C++'s `any_view`, a call per turn, where `impl Iterator` and
 templates compile the callee again per kind of walk.
 
+## 2026-10-03T20:00+02:00 — language
+
+**Generators, stackless, as proposed in coroutines.md**
+
+Asked for by the user: coroutines as proposed.  The seven questions at the end of [coroutines.md](coroutines.md) were taken at
+their recommendations.  (1) *Stackless*, against Lua's, Go's and D's stacks of their own: a frame of known size placed by the rule
+a lambda's environment follows, and a pass over the IR rather than a new kind of control transfer.  (2) *`fn g(…) ⇉ T` with
+`yield`*, the signature saying it as C#'s `IEnumerable<T>` and C++'s `std::generator<T>` do, against Python's and JavaScript's
+body-says-it.  (3) *A finished walk stays finished*, Python's and Rust's fused iterators.  (4) *`defer` through calls refused*
+(4674); written into a loop it runs as the loop leaves.  (5) *`?` hands the failure out and finishes*, Rust's iterators of
+`Result`.  (6) *Recursion refused* (4675) until an arena can be named for the inner frames, Rust's `Box::pin`.  (7) *Written into
+the loop where it can be* -- each `yield` where the loop's body runs, Kotlin's `inline` and Ruby's blocks -- under a size limit,
+reported, and through calls otherwise.
+
+What the iterator work had settled changed two things.  A call is a `⇉T` description, walked afresh each time, so the frame of a
+walk through calls is kept with the description; a second walk started inside the first would take it, and is caught at the
+first walk's next turn, which stops the program -- against Python and C#, which interleave two loops over one generator object
+silently.  And the state of a walk through calls is the walk's number, which is what tells the two apart.
+
+The split is a pass, `coroutines`, run at every level right after the calls take their shape: every value read outside the block
+that made it is kept in the frame, which is more than the values crossing a stop and always enough, and the stop number in the
+frame's first word chooses where a call resumes.  The frame's size is known only there, and is told to the layout then.
+
 
 Open questions
 --------------

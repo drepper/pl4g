@@ -73,7 +73,7 @@
 ; brackets are coloured, since what it does is what they do.
 [(fresh_open) (fresh_close)] @punctuation.bracket
 "let" @keyword
-"return" @keyword.return
+["return" "yield"] @keyword.return
 "defer" @keyword
 ["if" "elif" "else" "match"] @keyword.conditional
 ["while" "unless" "foreach" "break" "continue"] @keyword.repeat

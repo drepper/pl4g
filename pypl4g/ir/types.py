@@ -392,6 +392,34 @@ class PtrType(Type):
                         self.pointee.mangled(), ">"))
 
 
+@dataclass(frozen=True, slots=True, eq=False)
+class CoroutineFrame(Type):
+    """Room for a generator stopped part way: where it stopped and what it
+    still needs.
+
+    How much room that is, is known only once the pass splitting the body at
+    its stops has seen which values cross one, which is long after the type is
+    first named -- by the room a caller takes for a walk.  So the layout is told
+    it then (`layout.measured`), before any back end lays anything out; a type
+    says what a value is and not how large.  One per generator, and told apart
+    by identity.
+    """
+
+    name: str
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return "".join(("frame<", self.name, ">"))
+
+    def written(self) -> str:
+        """The name of this type as a program writes it."""
+        return "".join(("the frame of '", self.name, "'"))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name."""
+        return "".join(("frame<", self.name, ">"))
+
+
 @dataclass(frozen=True, slots=True)
 class IterType(Type):
     """`⇉T`: something a loop can walk, giving a `T` each turn.

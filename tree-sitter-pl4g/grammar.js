@@ -196,10 +196,13 @@ module.exports = grammar({
       // receiver anywhere in this language.
       field('name', choice($.member_name, $.identifier, $.operator_name)),
       field('parameters', $.parameter_list),
-      optional(seq($._return_arrow, optional($.mutable),
-                   field('return_type', $.type),
-                   // `in a, b`: which arena parameters the answer was made in.
-                   optional(seq('in', sepBy1(',', field('made_in', $.identifier)))))),
+      optional(choice(
+        seq($._return_arrow, optional($.mutable),
+            field('return_type', $.type),
+            // `in a, b`: which arena parameters the answer was made in.
+            optional(seq('in', sepBy1(',', field('made_in', $.identifier))))),
+        // A generator: the arrow doubled, and what each turn of a walk gives.
+        seq('\u21c9', field('gives', $.type)))),
       repeat($.clause),
       optional(field('body', $._block)),
     ),
@@ -636,6 +639,7 @@ module.exports = grammar({
       $.unit_definition,
       $.assignment,
       $.return_statement,
+      $.yield_statement,
       $.break_statement,
       $.continue_statement,
       $.defer_statement,
@@ -730,6 +734,10 @@ module.exports = grammar({
     // `return` and what may follow it has to say which reading wins: the one
     // that takes the expression, which is the only one that can be meant.
     return_statement: $ => prec.right(seq('return', optional($._expression))),
+
+    // One value handed out of a generator, or after the doubled arrow every
+    // value something else gives.
+    yield_statement: $ => seq('yield', optional('\u21c9'), $._expression),
 
     expression_statement: $ => $._expression,
 
