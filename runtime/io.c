@@ -25,6 +25,8 @@ typedef int i32;
 # define NR_WRITEV 20
 # define NR_MMAP 9
 # define NR_MUNMAP 11
+# define NR_OPENAT 257
+# define NR_CLOSE 3
 # define NR_IO_URING_SETUP 425
 # define NR_IO_URING_ENTER 426
 
@@ -47,6 +49,8 @@ static inline i64 sys(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f)
 # define NR_WRITEV 66
 # define NR_MMAP 222
 # define NR_MUNMAP 215
+# define NR_OPENAT 56
+# define NR_CLOSE 57
 # define NR_IO_URING_SETUP 425
 # define NR_IO_URING_ENTER 426
 
@@ -72,6 +76,8 @@ static inline i64 sys(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f)
 # define NR_WRITEV 66
 # define NR_MMAP 222
 # define NR_MUNMAP 215
+# define NR_OPENAT 56
+# define NR_CLOSE 57
 # define NR_IO_URING_SETUP 425
 # define NR_IO_URING_ENTER 426
 
@@ -514,7 +520,10 @@ i64 pl4g_io_submit(struct pl4g_ring *r, i32 which, i32 fd, u64 at, u64 len)
     r->held[slot] = ANSWERED;
     return slot;
   }
-  submit(r, slot, (unsigned char) ways[which].op, fd, at, len, 0);
+  /* At the file's own position, which is what -1 asks the ring for: a nought
+   * there is the absolute offset nought, which a pipe ignores and a file does
+   * not -- every read would start at the top and every write overwrite it. */
+  submit(r, slot, (unsigned char) ways[which].op, fd, at, len, (u64) -1);
   return slot;
 }
 
@@ -556,6 +565,69 @@ void pl4g_io_step(struct pl4g_ring *r)
 {
   if (r->state == READY && outstanding(r) > 0 && enter(r, 1) >= 0)
     reap(r);
+}
+
+/* -- opening and closing ---------------------------------------------------- */
+
+/* How `pl4g_io_open` is asked to open: the numbers the language passes, one per
+ * type `std.Io.open` makes.  The flags are the kernel's, and the same on the
+ * three architectures. */
+#define OPEN_READING 0
+#define OPEN_WRITING 1
+#define OPEN_BOTH 2
+#define O_WRONLY 01
+#define O_RDWR 02
+#define O_CREAT 0100
+#define O_TRUNC 01000
+#define O_CLOEXEC 02000000
+#define AT_FDCWD (-100)
+#define ENAMETOOLONG 36
+#define NAME_MAX_BYTES 4096
+
+/* Open the file named by the `len` bytes at `at`, relative to the directory the
+ * process is in.  Answers the descriptor, or what the kernel refused with as a
+ * negative number.
+ *
+ * The name the language holds is counted and the one the kernel wants ends in a
+ * nul, so it is copied here, once, with one added -- refusing a name with a nul
+ * inside it, which the kernel would read as a shorter one, and one too long for
+ * any file system to have.  A file opened for writing is made if it is not
+ * there and emptied if it is; one opened for both is made and left as it is. */
+i64 pl4g_io_open(i32 how, u64 at, u64 len)
+{
+  unsigned char name[NAME_MAX_BYTES];
+  if (len >= NAME_MAX_BYTES)
+    return -ENAMETOOLONG;
+  const unsigned char *from = (const unsigned char *) at;
+  for (u64 i = 0; i < len; ++i) {
+    if (from[i] == 0)
+      return -EINVAL;
+    name[i] = from[i];
+  }
+  name[len] = 0;
+  i64 flags = O_CLOEXEC;
+  if (how == OPEN_WRITING)
+    flags |= O_WRONLY | O_CREAT | O_TRUNC;
+  else if (how == OPEN_BOTH)
+    flags |= O_RDWR | O_CREAT;
+  else if (how != OPEN_READING)
+    return -EINVAL;
+  return sys(NR_OPENAT, AT_FDCWD, (i64) name, flags, 0666, 0, 0);
+}
+
+/* Close `fd`, once every request the ring holds has been answered: one still in
+ * flight may be a write to it, and closing under it would be the kernel's to
+ * sort out in a way the program never hears about.  What those requests answered
+ * stays where it is, to be read with `pl4g_io_wait`.  Answers what `close` said:
+ * nought, or a negative number. */
+i64 pl4g_io_close(struct pl4g_ring *r, i32 fd)
+{
+  while (r->state == READY && outstanding(r) > 0) {
+    if (enter(r, 1) < 0)
+      break;
+    reap(r);
+  }
+  return sys(NR_CLOSE, fd, 0, 0, 0, 0, 0);
 }
 
 /* Wait for every request that is outstanding, and give its slot back.

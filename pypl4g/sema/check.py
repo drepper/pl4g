@@ -184,6 +184,15 @@ class _Local:
     #: on what it holds points at nothing, and reading it is refused.
     gone_at: Span | None = None
     gone_with: str = ""
+    #: For a variable holding a value of a type marked `@[closed_by(f)]`: `f`.
+    #: Such a value is moved and never copied, and the variable owes a call of
+    #: `T.f` or a move before its scope ends.
+    closer: str = ""
+    #: Whether it still holds such a value, along the way being lowered.
+    owes: bool = False
+    #: Where its lifetime ended -- along some way here -- and how.
+    ended_at: Span | None = None
+    ended_how: str = ""
     #: For a container whose elements point somewhere, the allocator they are
     #: kept in: an arena's identity, or `⎕heap`'s.  Nothing for anything else.
     holds_in: int | None = None
@@ -280,6 +289,8 @@ class _NamedType:
     #: Whether it said `@[device]`: a value of it is permission to do input or
     #: output.
     device: bool = False
+    #: What `@[closed_by(f)]` named, or nothing.
+    closed_by: str = ""
     ty: Type | None = None
     resolving: bool = False
     shell: Type | None = None
@@ -444,7 +455,8 @@ def _shell_for(defined: _NamedType) -> Type | None:
                        family=defined.template, args=args)
     return ProductType((), name=defined.name, origin=defined.origin,
                        abi=defined.abi, unique=defined.unique,
-                       device=defined.device, family=defined.template, args=args)
+                       device=defined.device, closed_by=defined.closed_by,
+                       family=defined.template, args=args)
 
 
 def _filled_in(shell: Type | None, made: Type) -> Type:
@@ -755,6 +767,11 @@ class _Generic:
     #: Whether checking it where it is written found it wanting: an instance
     #: would only say the same again, so none is made.
     refused: bool = False
+    #: The parameters as a call writes them, where some are handed a type
+    #: (`kind: ⌜T'⌝`): `node` is the definition without those, which is the
+    #: function every instance is, and these are what a call reads its
+    #: arguments against.  Nothing where there are none.
+    written_params: tuple[ast.Param, ...] | None = None
 
 
 @dataclass(slots=True)
@@ -982,6 +999,68 @@ def _kept_anywhere(ty: Type) -> bool:
         case SumType():
             return all(_kept_anywhere(one) for _, one in ty.variants)
     return not _points_somewhere(ty)
+
+
+def _closer_of(ty: Type) -> str:
+    """What closes a value of *ty*, where `@[closed_by(f)]` said; nothing else."""
+    return ty.closed_by if isinstance(ty, ProductType) else ""
+
+
+def _closable_in(ty: Type, seen: frozenset[int] = frozenset()) -> ProductType | None:
+    """The type marked `@[closed_by(f)]` a value of *ty* holds, itself or inside
+    it; nothing where it holds none."""
+    if id(ty) in seen:
+        return None
+    deeper = seen | {id(ty)}
+    match ty:
+        case ProductType():
+            if ty.closed_by:
+                return ty
+            parts: tuple[Type, ...] = tuple(one for _, one in ty.fields)
+        case SumType():
+            parts = tuple(one for _, one in ty.variants)
+        case TupleType():
+            parts = ty.members
+        case ResultType():
+            parts = (ty.ok,) if ty.err is None else (ty.ok, ty.err)
+        case ArrayType() | ListType():
+            parts = (ty.element,)
+        case _:
+            return None
+    for one in parts:
+        found = _closable_in(one, deeper)
+        if found is not None:
+            return found
+    return None
+
+
+def _made_here(expr: ast.Expr, ty: Type) -> bool:
+    """Whether *expr* makes the record it is, written out where it stands:
+    `std.Reader(.fd ← 0i32)`, which is how the standard streams are made."""
+    if not isinstance(expr, ast.Call) or not isinstance(ty, ProductType):
+        return False
+    callee = expr.callee
+    named = callee.name if isinstance(callee, ast.NameRef) else (
+        callee.name if isinstance(callee, ast.Member) else "")
+    return named == ty.name
+
+
+def _lifts_a_parameter(expr: ast.Expr) -> bool:
+    """Whether *expr* is `⌜T'⌝`: a type parameter lifted, which is a type
+    whatever it turns out to be, and is asked about before it is anything."""
+    return isinstance(expr, ast.Lifted) and isinstance(expr.written, ast.TypeRef) \
+        and expr.written.module is None and not expr.written.result \
+        and _is_generic(expr.written.name)
+
+
+def _one_turn(iterable: ast.Expr) -> bool:
+    """Whether a loop over *iterable* takes one turn and no more, which a range
+    from a number written down to the one after it does -- the loop a generator
+    written into its walk is wrapped in."""
+    return isinstance(iterable, ast.Range) and iterable.step is None \
+        and isinstance(iterable.start, ast.IntLit) \
+        and isinstance(iterable.stop, ast.IntLit) \
+        and iterable.stop.value - iterable.start.value == 1
 
 
 def _only_member(ty: Type) -> Type | None:
@@ -1364,6 +1443,20 @@ def _rebuilt(node: object, change, into_lambdas: bool = True) -> object:  # noqa
         items = tuple(_rebuilt(one, change, into_lambdas) for one in node)
         return node if all(a is b for a, b in zip(items, node)) else items
     return node
+
+
+def _types_renamed(written: ast.TypeExpr, types: dict[str, str]) -> ast.TypeExpr:
+    """*written* with the type parameters in *types* renamed."""
+
+    def change(node: object) -> object | None:
+        if isinstance(node, ast.TypeRef) and node.module is None \
+                and node.name in types:
+            return replace(node, name=types[node.name])
+        return None
+
+    found = _rebuilt(written, change)
+    assert isinstance(found, ast.Node)
+    return found  # type: ignore[return-value]
 
 
 def _renamed(body: ast.Block, names: dict[str, str],
@@ -2744,7 +2837,8 @@ _REPLACED: Final[str] = "\0"
 
 #: Every name's provenance at one point of a body: the name, the arenas what it holds
 #: was made in, and where and by which arena it was killed, if it was.
-_Provenance = dict[int, tuple["_Local", frozenset[int], "Span | None", str]]
+_Provenance = dict[int, tuple["_Local", frozenset[int], "Span | None", str, bool,
+                              "Span | None", str]]
 
 
 @dataclass(slots=True)
@@ -2793,6 +2887,12 @@ class _Loop:
     bare_at: Span | None = None
     #: Whether anything named the label, for reporting one nothing did.
     named: bool = False
+    #: How many scopes were open outside the loop's own, which a jump out of the
+    #: body or back to its head leaves the rest of.
+    scope_at: int = 0
+    #: What held at the top of a turn, which the head a `continue` goes back to
+    #: has to find again.
+    turn_began: _Provenance | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -3240,6 +3340,13 @@ class Checker:
         #: Which argument of which function is being lowered, so that a type
         #: that does not match is reported as what it is.
         self._handing_over: tuple[str, int] | None = None
+        #: The expressions put inside something -- a record, a tuple, a list, an
+        #: array, a field, an element, a variable at the top level -- by what
+        #: they are put into, which a value that must be closed may not be.
+        self._stored_into: dict[int, str] = {}
+        #: The variables already reported as never closed.
+        self._told_unclosed: set[int] = set()
+        self._told_after_end: set[tuple[int, Span]] = set()
         #: What each top-level definition says it raises, and where it says so.
         self._expected_pairs: dict[str, list[_Expected]] = {}
         #: Every variable defined at the top level of any file, in the order it
@@ -3331,6 +3438,7 @@ class Checker:
                         pass
                     case _:
                         self._diags.internal("unknown kind of top-level definition")
+        self._check_closers()
         # Callees before their callers, as far as the call tree goes: what a
         # body shows of where its answer is made is written on the function, and
         # a caller checked after it relies on it.
@@ -3342,6 +3450,24 @@ class Checker:
         if whole_program:
             self._check_program()
         return self._module
+
+    def _check_closers(self) -> None:
+        """Check that what every `@[closed_by(f)]` names is a function `T.f` of
+        the type's file taking one `T` by value (4686)."""
+        for defined in self._named_types:
+            if not defined.closed_by or not isinstance(defined.ty, ProductType):
+                continue
+            found = self._members.get((defined.name, defined.closed_by))
+            why = None
+            if found is None:
+                why = "is not defined in this file"
+            elif len(found.ty.params) != 1 or found.ty.params[0] is not defined.ty:
+                why = "".join(("does not take exactly one '", defined.name,
+                               "' by value"))
+            if why is not None:
+                self._diags.emit(D.LANG_CLOSED_BY_INVALID, defined.node.span,
+                                 closer=defined.closed_by, type=defined.name,
+                                 why=why)
 
     def _build_the_tables(self) -> None:
         """Generate the constructor that gives the top-level tables their own.
@@ -3835,6 +3961,9 @@ class Checker:
                 local = self._find_local(expr.name)
                 if local is not None and local.placed \
                         and isinstance(local.held, ProductType):
+                    if local.closer and local.ended_at is not None:
+                        self._told_ended(local, expr.span)
+                        return None
                     if expr.name != self._taking_a_reference \
                             and self._lent_out(expr.name, expr.span, writing):
                         return None
@@ -4551,8 +4680,14 @@ class Checker:
         self._scopes.append({})
         self._unit_scopes.append({})
 
-    def _pop_scope(self) -> None:
-        """Leave the innermost scope, reporting values nothing read."""
+    def _pop_scope(self, left_at: Span | None = None) -> None:
+        """Leave the innermost scope, reporting values nothing read.
+
+        *left_at* says the scope is left by running off its end there, where
+        what it holds that must be closed has to have been.
+        """
+        if left_at is not None:
+            self._all_closed(self._scopes[-1:], left_at)
         # A reference kept by a name in this scope is gone with the name, so
         # the place it named is free to be lent again.
         depth = len(self._scopes)
@@ -4625,6 +4760,7 @@ class Checker:
                                  else span, is_parameter=is_parameter,
                                  depth=len(self._scopes))
             self._places[id(value)] = scope[name]
+            self._lifetime_begins(scope[name], placed_as)
             return
         held = self._value_type_of(value)
         # A record is given storage of its own whether or not anything takes its
@@ -4665,6 +4801,107 @@ class Checker:
             # Where the place is, so that a reference worked out from it can be
             # walked back to how long it lasts.
             self._places[id(value)] = scope[name]
+        self._lifetime_begins(scope[name], held)
+
+    def _lifetime_begins(self, local: _Local, held: Type) -> None:
+        """A variable given a value that must be closed owes the close from here.
+
+        Except the parameter of the function that closes: what that function is
+        handed it closes, and its lifetime ends with the function.
+        """
+        closer = _closer_of(held)
+        if not closer:
+            return
+        local.closer = closer
+        func = self._demanding[1]
+        if local.is_parameter and func is not None \
+                and func.name == ".".join((held.name, closer)):
+            self._module.reports.record(
+                ReportKind.LIFETIME_ENDED, local.name,
+                "".join(("closed: this is '", func.name, "', and what it is "
+                         "handed it closes")), local.span)
+            return
+        local.owes = True
+
+    def _moved(self, local: _Local, span: Span, how: str) -> bool:
+        """Read a variable holding a value that must be closed as a value: the
+        value is moved and the variable's lifetime ends.  Whether it still held
+        one to move."""
+        if local.ended_at is not None:
+            self._told_ended(local, span)
+            return False
+        local.owes = False
+        local.ended_at, local.ended_how = span, how
+        self._module.reports.record(ReportKind.MOVE, local.name, how, span)
+        self._module.reports.record(
+            ReportKind.LIFETIME_ENDED, local.name,
+            "".join(("moved, so it holds nothing from here: ", how)), span)
+        return True
+
+    def _told_ended(self, local: _Local, span: Span) -> None:
+        """Say, once for each place, that *local* is read after its end."""
+        key = (id(local), span)
+        if key in self._told_after_end:
+            return
+        self._told_after_end.add(key)
+        self._diags.emit(D.LANG_CLOSABLE_AFTER_ITS_END, span,
+                         name=local.name).note(
+            D.LANG_CLOSABLE_ENDED_HERE, local.ended_at or span, name=local.name,
+            how="".join(("its lifetime ended here: ", local.ended_how)))
+
+    def _all_closed(self, scopes: Sequence[dict[str, "_Local"]],
+                    span: Span) -> None:
+        """Check that every variable in *scopes* holding a value that must be
+        closed was closed or moved on, here where they are left."""
+        for scope in scopes:
+            for local in scope.values():
+                if not local.closer:
+                    continue
+                if local.owes:
+                    if id(local) not in self._told_unclosed:
+                        # Said once: every further way out would say it again.
+                        self._told_unclosed.add(id(local))
+                        self._diags.emit(D.LANG_CLOSABLE_NOT_CLOSED, span,
+                                         name=local.name,
+                                         type=self._held_by(local).written(),
+                                         closer=local.closer).note(
+                            D.LANG_CLOSABLE_ENDED_HERE, local.span,
+                            name=local.name, how="its lifetime began here")
+                    continue
+                if local.ended_at is None:
+                    continue
+
+    def _not_moved_out(self, expr: ast.Expr, value: Value) -> Value:
+        """Refuse moving a value that must be closed out of anything but a
+        variable, and putting one inside something, where that is what *expr*
+        is doing."""
+        held = self._value_type_of(value)
+        if held is ERROR:
+            return value
+        found = _closable_in(held)
+        if found is None:
+            return value
+        stored = self._stored_into.get(id(expr))
+        if stored is not None and not _made_here(expr, held):
+            self._diags.emit(D.LANG_CLOSABLE_STORED, expr.span,
+                             type=found.written(), what=stored)
+            return UndefConst(ERROR)
+        what = None
+        match expr:
+            case ast.Member():
+                what = "a variable at the top level" \
+                    if isinstance(expr.base, ast.NameRef) \
+                    and isinstance(self._top.get(expr.base.name), LoadedModule) \
+                    else "a field"
+            case ast.Element() | ast.Index():
+                what = "an element"
+            case ast.Deref():
+                what = "what a reference names"
+        if what is not None:
+            self._diags.emit(D.LANG_CLOSABLE_MOVED_OUT_OF_PLACE, expr.span,
+                             type=found.written(), what=what)
+            return UndefConst(ERROR)
+        return value
 
     def _report_undefined(self, name: str, span: Span) -> None:
         """Report a name nothing here stands for, saying which nothing it is.
@@ -5570,10 +5807,23 @@ class Checker:
                              name=node.name, attribute=str(kind))
             return None
         self._check_clause_shapes(node.clauses)
+        handed: tuple[ast.Param, ...] | None = None
+        if any(isinstance(one.type, ast.LiftedTypeRef) for one in node.params):
+            # A type handed as an argument settles a type parameter and is gone
+            # from every function the definition becomes.
+            handed = node.params
+            node = replace(node, params=tuple(
+                one for one in node.params
+                if not isinstance(one.type, ast.LiftedTypeRef)))
         made = _Generic(node=node, path=path, attrs=attrs, parameters=written,
                         exported=self._is_export(attrs),
-                        scope=self._top, siblings=self._bundles)
-        self._top[node.name] = made
+                        scope=self._top, siblings=self._bundles,
+                        written_params=handed)
+        if node.held is None:
+            self._top[node.name] = made
+        else:
+            # Inside a type: reached through the type, as any function there is.
+            self._members[(node.held, node.name)] = made
         self._an_operator(node, made)
         self._generics_here.append(made)
         return None
@@ -5966,6 +6216,9 @@ class Checker:
                              abi=any(one.name == "abi" for one in attrs),
                              unique=any(one.name == "unique" for one in attrs),
                              device=any(one.name == "device" for one in attrs),
+                             closed_by=next((one.as_str("function")
+                                             for one in attrs
+                                             if one.name == "closed_by"), ""),
                              scope=self._top, siblings=self._bundles)
         if isinstance(node, ast.TypeDef) and node.params:
             seen: set[str] = set()
@@ -6191,7 +6444,7 @@ class Checker:
             return SumType(made, name=defined.name, origin=defined.origin)
         return ProductType(made, name=defined.name, origin=defined.origin,
                            abi=defined.abi, unique=defined.unique,
-                           device=defined.device)
+                           device=defined.device, closed_by=defined.closed_by)
 
     def _defined_type(self, ref: ast.TypeRef) -> Type | None:
         """The type a name stands for, where a definition gave it one."""
@@ -6282,7 +6535,7 @@ class Checker:
                           ", ".join(one.written() for one in given), ")")),
             node=node, origin=template.origin, exported=template.exported,
             abi=template.abi, unique=template.unique, device=template.device,
-            bound=bound, template=template, scope=template.scope,
+            closed_by=template.closed_by, bound=bound, template=template, scope=template.scope,
             siblings=template.siblings)
         template.instances[given] = made
         return self._resolved(made)
@@ -6314,6 +6567,16 @@ class Checker:
 
     def _resolve_type(self, ref: ast.TypeExpr) -> Type:
         """Resolve a type written down, collection or name."""
+        if isinstance(ref, ast.ArrayTypeRef) and ref.result:
+            array = self._resolve_type(replace(ref, result=False, error=None))
+            if array is ERROR:
+                return ERROR
+            if ref.error is None:
+                return self._module.types.result_type(array)
+            carried = self._resolve_type(ast.TypeRef(span=ref.span, name=ref.error))
+            if carried is ERROR:
+                return ERROR
+            return self._module.types.result_type(array, carried)
         if isinstance(ref, ast.CollectionTypeRef):
             return self._collection_type(ref)
         if isinstance(ref, ast.ArrayTypeRef):
@@ -6351,6 +6614,11 @@ class Checker:
             if inner is ERROR:
                 return ERROR
             return self._module.types.iter_type(inner)
+        if isinstance(ref, ast.LiftedTypeRef):
+            # Only a generic function's parameter is handed a type, and that one
+            # is taken out of the definition before anything resolves it.
+            self._diags.emit(D.LANG_TYPE_ARGUMENT_NOT_GENERIC, ref.span)
+            return ERROR
         if isinstance(ref, ast.RunningTypeRef):
             element = self._resolve_type(ref.element)
             given = self._resolve_type(ref.given) if ref.given is not None else None
@@ -7063,7 +7331,9 @@ class Checker:
                 return
             case ast.Binary() if expr.op in (ast.BinaryOp.EQUAL,
                                              ast.BinaryOp.NOT_EQUAL) \
-                    and (self._type_stood_for(expr.left) is not None
+                    and (_lifts_a_parameter(expr.left)
+                         or _lifts_a_parameter(expr.right)
+                         or self._type_stood_for(expr.left) is not None
                          or self._type_stood_for(expr.right) is not None):
                 # Two types compared, which the compiler answers with a truth
                 # value: a condition, settled while compiling.
@@ -7739,29 +8009,39 @@ class Checker:
         another, as its value does -- so it is taken and put back where the value is:
         at every arm, and around every way out that runs what a block put off.
         """
-        return {id(local): (local, local.arenas, local.gone_at, local.gone_with)
+        return {id(local): (local, local.arenas, local.gone_at, local.gone_with,
+                            local.owes, local.ended_at, local.ended_how)
                 for scope in self._scopes for local in scope.values()}
 
     def _put_back(self, state: _Provenance) -> None:
         """Make what *state* says of every name in it true again."""
-        for local, arenas, gone_at, gone_with in state.values():
+        for local, arenas, gone_at, gone_with, owes, ended_at, ended_how \
+                in state.values():
             local.arenas, local.gone_at, local.gone_with = arenas, gone_at, gone_with
+            local.owes, local.ended_at, local.ended_how = owes, ended_at, ended_how
 
     def _joined(self, before: _Provenance,
                 ways: Sequence[_Provenance]) -> _Provenance:
         """What holds where several ways through meet: the union of what a name was
         made in, and dead where it is dead along any of them."""
         found: _Provenance = {}
-        for key, (local, arenas, gone_at, gone_with) in before.items():
+        for key, entry in before.items():
+            local = entry[0]
             made: set[int] = set()
             dead: tuple[Span | None, str] = (None, "")
+            # A variable that must be closed owes it where it owes it along any
+            # way, and its lifetime has ended where it ended along any.
+            owes = False
+            ended: tuple[Span | None, str] = (None, "")
             for way in ways:
-                _, there, gone, why = way.get(key, (local, arenas, gone_at,
-                                                    gone_with))
+                _, there, gone, why, owing, end, how = way.get(key, entry)
                 made.update(there)
                 if gone is not None and dead[0] is None:
                     dead = (gone, why)
-            found[key] = (local, frozenset(made), *dead)
+                owes = owes or owing
+                if end is not None and ended[0] is None:
+                    ended = (end, how)
+            found[key] = (local, frozenset(made), *dead, owes, *ended)
         return found
 
     def _on_the_way_out(self) -> tuple[_Provenance, list[set[int]]]:
@@ -7822,7 +8102,8 @@ class Checker:
         return self._provenance()
 
     def _after_the_turns(self, head: _Provenance, end: _Provenance | None,
-                         loop: _Loop | None) -> None:
+                         loop: _Loop | None, goes_round: bool = True,
+                         test_leaves: bool = True) -> None:
         """What holds after a loop: what holds where it may be left.
 
         At the top of a turn, where the condition or the iterator may end it; at the
@@ -7831,9 +8112,38 @@ class Checker:
         ways = [head]
         if end is not None:
             ways.append(end)
+            if goes_round:
+                self._goes_round(head, None, end)
+        if not test_leaves:
+            # `while true`: the test never ends it, so only a `break` does, and
+            # what holds after it is what held at those.
+            ways = []
         if loop is not None:
             ways.extend(loop.left_with)
+        if not ways:
+            ways = [head]
         self._put_back(self._joined(head, ways))
+
+    def _goes_round(self, head: _Provenance, span: Span | None,
+                    end: _Provenance | None = None) -> None:
+        """Refuse a turn that ends with a variable from outside the loop moved,
+        where the turn began with it holding something (4685)."""
+        now = end if end is not None else self._provenance()
+        for key, entry in head.items():
+            local = entry[0]
+            if not local.closer or entry[5] is not None:
+                continue
+            there = now.get(key)
+            if there is None or there[5] is None:
+                continue
+            if id(local) in self._told_unclosed:
+                continue
+            self._told_unclosed.add(id(local))
+            self._diags.emit(D.LANG_CLOSABLE_MOVED_IN_LOOP,
+                             span if span is not None else there[5],
+                             name=local.name).note(
+                D.LANG_CLOSABLE_ENDED_HERE, there[5], name=local.name,
+                how="".join(("its lifetime ended here: ", there[6])))
 
     def _made_in_part(self, base: ast.Expr, value: ast.Expr, span: Span) -> None:
         """What a field, an element or an entry was given, added to the whole.
@@ -8374,6 +8684,7 @@ class Checker:
                 if builder.is_terminated:
                     return
                 self._all_given_back(0, span)
+                self._all_closed(self._scopes, span)
             finally:
                 self._left(kept)
         if node is not None and func is not None:
@@ -8601,7 +8912,7 @@ class Checker:
                 if borrowed is not None and borrowed.placed:
                     sources.append(borrowed.value)
             self._answers_from(func, node, tuple(sources))
-        self._pop_scope()
+        self._pop_scope(node.span if not builder.is_terminated else None)
         self._addressed = outer_addressed
         self._answering = outer_answer
         self._impure = outer_impure
@@ -8759,6 +9070,13 @@ class Checker:
     def _lower_stmt(self, builder: IRBuilder, stmt: ast.Stmt, func: Function,
                     is_last: bool) -> None:
         """Lower one statement."""
+        match stmt:
+            case ast.MemberAssign():
+                self._stored_into[id(stmt.value)] = "a field"
+            case ast.ElementAssign():
+                self._stored_into[id(stmt.value)] = "an element"
+            case ast.DerefAssign():
+                self._stored_into[id(stmt.value)] = "what a reference names"
         match stmt:
             case ast.ReturnStmt():
                 # Only where the statement is one the function could have
@@ -9146,6 +9464,7 @@ class Checker:
         for at, (_, held) in enumerate(ty.fields):
             place = self._field_place(builder, where, ty, at, span)
             written = given[ty.fields[at][0]]
+            self._stored_into[id(written.value)] = "a record"
             if isinstance(held, ProductType):
                 self._build_record(builder, place, written.value, held,
                                    written.span)
@@ -10835,6 +11154,8 @@ class Checker:
             self._params_made_in(node, func)
             self._lower_block(inner, node.body, func)
             if not inner.is_terminated:
+                self._all_closed(self._scopes, node.span)
+            if not inner.is_terminated:
                 if func.ty.ret is VOID:
                     inner.ret()
                 else:
@@ -10866,15 +11187,32 @@ class Checker:
         rule an ordinary call follows, with the parameter's type worked out
         rather than looked up.
         """
-        if len(expr.args) != len(written.node.params):
+        params = written.written_params if written.written_params is not None \
+            else written.node.params
+        if len(expr.args) != len(params):
             self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
                              name=written.node.name,
-                             expected=len(written.node.params),
+                             expected=len(params),
                              found=len(expr.args))
             return UndefConst(ERROR)
         bound: dict[str, Type] = {}
         args: list[Value] = []
-        for at, (one, param) in enumerate(zip(expr.args, written.node.params)):
+        for at, (one, param) in enumerate(zip(expr.args, params)):
+            if isinstance(param.type, ast.LiftedTypeRef):
+                # A type, read where the call is and settling what the
+                # definition names: nothing is handed over.
+                if not isinstance(one, ast.Lifted) or one.written is None:
+                    self._diags.emit(D.LANG_TYPE_ARGUMENT_NOT_A_TYPE, one.span,
+                                     name=param.name)
+                    return UndefConst(ERROR)
+                given = self._resolve_type(one.written)
+                if given is ERROR:
+                    return UndefConst(ERROR)
+                with self._in_scope_of(written):
+                    if not self._reading(param.type.inner, given, bound,
+                                         one.span, param.name):
+                        return UndefConst(ERROR)
+                continue
             # A parameter's type is read where the function is written, and the
             # argument where the call is.
             with self._in_scope_of(written):
@@ -10931,6 +11269,8 @@ class Checker:
                 self._diags.and_no_longer(mark)
             if not met:
                 return UndefConst(ERROR)
+            if not self._conditions_can_hold(written, bound, expr.span):
+                return UndefConst(ERROR)
             missing = [name for name in written.parameters if name not in bound]
             if missing:
                 self._diags.emit(D.LANG_GENERIC_NOT_DETERMINED, expr.span,
@@ -10953,6 +11293,33 @@ class Checker:
         if func is None:
             return UndefConst(ERROR)
         return self._made_call(builder, expr, func, args, expected)
+
+    def _conditions_can_hold(self, written: _Generic, bound: dict[str, Type],
+                             span: Span) -> bool:
+        """Refuse a call whose types make a condition the compiler settles false.
+
+        `pre(⌜T'⌝ = ⌜Reader⌝ ∨ …)` is a question about the types, answered once
+        they are known -- here, before the function is made for them, so that a
+        type it was never meant for is refused at the call rather than wherever
+        its body first goes wrong.
+        """
+        outer, self._bound = self._bound, bound
+        try:
+            for clause in written.node.clauses:
+                if clause.kind is not ast.ClauseKind.PRE \
+                        or self._reading_of(clause) is not False \
+                        or self._settled(clause.expr) is not False:
+                    continue
+                self._diags.emit(D.LANG_CLAUSE_CANNOT_HOLD, clause.span,
+                                 function=written.node.name).note(
+                    D.LANG_GENERIC_ASKED_HERE, span, name=written.node.name,
+                    types=", ".join("".join((one, " = ", bound[one].written()))
+                                    for one in written.parameters
+                                    if one in bound))
+                return False
+            return True
+        finally:
+            self._bound = outer
 
     def _worked_out(self, param: ast.TypeExpr,
                     bound: dict[str, Type]) -> Type | None:
@@ -11493,6 +11860,12 @@ class Checker:
                 continue
             local.read = True
             held = self._held_by(local)
+            if held is not None and _closable_in(held) is not None:
+                self._diags.emit(D.LANG_CLOSABLE_STORED, one.span,
+                                 type=_closable_in(held).written(),
+                                 what="what a lambda brings in")
+                spoiled = True
+                continue
             if local.iterable is not None \
                     or (held is not None and _short_lived(held) is not None):
                 # What it walks is described in this call's room, which a
@@ -11764,6 +12137,8 @@ class Checker:
                         self._unknown_by_id[id(local)] = local
             self._lower_block(inner, expr.body, func)
             self._all_of_it_used(brought)
+            if not inner.is_terminated:
+                self._all_closed(self._scopes, expr.span)
             if not inner.is_terminated:
                 if answer is VOID:
                     inner.ret()
@@ -13273,7 +13648,7 @@ class Checker:
                                       as_result=False, wanted=wanted,
                                       produces=True)
         finally:
-            self._pop_scope()
+            self._pop_scope(expr.span if not builder.is_terminated else None)
         return found if found is not None else UndefConst(ERROR)
 
     def _lower_if(self, builder: IRBuilder, stmt: ast.If, func: Function,
@@ -13464,11 +13839,14 @@ class Checker:
                                produces, produces and stmt.alternative is None,
                                handing)
         head = self._a_turn_begins(stmt.body)
+        if one is not None:
+            one.turn_began = head
         self._lower_block(builder, stmt.body, func, as_result=False)
         end = self._provenance() if not builder.is_terminated else None
         self._end_loop(label)
-        self._pop_scope()
-        self._after_the_turns(head, end, one)
+        self._pop_scope(stmt.body.span if not builder.is_terminated else None)
+        self._after_the_turns(head, end, one, test_leaves=not (
+            isinstance(stmt.condition, ast.BoolLit) and stmt.condition.value))
         self._carried = outer_carried
         if not builder.is_terminated and builder.block is not None:
             builder.br(header,
@@ -13622,11 +14000,13 @@ class Checker:
                                produces, produces and stmt.alternative is None,
                                handing)
         head = self._a_turn_begins(stmt.body)
+        if one is not None and not _one_turn(stmt.iterable):
+            one.turn_began = head
         self._lower_block(builder, stmt.body, func, as_result=False)
         end = self._provenance() if not builder.is_terminated else None
         self._end_loop(label)
-        self._pop_scope()
-        self._after_the_turns(head, end, one)
+        self._pop_scope(stmt.body.span if not builder.is_terminated else None)
+        self._after_the_turns(head, end, one, not _one_turn(stmt.iterable))
         self._carried = outer_carried
         if not builder.is_terminated and builder.block is not None:
             builder.br(header,
@@ -13674,7 +14054,7 @@ class Checker:
         one = _Loop(label=label.name, span=label.span, header=header,
                     after=after, carried=carried, state=state, step=step,
                     answers=answers, wraps=wraps, handing=handing,
-                    frame=len(self._deferred))
+                    frame=len(self._deferred), scope_at=len(self._scopes) - 1)
         self._loops.append(one)
         return one
 
@@ -13733,6 +14113,7 @@ class Checker:
         # done now -- after what is handed over was worked out, as a return's is.
         kept = self._on_the_way_out()
         self._run_deferred(builder, self._demanding[1], found.frame)
+        self._all_closed(self._scopes[found.scope_at:], stmt.span)
         # What holds here holds after the loop, which this way reaches.
         found.left_with.append(self._provenance())
         self._left(kept)
@@ -13805,6 +14186,9 @@ class Checker:
         # The next turn begins with the body left, which runs what it put off.
         kept = self._on_the_way_out()
         self._run_deferred(builder, self._demanding[1], found.frame)
+        self._all_closed(self._scopes[found.scope_at:], stmt.span)
+        if found.turn_began is not None:
+            self._goes_round(found.turn_began, stmt.span)
         self._left(kept)
         if builder.is_terminated:
             return
@@ -13889,7 +14273,8 @@ class Checker:
                         wanted=handing, produces=produces)
                 finally:
                     self._as_it_was(outer)
-                self._pop_scope()
+                self._pop_scope(stmt.alternative.span
+                                if not builder.is_terminated else None)
                 if otherwise is not None:
                     found = self._value_type_of(otherwise)
                     if found is ERROR:
@@ -14011,7 +14396,7 @@ class Checker:
             self._push_scope()
             self._bind_local(stmt.name, turn, stmt.name_span, builder=builder)
             self._lower_block(builder, stmt.body, func, as_result=False)
-            self._pop_scope()
+            self._pop_scope(stmt.body.span if not builder.is_terminated else None)
         return UndefConst(VOID)
 
     def _iteration_over(self, builder: IRBuilder,
@@ -14800,6 +15185,14 @@ class Checker:
             return [builder.cast(CastKind.BITCAST, value,
                                  self._module.types.ptr_type(ty.element,
                                                              mutable=True), span)]
+        if isinstance(ty, ResultType):
+            # Taken apart by what a result is made of rather than by place: an
+            # answer may be several words itself, and the truth value is after
+            # all of them.
+            found = [builder.unwrap(value, ty.ok, span), builder.failed(value, span)]
+            if ty.err is not None:
+                found.append(builder.error(value, ty.err, span))
+            return found
         parts = parts_of(ty)
         if len(parts) == 1:
             inner = _only_member(ty)
@@ -14822,6 +15215,9 @@ class Checker:
         """A value of *ty* put back together from its words."""
         if isinstance(ty, ArrayType) and ty.fixed:
             return builder.cast(CastKind.BITCAST, words[0], ty, span)
+        if isinstance(ty, ResultType):
+            return builder.wrap(words[0], words[1], ty, span,
+                                words[2] if ty.err is not None else None)
         if len(words) == 1:
             inner = _only_member(ty)
             if inner is None:
@@ -15808,6 +16204,8 @@ class Checker:
         # so that they mean that inside it and nothing outside it.
         types = {name: "".join((prefix, name)) for name in found.bound}
         body = _renamed(node.body, renamed, labels, types)
+        element = _types_renamed(node.ret_type, types) \
+            if node.ret_type is not None else None
         outer = stmt.label or ast.Label(span=stmt.span,
                                         name="".join((prefix, "walk")))
         span = stmt.span
@@ -15828,8 +16226,13 @@ class Checker:
                                                 name=WILDCARD_NAME,
                                                 name_span=value.span, value=value)
             else:
+                # What the walk gives is what the generator says it gives, and
+                # not whatever one `yield` happened to write: a result's answer
+                # and its failure are both a result.
                 bind = ast.VarDef(span=value.span, name=stmt.name,
-                                  name_span=stmt.name_span, type=stmt.type,
+                                  name_span=stmt.name_span,
+                                  type=stmt.type if stmt.type is not None
+                                  or stmt.more else element,
                                   value=value, more=stmt.more)
             return ast.ExprStmt(span=span, value=ast.ForEach(
                 span=span, name=WILDCARD_NAME, name_span=span, type=None,
@@ -16569,7 +16972,7 @@ class Checker:
             for local, _, _ in before:
                 if id(local) in moved:
                     changed[id(local)] = local
-            self._pop_scope()
+            self._pop_scope(arm.body.span if not builder.is_terminated else None)
             if not builder.is_terminated and builder.block is not None:
                 outcomes.append((builder.block, moved, builder.memory(), given))
                 touched = touched or builder.memory() is not before_memory
@@ -16913,7 +17316,14 @@ class Checker:
             if self._lent_out(node.name, node.span, True):
                 return None
             assert local.held is not None
+            if local.closer and local.owes:
+                self._diags.emit(D.LANG_CLOSABLE_OVERWRITTEN, node.span,
+                                 name=node.name, type=local.held.written())
+                return None
             value = self._checked_value(builder, node, local.held)
+            if local.closer and self._value_type_of(value) is not ERROR:
+                # Given a value again: it owes the close again.
+                local.owes, local.ended_at, local.ended_how = True, None, ""
             if _reaches_a_place(local.held) \
                     and self._outlives_it(value, local.depth, node.name,
                                           node.span):
@@ -16965,6 +17375,7 @@ class Checker:
             self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, node.name_span,
                              name=node.name)
             return None
+        self._stored_into[id(node.value)] = "a variable at the top level"
         if not self._check_mutable(node, target.mutable, target.span):
             return None
         if _read_only_table(target.value_type):
@@ -17133,16 +17544,60 @@ class Checker:
         if isinstance(expr, (ast.Member, ast.Element, ast.Index)) \
                 and self._read_through_the_dead(expr):
             return UndefConst(ERROR)
+        self._mark_stored(expr)
         if not isinstance(expr, _CALLING):
-            return self._lower_written(builder, expr, expected)
+            found = self._lower_written(builder, expr, expected)
+            if isinstance(expr, (ast.Member, ast.Element, ast.Index, ast.Deref)) \
+                    or id(expr) in self._stored_into:
+                found = self._not_moved_out(expr, found)
+            return found
         before = len(self._borrows)
         found = self._lower_written(builder, expr, expected)
+        if id(expr) in self._stored_into:
+            found = self._not_moved_out(expr, found)
         if len(self._borrows) > before \
                 and not _holds_a_reference(self._value_type_of(found)):
             self._borrows[before:] = [
                 one for one in self._borrows[before:]
                 if one.depth != _UNTIL_THE_STATEMENT_ENDS]
         return found
+
+    def _mark_stored(self, expr: ast.Expr) -> None:
+        """Say of what *expr* puts inside itself that it is put inside something,
+        which a value that must be closed may not be (4687)."""
+        match expr:
+            case ast.TupleLit():
+                parts, what = expr.members, "a tuple"
+            case ast.ArrayLit():
+                parts, what = expr.elements, "an array"
+            case ast.ListLit():
+                parts, what = expr.elements, "a list"
+            case ast.Call() if self._makes_a_record(expr.callee):
+                parts = tuple(one.value if isinstance(one, ast.Named) else one
+                              for one in expr.args)
+                what = "a record"
+            case _:
+                return
+        for one in parts:
+            if isinstance(one, ast.Expr):
+                self._stored_into[id(one)] = what
+
+    def _makes_a_record(self, callee: ast.Expr) -> bool:
+        """Whether a call of *callee* writes a record out rather than calling."""
+        if isinstance(callee, ast.NameRef):
+            return isinstance(self._top.get(callee.name), _NamedType) \
+                and self._find_local(callee.name) is None
+        if isinstance(callee, ast.Member):
+            return self._type_exported(callee) is not None
+        return False
+
+    def _move_named(self, name: str) -> str:
+        """What a move of *name* here hands the value to, for the report log."""
+        if self._handing_over is not None:
+            callee, at = self._handing_over
+            return "".join(("handed to '", callee, "' as its argument ", str(at)))
+        return "".join(("'", name, "' read as a value: bound to another name, "
+                        "answered or handed out"))
 
     def _told_gone(self, local: _Local, name: str, span: Span) -> None:
         """Say why a dead name may not be read: its arena, or its container."""
@@ -22460,9 +22915,10 @@ class Checker:
                 found = self._top.get(callee.name)
             case ast.Member() if isinstance(callee.base, ast.NameRef):
                 held = self._top.get(callee.base.name)
-                if not isinstance(held, LoadedModule):
-                    return None
-                found = held.exports.get(callee.name)
+                found = held.exports.get(callee.name) \
+                    if isinstance(held, LoadedModule) else None
+            case ast.Member():
+                found = None
             case _:
                 return None
         if isinstance(found, _Generic):
@@ -22616,6 +23072,16 @@ class Checker:
                 builder, self._provided(ref.name), ref, expected)
         if local is not None and self._would_copy(local, ref):
             return UndefConst(ERROR)
+        if local is not None and local.closer:
+            stored = self._stored_into.get(id(ref))
+            if stored is not None:
+                self._diags.emit(D.LANG_CLOSABLE_STORED, ref.span,
+                                 type=self._held_by(local).written(), what=stored)
+                # Reported here, and not again where its scope ends.
+                local.owes = False
+                return UndefConst(ERROR)
+            if not self._moved(local, ref.span, self._move_named(ref.name)):
+                return UndefConst(ERROR)
         if local is not None and local.gone_at is not None:
             # Read all the same, so that what is said about it is the one thing.
             local.read = True
@@ -22640,6 +23106,12 @@ class Checker:
         if resolved is None:
             return UndefConst(ERROR)
         if isinstance(resolved, GlobalVar) and resolved.value_type is ERROR:
+            return UndefConst(ERROR)
+        if isinstance(resolved, GlobalVar) \
+                and _closable_in(resolved.value_type) is not None:
+            self._diags.emit(D.LANG_CLOSABLE_MOVED_OUT_OF_PLACE, ref.span,
+                             type=_closable_in(resolved.value_type).written(),
+                             what="a variable at the top level")
             return UndefConst(ERROR)
         if isinstance(resolved, GlobalVar):
             held = resolved.value_type

@@ -1,0 +1,22 @@
+※ pl4g-test: compile=error diag=4682
+※ pl4g-test: expect-diag 4682 LANG_CLOSABLE_AFTER_ITS_END
+
+※ Such a value is moved, never copied: binding it to another name ends the
+※ lifetime of the one it was in, and that one holds nothing to read.
+
+@[closed_by(close)]
+type Handle = n : u8
+
+fn Handle.close(h: Handle):
+    let n: u8 = h.n
+
+fn made(n: u8) → Handle:
+    Handle(.n ← n)
+
+@[startup]
+fn main() → u6:
+    let h: Handle = made(1u8)
+    let other: Handle = h
+    let n: u8 = h.n
+    Handle.close(other)
+    if n = 1u8: 0u6 else: 1u6

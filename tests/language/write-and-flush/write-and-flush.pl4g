@@ -64,6 +64,7 @@ fn rest(init: &mut std.Init) → u6:
 fn refused(init: &mut std.Init) → u6:
     ※ a descriptor nothing opened: the number comes back as the kernel gave it
     let nowhere: mut std.Writer = std.Writer(.fd ← 77i32)
+    defer std.Writer.close(nowhere)
     match std.write_sync(&mut nowhere, ⎕bytes("three\n")):
         u64 ¤size:
             6u6

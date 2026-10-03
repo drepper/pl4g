@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4689
+※ pl4g-test: expect-diag 4689 LANG_TYPE_ARGUMENT_NOT_GENERIC
+
+※ A type handed as an argument settles a type parameter; around a type that is
+※ written down it settles nothing.
+
+fn zero(kind: ⌜u8⌝) → u8:
+    0u8
+
+@[startup]
+fn main() → u6:
+    if zero(⌜u8⌝) = 0u8: 0u6 else: 1u6

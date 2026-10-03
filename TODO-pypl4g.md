@@ -610,3 +610,17 @@ Optimizations
 [ ] ask where an argument of a walk kept in `⎕heap` was made (4680) the way a lambda's captures are asked (`_reached_by`).  Today
     the parameter's type decides, and where it says nothing only what is written does -- text written down, `⎕bytes` of it, `in
     ⎕static`, `in ⎕heap` -- so text a caller made in the heap and handed on is refused.
+
+[ ] address a frame larger than the immediates reach on AArch64 and RISC-V.  `sub sp, sp, N` takes twelve bits there (shifted by
+    twelve on AArch64) and a load or store from `sp` twelve as well on RISC-V, so a function holding more than about four
+    kilobytes is refused.  `std.read_lines` keeps its line buffer at 1024 bytes for that reason; the fix is to put a large
+    adjustment or offset in a scratch register first, as x86-64's thirty-two-bit displacements never need to.
+
+[ ] lower the run-time conditions of a generic function's instances.  A condition the compiler settles is checked at the call
+    (since 2026-10-03), but one that has to be asked while running is lowered by `_lower_function` and not by `_lower_instance`,
+    so an instance never asks it.
+
+[ ] relax a conditional branch on RISC-V before the first layout rather than after.  `Target.relax` lays the sections out once per
+    round and grows every branch that does not reach; a function with many far branches takes as many rounds as growing one moves
+    another out of reach, which is few in practice and is bounded at thirty-two.
+

@@ -4,9 +4,10 @@
 ※ it starts and is handed back, by `⎕await`, what the kernel said about it.
 ※ `std.run` drives them all on the one thread, resuming whichever has been
 ※ answered and waiting for the kernel only when none has, and answers how many
-※ ran to their end.  Each task here writes a line three times and notes every
-※ turn it takes, so both started before either went on is what shows they
-※ share the thread.
+※ ran to their end.  Each task here opens a file of its own, writes a line to
+※ it three times and notes every turn it takes, so both started before either
+※ went on is what shows they share the thread; and each closes what it opened,
+※ however it ends, which a `defer` in a coroutine does.
 ※
 ※ Compare: **Python**'s `asyncio.create_task` and `asyncio.run`; **Rust**'s
 ※ `spawn` and an executor's `block_on`; **C#**'s `Task.Run` and `await`;
@@ -18,25 +19,30 @@ let std := ⎕import("std")
 let turns: mut [u8] = []
 
 @[impure]
-fn say(to: std.Writer, what: u8⟦⟧, who: u8) ⇉ std.Pending ⇇ std.Answer:
-    let out: mut std.Writer = to
-    foreach _ := 0u8…3u8:
-        turns ← turns ⧺ [who]
-        match std.write(&mut out, what):
-            std.Pending(p):
-                match std.done(⎕await(p)):
-                    u64 ¤size(n):
-                        if n ≠ 4:
-                            return
+fn say(name: str, what: u8⟦⟧, who: u8) ⇉ std.Pending ⇇ std.Answer:
+    match std.Io.open(name, ⌜std.Writer⌝):
+        std.Writer(to):
+            let out: mut std.Writer = to
+            defer std.Writer.close(out)
+            foreach _ := 0u8…3u8:
+                turns ← turns ⧺ [who]
+                match std.write(&mut out, what):
+                    std.Pending(p):
+                        match std.done(⎕await(p)):
+                            u64 ¤size(n):
+                                if n ≠ 4:
+                                    return
+                            ⊥:
+                                return
                     ⊥:
                         return
-            ⊥:
-                return
+        ⊥:
+            return
 
 @[startup, impure]
-fn main(init: mut std.Init) → u6:
-    std.spawn(⎕start(say(init.io.error, ⎕bytes("one\n"), 1u8) in ⎕heap))
-    std.spawn(⎕start(say(init.io.error, ⎕bytes("two\n"), 2u8) in ⎕heap))
+fn main() → u6:
+    std.spawn(⎕start(say("/dev/null", ⎕bytes("one\n"), 1u8) in ⎕heap))
+    std.spawn(⎕start(say("/dev/null", ⎕bytes("two\n"), 2u8) in ⎕heap))
     if std.run() ≠ 2u64:
         return 1u6
     let ones: mut u8 = 0u8

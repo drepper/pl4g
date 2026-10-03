@@ -645,6 +645,10 @@ class ProductType(Type):
     #: `@[impure]` mean "changes something global" rather than "touches a device
     #: somebody handed over".
     device: bool = False
+    #: The function that closes a value of this type, which `@[closed_by(f)]`
+    #: names: such a value is moved and never copied, and a variable holding one
+    #: owes a call of `T.f` with it before its scope ends.  Empty for any other.
+    closed_by: str = ""
     #: For a record of a type that takes type parameters, the definition it was
     #: made from and the types it was given -- what a generic function reads its
     #: own type parameters out of.  Nothing for any other.

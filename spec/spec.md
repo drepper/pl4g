@@ -230,11 +230,36 @@ fn write_sync(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32
 fn read(from: &mut Reader, into: u8⟦⟧)     → u64 ¤size ? i32
 fn drain()
 fn as_error(n: i32) → Error
+
+fn Io.open(name: str, kind: ⌜T'⌝) → T' ? i32    ※ T' is Reader, Writer or ReadWriter
+fn Reader.close(r: Reader)
+fn Writer.close(w: Writer)
+fn ReadWriter.close(rw: ReadWriter)
+fn read_lines(from: &mut Reader) ⇉ u8⟦⟧ ? i32
 ```
 
-**The three a process inherits are the only devices there are.**  There is no way to open anything and no way to write down the
-name of a file: what a program has is `init⌖.io.input`, `init⌖.io.output` and `init⌖.io.errors`, on the descriptors every system
-gives them.  `ReadWriter` is declared for what will answer one and nothing answers one yet.
+**A process starts with three devices, and opens more by name.**  The three are `init.io.input`, `init.io.output` and
+`init.io.error`, on the descriptors every system gives them.  **`Io.open(name, ⌜T⌝)` opens a file for what the type handed says**:
+`⌜Reader⌝` to read it; `⌜Writer⌝` to write it, made if it is not there and emptied if it is; `⌜ReadWriter⌝` for both, made if it is
+not there and left as it is.  It answers that type, or the number the kernel refused with.  The name is relative to the directory
+the process is in, and one with a nul inside it or longer than 4095 bytes is refused before the kernel is asked.  The type is the
+argument rather than a mode beside the name because what comes back is a different type for each: a `Reader` cannot be written to,
+which the compiler can say only if it knows which was opened, and a fourth kind is one more type a program may hand.
+
+**The three device types are `@[closed_by(close)]`** (see [Values that are closed](#values-that-are-closed)): what `open` answers is
+moved, never copied, and closed by whoever holds it last.  `close` waits for every request in flight first -- one may be a write to
+it -- and what those answered is still read with `flush`.  It answers nothing: what a program would do about a refused close is
+nothing it could do.  The three a process starts with are fields of `Init` and `std.io`, never moved, never closed.
+
+**`read_lines(&mut r)` walks a reader a line at a time**: each line without the end of line after it, the last one too where the
+text ends without one, as a view into a buffer the walk keeps and good until the next turn.  Nothing is copied and nothing
+allocated; a program that keeps a line copies it.  A line longer than 1024 bytes is refused with `ENOBUFS` rather than handed out
+in pieces a reader would take for lines, and a failed read ends the walk with what the kernel said.  The buffer is in the walk's
+frame, and grows when the AArch64 back end can address a larger one.
+
+Compare: **Go**'s `os.OpenFile` and `bufio.Scanner`, whose `Bytes` and `ErrTooLong` this `read_lines` is; **Rust**'s `File::open`
+and `BufRead::lines`, which allocates a `String` per line and closes on drop; **Python**'s `open` and iterating a file, which keeps
+the end of line; **C**'s `fopen` and `getline`; **Zig**'s `openFile` and `readUntilDelimiter`.
 
 **`args` is what the program was named with**, read off the stack before anything runs.  The first is the name it was run under,
 as it is everywhere, and the rest are what followed.  Each is a `str` -- bytes and a length -- and the length is counted once
@@ -1659,6 +1684,12 @@ A result type is written `TYPE?`, where `TYPE` is the **answer type**.  The mark
 nothing beyond the fact of it.  **`TYPE?ERROR` is a result whose error is a value of its own**: `bool?u8` is a truth value, or
 the fact that there is none and a `u8` saying something about why.
 
+**The mark after an array's brackets makes a result of the array**: `u8⟦⟧ ? i32` is a run of bytes or an `i32` saying why there is
+none, and `u8?⟦4⟧` is four results -- the mark belongs to what it is written after, as a unit does.  Its answer's arm is matched by
+the type as written, `u8⟦⟧(bytes):`.  What a walk hands out is the commonest place for one: `std.read_lines` gives `u8⟦⟧ ? i32`.
+Compare **Rust**'s `Result<&[u8], E>`, **Zig**'s `E![]const u8`, **Swift**'s `[UInt8]?`, all of which wrap the whole type the
+same way; C and Go answer two values instead.
+
 **The `⊥` arm of a `match` binds what the error carries**, exactly as the answer's arm binds the answer.  Where the error
 carries nothing there is nothing for a name there to stand for, and one written is refused (4521).
 
@@ -2841,6 +2872,59 @@ a comment.
 
 **A reference is never nothing.**  There is no null reference and no way to write one, because every one is made from a place that
 exists.  That is Rust's arrangement and C++'s intent, and it is what lets `r⌖` need no check.
+
+#### Values that are closed
+
+**`@[closed_by(f)]` says a value of the type stands for something that has to be given back**, and that `T.f` is what gives it
+back -- a file, a socket, a lock.  `std`'s `Reader`, `Writer` and `ReadWriter` are marked `@[closed_by(close)]`:
+
+```
+match std.Io.open("notes.txt", ⌜std.Reader⌝):
+    std.Reader(r):
+        let from: mut std.Reader = r
+        defer std.Reader.close(from)
+        …
+    ⊥(code):
+        …
+```
+
+**Such a value is moved, never copied.**  Reading a variable holding one as a value -- binding it to another name, handing it to a
+call by value, answering with it -- hands the value on, and **the variable's lifetime ends there**: it holds nothing from that
+point, and reading it again, a field of it or a reference to it included, is refused (4682).  A field of it read in place, and a
+reference taken to it, are not moves, exactly as they are not copies of a `@[unique]` value.
+
+**Every variable holding one owes the close.**  On every way out of its scope -- running off the end, `return`, `break`,
+`continue`, a `?` -- it has been handed to `T.f`, moved on, or put off with `defer T.f(x)`, which runs on every one of those ways
+(4681).  A by-value parameter holds one like any other variable, which is what makes handing one to a function hand it the duty;
+`T.f`'s own parameter is the one exception, since what that function is handed it closes.  Along a branch the duty is owed where
+any arm still owes it, and a lifetime has ended where any arm ended it.
+
+**Three things a program might write are refused**, each for what it would lose:
+
+| Written | Refused because | Diagnostic |
+|---|---|---|
+| `h ← another` while `h` still holds one | the one it held would never be closed | 4684 |
+| a move, in a loop, of a variable from outside it, where the turn goes round | the next turn reads a variable with nothing in it | 4685 |
+| `init.io.error` or `std.io.error` read as a value | moving out of a field, an element, a variable at the top level or through a reference would leave a hole in something that goes on existing | 4683 |
+| `〈h, 1u8〉`, `R(.f ← h)`, a list of it, `g ← h`, a lambda bringing it in | nothing whose scope ends would hold it, so nothing would ask whether it was closed | 4687 |
+
+**The standard streams are never moved and never closed.**  They are fields -- of `Init` and of `std.io` -- and are handed along by
+reference: `std.write(&mut init.io.error, …)`.  A value written out where it stands, `std.Writer(.fd ← 2i32)`, may be put into a
+record's field, which is how those are made; a variable's value or a call's answer may not.
+
+**`T.f` is checked where the attribute is written** (4686): a function of the type's own file, taking exactly one `T` by value.
+What it answers is its own business.
+
+**Every move and every end of a lifetime is in the report log** (`move`, `lifetime-ended`), at the line it happened on, with what
+the value was handed to: a reader asking "who closes this" is asking that.
+
+Compare: **Rust**, whose moves are these and whose `Drop` closes on its own, so that forgetting is impossible and *when* is decided
+by scope rather than written; **Austral** and **Linear Haskell**, whose linear types are this with any consuming function allowed
+in place of one named closer; **C++**, whose destructor closes on its own and whose moved-from object still exists to be destroyed;
+**Go**'s `defer f.Close()` and **Python**'s `with`, which close where written and are not required; **C#**'s `using` and
+`IDisposable`, likewise; **Zig**'s `defer` and `errdefer`, which this `defer` is.  This language closes nothing on its own --
+nothing the program did not write runs -- and refuses a program that forgot, which is the half of Rust's answer that needs no
+hidden code.
 
 #### Enumerations
 
@@ -4933,19 +5017,24 @@ end, and answers how many did.  `std.done(a)` reads an answer as `std.flush` rea
 ```
 let std := ⎕import("std")
 
-fn say(to: std.Writer, what: u8⟦⟧) ⇉ std.Pending ⇇ std.Answer:
-    let out: mut std.Writer = to
-    foreach _ := 0u8…3u8:
-        match std.write(&mut out, what):
-            std.Pending(p):
-                let sent := std.done(⎕await(p))
-            ⊥:
-                return
+fn say(name: str, what: u8⟦⟧) ⇉ std.Pending ⇇ std.Answer:
+    match std.Io.open(name, ⌜std.Writer⌝):
+        std.Writer(to):
+            let out: mut std.Writer = to
+            defer std.Writer.close(out)
+            foreach _ := 0u8…3u8:
+                match std.write(&mut out, what):
+                    std.Pending(p):
+                        let sent := std.done(⎕await(p))
+                    ⊥:
+                        return
+        ⊥:
+            return
 
 @[startup, impure]
-fn main(init: mut std.Init) → u6:
-    std.spawn(⎕start(say(init.io.error, ⎕bytes("one\n")) in ⎕heap))
-    std.spawn(⎕start(say(init.io.error, ⎕bytes("two\n")) in ⎕heap))
+fn main() → u6:
+    std.spawn(⎕start(say("one.txt", ⎕bytes("one\n")) in ⎕heap))
+    std.spawn(⎕start(say("two.txt", ⎕bytes("two\n")) in ⎕heap))
     if std.run() = 2u64: 0u6 else: 1u6
 ```
 
@@ -6861,6 +6950,16 @@ about is what went in.
 #### Generic Functions
 
 **A name with a mark after it is a type a call settles.**
+
+**A parameter may be handed a type**, written `name: ⌜T'⌝` and given `⌜u8⌝` at the call, which settles the type parameter inside
+it where nothing else the call hands does.  Nothing is handed at run time: the parameter is gone from every function the definition
+becomes, and the body asks about the type with `comptime if`.  It is what lets one function answer a different type for each of
+several -- `std.Io.open(name, ⌜std.Reader⌝)` answers a `Reader`.  Its argument is a lifted type (4688), and only a parameter of a
+generic function is handed one (4689).  **A condition comparing types** -- `pre(⌜T'⌝ = ⌜Reader⌝ ∨ …)` -- **is settled at the
+call**, before the function is made, so a type it was not meant for is refused there (4918) rather than wherever its body first goes
+wrong.  Compare **Zig**'s `comptime T: type`, which this is; **C++**'s explicit template arguments, `make<A>(3)`; **Rust**'s
+turbofish, `make::<A>(3)`; **Haskell**'s type applications, `make @A 3`.  A function of a type may be generic as any other: `Io.open`
+is one.
 
 ```
 fn largest(a: T', b: T') → T':

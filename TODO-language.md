@@ -489,9 +489,16 @@ To Do List for the PL4g language
     program that has not waited does not have them.  A program that wants several reads in flight -- from several descriptors --
     wants the same pair `write` and `flush` are, and wants somewhere to say which buffer each filled.
 
-[ ] use `ReadWriter`.  The type is exported and nothing answers one, and nothing will while the three inherited descriptors are
-    all there is -- the user settled on 2026-09-18 that there is no `open` call and no representation for a file name.  It is
-    declared for what will answer one.
+[x] use `ReadWriter`.  Done on 2026-10-03: `std.Io.open(name, ⌜std.ReadWriter⌝)` answers one.  The decision of 2026-09-18 that
+    there is no `open` call was reversed by the user's asking for `std.Io.open`, with the kind of device handed as a type.
+
+[ ] let a device answer why its close failed.  `Reader.close` and its siblings answer nothing: a refused close of a file that was
+    written may mean the data never reached the disk, which Go's `Close` answers an error for and Rust's `Drop` ignores.  Answering
+    a result would make every `defer` of one a statement whose answer nothing takes, which is the part to decide.
+
+[ ] let a value that must be closed live inside something.  A record, a tuple, a list or a variable at the top level may not hold
+    one moved there (4687), because nothing asks whether what is inside is closed when the whole goes.  A record whose type is
+    itself `@[closed_by]`, closing what it holds, is the shape that would make it safe.
 
 [ ] say how long a buffer handed to the runtime must last.  `std` hands over the buffer's address as a number, so nothing relates
     the two at all: the request is complete before the call returns and that is a property of the runtime's design rather than of

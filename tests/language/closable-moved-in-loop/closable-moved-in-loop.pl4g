@@ -1,0 +1,22 @@
+※ pl4g-test: compile=error diag=4685
+※ pl4g-test: expect-diag 4685 LANG_CLOSABLE_MOVED_IN_LOOP
+
+※ Closed in a loop that goes round again: the next turn would find nothing.
+
+@[closed_by(close)]
+type Handle = n : u8
+
+fn Handle.close(h: Handle):
+    let n: u8 = h.n
+
+fn made(n: u8) → Handle:
+    Handle(.n ← n)
+
+@[startup]
+fn main() → u6:
+    let h: Handle = made(1u8)
+    let i: mut u8 = 0u8
+    while i < 3u8:
+        Handle.close(h)
+        i ← i + 1u8
+    0u6

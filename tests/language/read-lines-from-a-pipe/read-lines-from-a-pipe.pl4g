@@ -1,0 +1,51 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `std.read_lines` walks a `Reader` a line at a time: each line without the end
+※ of line after it, the last one too where the text ends without one, as a view
+※ into a buffer the walk keeps -- good until the next turn.  An empty line is a
+※ line.  A pipe here, so that nothing is left on a disk: what goes in at one end
+※ comes out of the other, and closing the writing end is what ends the text.
+※
+※ Compare: **Go**'s `bufio.Scanner` with `Bytes`, which this is; **Rust**'s
+※ `BufRead::lines`, which allocates a `String` per line; **Python**'s iterating
+※ a file, which keeps the end of line; **C**'s `getline` into one buffer.
+
+let std := ⎕import("std")
+
+@[impure]
+fn filled(out: std.Writer) → u6:
+    let w: mut std.Writer = out
+    defer std.Writer.close(w)
+    match std.write_sync(&mut w, ⎕bytes("one\ntwo two\n\nfour")):
+        u64 ¤size(n):
+            if n = 17: 0u6 else: 1u6
+        ⊥:
+            2u6
+
+@[impure]
+fn counted(from: std.Reader) → u6:
+    let r: mut std.Reader = from
+    defer std.Reader.close(r)
+    let lines: mut u64 = 0u64
+    let bytes: mut u64 = 0u64
+    let fourth: mut u8 = 0u8
+    foreach line := std.read_lines(&mut r):
+        match line:
+            u8⟦⟧(text):
+                lines ← lines + 1u64
+                bytes ← bytes + ⎕drop(#text)
+                if lines = 4u64 ∧ #text = 4: fourth ← text⟦0⟧
+            ⊥:
+                return 3u6
+    if lines = 4u64 ∧ bytes = 14u64 ∧ fourth = 102u8: 0u6 else: 4u6
+
+@[startup, impure]
+fn main() → u6:
+    let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
+    if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
+        return 5u6
+    let wrote := filled(std.Writer(.fd ← ends⟦1⟧))
+    if wrote ≠ 0u6:
+        std.Reader.close(std.Reader(.fd ← ends⟦0⟧))
+        return wrote
+    counted(std.Reader(.fd ← ends⟦0⟧))

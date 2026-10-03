@@ -1,0 +1,64 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `std.Io.open(name, ⌜T⌝)` opens a file for what the type it is handed says --
+※ `⌜std.Reader⌝`, `⌜std.Writer⌝` or `⌜std.ReadWriter⌝` -- and answers that type,
+※ or the number the kernel refused with.  What it answers is closed by whoever
+※ holds it: `std.Writer.close` and its two siblings, here put off with `defer`.
+※
+※ Compare: **Go**'s `os.OpenFile` and **Zig**'s `openFile`, which take a mode and
+※ answer one type that may or may not be writable; **Rust**'s `File::open` and
+※ `File::create`, one type again; **Python**'s `open(name, "r")`, whose mode
+※ string picks the class at run time.  Here the type is the argument, so a
+※ `Reader` cannot be written to, and the compiler says so.
+
+let std := ⎕import("std")
+
+@[impure]
+fn written() → u6:
+    match std.Io.open("/dev/null", ⌜std.Writer⌝):
+        std.Writer(w):
+            let out: mut std.Writer = w
+            defer std.Writer.close(out)
+            if ⎕drop(std.write_sync(&mut out, ⎕bytes("gone\n")) ?? 0) = 5u64: 0u6 else: 1u6
+        ⊥:
+            2u6
+
+@[impure]
+fn read() → u6:
+    match std.Io.open("/dev/null", ⌜std.Reader⌝):
+        std.Reader(r):
+            let from: mut std.Reader = r
+            defer std.Reader.close(from)
+            let room: mut u8⟦4⟧ = 4 ⍴ 0u8
+            if ⎕drop(std.read(&mut from, room) ?? 9) = 0u64: 0u6 else: 3u6
+        ⊥:
+            4u6
+
+@[impure]
+fn both() → u6:
+    match std.Io.open("/dev/null", ⌜std.ReadWriter⌝):
+        std.ReadWriter(rw):
+            let held: std.ReadWriter = rw
+            std.ReadWriter.close(held)
+            0u6
+        ⊥:
+            5u6
+
+@[impure]
+fn missing() → u6:
+    match std.Io.open("/nonexistent/pl4g", ⌜std.Reader⌝):
+        std.Reader(r):
+            std.Reader.close(r)
+            6u6
+        ⊥(code):
+            if code = 2i32: 0u6 else: 7u6
+
+@[startup, impure]
+fn main() → u6:
+    let a := written()
+    if a ≠ 0u6: return a
+    let b := read()
+    if b ≠ 0u6: return b
+    let c := both()
+    if c ≠ 0u6: return c
+    missing()

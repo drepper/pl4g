@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4688
+※ pl4g-test: expect-diag 4688 LANG_TYPE_ARGUMENT_NOT_A_TYPE
+
+※ A parameter written `kind: ⌜T'⌝` is handed a type, lifted: `⌜u8⌝`.
+
+fn zero(kind: ⌜T'⌝) → u8:
+    0u8
+
+@[startup]
+fn main() → u6:
+    let z := zero(3u8)
+    if z = 0u8: 0u6 else: 1u6

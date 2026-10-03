@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, Sequence
 
 from ..diag.engine import DiagEngine
 from ..ir.module import Module
@@ -13,6 +13,7 @@ from ..mc.fixup import FixupApplier, MCFixup
 from ..mc.inst import MCInst
 from ..mc.reg import RegisterInfo
 from ..mc.streamer import MCStreamer
+from ..mc.symbol import MCSection, MCSymbol
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,4 +88,10 @@ class Target(Protocol):
 
     def image_defaults(self) -> ImageDefaults:
         """The layout constants the image writer needs."""
+        ...
+
+    def relax(self, sections: Sequence[MCSection],
+              symbols: Sequence[MCSymbol]) -> None:
+        """Grow any instruction whose displacement does not reach, once the code
+        is all there and before anything is laid out for good."""
         ...

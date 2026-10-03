@@ -42,7 +42,7 @@ BLOB = Blob(
                   "4003f8b7888143a9080140b900fcdf881f01006b20020054828544a9"
                   "420040b904000014080500111f00086b400100540301020a2450238b"
                   "830040f97f1c00f128ffff54840880b9f27923f8047a23f8f5ffff17"
-                  "e803002a811d40f9e0031f2a28fc9f8826f707370e0080928c000014"
+                  "e803002a811d40f9e0031f2a28fc9f8826f707370e0080928d000014"
                   "00e4006f48008052ff3b00f9880100f900018052e103009128358052"
                   "e2031faae3031faae4031faae5031faae00300ade00301ade00302ad"
                   "e01b803d010000d42007f8b7e8434029ee4340b9ef6740b9e40300aa"
@@ -56,61 +56,81 @@ BLOB = Blob(
                   "8181833c881100a969ffff173100805267ffff17ee031faa0c000014"
                   "4e0080520a0000146e008052080000148e00805206000014ae008052"
                   "04000014ce00805202000014ee0080525f0100f128020052e803881a"
-                  "c80100374a0500b40800009008010091207d409308492d8be1030baa"
-                  "e2030aaae3031faae4031faae5031faa08054079010000d41f000014"
-                  "92c541a9ad7d7ed3000000900000009100e4006f0d686d38e8031faa"
-                  "310240b952fedf88801940f95102110a0018118b0000803d0080823c"
-                  "1f1c00f90b7c01a94b060011090400b9891540f90a1800b98a0d40f9"
-                  "0d0000390e1000f920008052315931b8e9030faaef0310aa4bfd9f88"
-                  "04000014e0031faa48008052e90310aa20792ef8e8792ef8f34340f9"
-                  "ff430291e0030eaac0035fd63f1c00f169000054a0028092c0035fd6"
-                  "e90301aaea0300aa0b6001910c6002914d00805204000014e8030e2a"
-                  "4e1d40f9c8fd9f88687969f81f0500f1c1030054400540f948358052"
-                  "010180522200805223008052e4031faae5031faa010000d460fdffb7"
-                  "48b943a9080140b9cefddf881f010e6bc0fdff5450bd44a9100240b9"
-                  "0400001408050011df01086be0fcff541101100af251318b510240f9"
-                  "3f1e00f128ffff54520a80b96d7931f8927931f8f5ffff171f0900f1"
-                  "81000054807969f87f7929f8c0035fd6a00280927f7929f8c0035fd6"
-                  "3f1c00f1c803005408600191097961f83f0500f141030054090040f9"
-                  "3f0500f12103005409a843a9290140b94afddf883f010a6be0020054"
-                  "0cac44a90d6002914e0080528c0140b904000014290500115f01096b"
-                  "c00100542f010c0a70512f8b0f0240f9ff1d00f128ffff54100a80b9"
-                  "0e792ff8b0792ff8f5ffff1720008052c0035fd6e0031faac0035fd6"
-                  "e9030a2a0a1c40f949fd9f88087961f81f0500f1e0079f1ac0035fd6"
-                  "080040f91f0500f1a1070054ea0300aa000d084e418dc53c4205c03d"
-                  "482d42a9428ce06e208ce06e493143a91f0500f10018824ee8179f1a"
-                  "3f0500f1e9179f1a7f0500f12915891a9f0500f100b8b14e0b00261e"
-                  "08010b4b0801090be9179f1a0801092ac8040034090440f9eb0300aa"
-                  "48358052010180522200805223008052e00309aae4031faae5031faa"
-                  "010000d46003f8b7e8030baa69ad43a9290140b96bfddf883f010b6b"
-                  "600200540db144a90e6102914f008052ad0140b90400001429050011"
-                  "7f01096b4001005430010d0a9151308b300240f91f1e00f128ffff54"
-                  "310a80b94f7930f8d17930f8f5ffff17e9030b2a081d40f909fd9f88"
-                  "c0035fd6ea0300aae90300aa488545f81f0500f1a1070054000d084e"
-                  "2b6102914c00805207000014e8030d2a2d1d40f9a8fd9f88280140f9"
-                  "1f0500f1610600542181c53c2281c63c28b947a9428ce06e218ce06e"
-                  "2dbd48a91f0500f12118824ee8179f1abf0500f1ed179f1adf0500f1"
-                  "ad158d1aff0500f121b8b14e2e00261e08010e4b08010d0bed179f1a"
-                  "08010d2ac8030034200540f948358052010180522200805223008052"
-                  "e4031faae5031faa010000d4a002f8b728b543a9080140b9adfddf88"
-                  "1f010d6b20fbff542fb944a9ef0140b90400001408050011bf01086b"
-                  "40faff5410010f0ad151308b300240f91f1e00f128ffff54310a80b9"
-                  "4c7930f8717930f8f5ffff1700e4006f2081853c2081863c2081873c"
-                  "2081883cc0035fd61f4040f1a901005408fc3f91e0031faa62008052"
-                  "01cd7492c81b80524304805204008092e5031faa010000d41f0000f1"
-                  "e043809ac0035fd61f0404f102010054083c00911f0000f108fd44d3"
-                  "08159f9a09ed7cd3080500d10c0000141f0408f10301005409408052"
-                  "0802805229f97fd3080500913f0100eba3ffff540300001408028052"
-                  "094080520a0000904a010091407968f8800000b4090040f9497928f8"
-                  "c0035fd60a0000900b000090400140f9a00000b4680140f9080100cb"
-                  "1f0109eb82010054e0031faac81b80520102a0526200805243048052"
-                  "04008092e5031faa010000d4c000f8b708004491680100f90800098b"
-                  "480100f9c0035fd6e0031faac0035fd6600400b43f4040f149010054"
-                  "28fc3f91e2031faae3031faa01cd7492e81a8052e4031faae5031faa"
-                  "010000d4c0035fd63f0404f1e2000054283c00913f0000f108fd44d3"
-                  "080500d1e803889a0b0000143f0408f1030100540940805208028052"
-                  "29f97fd3080500913f0101eba3ffff54020000140802805209000090"
-                  "290100912a7968f80a0000f9207928f8c0035fd6")),
+                  "c80100376a0500b40800009008010091207d409308492d8be1030baa"
+                  "e2030aaae3031faae4031faae5031faa08054079010000d420000014"
+                  "92c541a9ad7d7ed30000009000000091010000900d686d382000c03d"
+                  "e8031faa310240b952fedf88801940f95102110a0018118b1ffc02a9"
+                  "1f1c00f90000803d0b7c01a94b060011090400b9891540f90a1800b9"
+                  "8a0d40f90d0000390e1000f920008052315931b8e9030faaef0310aa"
+                  "4bfd9f8804000014e0031faa48008052e90310aa20792ef8e8792ef8"
+                  "f34340f9ff430291e0030eaac0035fd63f1c00f169000054a0028092"
+                  "c0035fd6e90301aaea0300aa0b6001910c6002914d00805204000014"
+                  "e8030e2a4e1d40f9c8fd9f88687969f81f0500f1c1030054400540f9"
+                  "48358052010180522200805223008052e4031faae5031faa010000d4"
+                  "60fdffb748b943a9080140b9cefddf881f010e6bc0fdff5450bd44a9"
+                  "100240b90400001408050011df01086be0fcff541101100af251318b"
+                  "510240f93f1e00f128ffff54520a80b96d7931f8927931f8f5ffff17"
+                  "1f0900f181000054807969f87f7929f8c0035fd6a00280927f7929f8"
+                  "c0035fd63f1c00f1c803005408600191097961f83f0500f141030054"
+                  "090040f93f0500f12103005409a843a9290140b94afddf883f010a6b"
+                  "e00200540cac44a90d6002914e0080528c0140b90400001429050011"
+                  "5f01096bc00100542f010c0a70512f8b0f0240f9ff1d00f128ffff54"
+                  "100a80b90e792ff8b0792ff8f5ffff1720008052c0035fd6e0031faa"
+                  "c0035fd6e9030a2a0a1c40f949fd9f88087961f81f0500f1e0079f1a"
+                  "c0035fd6080040f91f0500f1a1070054ea0300aa000d084e418dc53c"
+                  "4205c03d482d42a9428ce06e208ce06e493143a91f0500f10018824e"
+                  "e8179f1a3f0500f1e9179f1a7f0500f12915891a9f0500f100b8b14e"
+                  "0b00261e08010b4b0801090be9179f1a0801092ac8040034090440f9"
+                  "eb0300aa48358052010180522200805223008052e00309aae4031faa"
+                  "e5031faa010000d46003f8b7e8030baa69ad43a9290140b96bfddf88"
+                  "3f010b6b600200540db144a90e6102914f008052ad0140b904000014"
+                  "290500117f01096b4001005430010d0a9151308b300240f91f1e00f1"
+                  "28ffff54310a80b94f7930f8d17930f8f5ffff17e9030b2a081d40f9"
+                  "09fd9f88c0035fd65ffc3ff16900005460048092c0035fd6fd0f1ff8"
+                  "ff0740d1020100b4e8030091e90302aa2a1440386a020034290500f1"
+                  "0a15003881ffff54e80300911f0800711f6922388801005408000090"
+                  "08010091e1030091025960f8600c809208078052c3368052e4031faa"
+                  "e5031faa010000d402000014a0028092ff074091fd0741f8c0035fd6"
+                  "eb0300aaea03012a688545f81f0500f1c1070054000d084ee90300aa"
+                  "0c6002914d00805207000014e8030e2a2e1d40f9c8fd9f88280140f9"
+                  "1f0500f1610600542181c53c2281c63c28bd47a9428ce06e218ce06e"
+                  "2ec148a91f0500f12118824ee8179f1adf0500f1ee179f1aff0500f1"
+                  "ce158e1a1f0600f121b8b14e2f00261e08010f4b08010e0bee179f1a"
+                  "08010e2ac8030034200540f948358052010180522200805223008052"
+                  "e4031faae5031faa010000d4a002f8b728b943a9080140b9cefddf88"
+                  "1f010e6b20fbff5430bd44a9100240b90400001408050011df01086b"
+                  "40faff541101100af251318b510240f93f1e00f128ffff54520a80b9"
+                  "6d7931f8927931f8f5ffff17407d409328078052e1031faae2031faa"
+                  "e3031faae4031faae5031faa010000d4c0035fd6ea0300aae90300aa"
+                  "488545f81f0500f1a1070054000d084e2b6102914c00805207000014"
+                  "e8030d2a2d1d40f9a8fd9f88280140f91f0500f1610600542181c53c"
+                  "2281c63c28b947a9428ce06e218ce06e2dbd48a91f0500f12118824e"
+                  "e8179f1abf0500f1ed179f1adf0500f1ad158d1aff0500f121b8b14e"
+                  "2e00261e08010e4b08010d0bed179f1a08010d2ac8030034200540f9"
+                  "48358052010180522200805223008052e4031faae5031faa010000d4"
+                  "a002f8b728b543a9080140b9adfddf881f010d6b20fbff542fb944a9"
+                  "ef0140b90400001408050011bf01086b40faff5410010f0ad151308b"
+                  "300240f91f1e00f128ffff54310a80b94c7930f8717930f8f5ffff17"
+                  "00e4006f2081853c2081863c2081873c2081883cc0035fd61f4040f1"
+                  "a901005408fc3f91e0031faa6200805201cd7492c81b805243048052"
+                  "04008092e5031faa010000d41f0000f1e043809ac0035fd61f0404f1"
+                  "02010054083c00911f0000f108fd44d308159f9a09ed7cd3080500d1"
+                  "0c0000141f0408f103010054094080520802805229f97fd308050091"
+                  "3f0100eba3ffff540300001408028052094080520a0000904a010091"
+                  "407968f8800000b4090040f9497928f8c0035fd60a0000900b000090"
+                  "400140f9a00000b4680140f9080100cb1f0109eb82010054e0031faa"
+                  "c81b80520102a052620080524304805204008092e5031faa010000d4"
+                  "c000f8b708004491680100f90800098b480100f9c0035fd6e0031faa"
+                  "c0035fd6600400b43f4040f14901005428fc3f91e2031faae3031faa"
+                  "01cd7492e81a8052e4031faae5031faa010000d4c0035fd63f0404f1"
+                  "e2000054283c00913f0000f108fd44d3080500d1e803889a0b000014"
+                  "3f0408f103010054094080520802805229f97fd3080500913f0101eb"
+                  "a3ffff54020000140802805209000090290100912a7968f80a0000f9"
+                  "207928f8c0035fd6")),
+        Piece(name=".rodata.cst16", alignment=16,
+              writable=False, executable=False,
+              contents=bytes.fromhex(
+                  "0000000000000000ffffffffffffffff")),
         Piece(name=".rodata", alignment=8,
               writable=False, executable=False,
               contents=bytes.fromhex(
@@ -122,7 +142,8 @@ BLOB = Blob(
                   "00000000400000000000000008000000000000004800000000000000"
                   "08000000000000005000000000000000080000000000000058000000"
                   "00000000400000000000000098000000000000004000000000000000"
-                  "16003f001700400002004200")),
+                  "16003f00170040000200420000000000000008000000000041020800"
+                  "000000004200080000000000")),
         Piece(name=".bss", alignment=8,
               writable=True, executable=False,
               contents=bytes.fromhex(
@@ -138,43 +159,53 @@ BLOB = Blob(
     symbols={
         "pl4g_args": (0, 0),
         "pl4g_env": (0, 140),
-        "pl4g_heap_alloc": (0, 2276),
-        "pl4g_heap_free": (0, 2536),
-        "pl4g_io_drain": (0, 1992),
-        "pl4g_io_ready": (0, 1568),
-        "pl4g_io_shape": (1, 0),
-        "pl4g_io_step": (0, 1736),
+        "pl4g_heap_alloc": (0, 2712),
+        "pl4g_heap_free": (0, 2972),
+        "pl4g_io_close": (0, 2128),
+        "pl4g_io_drain": (0, 2428),
+        "pl4g_io_open": (0, 1996),
+        "pl4g_io_ready": (0, 1572),
+        "pl4g_io_shape": (2, 0),
+        "pl4g_io_step": (0, 1740),
         "pl4g_io_submit": (0, 408),
-        "pl4g_io_wait": (0, 1356),
+        "pl4g_io_wait": (0, 1360),
     },
     patches=(
         Patch(piece=0, offset=1156, kind="aarch64_adr_page21",
-              target=1, addend=224),
+              target=2, addend=224),
         Patch(piece=0, offset=1160, kind="aarch64_add_lo12",
-              target=1, addend=224),
+              target=2, addend=224),
         Patch(piece=0, offset=1212, kind="aarch64_adr_page21",
-              target=1, addend=224),
+              target=2, addend=224),
         Patch(piece=0, offset=1216, kind="aarch64_add_lo12",
-              target=1, addend=224),
-        Patch(piece=0, offset=2412, kind="aarch64_adr_page21",
-              target=2, addend=0),
-        Patch(piece=0, offset=2416, kind="aarch64_add_lo12",
-              target=2, addend=0),
-        Patch(piece=0, offset=2440, kind="aarch64_adr_page21",
-              target=2, addend=192),
-        Patch(piece=0, offset=2444, kind="aarch64_adr_page21",
-              target=2, addend=200),
-        Patch(piece=0, offset=2448, kind="aarch64_ldst64_lo12",
-              target=2, addend=192),
-        Patch(piece=0, offset=2456, kind="aarch64_ldst64_lo12",
-              target=2, addend=200),
-        Patch(piece=0, offset=2512, kind="aarch64_ldst64_lo12",
-              target=2, addend=200),
-        Patch(piece=0, offset=2520, kind="aarch64_ldst64_lo12",
-              target=2, addend=192),
-        Patch(piece=0, offset=2656, kind="aarch64_adr_page21",
-              target=2, addend=0),
-        Patch(piece=0, offset=2660, kind="aarch64_add_lo12",
-              target=2, addend=0),
+              target=2, addend=224),
+        Patch(piece=0, offset=1220, kind="aarch64_adr_page21",
+              target=1, addend=0),
+        Patch(piece=0, offset=1228, kind="aarch64_ldst128_lo12",
+              target=1, addend=0),
+        Patch(piece=0, offset=2068, kind="aarch64_adr_page21",
+              target=2, addend=240),
+        Patch(piece=0, offset=2072, kind="aarch64_add_lo12",
+              target=2, addend=240),
+        Patch(piece=0, offset=2848, kind="aarch64_adr_page21",
+              target=3, addend=0),
+        Patch(piece=0, offset=2852, kind="aarch64_add_lo12",
+              target=3, addend=0),
+        Patch(piece=0, offset=2876, kind="aarch64_adr_page21",
+              target=3, addend=192),
+        Patch(piece=0, offset=2880, kind="aarch64_adr_page21",
+              target=3, addend=200),
+        Patch(piece=0, offset=2884, kind="aarch64_ldst64_lo12",
+              target=3, addend=192),
+        Patch(piece=0, offset=2892, kind="aarch64_ldst64_lo12",
+              target=3, addend=200),
+        Patch(piece=0, offset=2948, kind="aarch64_ldst64_lo12",
+              target=3, addend=200),
+        Patch(piece=0, offset=2956, kind="aarch64_ldst64_lo12",
+              target=3, addend=192),
+        Patch(piece=0, offset=3092, kind="aarch64_adr_page21",
+              target=3, addend=0),
+        Patch(piece=0, offset=3096, kind="aarch64_add_lo12",
+              target=3, addend=0),
     ),
 )

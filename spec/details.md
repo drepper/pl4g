@@ -4362,3 +4362,56 @@ enters the ring waiting for one completion -- that being also what hands the ker
 **A record of one field** is one word, its field's, and `_words_of` and `_from_words` step into it: `_word_types` already said the
 word is the field's type, and an argument record of a generator with such a parameter read the field back as the record.
 
+**Values that are closed** (`@[closed_by(f)]`).  The attribute is carried from `_NamedType.closed_by` to `ProductType.closed_by`;
+`_check_closers` checks `T.f` in `_members` before any body is lowered (4686).  A `_Local` holding such a value has `closer`, and
+two pieces of state that differ from one way through a body to another: `owes` and `ended_at`/`ended_how`.  Both ride in the
+provenance tuple beside an arena's `gone_at`, so `_provenance`, `_put_back` and `_joined` carry them through arms, loops and ways
+out with nothing new: a join owes where any way owes, and has ended where any way ended.
+
+- `_bind_local` begins the lifetime (`_lifetime_begins`), both for a value and for a name that already stands for a place; the
+  parameter of the closing function itself (`func.name == "T.f"`) owes nothing and says so in the log.
+- `_lower_name` is the one place a name becomes a value, so a move is recorded there (`_moved`): `owes` cleared, `ended_at` set,
+  `move` and `lifetime-ended` logged with what `_handing_over` says it went to.  `_record_at`, which every field read and
+  reference goes through, refuses a variable whose lifetime ended (4682, said once per place).
+- Assigning to such a variable (`_lower_assignment`, placed path) refuses one that still owes (4684) and owes again after.
+- `_all_closed(scopes, span)` asks every variable in the scopes being left: from `_returning` after the defers ran, from
+  `break`/`continue` over `scopes[loop.scope_at:]`, from `_pop_scope(left_at)` where a block fell through, and after the body of an
+  instance and of a lambda.  Each variable is told once (`_told_unclosed`).
+- `_goes_round` compares a turn's head with its end (`_after_the_turns`) and with each `continue` (`_Loop.turn_began`): a variable
+  from outside that ended in the turn is 4685.  A loop over a range from a literal to the one after it takes one turn
+  (`_one_turn`), which is the loop a generator written into its walk is wrapped in, and a `while true` is left only by its
+  `break`s, so its head is no way out.
+- `_lower_expr` marks what an aggregate puts inside itself (`_mark_stored`: a tuple's members, an array's and a list's elements, a
+  record's fields; `_build_record` marks the fields it writes in place) and what a statement stores into a field, an element, a
+  dereference or a variable at the top level.  `_not_moved_out` refuses a marked value of such a type unless it is written out where
+  it stands (`_made_here`), and a member, element or dereference read as a value (4683, 4687).
+
+**`kind: ⌜T'⌝`** (`ast.LiftedTypeRef`).  `_collect_generic` keeps the definition without such parameters as `_Generic.node`, so
+that checking it where it is written and making its instances never see them, and keeps the parameters as written in
+`written_params`.  `_lower_generic` reads each against that: a lifted type is resolved where the call is and read into the bound
+types with `_reading`, and nothing is handed.  `_conditions_can_hold` then settles every `pre` condition the compiler can answer with
+the types bound (4918, with the call as a note) -- before the instance, where a type the body was not written for would otherwise
+fail first.  A generic function of a type is registered in `_members`, and `_generic_named` asks `_member_named` for a path whose
+base is a type.  `_levels_in` takes `⌜T'⌝` for a type without resolving it, which is what let a condition over a type parameter be
+classified where the function is written.
+
+**A result of an array** is `ArrayTypeRef.result`/`error`, resolved first in `_resolve_type` by wrapping the array type.  Two places
+that took a result apart by position now take it apart by what it is made of: `_words_of` with `unwrap`, `failed` and `error`, and
+`_from_words` with `wrap` -- an `extract` of a result reads a register by index and is right only where the answer is one word.
+A generator written into its walk binds what each `yield` gives with the generator's element type (`_types_renamed`), so a `yield`
+of an answer and one of a failure are both the result.
+
+**`std.Io.open` and the closes** are `pl4g_io_open` and `pl4g_io_close` in `runtime/io.c`: the name copied to a buffer on the
+stack with a nul added, `openat(AT_FDCWD, …)` with `O_CLOEXEC` and the flags of the kind; a close enters the ring until nothing is
+outstanding and then calls `close`.  Every request the ring is handed now carries the offset −1, the file's own position: a nought
+there is the absolute offset nought, which a pipe ignores and a file does not.
+
+**`std.read_lines`** keeps a 1024-byte buffer and two indices in its frame; it is walked through calls from another file.
+`target/vectors.py` stores a splat of a constant a word at a time where the target holds no run in a register
+(`_store_repeated`), which is what keeps `1024 ⍴ 0u8` to 128 stores on RISC-V rather than a thousand.
+
+**RISC-V branch relaxation** (`Target.relax`, a no-op on the other two).  After code generation and before the image or the
+assembly dump is laid out, the sections are laid out and every conditional branch whose target in the same section is out of its
+±4 KiB reach becomes the opposite branch over eight bytes and `jal zero, target` with a `riscv_jal` fixup; repeated until a round
+grows nothing.
+

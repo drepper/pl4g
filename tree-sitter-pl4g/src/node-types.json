@@ -7691,6 +7691,16 @@
           }
         ]
       },
+      "handed": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "type",
+            "named": true
+          }
+        ]
+      },
       "made_in": {
         "multiple": false,
         "required": false,
@@ -7713,7 +7723,7 @@
       },
       "type": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "type",
@@ -10241,6 +10251,16 @@
         "types": [
           {
             "type": "type",
+            "named": true
+          }
+        ]
+      },
+      "error": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
             "named": true
           }
         ]

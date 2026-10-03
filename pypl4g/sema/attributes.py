@@ -160,6 +160,11 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
                      "by value, answering with it or putting it inside something "
                      "else are all refused, and a reference to it is how it is "
                      "passed along"),
+        AttrSpec("closed_by", AttrTarget.TYPE, (_param("function", "name"),),
+                 doc="a value of this type stands for something that has to be "
+                     "given back, which the named function of the type does: it "
+                     "is moved and never copied, and every variable holding one "
+                     "closes it or moves it on before its scope ends"),
         AttrSpec("external", AttrTarget.FUNCTION,
                  (_param("symbol", "string"),),
                  doc="the function is defined somewhere else, under this "

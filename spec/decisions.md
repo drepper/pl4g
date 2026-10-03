@@ -9492,6 +9492,55 @@ Taken without asking, each the smallest thing that does the job:
 - **Two runtime functions**, `pl4g_io_ready` and `pl4g_io_step`, rather than one that answers which slot was answered: the
   scheduler holds the slots and asking each is eight loads.
 
+## 2026-10-03T23:00+02:00 — language
+
+**Files: `std.Io.open`, `close`, `read_lines`, and values that must be closed**
+
+The user asked for `std.read_lines` over a reader, answering a coroutine; for `std.Io.open` to open a file by name, with parameters
+saying how, so that reading and writing both come; for a `close` on `Reader` and `Writer`; and for an attribute on those types
+that makes the compiler refuse a scope ending without the close, a `defer` counting.  This reverses the decision of 2026-09-18
+that there is no `open`.  Four questions were put and answered as recommended:
+
+- **How `open` says what it opens: the type, handed as an argument** -- `std.Io.open(name, ⌜std.Reader⌝) → std.Reader ? i32`.
+  Against a mode enumeration answering one `File` type (Go's `os.OpenFile`, Zig's `openFile`) and against a mode answering a sum to
+  match (nothing common does).  Python picks the class from the mode string at run time; Zig's `comptime T: type` is what this is.
+  It needed a parameter that is handed a type, `kind: ⌜T'⌝`, which settles `T'` and is gone at run time.
+- **The attribute: `@[closed_by(close)]`**, naming the function -- against `@[must_close]`, which could only ever mean `close`, and
+  `@[linear]`, where any consuming function would do (Austral, Linear Haskell).
+- **What else discharges the duty: a move** -- answering the value or handing it to a call by value; a reference does not.
+  Rust's moves.  Storing one inside something is refused for now.
+- **What `read_lines` gives: `u8⟦⟧ ? i32`**, a view into the walk's buffer good until the next turn (Go's `Scanner.Bytes`), against a
+  `str` per line in the heap (Rust's `lines`, Python) and one in an arena handed in (Zig).  It needed a result whose answer is an
+  array, which had no spelling: `u8⟦⟧ ? i32`, the mark after the brackets.
+
+A fifth was asked because the answers left the standard streams to be closed by whoever copied them: which values owe the close.
+The user answered: **such a value is moved and never copied; the standard streams are fields of `Init`, which cannot be moved out
+of, so only references to them are handed; a variable's lifetime ends when its value is moved to another; every by-value binding
+owes the close; and every move and end of a lifetime goes into the report log.**  So `move` and `lifetime-ended` are report kinds,
+and a field, an element, a variable at the top level and what a reference names are never moved out of (4683).
+
+Taken without asking, each the smallest thing that does the job and each recorded in the specification:
+
+- **A value written out where it stands may go into a record's field** -- `std.Writer(.fd ← 2i32)`, which is how `std.io` and the
+  startup record are made -- while a variable's value or a call's answer may not (4687).  Without it `std` could not be written.
+- **A loop of one turn and a `while true` are what they are**: a variable from outside closed in a loop of one turn -- the loop a
+  generator written into its walk is wrapped in -- does not go round, and a `while true` is left only by its `break`s.  Without
+  either, a `defer` in a generator and a close before a `break` were refused.
+- **`close` answers nothing.**  Rust's `Drop` ignores a refused close and Go's `Close` answers one; answering one here would make
+  every `defer` of it a statement whose answer nothing takes.  In the to-do list.
+- **`close` waits for every request the ring holds**, not only the ones to its descriptor: the ring does not record which
+  descriptor a slot is for, and recording it would change the record the language and the runtime share.
+- **`read_lines` refuses a line longer than its buffer with `ENOBUFS`** (Go's `ErrTooLong`), rather than handing it out in pieces.
+  The buffer is 1024 bytes because a frame larger than about four kilobytes is more than the AArch64 and RISC-V back ends address
+  yet; that is in the compiler's to-do list.
+- **A condition over types is settled at a generic call** (4918), which no instance did before; `open`'s
+  `pre(⌜T'⌝ = ⌜Reader⌝ ∨ …)` is what refuses `⌜u8⌝`.
+
+Four faults the work ran into are mended with it: a generator written into its walk took each `yield`'s own type for the element's;
+a result was taken apart by position where its answer is more than one word; a request on the ring was made at the absolute
+offset nought, so that every read of a file started at its top; and a conditional branch on RISC-V further than four kilobytes was
+refused rather than grown into a branch and a jump.
+
 
 Open questions
 --------------

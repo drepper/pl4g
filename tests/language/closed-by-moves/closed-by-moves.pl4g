@@ -1,0 +1,62 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `@[closed_by(close)]` on a type says a value of it stands for something that
+※ has to be given back, and `T.close` is what gives it back.  Such a value is
+※ moved, never copied: reading a variable as a value hands it on and ends the
+※ variable's lifetime, and every variable holding one closes it or moves it on
+※ before its scope ends -- answered, handed to a call, bound to another name, or
+※ closed in a `defer`.  The function that closes is the one place a value of it
+※ ends without either.
+※
+※ Compare: **Rust**, whose moves are this and whose `Drop` closes on its own;
+※ **Austral** and **Linear Haskell**, whose linear types are this with any
+※ consuming function allowed; **C++**, whose destructor closes on its own and
+※ whose moves leave the source to be destroyed; **Go**'s `defer f.Close()`,
+※ which nothing makes a program write.
+
+let closed: mut u8 = 0u8
+
+@[closed_by(close)]
+type Handle = n : u8
+
+@[impure]
+fn Handle.close(h: Handle):
+    closed ← closed + h.n
+
+fn made(n: u8) → Handle:
+    Handle(.n ← n)
+
+fn passed(h: Handle) → Handle:
+    h
+
+@[impure]
+fn kept(h: Handle):
+    defer Handle.close(h)
+    closed ← closed + 0u8
+
+@[impure]
+fn either(h: Handle, early: bool) → u8:
+    if early:
+        Handle.close(h)
+        return 1u8
+    let moved: Handle = h
+    Handle.close(moved)
+    2u8
+
+@[startup, impure]
+fn main() → u6:
+    let a: Handle = made(1u8)
+    let b: Handle = passed(a)
+    kept(b)
+    let c: mut Handle = made(2u8)
+    Handle.close(c)
+    c ← made(4u8)
+    let way := either(c, false) + either(made(8u8), true)
+    let d: Handle = made(16u8)
+    let i: mut u8 = 0u8
+    while §out true:
+        i ← i + 1u8
+        if i = 3u8:
+            Handle.close(d)
+            break §out
+    if closed = 31u8 ∧ way = 3u8: 0u6 else: 1u6

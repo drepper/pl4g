@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4683
+※ pl4g-test: expect-diag 4683 LANG_CLOSABLE_MOVED_OUT_OF_PLACE
+
+※ The standard streams are fields of `std.Init` and of `std.io`, and nothing is
+※ moved out of a field: they are handed along by reference.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: mut std.Init) → u6:
+    let mine: std.Writer = init.io.error
+    std.Writer.close(mine)
+    0u6

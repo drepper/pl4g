@@ -286,7 +286,10 @@ module.exports = grammar({
       // end: it is written where the one is and what arrives is the several.
       optional('⁂'),
       field('name', $.identifier), ':', optional($.mutable),
-      field('type', $.type),
+      // A type handed as an argument, `kind: \u231cT'\u231d`, settles the type
+      // parameter inside it; only a parameter is handed one.
+      choice(field('type', $.type),
+             seq('\u231c', field('handed', $.type), '\u231d')),
       // `in a`: the arena parameter what is handed over was made in.
       optional(seq('in', field('made_in', $.identifier))),
       optional(seq('\u2190', field('default', $._expression))),
@@ -353,6 +356,11 @@ module.exports = grammar({
     // choose.
     type: $ => choice(
       seq($._plain_type, repeat($._array_suffix)),
+      // A result whose answer is an array: the mark after the brackets, as it
+      // is after a name, so that `u8\u27e6\u27e7 ? i32` is one result and
+      // `u8?\u27e64\u27e7` four.
+      prec(1, seq($._plain_type, repeat1($._array_suffix),
+                  '?', optional(field('error', $.identifier)))),
       seq('&', optional($.mutable),
           optional(choice($.lasting, $.lifetime)),
           field('pointee', $.type)),

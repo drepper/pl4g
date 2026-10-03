@@ -10,16 +10,21 @@
 ※ sometimes not one, is not something a program can see.
 
 ※※ A device that can be read.
-@[export, device]
+※
+※ Moved and never copied, and closed with `Reader.close` -- by whatever variable
+※ holds one when its scope ends, or by what it was moved on to.  The three a
+※ process starts with are fields of `Init` and of `io`, which nothing moves out
+※ of: they are handed along by reference and never closed.
+@[export, device, closed_by(close)]
 type Reader = fd : i32
 
-※※ A device that can be written.
-@[export, device]
+※※ A device that can be written.  Closed with `Writer.close`.
+@[export, device, closed_by(close)]
 type Writer = fd : i32
 
 ※※ A device that can be both, which is what a socket and a file opened either
-※※ way are.
-@[export, device]
+※※ way are.  Closed with `ReadWriter.close`.
+@[export, device, closed_by(close)]
 type ReadWriter = fd : i32
 
 ※※ The devices a program starts with open.
@@ -144,6 +149,12 @@ fn io_ready(r: &mut Ring, slot: i64) → i64
 
 @[external("pl4g_io_step"), io]
 fn io_step(r: &mut Ring)
+
+@[external("pl4g_io_open"), io]
+fn io_open(how: i32, at: u64, len: u64) → i64
+
+@[external("pl4g_io_close"), io]
+fn io_close(r: &mut Ring, fd: i32) → i64
 
 ※※ A request that has been started, and may not have been answered yet.
 ※
@@ -291,6 +302,114 @@ fn read(from: &mut Reader, into: u8⟦⟧) → u64 ¤size ? i32:
         ⊥ 11i32
     else:
         flush(Pending(.slot ← slot))
+
+※ -- files -------------------------------------------------------------------
+
+※※ How `io_open` is asked to open, as the runtime numbers the ways.
+let OPEN_READING: i32 = 0i32
+let OPEN_WRITING: i32 = 1i32
+let OPEN_BOTH: i32 = 2i32
+
+※※ Open the file `name`, for what the type handed says: `⌜Reader⌝` to read it,
+※※ `⌜Writer⌝` to write it, made if it is not there and emptied if it is, and
+※※ `⌜ReadWriter⌝` for both, made if it is not there and left as it is.
+※※
+※※ \param name the file, relative to the directory the process is in
+※※ \param kind which of the three to make
+※※ \return the device, which the caller closes
+※※ \raises the number the kernel gave
+※
+※ The type is the argument, rather than a mode beside the name, because what
+※ comes back is a different type for each: a `Reader` cannot be written, which
+※ is a thing the compiler can say only if it knows which was opened.  A fourth
+※ kind is a fourth arm here and one more type a program may hand.
+@[export, io]
+fn Io.open(name: str, kind: ⌜T'⌝) → T' ? i32
+        pre(⌜T'⌝ = ⌜Reader⌝ ∨ ⌜T'⌝ = ⌜Writer⌝ ∨ ⌜T'⌝ = ⌜ReadWriter⌝):
+    let bytes: u8⟦⟧ = ⎕bytes(name)
+    let at: u64 = if #bytes = 0: 0u64 else: ⎕address(&bytes⟦0⟧)
+    comptime if ⌜T'⌝ = ⌜Reader⌝:
+        let fd: i64 = io_open(OPEN_READING, at, ⎕drop(#bytes))
+        if fd < 0i64: ⊥ refusal(fd) else: Reader(.fd ← ⎕narrow(fd, ⌜i32⌝) ?? 0i32)
+    comptime elif ⌜T'⌝ = ⌜Writer⌝:
+        let fd: i64 = io_open(OPEN_WRITING, at, ⎕drop(#bytes))
+        if fd < 0i64: ⊥ refusal(fd) else: Writer(.fd ← ⎕narrow(fd, ⌜i32⌝) ?? 0i32)
+    else:
+        let fd: i64 = io_open(OPEN_BOTH, at, ⎕drop(#bytes))
+        if fd < 0i64: ⊥ refusal(fd) else: ReadWriter(.fd ← ⎕narrow(fd, ⌜i32⌝) ?? 0i32)
+
+※※ Close a device that was read, once every request in flight is answered.
+@[export, io]
+fn Reader.close(r: Reader):
+    _ ← io_close(&mut ring, r.fd)
+
+※※ Close a device that was written, once every request in flight is answered:
+※※ one may be a write to it, and what it answers is still read with `flush`.
+@[export, io]
+fn Writer.close(w: Writer):
+    _ ← io_close(&mut ring, w.fd)
+
+※※ Close a device that was both.
+@[export, io]
+fn ReadWriter.close(rw: ReadWriter):
+    _ ← io_close(&mut ring, rw.fd)
+
+※※ The longest line `read_lines` hands out: a line longer than this is refused
+※※ with `ENOBUFS` rather than handed out in pieces a reader would take for lines.
+※
+※ The buffer is in the walk's frame, which is why it is not larger: a frame
+※ is the caller's room or the walk's description.
+let LINE_MAX: u64 ¤idx = 1024
+
+※※ Walk what `from` holds a line at a time.
+※※
+※※ \param from the device to read
+※※ \return each line without the end of line after it -- the last one too,
+※※ where the device ends without one -- or the number the kernel gave, which
+※※ ends the walk
+※
+※ What each turn gives is a view into a buffer the walk keeps, good until the
+※ next turn: nothing is copied and nothing allocated, which is Go's
+※ `Scanner.Bytes` and what C's `getline` into one buffer does.  A reader that
+※ wants to keep a line copies it.
+@[export, io]
+fn read_lines(from: &mut Reader) ⇉ u8⟦⟧ ? i32:
+    let buf: mut u8⟦1024⟧ = 1024 ⍴ 0u8
+    let start: mut u64 ¤idx = 0
+    let end: mut u64 ¤idx = 0
+    let more: mut bool = true
+    while more:
+        let at: mut u64 ¤idx = start
+        while at < end ∧ buf⟦at⟧ ≠ 10u8:
+            at ← at + 1
+        if at < end:
+            yield buf⟦start…at⟧
+            start ← at + 1
+        else:
+            if start > 0:
+                ※ what is left of the last line goes to the front
+                let left: u64 ¤idx = end - start
+                let i: mut u64 ¤idx = 0
+                while i < left:
+                    buf⟦i⟧ ← buf⟦start + i⟧
+                    i ← i + 1
+                start ← 0
+                end ← left
+            if end = LINE_MAX:
+                yield ⊥ 105i32
+                more ← false
+            else:
+                match read(from, buf⟦end…LINE_MAX⟧):
+                    u64 ¤size(n):
+                        if n = 0:
+                            if end > start:
+                                yield buf⟦start…end⟧
+                            more ← false
+                        else:
+                            end ← end + ⎕unit(⎕drop(n), ⌜idx⌝)
+                    ⊥(e):
+                        yield ⊥ e
+                        more ← false
 
 ※ -- writing text ------------------------------------------------------------
 

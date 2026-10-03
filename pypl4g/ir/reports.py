@@ -113,6 +113,13 @@ class ReportKind(StrEnum):
     #: built into an array where one was asked for, or handed on to a call
     #: with its description in the caller's frame -- and what it borrows.
     ITERATOR = "iterator"
+    #: A value of a type marked `@[closed_by(f)]` moved from one variable to
+    #: another, into a call, or out as an answer -- never copied, so the one it
+    #: came from holds nothing from here on.
+    MOVE = "move"
+    #: Where such a variable's lifetime ended: by a move, by being closed, or
+    #: by its scope ending with it closed on every way out.
+    LIFETIME_ENDED = "lifetime-ended"
 
 
 #: What the severities of the diagnostic catalog are called here.  One name for

@@ -30,7 +30,9 @@ fn main(init: std.Init) → u6:
     if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
         return 1u6
     let out: mut std.Writer = std.Writer(.fd ← ends⟦1⟧)
+    defer std.Writer.close(out)
     let back: mut std.Reader = std.Reader(.fd ← ends⟦0⟧)
+    defer std.Reader.close(back)
 
     let wrote: u64 ¤size = std.Io.println(&mut out, ⎕bytes("ab")) ?? 0
     if ⎕drop(wrote) ≠ 3u64:

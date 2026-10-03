@@ -353,15 +353,61 @@ class _Settler:
         assert isinstance(ty, VecType)
         address = inst.operands[1]
         written: Value = inst.operands[0]
+        cuts = self._cut(inst.operands[2], ty.lanes)
+        if all(lanes == 1 for lanes in cuts):
+            done = self._store_repeated(inst, ty)
+            if done is not None:
+                self._became[id(inst)] = done
+                return
         at = 0
-        for lanes, piece in zip(self._cut(inst.operands[2], ty.lanes),
-                                self._held(inst.operands[2])):
+        for lanes, piece in zip(cuts, self._held(inst.operands[2])):
             written = self._add(StoreInst(
                 written,
                 self._piece_place(address, ty.element, at, piece.ty, inst.span),
                 piece, inst.span))
             at += lanes
         self._became[id(inst)] = written
+
+    def _store_repeated(self, inst: StoreInst, ty: VecType) -> Value | None:
+        """Write one number written down into every element eight bytes at a
+        time, where nothing holds a run at once: the number repeated across a
+        word is the same bytes as the elements one after another.  What does not
+        fill a word is written an element at a time.  Nothing where the run is
+        not that -- or is too short for it to matter.
+
+        Without this, `1024 ⍴ 0u8` on a machine with no vector registers is a
+        thousand stores, and a function holding them is longer than a branch
+        across it can reach.
+        """
+        stored = inst.operands[2]
+        element = ty.element
+        if not isinstance(stored, SplatInst) \
+                or not isinstance(stored.operands[0], IntConst) \
+                or not isinstance(element, IntType) \
+                or element.bits not in (8, 16, 32) \
+                or stride_of(element, self._layout) * 8 != element.bits:
+            return None
+        per = 64 // element.bits
+        whole = ty.lanes // per
+        if whole < 2:
+            return None
+        one = stored.operands[0].value & ((1 << element.bits) - 1)
+        pattern = 0
+        for lane in range(per):
+            pattern |= one << (lane * element.bits)
+        written: Value = inst.operands[0]
+        address = inst.operands[1]
+        for word in range(whole):
+            written = self._add(StoreInst(
+                written,
+                self._piece_place(address, element, word * per, U64, inst.span),
+                IntConst(U64, pattern), inst.span))
+        for at in range(whole * per, ty.lanes):
+            written = self._add(StoreInst(
+                written,
+                self._piece_place(address, element, at, element, inst.span),
+                IntConst(element, one), inst.span))
+        return written
 
     def _binary(self, inst: BinaryInst) -> None:
         """One operation per piece."""

@@ -390,6 +390,10 @@ class Driver:
         from ..elf.writer import ImageError, ImageSettings, write_image
         from ..mc.layout import layout_section, resolve_symbol_offsets
 
+        # A displacement that does not reach is grown before anything is laid out
+        # for good -- the dump below included, so that it shows what the image has.
+        target.relax(list(streamer.sections.values()),
+                     list(streamer.symbols.values()))
         if self.options.emit is EmitKind.ASM:
             symbols = list(streamer.symbols.values())
             for section in streamer.sections.values():

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from dataclasses import replace
 from typing import Final
 
@@ -21,6 +23,10 @@ from ...ir.callgraph import in_call_order
 from ...mc.machine import clobbered_units
 from ...mc.reg import RegUnit
 from ...mc.streamer import MCStreamer
+from ...mc.fragment import MCInstFragment
+from ...mc.layout import layout_section, resolve_symbol_offsets
+from ...mc.operand import SymExpr
+from ...mc.symbol import MCSection, MCSymbol
 from ...ir.layout import DataLayout
 from ...ir.types import (ArrayType, FloatType, ListType, PtrType, ResultType,
                          TupleType, Type, VecType)
@@ -34,7 +40,7 @@ from ..registry import architecture_of
 from .. import started
 from ..runtime import Runtime, reaches
 from ...runtime import blob_for
-from .fixups import BY_NAME
+from .fixups import BRANCH, BY_NAME, JAL
 from ..globals import emit_globals
 from ..vectors import Vectors, settle as settle_vectors
 from ..target import ImageDefaults
@@ -127,6 +133,33 @@ class RISCV64Target:
         """The instruction selector for this target."""
         del streamer
         return RVSelector(self.table, self.isa)
+
+    def relax(self, sections: Sequence[MCSection],
+              symbols: Sequence[MCSymbol]) -> None:
+        """Make a conditional branch whose target is further than it reaches into
+        the opposite branch over one instruction and a jump.
+
+        A branch reaches four kilobytes either way and a jump a megabyte, so a
+        function longer than the one is still shorter than the other: `beq a, b,
+        far` becomes `bne a, b, +8; jal zero, far`, which is what the GNU
+        assembler does with the same instruction.  Laid out again after each
+        round, since a branch that grew moves everything after it, until a round
+        grows none -- which it must, nothing ever shrinking.
+        """
+        for _ in range(32):
+            for section in sections:
+                layout_section(section)
+                resolve_symbol_offsets(section, symbols)
+            grew = False
+            for section in sections:
+                for fragment in section.fragments:
+                    if isinstance(fragment, MCInstFragment) \
+                            and _too_far(fragment, section):
+                        _jump_around(fragment)
+                        grew = True
+            if not grew:
+                return
+        raise RuntimeError("branch relaxation did not settle")
 
     def image_defaults(self) -> ImageDefaults:
         """The layout constants the image writer needs.
@@ -316,3 +349,42 @@ def _is_floating(ty: Type) -> bool:
     if isinstance(ty, TupleType):
         return any(_is_floating(member) for member in ty.members)
     return False
+
+
+#: How far a conditional branch reaches, in bytes either way.
+_BRANCH_REACH: Final[int] = 1 << 12
+
+#: The bits of a conditional branch that hold where it goes, and the one that
+#: tells each comparison from its opposite: `beq`/`bne`, `blt`/`bge`,
+#: `bltu`/`bgeu` differ in the lowest bit of the function field.
+_BRANCH_OFFSET_BITS: Final[int] = 0xFE000F80
+_BRANCH_OPPOSITE: Final[int] = 1 << 12
+
+#: `jal zero, 0`, the offset filled in by the jump's own fixup.
+_JUMP: Final[int] = 0x6F
+
+
+def _too_far(fragment: MCInstFragment, section: MCSection) -> bool:
+    """Whether *fragment* is a conditional branch, not yet grown, to a place in
+    *section* further than one reaches."""
+    if len(fragment.fixups) != 1 or len(fragment.encoded) != 4:
+        return False
+    fixup = fragment.fixups[0]
+    if fixup.kind is not BRANCH or not isinstance(fixup.target, SymExpr):
+        return False
+    symbol = fixup.target.symbol
+    if symbol.section is not section or not symbol.defined:
+        return False
+    distance = symbol.offset - (fragment.offset + fixup.offset)
+    return not -_BRANCH_REACH <= distance < _BRANCH_REACH
+
+
+def _jump_around(fragment: MCInstFragment) -> None:
+    """Turn a conditional branch into its opposite over eight bytes, and a jump."""
+    word = int.from_bytes(fragment.encoded[:4], "little")
+    # Eight bytes on: imm[4:1] is 0b0100 in bits 11..8, everything else nought.
+    opposite = (word & ~_BRANCH_OFFSET_BITS) ^ _BRANCH_OPPOSITE | (4 << 8)
+    fixup = fragment.fixups[0]
+    fragment.encoded = bytearray(opposite.to_bytes(4, "little")
+                                 + _JUMP.to_bytes(4, "little"))
+    fragment.fixups = [replace(fixup, kind=JAL, offset=fixup.offset + 4)]

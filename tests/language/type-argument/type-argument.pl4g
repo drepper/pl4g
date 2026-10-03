@@ -1,0 +1,36 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A generic function's type parameter may be read off a type the call hands it
+※ -- `kind: ⌜T'⌝`, called with `⌜A⌝` -- where nothing else the call hands says
+※ it, which is what a function answering a different type for each of several
+※ asks for.  Nothing is handed at run time.  A condition comparing types
+※ (`pre(⌜T'⌝ = ⌜A⌝ ∨ …)`) is settled at the call, before the function is made,
+※ and a type it was not meant for is refused there.
+※
+※ Compare: **Zig**, whose `comptime T: type` parameter this is; **C++**'s
+※ explicit template arguments, `make<A>(3)`; **Rust**'s turbofish,
+※ `make::<A>(3)`; **Haskell**'s `Proxy` and type applications, `make @A 3`.
+
+type A = n : u8
+type B = n : u8
+type Kinds = x : u8
+
+fn Kinds.make(kind: ⌜T'⌝, v: u8) → T'
+        pre(⌜T'⌝ = ⌜A⌝ ∨ ⌜T'⌝ = ⌜B⌝):
+    comptime if ⌜T'⌝ = ⌜A⌝:
+        A(.n ← v)
+    else:
+        B(.n ← v + 1u8)
+
+fn plain(kind: ⌜T'⌝, v: u8) → T':
+    comptime if ⌜T'⌝ = ⌜A⌝:
+        A(.n ← v)
+    else:
+        B(.n ← v + 1u8)
+
+@[startup]
+fn main() → u6:
+    let a: A = plain(⌜A⌝, 3u8)
+    let b: B = Kinds.make(⌜B⌝, 3u8)
+    let c: A = Kinds.make(⌜A⌝, 5u8)
+    if a.n = 3u8 ∧ b.n = 4u8 ∧ c.n = 5u8: 0u6 else: 1u6

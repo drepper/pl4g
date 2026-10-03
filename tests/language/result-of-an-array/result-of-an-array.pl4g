@@ -1,0 +1,33 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `u8⟦⟧ ? i32` is a result whose answer is an array: the mark after the
+※ brackets, as after a name -- where `u8?⟦4⟧` is four results.  A generator may
+※ give one, which is how a walk hands out views and a failure in one type; it
+※ is the same written into the loop that walks it and walked through calls.
+
+fn parts(n: u64) ⇉ u8⟦⟧ ? i32:
+    let buf: mut u8⟦8⟧ = 8 ⍴ 7u8
+    let at: u64 ¤idx = 3
+    yield buf⟦0…at⟧
+    yield ⊥ 5i32
+
+fn walked(it: ⇉u8⟦⟧ ? i32) → u64:
+    let t: mut u64 = 0u64
+    foreach x := it:
+        match x:
+            u8⟦⟧(b):
+                t ← t + ⎕drop(#b)
+            ⊥(e):
+                t ← t + (⎕narrow(e, ⌜u64⌝) ?? 0u64)
+    t
+
+@[startup]
+fn main() → u6:
+    let here: mut u64 = 0u64
+    foreach x := parts(1u64):
+        match x:
+            u8⟦⟧(b):
+                here ← here + ⎕drop(#b)
+            ⊥:
+                here ← here + 10u64
+    if here = 13u64 ∧ walked(parts(1u64)) = 8u64: 0u6 else: 1u6

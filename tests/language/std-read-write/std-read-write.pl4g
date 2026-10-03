@@ -34,7 +34,9 @@ fn main(init: mut std.Init) → u6:
         1u6
     else:
         let sink: mut std.Writer = std.Writer(.fd ← ends⟦1⟧)
+        defer std.Writer.close(sink)
         let source: mut std.Reader = std.Reader(.fd ← ends⟦0⟧)
+        defer std.Reader.close(source)
         let sent: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧ in ⎕static
         let back: mut u8⟦4⟧ = ⟦0u8, 0u8, 0u8, 0u8⟧
         ※ how many bytes went, or why none did
@@ -50,6 +52,7 @@ fn main(init: mut std.Init) → u6:
         ※ back named rather than as a number
         else:
             let nowhere: mut std.Writer = std.Writer(.fd ← 77i32)
+            defer std.Writer.close(nowhere)
             match std.write_sync(&mut nowhere, sent):
                 u64 ¤size:
                     5u6

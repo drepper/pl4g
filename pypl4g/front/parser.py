@@ -950,6 +950,13 @@ class Parser:
                                     shape=tuple(shape))
         if self._check(TokKind.DEREF) and self._peek().kind is TokKind.ITER:
             return self._parse_running_type()
+        if self._check(TokKind.LIFT_OPEN):
+            # A type handed as an argument: `kind: ⌜T'⌝`.
+            start = self._advance().span
+            inner = self._parse_type_ref()
+            end = self._expect(TokKind.LIFT_CLOSE,
+                               D.LANG_SYNTAX_EXPECTED_CLOSING_LIFT).span
+            return ast.LiftedTypeRef(span=start.to(end), inner=inner)
         if self._check(TokKind.ITER):
             # Something a loop can walk, and what it gives -- or, where no type
             # follows, whatever the definition is given gives.
@@ -982,6 +989,17 @@ class Parser:
                                D.LANG_SYNTAX_EXPECTED_CLOSING_ARRAY).span
             found = ast.ArrayTypeRef(span=found.span.to(end), element=found,
                                      shape=tuple(shape))
+        if isinstance(found, ast.ArrayTypeRef) and self._check(TokKind.QUESTION):
+            # A result whose answer is the array: the mark after the brackets,
+            # as after a name, and what the error carries after it.
+            mark = self._advance()
+            error: str | None = None
+            last = mark
+            if self._check(TokKind.IDENT):
+                last = self._advance()
+                error = last.text
+            found = replace(found, span=found.span.to(last.span), result=True,
+                            error=error)
         return found
 
     def _parse_unit_ref(self) -> ast.UnitRef:

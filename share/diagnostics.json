@@ -6203,6 +6203,260 @@
       "option": null
     },
     {
+      "number": 4681,
+      "name": "LANG_CLOSABLE_NOT_CLOSED",
+      "severity": "error",
+      "message": "'{name}' holds a '{type}', and its lifetime ends here without '{closer}' or a move: it is never closed",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "its type"
+        },
+        {
+          "name": "closer",
+          "type": "string",
+          "description": "the function that closes it"
+        }
+      ],
+      "cause": "A type marked `@[closed_by(f)]` stands for something outside the program that has to be given back -- a file, say -- and every variable holding one by value owes that.  The duty is met by calling `T.f` with it, directly or in a `defer`, or by moving the value on: handing it to a call by value, binding it to another name, answering with it.  Some way out of the variable's scope does none of these.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Values that are closed",
+        "requirement": "Every variable holding a value of a type marked `@[closed_by(f)]` is closed or moved on every way out of its scope."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4682,
+      "name": "LANG_CLOSABLE_AFTER_ITS_END",
+      "severity": "error",
+      "message": "'{name}' is read after its lifetime ended",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        }
+      ],
+      "cause": "A value of a type marked `@[closed_by(f)]` is moved, never copied: reading the variable as a value hands the value on and ends the variable's lifetime, and closing it ends it too.  After that the name holds nothing.  Where the end was on one way through and not another, the name holds nothing on the way that ended it, which is enough.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Values that are closed",
+        "requirement": "A variable whose value was moved or closed is not read again until it is given a new one."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4683,
+      "name": "LANG_CLOSABLE_MOVED_OUT_OF_PLACE",
+      "severity": "error",
+      "message": "a '{type}' is moved, never copied, and cannot be moved out of {what}: take a reference to it",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        },
+        {
+          "name": "what",
+          "type": "string",
+          "description": "where it is"
+        }
+      ],
+      "cause": "Moving a value out of a variable ends the variable's lifetime; moving one out of a field, an element, a variable at the top level or what a reference names would leave a hole in something that goes on existing.  The standard streams are such fields -- of `std.Init` and of `std.io` -- and are handed along by `&` or `&mut`.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Values that are closed",
+        "requirement": "A value of a type marked `@[closed_by(f)]` is moved only out of a variable."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4684,
+      "name": "LANG_CLOSABLE_OVERWRITTEN",
+      "severity": "error",
+      "message": "'{name}' still holds a '{type}' that was not closed, and giving it another would lose that one",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "its type"
+        }
+      ],
+      "cause": "Assigning to a variable that still owes a close would drop the value it holds without closing it.  Close it or move it on first; a variable whose value was moved may be given another.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Values that are closed",
+        "requirement": "A variable holding an unclosed value of a type marked `@[closed_by(f)]` is not assigned to."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4685,
+      "name": "LANG_CLOSABLE_MOVED_IN_LOOP",
+      "severity": "error",
+      "message": "'{name}' is moved inside a loop that goes round again, and the next turn would read it after its lifetime ended",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        }
+      ],
+      "cause": "The variable was bound outside the loop and is moved or closed in its body, along a way that goes back round.  The next turn would find it holding nothing.  Leave the loop on that way, or give the variable a new value before the turn ends.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Values that are closed",
+        "requirement": "A loop's turn does not end with a variable bound outside it moved where it was not at the start."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4686,
+      "name": "LANG_CLOSED_BY_INVALID",
+      "severity": "error",
+      "message": "'@[closed_by({closer})]' on '{type}' names '{type}.{closer}', which {why}",
+      "args": [
+        {
+          "name": "closer",
+          "type": "string",
+          "description": "the name given"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        },
+        {
+          "name": "why",
+          "type": "string",
+          "description": "what is wrong with it"
+        }
+      ],
+      "cause": "What the attribute names is the function that closes a value of the type: defined in the same file as `T.closer`, taking exactly one parameter, a `T` by value.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Values that are closed",
+        "requirement": "`@[closed_by(f)]` names a function `T.f` of the type's file taking one `T` by value."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4687,
+      "name": "LANG_CLOSABLE_STORED",
+      "severity": "error",
+      "message": "a '{type}' cannot be put inside {what}: nothing would close it",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        },
+        {
+          "name": "what",
+          "type": "string",
+          "description": "what it would be put into"
+        }
+      ],
+      "cause": "A record, a tuple, a list, a variable at the top level or what a lambda brought in is not a variable whose scope ends, so nothing would ask whether the value inside was closed.  A value made where it is written -- `std.Reader(.fd ← 0i32)`, which is how the standard streams are made -- may be; a variable's value, or a call's answer, may not.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Values that are closed",
+        "requirement": "A value of a type marked `@[closed_by(f)]` is held by a variable or a parameter, not inside something else."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4688,
+      "name": "LANG_TYPE_ARGUMENT_NOT_A_TYPE",
+      "severity": "error",
+      "message": "'{name}' is handed a type, written '⌜T⌝', and this is not one",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the parameter"
+        }
+      ],
+      "cause": "A parameter written `name: ⌜T'⌝` is handed a type at the call -- `⌜u8⌝`, `⌜std.Reader⌝` -- which settles the type parameter inside it.  Nothing is handed at run time.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "An argument for a parameter of type `⌜T'⌝` is a lifted type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4689,
+      "name": "LANG_TYPE_ARGUMENT_NOT_GENERIC",
+      "severity": "error",
+      "message": "a parameter is handed a type only where what it settles is a type parameter",
+      "args": [],
+      "cause": "`⌜T'⌝` as a parameter's type says the call hands the function a type, which is what settles `T'`.  Written in a function without type parameters, or around something that is not one, it settles nothing.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A parameter of type `⌜T'⌝` belongs to a generic function."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4690,
+      "name": "LANG_CLOSABLE_ENDED_HERE",
+      "severity": "note",
+      "message": "'{name}': {how}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        },
+        {
+          "name": "how",
+          "type": "string",
+          "description": "what happened to it here"
+        }
+      ],
+      "cause": "Said beside a read of a variable that no longer holds anything, pointing at what ended it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Values that are closed",
+        "requirement": "A note."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

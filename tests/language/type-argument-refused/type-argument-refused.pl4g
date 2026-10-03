@@ -1,0 +1,20 @@
+※ pl4g-test: compile=error diag=4918
+※ pl4g-test: expect-diag 4918 LANG_CLAUSE_CANNOT_HOLD
+
+※ A condition over the types is settled at the call, so a type the function was
+※ not meant for is refused there rather than wherever its body first goes wrong.
+
+type A = n : u8
+type B = n : u8
+
+fn make(kind: ⌜T'⌝, v: u8) → T'
+        pre(⌜T'⌝ = ⌜A⌝ ∨ ⌜T'⌝ = ⌜B⌝):
+    comptime if ⌜T'⌝ = ⌜A⌝:
+        A(.n ← v)
+    else:
+        B(.n ← v)
+
+@[startup]
+fn main() → u6:
+    let x: u8 = make(⌜u8⌝, 3u8)
+    if x = 3u8: 0u6 else: 1u6

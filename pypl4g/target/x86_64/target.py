@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from typing import Final
 
 from ...diag import ids as D
@@ -20,6 +22,7 @@ from ...ir.callgraph import in_call_order
 from ...mc.machine import clobbered_units
 from ...mc.reg import RegUnit
 from ...mc.streamer import MCStreamer
+from ...mc.symbol import MCSection, MCSymbol
 from ...ir.layout import DataLayout
 from ..allocator import OUT_OF_MEMORY, emit_allocator, wanted_by
 from ..backtrace import emit_backtrace
@@ -112,6 +115,10 @@ class X86_64Target:
     def image_defaults(self) -> ImageDefaults:
         """The layout constants the image writer needs."""
         return IMAGE_DEFAULTS
+
+    def relax(self, sections: Sequence[MCSection],
+              symbols: Sequence[MCSymbol]) -> None:
+        """Nothing: every displacement this target writes reaches far enough."""
 
     def new_assembler(self, streamer: MCStreamer, opt_level: int) -> Assembler:
         """Build an assembler that emits for this target."""

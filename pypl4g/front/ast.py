@@ -156,6 +156,11 @@ class ArrayTypeRef(Node):
     #: which takes it from the value: an array of whatever that gives.
     element: "TypeExpr | None"
     shape: tuple[Expr | None, ...] = (None,)
+    #: `u8⟦⟧?` and `u8⟦⟧ ? i32`: a result whose answer is the array, written
+    #: after the brackets as `TYPE?` is after a name -- and `u8?⟦4⟧` is an array
+    #: of four results, the mark belonging to what it is written after.
+    result: bool = False
+    error: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,9 +248,21 @@ class RunningTypeRef(Node):
     kept_in: tuple[str, Span] | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class LiftedTypeRef(Node):
+    """`⌜T'⌝` as a parameter's type: the parameter is handed a type, written
+    `⌜u8⌝` at the call, and what it settles is the type parameter inside.
+
+    Nothing is handed at run time: what the argument says, it says while
+    compiling, and the parameter is gone from the function the call makes.
+    """
+
+    inner: TypeExpr
+
+
 type TypeExpr = (TypeRef | CollectionTypeRef | TupleTypeRef | ArrayTypeRef
                  | ListTypeRef | RefTypeRef | UnitTypeRef | FuncTypeRef
-                 | IterTypeRef | RunningTypeRef)
+                 | IterTypeRef | RunningTypeRef | LiftedTypeRef)
 
 
 @dataclass(frozen=True, slots=True)

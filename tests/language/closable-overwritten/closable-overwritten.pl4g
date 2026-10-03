@@ -1,0 +1,21 @@
+※ pl4g-test: compile=error diag=4684
+※ pl4g-test: expect-diag 4684 LANG_CLOSABLE_OVERWRITTEN
+
+※ Giving a variable another value while it still holds one that was not closed
+※ would lose that one.
+
+@[closed_by(close)]
+type Handle = n : u8
+
+fn Handle.close(h: Handle):
+    let n: u8 = h.n
+
+fn made(n: u8) → Handle:
+    Handle(.n ← n)
+
+@[startup]
+fn main() → u6:
+    let h: mut Handle = made(1u8)
+    h ← made(2u8)
+    Handle.close(h)
+    0u6

@@ -142,5 +142,6 @@ def names() -> Sequence[str]:
 #: does not have is refused where it is written rather than when an image is laid
 #: out.
 _NAMES: tuple[str, ...] = ("pl4g_args", "pl4g_env", "pl4g_heap_alloc",
-                          "pl4g_heap_free", "pl4g_io_drain", "pl4g_io_ready",
-                          "pl4g_io_step", "pl4g_io_submit", "pl4g_io_wait")
+                          "pl4g_heap_free", "pl4g_io_close", "pl4g_io_drain",
+                          "pl4g_io_open", "pl4g_io_ready", "pl4g_io_step",
+                          "pl4g_io_submit", "pl4g_io_wait")

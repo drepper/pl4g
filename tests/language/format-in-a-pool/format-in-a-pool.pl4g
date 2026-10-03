@@ -43,6 +43,7 @@ fn said(out: &mut std.Writer) → u6:
 @[startup, impure]
 fn main() → u6:
     let out: mut std.Writer = piped()
+    defer std.Writer.close(out)
     if out.fd < 0i32:
         return 1u6
     let how: u6 = said(&mut out)
