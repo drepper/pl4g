@@ -632,3 +632,8 @@ Optimizations
 
 [ ] give the startup function's `std.Init` no register where nothing reads it.  Every startup function takes the record now, and
     on x86-64 one that never names it still copies the pointer (`mov rcx, rax`) before anything else.
+
+[ ] lower `std` on demand in the macro pass as well.  `check_macros` reads the program's imports itself, and since every program
+    imports `std` a program with a macro pays for `std` there: the `macro-*` samples went from about 8 ms of work to about 51 at
+    e825472, where every other sample new to `std` went up by some 14.  Forty-odd functions are lowered and `_mentioned` is asked
+    twelve thousand times, which is what lowering by names written was meant to avoid.
