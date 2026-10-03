@@ -72,13 +72,13 @@ type Init = io : Io ; args : str⟦⟧
 ※ name comes to -- honest about what it cannot say rather than pretending the
 ※ list is closed.
 ※
-※ What is named is what a read or a write of a descriptor the program was
-※ started with can actually give.  There is no way to open anything, so the
-※ refusals that belong to opening are not here: a name nothing can reach would
-※ be a comparison every program pays for and none of them needs.
+※ What is named is what a read or a write can actually give, and what opening a
+※ file by name can: `Io.open` reaches the refusals that belong to a path, and
+※ `read_lines` refuses a line longer than it holds with `ENOBUFS`.
 @[export]
 enum Error:
     other = 0 ;
+    not_found = 2 ;          ※ ENOENT
     interrupted = 4 ;        ※ EINTR
     device = 5 ;             ※ EIO
     not_a_device = 9 ;       ※ EBADF
@@ -86,12 +86,18 @@ enum Error:
     no_memory = 12 ;         ※ ENOMEM
     not_allowed = 13 ;       ※ EACCES
     bad_address = 14 ;       ※ EFAULT
+    not_a_directory = 20 ;   ※ ENOTDIR
     is_a_directory = 21 ;    ※ EISDIR
     invalid = 22 ;           ※ EINVAL
+    too_many_open = 24 ;     ※ EMFILE
     too_big = 27 ;           ※ EFBIG
     no_room = 28 ;           ※ ENOSPC
+    read_only = 30 ;         ※ EROFS
     broken_pipe = 32 ;       ※ EPIPE
-    reset = 104              ※ ECONNRESET
+    name_too_long = 36 ;     ※ ENAMETOOLONG
+    link_loop = 40 ;         ※ ELOOP
+    reset = 104 ;            ※ ECONNRESET
+    no_buffer = 105          ※ ENOBUFS
 
 ※※ What the kernel answered, read as one of those.
 ※
@@ -104,6 +110,26 @@ enum Error:
 @[export]
 fn as_error(n: i32) → Error:
     ⎕narrow(n, ⌜Error⌝) ?? Error.other
+
+※※ The name of each `Error`, filled the first time `error_name` is asked.
+let error_names: mut ⸨Error: str⸩ = ⸨⸩
+
+※※ The name of what the kernel answered, as `Error` writes it.
+※※
+※※ \param code the number the kernel gave -- what `read`, `write`, `flush` and
+※※ `Io.open` carry when they fail
+※※ \return the name of the `Error` it is: `not_allowed` for 13, and `other` for
+※※ a number the enumeration does not name
+※
+※ The names are the enumeration's own, read off it with `⎕fields` rather than
+※ written out a second time, and put in a dictionary the first time they are
+※ wanted: a program that never fails pays nothing for them.
+@[export, impure]
+fn error_name(code: i32) → str:
+    if #error_names = 0:
+        comptime foreach member := ⎕fields(⌜Error⌝):
+            error_names⸨member⟦1⟧⸩ ← member⟦0⟧
+    error_names⸨as_error(code)⸩ ?? "other"
 
 ※ -- the ring ---------------------------------------------------------------
 

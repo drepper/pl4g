@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4692
+※ pl4g-test: expect-diag 4692 LANG_FIELDS_OF_A_TYPE_NOT_WALKED
+
+※ `⎕fields` of a record type answers types, which only `comptime foreach` can
+※ hold: there is no tuple of them to keep.
+
+type Point = x : u8 ; y : u16
+
+@[startup]
+fn main() → u6:
+    let t := ⎕fields(⌜Point⌝)
+    0u6

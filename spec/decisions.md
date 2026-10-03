@@ -9565,6 +9565,29 @@ against making the AArch64 and RISC-V back ends address larger frames and agains
 found that `read_lines` read one byte past what it had read when a line filled the buffer -- `∧` evaluates both sides -- which is
 now `and`.
 
+## 2026-10-04T02:00+02:00 — language
+
+**`⎕fields` of an enumeration and of a record type; `std.error_name`; empty tables in the image**
+
+The user asked for reflection to walk an enumeration's names and values, and for a map from an error code to its name built with
+it.  Asked how: **`⎕fields` works as before on a record's value, and also on a type -- an enumeration's and a record's -- all walked
+with `comptime foreach`**; against a new `⎕members` answering an array walked at run time (C#'s `GetValues`, Python), and against a
+separate tuple-only builtin.  An enumeration's pairs hold **the value itself and not its number**, keeping the rule that a program
+does not see what a value is stored as (C++'s `enum class`), against revealing the number (Rust's `as`).  A record type's pairs
+hold **the field's type, lifted**, as Zig's `@typeInfo(T).Struct.fields` do -- a type is nothing at run time, so such a pair is
+walked by `comptime foreach` alone (4692) and its type stands only where a type is asked about (4691).
+
+The map is **`std.error_name(code)`, filled on first use** (C's `strerror` answers the system's text; Rust's `ErrorKind` prints its
+name, which is what this does).  A dictionary at the top level was built by a constructor before `main` in every program importing
+`std`; asked, the user chose to make **an empty table at the top level cost nothing**: laid out in the image, empty, growing from
+the heap on the first insertion that does not fit (Go's nil map without its panic; Rust's `HashMap::new`), against building the map
+on every call and against accepting the cost.
+
+Taken without asking: **`Error` names the refusals opening a file can give** -- `not_found` (2), `not_a_directory` (20),
+`too_many_open` (24), `read_only` (30), `name_too_long` (36), `link_loop` (40), and `no_buffer` (105, what `read_lines` refuses a
+long line with) -- since `Io.open` exists now and `cat missing` would otherwise say `other`.  The names follow the ones already
+there.
+
 
 Open questions
 --------------

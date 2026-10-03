@@ -4420,3 +4420,17 @@ cutting the path back to the array; `_lend` and `_lent_out` refuse only where th
 it (`_overlap`).  `_record_at` and `_field_of` carry the fields being read down to the name (`below`), so reading one field while
 another is lent is not reading the name.
 
+**`⎕fields` of a type.**  `_fields_of_a_type` reads a lifted argument: an enumeration gives `_members_of`, a tuple of
+`〈str, E〉` pairs built from `enum_const` and the names' text; a record type is taken by `_written_out` before anything lowers it
+(`_written_out_per_field`): each turn binds the name to a one-member tuple holding the field's name and records the field's type in
+`_field_types`, by the local's identity.  `_type_stood_for` answers `f⟦1⟧` from there, which is what `⎕typename` and `comptime if`
+ask; `_lower_expr` refuses it as a value (4691).  Anywhere else `⎕fields(⌜T⌝)` of a record type is 4692.
+
+**An empty table at the top level** (`_empty_in_the_heap`, `_empty_table_constant`): the block and a run of `FIRST_CAPACITY` empty
+entries are image variables made writable (`_image_variable(…, mutable=True)`), the block's arena word the address of
+`__pl4g_heap`; the variable's initializer is the block's address, and it is not given to `_build_the_tables`.  Growing allocates a
+new run from the heap and leaves the old one; nothing hands a table's runs back.
+
+**`std.error_name`** fills the top-level `error_names: mut ⸨Error: str⸩` with `comptime foreach` over `⎕fields(⌜Error⌝)` when it is
+empty, and looks up `as_error(code)`.
+

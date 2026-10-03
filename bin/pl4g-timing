@@ -231,6 +231,8 @@ GROUPS: tuple[Group, ...] = (
            "read-lines-from-a-pipe": "a file's lines walked through calls from std, closed on the way out",
            "closed-by-moves": "values that must be closed, moved through names, calls and a loop",
            "type-argument": "a generic function settled by a type handed to it",
+           "fields-of-an-enum": "an enumeration's values walked with their names into a table",
+           "error-name": "std's error names read off the enumeration on first use",
            "divides": "dividing without a remainder, both forms and over an array",
            "failure-written-out": "failures written out, carrying a value and not",
            "named-arguments": "defaults, arguments named at the call, and one across a module",

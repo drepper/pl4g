@@ -1,0 +1,24 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `std.error_name(code)` is the name of the `std.Error` a number the kernel gave
+※ is -- read off the enumeration with `⎕fields` into a dictionary the first time
+※ it is asked -- and `other` for a number it does not name.
+※
+※ Compare: **C**'s `strerror` and **Go**'s `Errno.Error`, which answer the
+※ system's message; **Rust**'s `io::ErrorKind`, whose `Debug` is the name, as
+※ this is.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main() → u6:
+    if std.error_name(2i32) ≠ "not_found": return 1u6
+    if std.error_name(13i32) ≠ "not_allowed": return 2u6
+    if std.error_name(105i32) ≠ "no_buffer": return 3u6
+    if std.error_name(99i32) ≠ "other": return 4u6
+    match std.Io.open("/nonexistent/pl4g", ⌜std.Reader⌝):
+        std.Reader(r):
+            std.Reader.close(r)
+            5u6
+        ⊥(code):
+            if std.error_name(code) = "not_found": 0u6 else: 6u6

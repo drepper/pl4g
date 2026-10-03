@@ -6457,6 +6457,55 @@
       "option": null
     },
     {
+      "number": 4691,
+      "name": "LANG_FIELD_TYPE_NOT_A_VALUE",
+      "severity": "error",
+      "message": "'{what}' is the type '{type}' and not a value: it stands where a type is asked about",
+      "args": [
+        {
+          "name": "what",
+          "type": "string",
+          "description": "what was written"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        }
+      ],
+      "cause": "`comptime foreach f := ⎕fields(⌜T⌝)` over a record type gives each field's name and its type, and a type has nothing to be at run time.  It is asked about -- `⎕typename(f⟦1⟧)`, `comptime if f⟦1⟧ = ⌜u8⌝` -- and not read.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Settled while compiling / Asking what a type is",
+        "requirement": "The type of a field given by `⎕fields` of a record type stands only where a type is asked about."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4692,
+      "name": "LANG_FIELDS_OF_A_TYPE_NOT_WALKED",
+      "severity": "error",
+      "message": "'⎕fields' of the record type '{type}' answers types, and is walked by 'comptime foreach' and nothing else",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        }
+      ],
+      "cause": "What `⎕fields(⌜T⌝)` gives for a record type is each field's name and its type, and a type is not a value: there is no tuple of them to keep or hand on.  `comptime foreach` writes its body out once per field with the type in hand, which is the one place that can hold one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Settled while compiling / Asking what a type is",
+        "requirement": "`⎕fields` of a record type stands only as what `comptime foreach` walks."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",
@@ -7258,7 +7307,7 @@
       "number": 4606,
       "name": "LANG_FIELDS_NOT_A_RECORD",
       "severity": "error",
-      "message": "'⎕fields' asked of '{found}', which has no fields",
+      "message": "'⎕fields' asked of '{found}', which has no fields: it takes a record, or a record or an enumeration type lifted",
       "args": [
         {
           "name": "found",

@@ -1,0 +1,24 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A set or a dictionary written empty at the top level, in the heap, costs
+※ nothing until something is put in it: its table is laid out in the image,
+※ empty, and no constructor runs for it.  The first insertions fill that run;
+※ growing takes a new one from the heap, as any table's growing does.
+※
+※ Compare: **Go**'s nil map, which reads as empty and costs nothing -- but
+※ panics on the first insertion, where this grows; **Rust**'s `HashMap::new`,
+※ which allocates nothing until the first insertion, the same promise kept in
+※ the library rather than the image.
+
+let seen: mut ⸨u64⸩ = ⸨⸩
+let names: mut ⸨u64: str⸩ = ⸨⸩ in ⎕heap
+
+@[startup, impure]
+fn main() → u6:
+    if #seen ≠ 0 ∨ seen⸨3u64⸩: return 1u6
+    if (names⸨1u64⸩ ?? "none") ≠ "none": return 2u6
+    foreach i := 0u64…40u64:
+        names⸨i⸩ ← "n"
+    if #names ≠ 40 ∨ (names⸨39u64⸩ ?? "") ≠ "n" ∨ (names⸨40u64⸩ ?? "none") ≠ "none":
+        return 4u6
+    0u6

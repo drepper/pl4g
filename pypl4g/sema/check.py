@@ -2557,6 +2557,18 @@ def _in_the_image(expr: ast.Expr) -> bool:
     return isinstance(where, ast.NameRef) and where.name == STATIC_NAME
 
 
+def _empty_in_the_heap(expr: ast.Expr) -> bool:
+    """Whether *expr* is `⸨⸩` with nothing in it, of the heap: written with no
+    `in`, or `in ⎕heap`."""
+    if not isinstance(expr, (ast.SetLit, ast.DictLit)):
+        return False
+    held = expr.elements if isinstance(expr, ast.SetLit) else expr.entries
+    where = expr.arena
+    return not held and (where is None
+                         or (isinstance(where, ast.NameRef)
+                             and where.name == HEAP_NAME))
+
+
 def _a_container_written(expr: ast.Expr) -> bool:
     """Whether *expr* is an array, a list, a set or a dictionary written down,
     whatever `in` says of it."""
@@ -3355,6 +3367,9 @@ class Checker:
         #: array, a field, an element, a variable at the top level -- by what
         #: they are put into, which a value that must be closed may not be.
         self._stored_into: dict[int, str] = {}
+        #: For a name `comptime foreach` binds to a record type's field: the
+        #: field's type, which `f⟦1⟧` stands for.
+        self._field_types: dict[int, Type] = {}
         #: The variables already reported as never closed.
         self._told_unclosed: set[int] = set()
         self._told_after_end: set[tuple[int, Span]] = set()
@@ -3647,9 +3662,15 @@ class Checker:
             static = _in_the_image(node.value)
             if ty is not None and not self._image_definition(node, ty):
                 ty = ERROR
+            # An empty one in the heap costs nothing until something is put in
+            # it: its table is laid out in the image, empty, with the heap to
+            # grow from, and no constructor runs for it.
+            unbuilt = ty is not None and _is_a_table(ty) and not static \
+                and _empty_in_the_heap(node.value)
             outer, self._for_the_image = self._for_the_image, static
             try:
-                initializer = (None if ty is None
+                initializer = (self._empty_table_constant(ty) if unbuilt
+                               else None if ty is None
                                or (_is_a_table(ty) and not static)
                                else self._constant_value(node, ty))
             finally:
@@ -3690,7 +3711,7 @@ class Checker:
         self._top_level.append(_Global(var=var, span=node.name_span,
                                        expectation=expectation,
                                        expected_pairs=list(pairs)))
-        if _is_a_table(ty) and not static:
+        if _is_a_table(ty) and not static and initializer is None:
             self._built_globals.append((var, node))
 
     # -- modules ---------------------------------------------------------------
@@ -4458,12 +4479,14 @@ class Checker:
                                     U64, len(text.encode("utf-8"))),
                                 AddressConst(pieces[2], None)))
 
-    def _image_variable(self, ty: Type, value: Const) -> GlobalVar:
+    def _image_variable(self, ty: Type, value: Const,
+                        mutable: bool = False) -> GlobalVar:
         """A variable of the image nothing names, holding *value*: a run, a table,
-        or what a body put `in ⎕static`."""
+        or what a body put `in ⎕static` -- where a table may be put in, one that
+        may be written."""
         return self._module.add_global(GlobalVar(
             name="".join((STATIC_SYMBOL, str(len(self._module.globals)))),
-            value_type=ty, ptr_type=self._module.types.ptr_type(ty),
+            value_type=ty, ptr_type=self._module.types.ptr_type(ty, mutable),
             initializer=value, linkage=Linkage.INTERNAL))
 
     def _table_constant(self, node: ast.VarDef, ty: SetType | DictType,
@@ -4530,6 +4553,37 @@ class Checker:
             self._module.int_const(U64, shape.stride),
             AddressConst(block.fields[4][1], entries),
             self._module.int_const(U64, count))))
+        return AddressConst(ty, made)
+
+    def _empty_table_constant(self, ty: Type) -> Const:
+        """An empty set or dictionary of the heap, laid out in the image.
+
+        The block and a first run of entries, every one empty -- what
+        `__pl4g_table_new` would have made, with the heap as the allocator it grows
+        from.  Growing takes a new run from the heap and leaves this one where it
+        is, which nothing gives back: a table's runs are never handed back one at a
+        time.  So a program that never puts anything in it pays for none of it.
+        """
+        assert isinstance(ty, (SetType, DictType))
+        shape = tables.Shape(key=ty.element) if isinstance(ty, SetType) \
+            else tables.Shape(key=ty.key, value=ty.value)
+        capacity = tables.FIRST_CAPACITY
+        run_ty = self._module.types.array_type(U8, (capacity * shape.stride,))
+        entries = self._image_variable(run_ty, self._module.array_const(
+            run_ty, [self._module.int_const(U8, 0)] * (capacity * shape.stride)),
+            mutable=True)
+        arena = self._module.types.ptr_type(ARENA, True)
+        block = ProductType((("arena", arena), ("mask", U64), ("count", U64),
+                             ("stride", U64),
+                             ("entries", self._module.types.ptr_type(U8, True)),
+                             ("used", U64)), name="table")
+        made = self._image_variable(block, self._module.record_const(block, (
+            AddressConst(arena, tables.heap_global(self._module)),
+            self._module.int_const(U64, capacity - 1),
+            self._module.int_const(U64, 0),
+            self._module.int_const(U64, shape.stride),
+            AddressConst(block.fields[4][1], entries),
+            self._module.int_const(U64, 0))), mutable=True)
         return AddressConst(ty, made)
 
     def _key_bits(self, key: Const) -> object | None:
@@ -13584,6 +13638,8 @@ class Checker:
             case ast.Lifted():
                 found = self._lifted_type(expr)
                 return found
+            case ast.Element():
+                return self._field_type_named(expr)
             case _:
                 return None
 
@@ -14395,6 +14451,11 @@ class Checker:
         is also why it has nothing to hand over -- a `break` needs somewhere to
         jump to and there is nowhere.
         """
+        asked = self._fields_of_a_type(stmt.iterable)
+        if asked is ERROR:
+            return UndefConst(ERROR)
+        if isinstance(asked, ProductType):
+            return self._written_out_per_field(builder, stmt, func, asked)
         value = self._lower_expr(builder, stmt.iterable, None)
         ty = self._value_type_of(value)
         if ty is ERROR:
@@ -14427,6 +14488,49 @@ class Checker:
             self._lower_block(builder, stmt.body, func, as_result=False)
             self._pop_scope(stmt.body.span if not builder.is_terminated else None)
         return UndefConst(VOID)
+
+    def _written_out_per_field(self, builder: IRBuilder, stmt: ast.ForEach,
+                               func: Function, ty: ProductType) -> Value:
+        """`comptime foreach f := ⎕fields(⌜T⌝)` over a record type: the body once
+        per field, `f⟦0⟧` its name and `f⟦1⟧` its type.
+
+        A type is nothing at run time, so the name is bound to the field's name
+        alone and what the field is of is kept beside it, where `_type_stood_for`
+        finds it: `f⟦1⟧` is then a type wherever a type is asked about --
+        `⎕typename`, `comptime if` -- and refused where a value is (4691).
+        """
+        if stmt.alternative is not None or stmt.label is not None:
+            self._diags.emit(D.LANG_COMPTIME_NEEDS_A_TUPLE, stmt.span,
+                             found=ty.written())
+            return UndefConst(ERROR)
+        text = parts_of(STR)
+        holder = self._module.types.tuple_type((STR,))
+        for name, kind in ty.fields:
+            written = self._written_text(builder, name, stmt.span)
+            turn = builder.whole([builder.extract(written, which, text[which],
+                                                  stmt.span)
+                                  for which in range(len(text))], holder, stmt.span)
+            self._push_scope()
+            self._bind_local(stmt.name, turn, stmt.name_span, builder=builder)
+            local = self._find_local(stmt.name)
+            if local is not None:
+                self._field_types[id(local)] = kind
+            self._lower_block(builder, stmt.body, func, as_result=False)
+            self._pop_scope(stmt.body.span if not builder.is_terminated else None)
+        return UndefConst(VOID)
+
+    def _field_type_named(self, expr: ast.Expr) -> Type | None:
+        """The type `f⟦1⟧` stands for, where `f` is a turn of `comptime foreach`
+        over a record type's fields; nothing for anything else."""
+        if not (isinstance(expr, ast.Element) and isinstance(expr.base, ast.NameRef)
+                and len(expr.indices) == 1
+                and isinstance(expr.indices[0], ast.IntLit)
+                and expr.indices[0].value == 1):
+            return None
+        local = self._find_local(expr.base.name)
+        if local is None:
+            return None
+        return self._field_types.get(id(local))
 
     def _iteration_over(self, builder: IRBuilder,
                         stmt: ast.ForEach) -> _Iteration | None:
@@ -17713,6 +17817,14 @@ class Checker:
                 return self._lower_tuple(builder, expr, expected)
             case ast.ArrayLit():
                 return self._lower_array(builder, expr, expected)
+            case ast.Element() if self._field_types \
+                    and self._field_type_named(expr) is not None:
+                kind = self._field_type_named(expr)
+                assert kind is not None
+                self._diags.emit(D.LANG_FIELD_TYPE_NOT_A_VALUE, expr.span,
+                                 what="".join((expr.base.name, "⟦1⟧")),
+                                 type=kind.written())
+                return UndefConst(ERROR)
             case ast.Element():
                 return self._lower_element(builder, expr, expected)
             case ast.Range():
@@ -21310,6 +21422,17 @@ class Checker:
             self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
                              name=FIELDS_NAME, expected=1, found=len(expr.args))
             return UndefConst(ERROR)
+        asked = self._fields_of_a_type(expr)
+        if asked is ERROR:
+            return UndefConst(ERROR)
+        if isinstance(asked, EnumType):
+            return self._members_of(builder, asked, expr, expected)
+        if asked is not None:
+            # A record's type answers types, and only `comptime foreach` can
+            # hold one: `_written_out` takes that form before it gets here.
+            self._diags.emit(D.LANG_FIELDS_OF_A_TYPE_NOT_WALKED, expr.span,
+                             type=asked.written())
+            return UndefConst(ERROR)
         given = self._lower_expr(builder, expr.args[0], None)
         found = self._value_type_of(given)
         if found is ERROR:
@@ -21336,6 +21459,46 @@ class Checker:
                                           held[first + which], expr.span)
                           for which in range(count))
             kinds.append(self._module.types.tuple_type((STR, kind)))
+        answer = self._module.types.tuple_type(tuple(kinds))
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return builder.make_tuple(tuple(leaves), answer, expr.span)
+
+    def _fields_of_a_type(self, expr: ast.Expr) -> Type | None:
+        """The type `⎕fields(⌜T⌝)` asks about, where it asks about a type rather
+        than a value: an enumeration's or a record's; nothing for anything else."""
+        if not (isinstance(expr, ast.Call) and isinstance(expr.callee, ast.NameRef)
+                and expr.callee.name == FIELDS_NAME and len(expr.args) == 1
+                and isinstance(expr.args[0], ast.Lifted)):
+            return None
+        found = self._lifted_type(expr.args[0])
+        if isinstance(found, (EnumType, ProductType)):
+            return found
+        if found is not None and found is not ERROR:
+            self._diags.emit(D.LANG_FIELDS_NOT_A_RECORD, expr.args[0].span,
+                             found=found.written())
+            return ERROR
+        return None
+
+    def _members_of(self, builder: IRBuilder, ty: EnumType, expr: ast.Call,
+                    expected: Type | None) -> Value:
+        """`⎕fields(⌜E⌝)`: an enumeration's values, each with its name, as a tuple
+        of pairs -- in the order the definition wrote them, an alias included,
+        for the reason a record's fields come in the order they were written.
+
+        The value and not the number it is stored as: a value of an enumeration is
+        one of its names, and what it is stored as is nothing a program sees.
+        """
+        text = parts_of(STR)
+        leaves: list[Value] = []
+        kinds: list[Type] = []
+        for at, name in enumerate(ty.members):
+            written = self._written_text(builder, name, expr.span)
+            leaves.extend(builder.extract(written, which, text[which], expr.span)
+                          for which in range(len(text)))
+            leaves.append(self._module.enum_const(ty, at))
+            kinds.append(self._module.types.tuple_type((STR, ty)))
         answer = self._module.types.tuple_type(tuple(kinds))
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)

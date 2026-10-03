@@ -1,0 +1,30 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕fields(⌜E⌝)` answers an enumeration's values, each with its name, as a
+※ tuple of pairs in the order the definition wrote them -- walked by `comptime
+※ foreach` as a record's fields are.  The value is the enumeration's own and
+※ not the number it is stored as, which a program does not see.
+※
+※ Compare: **Zig**'s `@typeInfo(E).Enum.fields`, walked with `inline for`;
+※ **C#**'s `Enum.GetValues` and `GetNames`, asked at run time; **Python**'s
+※ iteration over an `Enum`; **Rust**, which has none and derives it with a
+※ macro (strum's `EnumIter`).
+
+enum Colour:
+    red = 1 ;
+    green = 4 ;
+    blue = 9
+
+@[startup, impure]
+fn main() → u6:
+    let names: mut ⸨Colour: str⸩ = ⸨⸩
+    let letters: mut u64 = 0u64
+    let turns: mut u8 = 0u8
+    comptime foreach m := ⎕fields(⌜Colour⌝):
+        names⸨m⟦1⟧⸩ ← m⟦0⟧
+        letters ← letters + ⎕drop(#m⟦0⟧)
+        turns ← turns + 1u8
+    if turns ≠ 3u8 ∨ letters ≠ 12u64: return 1u6
+    if (names⸨Colour.green⸩ ?? "") ≠ "green": return 2u6
+    if (names⸨Colour.blue⸩ ?? "") ≠ "blue": return 3u6
+    0u6

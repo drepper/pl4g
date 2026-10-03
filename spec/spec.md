@@ -230,6 +230,7 @@ fn write_sync(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32
 fn read(from: &mut Reader, into: u8⟦⟧)     → u64 ¤size ? i32
 fn drain()
 fn as_error(n: i32) → Error
+fn error_name(code: i32) → str       ※ "not_found" for 2; "other" for one Error does not name
 
 fn Io.open(name: str, kind: ⌜T'⌝) → T' ? i32    ※ T' is Reader, Writer or ReadWriter
 fn Reader.close(r: Reader)
@@ -241,7 +242,9 @@ fn read_lines(from: &mut Reader) ⇉ u8⟦⟧ ? i32
 **A process starts with three devices, and opens more by name.**  The three are `init.io.input`, `init.io.output` and
 `init.io.error`, on the descriptors every system gives them.  **`Io.open(name, ⌜T⌝)` opens a file for what the type handed says**:
 `⌜Reader⌝` to read it; `⌜Writer⌝` to write it, made if it is not there and emptied if it is; `⌜ReadWriter⌝` for both, made if it is
-not there and left as it is.  It answers that type, or the number the kernel refused with.  The name is relative to the directory
+not there and left as it is.  **`error_name(code)` names what the kernel refused with** as `Error` writes it -- `cat: x:
+not_found` -- read off the enumeration with `⎕fields` into a dictionary the first time it is asked, so a program that never fails
+pays for none of it; `Error` names what reading, writing and opening by name can give, and `other` is everything else.  It answers that type, or the number the kernel refused with.  The name is relative to the directory
 the process is in, and one with a nul inside it or longer than 4095 bytes is refused before the kernel is asked.  The type is the
 argument rather than a mode beside the name because what comes back is a different type for each: a `Reader` cannot be written to,
 which the compiler can say only if it knows which was opened, and a fourth kind is one more type a program may hand.
@@ -4069,6 +4072,14 @@ given.
 Everything a definition inside a function may say may be said here: a literal, an arena named with `in`, a call, an operator over
 two collections.  And a name is a handle, here as anywhere, so two names for one table are two names for one table.
 
+**One written empty, in the heap, costs nothing until something is put in it**: `let seen: mut ⸨Error: str⸩ = ⸨⸩`, with no `in` or
+with `in ⎕heap`, is laid out in the image -- the table and a first run of empty entries, where they may be written -- and no
+constructor runs for it.  The first insertions fill that run, and growing takes a new one from the heap as any table's growing
+does; the run in the image is never handed back, as no table's runs are.  So a module may keep a table it fills on first use, and a
+program that never uses it pays for none of it.  Compare **Go**'s nil map, which reads as empty and costs nothing but panics on the
+first insertion, and **Rust**'s `HashMap::new`, which allocates nothing until the first insertion -- the same promise, kept by the
+library rather than the image.
+
 ##### What one costs
 
 The compiler decides this and the language says only what follows.  A value of a set or a dictionary type is where its table is
@@ -4608,6 +4619,8 @@ record than for a number -- the language having no overloading, so that a glyph 
 | `⎕isrecord(⌜T⌝)` | whether `T` is a record | a condition `comptime` was written on, and nowhere else (4605) |
 | `⎕typename(⌜T⌝)` | the type written out, as `str` | anywhere a value stands |
 | `⎕fields(v)` | a record's fields as a tuple of pairs | anywhere a value stands |
+| `⎕fields(⌜E⌝)` | an enumeration's values, each with its name, as a tuple of pairs | anywhere a value stands |
+| `⎕fields(⌜T⌝)` | a record type's fields, each name with its type | what `comptime foreach` walks, and nowhere else (4692) |
 
 ```
 type Point = x : u8 ; y : u16
@@ -4637,7 +4650,28 @@ walks cannot be taken together, so a name and its value travel as one turn.
 a reader of the answer wants is what the program wrote.  **It costs nothing beyond the names**: a record already travels as its
 fields, so a pair is the field read where it lies with a literal beside it.
 
-**Only a record has fields to answer** (4606).  A sum holds one of its parts rather than all of them, so what its fields are is not
+**An enumeration's values are its fields**, asked of the type: `⎕fields(⌜Error⌝)` answers one pair per value, its name and the
+value itself, in the order the definition wrote them.  The value and not the number it is stored as, which a program does not see
+-- so what a program builds from them is keyed by the enumeration, and a number reaches one through `⎕narrow`:
+
+```
+let names: mut ⸨Colour: str⸩ = ⸨⸩
+comptime foreach m := ⎕fields(⌜Colour⌝):
+    names⸨m⟦1⟧⸩ ← m⟦0⟧
+```
+
+**A record type's fields are names and types**: `⎕fields(⌜Point⌝)`, with no value to read, gives each field's name and its type.
+A type is nothing at run time, so this is walked by `comptime foreach` alone (4692), and in each turn `f⟦0⟧` is the name and
+`f⟦1⟧` is the type, which stands wherever a type is asked about -- `⎕typename(f⟦1⟧)`, `comptime if f⟦1⟧ = ⌜u8⌝` -- and is refused
+where a value goes (4691):
+
+```
+comptime foreach f := ⎕fields(⌜Point⌝):
+    comptime if f⟦1⟧ = ⌜u8⌝:
+        …                        ※ a byte field, by name f⟦0⟧
+```
+
+**Nothing else has fields to answer** (4606).  A sum holds one of its parts rather than all of them, so what its fields are is not
 a question with one answer; a tuple's members have no names; and everything else is one value.  A generic definition asks
 `⎕isrecord` first and reaches the refusal only where it did not.
 
@@ -4650,6 +4684,11 @@ that is a record is written by the same definition -- and in the notation the la
 ```
 Line(.from ← Point(.x ← 1, .y ← 234), .to ← Point(.x ← 56, .y ← 7))
 ```
+
+Compare, for the enumeration and the record type: **Zig**'s `@typeInfo(E).Enum.fields` and `@typeInfo(T).Struct.fields`, each
+field with a `.name` and a `.value` or `.type`, walked with `inline for` -- the same thing; **C#**'s `Enum.GetValues` and
+`GetNames` and **Python**'s iteration over an `Enum`, which answer at run time; **Rust**, which derives both with a macro
+(strum's `EnumIter`, serde); **C++26**'s `enumerators_of` and `nonstatic_data_members_of`.
 
 Compare: **Zig**, whose `@typeInfo` this is a narrow slice of -- one union with a payload per kind of type, walked at `comptime`
 exactly this way, and whose `std.fmt` prints a struct by this method; **Odin** and **D**, which have full compile-time

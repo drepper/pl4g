@@ -12,6 +12,8 @@
 ※※ without one -- so what comes out is what went in, with a number in front of
 ※※ each line that begins.  A line longer than `std.read_lines` takes (1024
 ※※ bytes) is reported as the error it hands out, and the file goes no further.
+※※ An error is reported by its name in `std.Error` -- `not_found`, `no_buffer` --
+※※ which `std.error_name` reads off the enumeration.
 
 let std := ⎕import("std")
 
@@ -104,9 +106,9 @@ fn main(init: mut std.Init) → u6:
 
 ※※ Say what went wrong with `name`, where `code` says something did, and answer the
 ※※ status that comes to.
-@[io]
+@[impure]
 fn reported(code: i32, name: str, err: &mut std.Writer) → u6:
     if code = 0i32:
         return 0u6
-    ⎕drop(std.println⌜err, "cat: {}: error {}", name, code⌝ ?? 0)
+    ⎕drop(std.println⌜err, "cat: {}: {}", name, std.error_name(code)⌝ ?? 0)
     1u6

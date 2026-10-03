@@ -1,0 +1,26 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕fields(⌜T⌝)` of a record type, with no value to read, answers each field's
+※ name and its type: `f⟦0⟧` is text and `f⟦1⟧` a type, which stands wherever a
+※ type is asked about -- `⎕typename`, `comptime if` -- and nowhere a value goes.
+※ `⎕fields(v)` of a value answers each field's name and value, as before.
+※
+※ Compare: **Zig**'s `@typeInfo(T).Struct.fields`, each with `.name` and
+※ `.type`; **C++26**'s `nonstatic_data_members_of`; **D**'s
+※ `__traits(allMembers)`; **Go**'s `reflect.Type.Field`, at run time.
+
+type Point = x : u8 ; y : u16 ; z : u8
+
+@[startup]
+fn main() → u6:
+    let text: mut u64 = 0u64
+    let small: mut u8 = 0u8
+    comptime foreach f := ⎕fields(⌜Point⌝):
+        text ← text + ⎕drop(#f⟦0⟧) + ⎕drop(#⎕typename(f⟦1⟧))
+        comptime if f⟦1⟧ = ⌜u8⌝:
+            small ← small + 1u8
+    let p: Point = Point(.x ← 1u8, .y ← 2u16, .z ← 3u8)
+    let names: mut u64 = 0u64
+    comptime foreach f := ⎕fields(p):
+        names ← names + ⎕drop(#f⟦0⟧)
+    if text = 10u64 ∧ small = 2u8 ∧ names = 3u64: 0u6 else: 1u6

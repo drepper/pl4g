@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4691
+※ pl4g-test: expect-diag 4691 LANG_FIELD_TYPE_NOT_A_VALUE
+
+※ What `⎕fields` of a record type gives for a field's type is a type, and a type
+※ has nothing to be at run time.
+
+type Point = x : u8 ; y : u16
+
+@[startup]
+fn main() → u6:
+    comptime foreach f := ⎕fields(⌜Point⌝):
+        let k := f⟦1⟧
+    0u6
