@@ -30,7 +30,7 @@
 let std := ⎕import("std")
 
 @[startup, impure]
-fn main(init: mut std.Init) → u6:
+fn main(init: std.Init) → u6:
     ※ a literal, written straight out
     let first: u64 ¤size = std.write_sync(&mut init.io.error,
                                      ⎕bytes("hello\n")) ?? 0

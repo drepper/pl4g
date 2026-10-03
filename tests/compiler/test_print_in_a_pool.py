@@ -18,10 +18,10 @@ let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 type Point = x: u8 ; y: i16
 
 @[startup]
-fn main(init: mut std.Init) \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let p: Point = Point(.x \N{LEFTWARDS ARROW} 1u8, .y \N{LEFTWARDS ARROW} \N{SUPERSCRIPT MINUS}2i16)
-    _ \N{LEFTWARDS ARROW} std.println\N{TOP LEFT CORNER}&mut std.io.output, "{} {} {} {} {}", 42u16, true, 'c', "text", p\N{TOP RIGHT CORNER}
-    _ \N{LEFTWARDS ARROW} std.print\N{TOP LEFT CORNER}&mut std.io.output, "{}", \N{SUPERSCRIPT MINUS}7i32\N{TOP RIGHT CORNER}
+    _ \N{LEFTWARDS ARROW} std.println\N{TOP LEFT CORNER}&mut init.io.output, "{} {} {} {} {}", 42u16, true, 'c', "text", p\N{TOP RIGHT CORNER}
+    _ \N{LEFTWARDS ARROW} std.print\N{TOP LEFT CORNER}&mut init.io.output, "{}", \N{SUPERSCRIPT MINUS}7i32\N{TOP RIGHT CORNER}
     0
 """
 

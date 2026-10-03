@@ -1,31 +1,25 @@
 ※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
 
-※ `std.io` is the three devices every process starts with, named so that a program need not
-※ be handed them.
+※ `init.io` is the three devices every process starts with, and the only way to them: there
+※ is no variable at the top level holding them, so a function that writes is handed the
+※ device it writes to.
 ※
-※ The same three `Init` carries and the same values: a descriptor a process starts with is a
-※ number the kernel fixed long before this language existed, so there is nothing to find out
-※ and nothing to be handed.  A program that takes `Init` reads them from there; one that does
-※ not reads them from here.
-※
-※ Writing to one takes `&mut`, and a second `&mut` to the same place is refused -- so two
-※ names for one device is something the compiler refuses rather than something a lock
-※ prevents, which is the rule `Init`'s own already followed.
-※
-※ What this needed of the language is that **a variable another module exports is a place**:
-※ a reference may be taken of it and a field of it read at an offset, which is what every
-※ variable at the top level already was and what a path to one now is too.
+※ Each is a `mut` field of `std.Io` -- `mut output : Writer` -- so it may be lent by `&mut`
+※ though the startup function took `init: std.Init` without `mut`: the record is the
+※ process's and is not changed, and a stream in it is lent to be written to.  Writing to one
+※ takes `&mut`, and a second `&mut` to the same place is refused -- so two names for one
+※ device is something the compiler refuses rather than something a lock prevents.
 
 let std := ⎕import("std")
 
 @[startup, impure]
-fn main() → u6:
+fn main(init: std.Init) → u6:
     ※ The numbers the kernel fixed, read through the path.
-    if std.io.input.fd ≠ 0i32:
+    if init.io.input.fd ≠ 0i32:
         return 1u6
-    if std.io.output.fd ≠ 1i32:
+    if init.io.output.fd ≠ 1i32:
         return 2u6
-    if std.io.error.fd ≠ 2i32:
+    if init.io.error.fd ≠ 2i32:
         return 3u6
     ※ And written to, which is what they are for.  Into a pipe, so that the test says
     ※ what went rather than leaving it on somebody's terminal.
@@ -39,8 +33,8 @@ fn main() → u6:
     ※ And the real devices are places that can be written to.  Nothing is written:
     ※ no bytes means no request, which answers nought -- so this says the reference
     ※ was taken and the device reached without putting anything on a terminal.
-    if ⎕drop(std.Io.print(&mut std.io.output, ⎕bytes("")) ?? 1) ≠ 0u64:
+    if ⎕drop(std.Io.print(&mut init.io.output, ⎕bytes("")) ?? 1) ≠ 0u64:
         return 6u6
-    if ⎕drop(std.Io.print(&mut std.io.error, ⎕bytes("")) ?? 1) ≠ 0u64:
+    if ⎕drop(std.Io.print(&mut init.io.error, ⎕bytes("")) ?? 1) ≠ 0u64:
         return 7u6
     0u6

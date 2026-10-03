@@ -2,9 +2,9 @@
 ※ pl4g-test: expect-diag 4537 LANG_REF_PLACE_NOT_MUTABLE
 
 ※ A field may be written where the record holding it may, which is what the
-※ `mut` before the record's type says -- of a variable, of a parameter, and of
-※ the record the startup function is handed: `&mut init.io.output` asks for
-※ `init: mut std.Init`.
+※ `mut` before the record's type says -- of a variable, of a parameter -- unless
+※ the field is written `mut NAME`, as `std.Io`'s streams are: `init.io.output`
+※ may be lent by `&mut` from `init: std.Init`, and `p.x` here may not.
 
 let std := ⎕import("std")
 
@@ -18,5 +18,5 @@ fn bump(n: &mut u8):
 fn main(init: std.Init) → u6:
     let p: Point = Point(.x ← 1u8, .y ← 2u8)
     bump(&mut p.x)
-    ⎕drop(std.Io.print(&mut init.io.output, ⎕bytes("x")) ?? 0)
+    ⎕drop(std.Io.print(&mut init.io.output, ⎕bytes("")) ?? 0)
     0u6

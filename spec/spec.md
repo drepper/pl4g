@@ -252,7 +252,7 @@ which the compiler can say only if it knows which was opened, and a fourth kind 
 **The three device types are `@[closed_by(close)]`** (see [Values that are closed](#values-that-are-closed)): what `open` answers is
 moved, never copied, and closed by whoever holds it last.  `close` waits for every request in flight first -- one may be a write to
 it -- and what those answered is still read with `flush`.  It answers nothing: what a program would do about a refused close is
-nothing it could do.  The three a process starts with are fields of `Init` and `std.io`, never moved, never closed.
+nothing it could do.  The three a process starts with are fields of `Init`, never moved, never closed.
 
 **`read_lines(&mut r)` walks a reader a line at a time**: each line with the end of line after it, the last one without where the
 text ends without one, as a view into a buffer the walk keeps and good until the next turn.  The end of line is kept so that a
@@ -282,29 +282,28 @@ no way to hand a `Reader` to `write` and no way to write to a number a program m
 
 ```
 @[startup, impure]
-fn main(init: mut std.Init) → u6:
+fn main(init: std.Init) → u6:
+    ⎕drop(std.println⌜&mut init.io.output, "x = {}", x⌝ ?? 0)
+    ⎕drop(std.println⌜&mut init.io.error, "went wrong"⌝ ?? 0)
     …
 ```
 
 `Init` is `@[unique]`, so having it is having the thing itself: the devices in it cannot be had twice over, and a program that
-passes it on takes the reference where it passes it.  `mut` before the type says the program may write the record it was handed.
-What the entry point hands over is still *where* the record is -- it is in the image, the entry point filled it, and there is no
-caller to put it in registers -- which is what a record name means everywhere else.
+passes it on takes the reference where it passes it.  What the entry point hands over is still *where* the record is -- it is in
+the image, the entry point filled it, and there is no caller to put it in registers -- which is what a record name means everywhere
+else.
 
-**`std.io` is the three of them, named**, so a program need not be handed anything to write:
+**The three streams are `mut` fields of `Io`** (`mut output : Writer`; see [the fields of a record](#product-and-sum-types)), so
+`&mut init.io.output` may be lent from `init: std.Init`: the record is not changed, and a stream in it is lent to be written to.
+`mut` before `std.Init` is what lends the whole record by `&mut`.
 
-```
-⎕drop(std.println⌜&mut std.io.output, "x = {}", x⌝ ?? 0)
-⎕drop(std.println⌜&mut std.io.error, "went wrong"⌝ ?? 0)
-```
+**There is no other way to them.**  No variable at the top level holds the streams: a function that writes is handed the device it
+writes to, by `&mut`, which is what its signature then says.  A program that wants an ambient one may make a variable of its own,
+and a function writing through it says `@[io]` (below).
 
-The same three `Init` carries and the same values: a descriptor a process starts with is a number the kernel fixed long before this
-language existed, so there is nothing to find out and nothing to be handed.  A program that takes `Init` reads them from there, one
-that does not reads them from here, and they are the same devices either way.
-
-**A variable another module exports is a place.**  That is what `std.io` needed and what it says generally: a variable at the top
-level is a place for as long as the program is, and reaching one through the module that wrote it does not change that -- a
-reference may be taken of it, a field of it is read at an offset from it, and the reference lasts as long as the program.
+**A variable another module exports is a place**: a variable at the top level is a place for as long as the program is, and
+reaching one through the module that wrote it does not change that -- a reference may be taken of it, a field of it is read at an
+offset from it, and the reference lasts as long as the program.
 
 **One mutable reference is the whole of the concurrency rule.**  `&mut init.io.output` is exclusive because a second `&mut` to the
 same place is refused, so two names for one device is a thing the compiler refuses rather than a thing a lock prevents.
@@ -2619,6 +2618,43 @@ such a field with zero, which is the half of the designated initializer not take
 program that meant it can write it.  A name that is not a field is refused (4576), and a value given without naming one is
 refused as well (4579): a record's fields have names and a tuple is the shape for several values that go by position.
 
+**`mut NAME : TYPE` is a field that may be written where the record holding it may not**: a variable not written `mut`, a
+parameter, a variable at the top level.  It may be assigned and lent by `&mut`, and so may everything inside it; the other fields
+are as they were.
+
+```
+type Io = mut input : Reader ; mut output : Writer ; mut error : Writer
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    ⎕drop(std.println⌜&mut init.io.output, "hello"⌝ ?? 0)     ※ init is not mut; output is
+    …
+```
+
+What it is for is a part of a record that stands for something outside it -- a device, a counter, a cache -- whose being written is
+no change to the record's own value.  `std.Io`'s three streams are the case that asked for it: the startup function's record is the
+process's and is not changed, while a stream in it is lent to be written to.
+
+**`mut` before the name and `mut` before the type are two questions.**  Before the name it says whether this part of the record may
+change; before the type, as everywhere, whether a collection there may have entries put in it.  A field may be either, both or
+neither.
+
+**A `&` still reads only** (4535).  A `mut` field lifts the `mut` its record lacks, not the one a reference lacks: what a `&` lends is
+read-only however the record behind it was made, which is what lets several of them be out at once and what keeps the rule that a
+place has one `&mut` or any number of `&`.  `&mut` of the whole record still needs the record to be one that may be written -- a
+`mut` field says something about that field only.
+
+**Only a record's field may be `mut`** (4693).  A sum holds one of its variants and is changed by being given another; there is no
+part of it that stays while another changes.  A variable at the top level whose type holds a `mut` field is placed where it may be
+written, whether or not the variable itself says `mut`.
+
+Compare: **C++**'s `mutable`, which this is, with the difference that C++ lets one be written through a `const` reference too --
+the use it was made for, a cache in a `const` method, and the one this language leaves out, since it would let two readers write
+one place; **Rust**, which has no per-field mutability and reaches for `Cell` and `RefCell`, interior mutability as a type, the only
+way to write through `&` there; **D**, whose `const` is transitive and has no way out; **Swift**, where a `let` of a struct freezes
+every field and a class is the way out; **C#**, whose `readonly` struct is the opposite default; **Go** and **C**, which have no
+read-only binding for it to lift.
+
 **A field is read with the same mark**: `p.x`.  That mark does three things -- a module's name, an enumeration's value, and a
 record's field -- told apart by what stands on its left, which is what Go, Rust and Zig all do.
 
@@ -2913,10 +2949,10 @@ any arm still owes it, and a lifetime has ended where any arm ended it.
 |---|---|---|
 | `h ← another` while `h` still holds one | the one it held would never be closed | 4684 |
 | a move, in a loop, of a variable from outside it, where the turn goes round | the next turn reads a variable with nothing in it | 4685 |
-| `init.io.error` or `std.io.error` read as a value | moving out of a field, an element, a variable at the top level or through a reference would leave a hole in something that goes on existing | 4683 |
+| `init.io.error` read as a value | moving out of a field, an element, a variable at the top level or through a reference would leave a hole in something that goes on existing | 4683 |
 | `〈h, 1u8〉`, `R(.f ← h)`, a list of it, `g ← h`, a lambda bringing it in | nothing whose scope ends would hold it, so nothing would ask whether it was closed | 4687 |
 
-**The standard streams are never moved and never closed.**  They are fields -- of `Init` and of `std.io` -- and are handed along by
+**The standard streams are never moved and never closed.**  They are fields of `Init` and are handed along by
 reference: `std.write(&mut init.io.error, …)`.  A value written out where it stands, `std.Writer(.fd ← 2i32)`, may be put into a
 record's field, which is how those are made; a variable's value or a call's answer may not.
 
@@ -5741,9 +5777,10 @@ fn quiet(to: &mut std.Writer) → u64 ¤size ? i32:
 how the startup function's `std.Init` carries three and why writing through it needs nothing said.  **A function handed none says
 `@[io]`**, which is what the drain a program does before it ends has to say, having nothing handed to it.
 
-**Reaching a device through a variable is not being handed one.**  `std.io` is ambient, so a function that writes through it is
-doing something its signature does not account for and declares it.  That one word is the whole difference between the two ways of
-reaching the same three devices, and it is what makes the other way mean anything.
+**Reaching a device through a variable is not being handed one.**  A variable at the top level holding one is ambient, so a
+function that writes through it is doing something its signature does not account for and declares it.  `std` has no such variable:
+the streams are handed on from `init.io`.  A program may make one, and that one word is then the whole difference between the two
+ways of reaching a device, and it is what makes the other way mean anything.
 
 **Doing it is what marks the function**, not holding the device: a function handed a `&mut Writer` that never touches it is a
 function a caller may still drop, and one that writes is one nothing may drop, move or repeat.  So the attribute a program writes is
@@ -6842,14 +6879,15 @@ fn main() → u6:
 let std := ⎕import("std")
 
 @[startup, impure]
-fn main(init: &mut std.Init) → u6:
+fn main(init: std.Init) → u6:
     ※ the devices the process inherited, as descriptors and not as numbers
-    ⎕drop(std.write(&mut init⌖.io.output, ⎕bytes("hello\n")) ?? 0)
+    ⎕drop(std.write_sync(&mut init.io.output, ⎕bytes("hello\n")) ?? 0)
     0u6
 ```
 
-The value it returns becomes the exit status of the process.  The one parameter it may take is **a reference to the record the
-`std` module calls `Init`**, and no other: the entry point has the devices the process inherited to hand over and nothing else, so
+The value it returns becomes the exit status of the process.  The one parameter it may take is **the record the `std` module
+calls `Init`** -- the record itself, written `init: std.Init`, or `init: mut std.Init` where the program lends the whole of it by
+`&mut` -- and no other: the entry point has the devices the process inherited to hand over and nothing else, so
 a parameter of any other type would be left undefined (4404).  It is `Init` rather than the descriptors themselves so that the
 arguments, the environment and whatever else a program is started with have somewhere to go without changing the one signature
 every program writes.  Which type that is is settled by where it was written down -- the `std` module the installation provides --

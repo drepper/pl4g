@@ -6506,6 +6506,28 @@
       "option": null
     },
     {
+      "number": 4693,
+      "name": "LANG_TYPEDEF_MUT_VARIANT",
+      "severity": "error",
+      "message": "'mut' marks a field that may be written where its record may not, and '{name}' is a variant of a sum, not a field",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variant"
+        }
+      ],
+      "cause": "A sum holds one of its variants, and a value of it is changed by giving it another; there is no part of it that stays while another changes.  `mut` before a name belongs to a record's fields.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "`mut` marks only a field of a record."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

@@ -55,7 +55,7 @@ fn copied(from: &mut std.Reader, out: &mut std.Writer, state: &mut State) → i3
     0i32
 
 @[startup, impure]
-fn main(init: mut std.Init) → u6:
+fn main(init: std.Init) → u6:
     let state: mut State = State(.numbered ← false, .blank_too ← true, .count ← 0u64,
                                  .at_start ← true)
     let files: mut u64 = 0u64

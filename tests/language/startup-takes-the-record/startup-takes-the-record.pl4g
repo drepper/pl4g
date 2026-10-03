@@ -18,7 +18,7 @@ fn said(init: &std.Init) → u64 ¤size:
     #init⌖.args
 
 @[startup, impure]
-fn main(init: mut std.Init) → u6:
+fn main(init: std.Init) → u6:
     ※ A field of the record, read at an offset from where it is.  How many words the
     ※ program was named with depends on how it was run, so what is checked is that the
     ※ two ways of asking agree -- and that there is at least the name itself.

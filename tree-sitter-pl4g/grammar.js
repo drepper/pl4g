@@ -166,9 +166,12 @@ module.exports = grammar({
     ),
 
     // `mut` before the type of a field says of a collection what it says of a
-    // variable's: entries may be put in it.  A field is never bound to
-    // something else, so that is all it can say here.
+    // variable's: entries may be put in it.  `mut` before the name says the
+    // field may be written where the record holding it may not -- C++'s
+    // `mutable` -- which is a question about the part and not about what it
+    // holds, so it stands in the other place.
     type_part: $ => seq(
+      optional(field('field_mut', $.mutable)),
       field('name', $.identifier), ':', optional($.mutable),
       field('type', $.type),
     ),

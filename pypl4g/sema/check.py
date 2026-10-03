@@ -467,6 +467,7 @@ def _shell_for(defined: _NamedType) -> Type | None:
     return ProductType((), name=defined.name, origin=defined.origin,
                        abi=defined.abi, unique=defined.unique,
                        device=defined.device, closed_by=defined.closed_by,
+                       mutable_fields=_mutable_fields(defined.node),
                        family=defined.template, args=args)
 
 
@@ -1062,6 +1063,31 @@ def _lifts_a_parameter(expr: ast.Expr) -> bool:
     return isinstance(expr, ast.Lifted) and isinstance(expr.written, ast.TypeRef) \
         and expr.written.module is None and not expr.written.result \
         and _is_generic(expr.written.name)
+
+
+def _mutable_fields(node: object) -> frozenset[str]:
+    """The fields a record's definition wrote `mut NAME : TYPE`."""
+    if not isinstance(node, ast.TypeDef) or node.kind is not ast.TypeKind.PRODUCT:
+        return frozenset()
+    return frozenset(one.name for one in node.fields if one.mutable)
+
+
+def _has_mutable_field(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
+    """Whether a value of *ty* holds a field written `mut` anywhere inside it --
+    which a variable at the top level holding one has to be written where it
+    may be changed for."""
+    if id(ty) in seen:
+        return False
+    deeper = seen | {id(ty)}
+    match ty:
+        case ProductType():
+            return bool(ty.mutable_fields) or any(
+                _has_mutable_field(one, deeper) for _, one in ty.fields)
+        case TupleType():
+            return any(_has_mutable_field(one, deeper) for one in ty.members)
+        case ArrayType():
+            return _has_mutable_field(ty.element, deeper)
+    return False
 
 
 def _path_of(expr: ast.Expr) -> str:
@@ -3809,7 +3835,8 @@ class Checker:
             # be written.  What the *program* may do is the type's business, and
             # a collection without `mut` is refused an assignment there.
             ptr_type=self._module.types.ptr_type(
-                ty, mutable=node.mutable or (_is_a_table(ty) and not static)),
+                ty, mutable=node.mutable or (_is_a_table(ty) and not static)
+                or _has_mutable_field(ty)),
             initializer=initializer, linkage=linkage, span=node.span,
             name_span=node.name_span,
             exported=self._is_export(attrs),
@@ -6586,6 +6613,10 @@ class Checker:
                                  name=field.name)
                 spoiled = True
                 continue
+            if field.mutable and node.kind is ast.TypeKind.SUM:
+                self._diags.emit(D.LANG_TYPEDEF_MUT_VARIANT, field.span,
+                                 name=field.name)
+                spoiled = True
             seen[field.name] = field.name_span
             ty = self._resolve_type(field.type)
             short = _short_lived(ty)
@@ -6638,7 +6669,8 @@ class Checker:
             return SumType(made, name=defined.name, origin=defined.origin)
         return ProductType(made, name=defined.name, origin=defined.origin,
                            abi=defined.abi, unique=defined.unique,
-                           device=defined.device, closed_by=defined.closed_by)
+                           device=defined.device, closed_by=defined.closed_by,
+                           mutable_fields=_mutable_fields(node))
 
     def _defined_type(self, ref: ast.TypeRef) -> Type | None:
         """The type a name stands for, where a definition gave it one."""
@@ -10711,7 +10743,8 @@ class Checker:
             self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, stmt.name_span,
                              type=ty.written(), name=stmt.name)
             return
-        if not self._record_may_change(stmt.base, stmt.name_span):
+        if not self._lifted(stmt.base, stmt.name, ty) \
+                and not self._record_may_change(stmt.base, stmt.name_span):
             return
         if _read_only_table(ty.fields[at][1]):
             # A field holding a collection the type says nothing may be put in
@@ -12889,31 +12922,10 @@ class Checker:
         # a reference to it may be held -- and may be written where the record
         # may: `&mut init.io.output` asks the `mut` of `init`.
         return (self._field_place(builder, where, ty, at, expr.span),
-                ty.fields[at][1], self._may_write(expr.base), _path_of(expr),
+                ty.fields[at][1],
+                bool(self._lifted(expr.base, expr.name, ty))
+                or self._may_write(expr.base), _path_of(expr),
                 self._lasting(where))
-
-    def _may_write(self, expr: ast.Expr) -> bool:
-        """Whether the record *expr* names is one the program may write: a name
-        written `mut`, a variable at the top level written `mut`, a field of one
-        of those, or what a `&mut` names."""
-        match expr:
-            case ast.NameRef():
-                local = self._find_local(expr.name)
-                if local is not None:
-                    return local.mutable
-                found = self._provided(expr.name)
-                return found.mutable if isinstance(found, GlobalVar) else True
-            case ast.Member():
-                shared = self._exported_variable(expr)
-                if shared is not None:
-                    return shared.mutable
-                return self._may_write(expr.base)
-            case ast.Deref():
-                held = self._type_of(expr.operand)
-                return held.mutable if isinstance(held, PtrType) else True
-        # An element is the array's, which asks its own question where the
-        # element is reached.
-        return True
 
     def _place_of_an_element(self, builder: IRBuilder, expr: ast.Element
                              ) -> tuple[Value, Type, bool, str, bool] | None:
@@ -12944,10 +12956,65 @@ class Checker:
                 self._may_write(expr.base) and not self._read_only(base),
                 "an element", self._lasting(base))
 
+    def _lifted(self, base: ast.Expr, name: str, ty: ProductType) -> bool:
+        """Whether the field *name* of the record *base* is writable whatever the
+        record is: it, or a field on the way to it, is written `mut NAME`, and no
+        `&` that only reads lies on the way -- what a `&` lends is read-only
+        however it is made."""
+        if name in ty.mutable_fields:
+            return not self._behind_a_reader(base)
+        if isinstance(base, ast.Member):
+            above = self._record_type_of(base.base)
+            if isinstance(above, ProductType):
+                return self._lifted(base.base, base.name, above)
+        return False
+
+    def _behind_a_reader(self, expr: ast.Expr) -> bool:
+        """Whether *expr* is reached through a `&` that may not write."""
+        while True:
+            match expr:
+                case ast.Member() | ast.Element() | ast.Index():
+                    expr = expr.base
+                case ast.Deref():
+                    held = self._record_type_of(expr.operand)
+                    if isinstance(held, PtrType) and not held.mutable:
+                        return True
+                    expr = expr.operand
+                case _:
+                    return False
+
+    def _record_type_of(self, expr: ast.Expr) -> Type | None:
+        """The type of a place written as a path -- a name, a field of one, what
+        a reference names -- read off the definitions, with nothing lowered."""
+        match expr:
+            case ast.NameRef():
+                local = self._find_local(expr.name)
+                if local is not None:
+                    return self._held_by(local)
+                found = self._provided(expr.name)
+                return found.value_type if isinstance(found, GlobalVar) else None
+            case ast.Member():
+                shared = self._exported_variable(expr)
+                if shared is not None:
+                    return shared.value_type
+                base = self._record_type_of(expr.base)
+                if isinstance(base, ProductType):
+                    at = _field_index(base, expr.name)
+                    return base.fields[at][1] if at is not None else None
+                return None
+            case ast.Deref():
+                held = self._record_type_of(expr.operand)
+                return held.pointee if isinstance(held, PtrType) else None
+        return None
+
     def _may_write(self, expr: ast.Expr) -> bool:
         """Whether what *expr* names may be written, asked quietly of its root:
         a name that is `mut`, a reference that is `&mut`."""
         match expr:
+            case ast.Member() if self._exported_variable(expr) is not None:
+                shared = self._exported_variable(expr)
+                assert shared is not None
+                return shared.mutable
             case ast.Member() | ast.Element():
                 return self._may_write(expr.base)
             case ast.Deref():

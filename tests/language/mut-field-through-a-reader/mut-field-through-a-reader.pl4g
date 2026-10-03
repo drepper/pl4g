@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4535
+※ pl4g-test: expect-diag 4535 LANG_REF_NOT_WRITABLE
+
+※ A `mut` field lifts the `mut` its record lacks, and not the one a reference
+※ lacks: what a `&` lends is read-only however the record behind it was made,
+※ which is what lets several `&` to one place be out at once.
+
+type Counter = mut hits : u8 ; fixed : u8
+
+fn peek(c: &Counter):
+    c⌖.hits ← 1u8
+
+@[startup]
+fn main() → u6:
+    let c: Counter = Counter(.hits ← 0u8, .fixed ← 7u8)
+    peek(&c)
+    0u6

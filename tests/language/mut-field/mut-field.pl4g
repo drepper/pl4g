@@ -1,0 +1,39 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `mut NAME : TYPE` in a record's definition is a field that may be written,
+※ and lent by `&mut`, where the record holding it may not: a variable not
+※ written `mut`, a parameter, a variable at the top level.  Everything inside
+※ such a field may be written with it.  The other fields are as they were.
+※
+※ Compare: **C++**'s `mutable`, which this is, there written through a `const`
+※ reference as well; **Rust**, whose `Cell` and `RefCell` are the same idea as a
+※ type and the only way to write through `&`; **D**, which has no such thing,
+※ `const` being transitive; **Swift**, whose `let` of a struct freezes every
+※ field.
+
+type In = a : u8 ; b : u8
+type Counter = mut hits : u8 ; mut inner : In ; fixed : u8
+
+let shared: Counter = Counter(.hits ← 0u8, .inner ← In(.a ← 0u8, .b ← 0u8), .fixed ← 7u8)
+
+@[impure]
+fn bump(n: &mut u8):
+    n⌖ ← n⌖ + 1u8
+
+@[impure]
+fn counted(c: Counter) → u8:
+    c.hits ← c.hits + 1u8
+    c.hits
+
+@[startup, impure]
+fn main() → u6:
+    let c: Counter = Counter(.hits ← 0u8, .inner ← In(.a ← 0u8, .b ← 0u8), .fixed ← 7u8)
+    c.hits ← 2u8
+    bump(&mut c.hits)
+    c.inner.a ← 5u8
+    bump(&mut c.inner.b)
+    shared.hits ← 9u8
+    bump(&mut shared.inner.a)
+    if counted(c) ≠ 4u8 ∨ c.hits ≠ 3u8: return 1u6
+    let here: bool = c.inner.a = 5u8 ∧ c.inner.b = 1u8 ∧ c.fixed = 7u8
+    if here ∧ shared.hits = 9u8 ∧ shared.inner.a = 1u8: 0u6 else: 2u6

@@ -25,7 +25,7 @@
 let std := ⎕import("std")
 
 @[startup, impure]
-fn main(init: mut std.Init) → u6:
+fn main(init: std.Init) → u6:
     ※ at least the name the program was run under
     if #init.args < 1:
         1u6

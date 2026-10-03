@@ -645,6 +645,9 @@ class ProductType(Type):
     #: `@[impure]` mean "changes something global" rather than "touches a device
     #: somebody handed over".
     device: bool = False
+    #: The fields written `mut NAME : TYPE`, which may be written where the
+    #: record holding them may not.
+    mutable_fields: frozenset[str] = frozenset()
     #: The function that closes a value of this type, which `@[closed_by(f)]`
     #: names: such a value is moved and never copied, and a variable holding one
     #: owes a call of `T.f` with it before its scope ends.  Empty for any other.

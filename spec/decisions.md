@@ -9633,6 +9633,24 @@ exactly where the record holding it may -- a variable or a parameter written `mu
 a `&mut` names (4537), the message naming the whole path.  The startup function's parameter is the record the process was started
 with, not a copy; `init: mut std.Init` is what lets a program hand its streams out by `&mut`.
 
+## 2026-10-04T06:00+02:00 — language
+
+**No `std.io`; a record's field may be `mut` on its own**
+
+The user asked for `std.io` to go -- the streams reached only as `init.io.output` and the others, with no variable at the top level
+-- and for what that needs: C++'s `mutable` for a record's field, so that a startup function written `init: std.Init` may still lend
+a stream by `&mut`.  Asked, the user chose the spelling **`mut NAME : TYPE`**, before the name like C++'s `mutable int x;`, keeping
+`NAME : mut TYPE` for what it already said of a collection -- against one spelling carrying both, as `let x: mut T` does; that **a
+`&` still reads only**, so a `mut` field lifts the `mut` its record lacks and not the one a reference lacks (Rust's rule, where
+writing through `&` takes `Cell` or `RefCell`) -- against C++'s, which writes one through a `const&` and would let two readers write
+one place; and that **only the streams go**, `std`'s ring, task list, error names and constants staying at the top level as its own
+state.
+
+Taken without asking: `mut` on a sum's variant is refused (4693); a variable at the top level whose type holds a `mut` field is placed
+where it may be written; and `&mut` of the whole record still needs the record to be `mut` -- the two tests that lend `&mut init` keep
+`init: mut std.Init`, and everything else that wrote it for the streams, `examples/cat` included, writes `init: std.Init`.  A program
+may still make an ambient device of its own, and a function writing through it says `@[io]` as before.
+
 
 Open questions
 --------------

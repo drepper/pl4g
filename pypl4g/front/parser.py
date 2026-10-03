@@ -1670,7 +1670,14 @@ class Parser:
                               name_span=written.span, value=value)
 
     def _parse_field(self) -> ast.Field:
-        """Parse one ``NAME ':' TYPE`` of a type definition."""
+        """Parse one ``['mut'] NAME ':' TYPE`` of a type definition.
+
+        `mut` before the name says the field may be written where the record
+        holding it may not; `mut` before the type says what it says of a
+        collection there.  Two places, because they are two questions: whether
+        this part of the record changes, and whether what it holds does.
+        """
+        field_mut = self._accept(TokKind.KW_MUT)
         name_token = self._expect(TokKind.IDENT)
         self._expect(TokKind.COLON, D.LANG_TYPEDEF_EXPECTED_COLON)
         # `mut` stands before the type here as it does in a definition, and a
@@ -1679,9 +1686,9 @@ class Parser:
         # collection -- that entries may be put in it.
         mutable = self._accept(TokKind.KW_MUT) is not None
         written = _writable(self._parse_type_ref(), mutable)
-        return ast.Field(span=name_token.span.to(written.span),
+        return ast.Field(span=(field_mut or name_token).span.to(written.span),
                          name=name_token.text, name_span=name_token.span,
-                         type=written)
+                         type=written, mutable=field_mut is not None)
 
     def _parse_params(self) -> tuple[ast.Param, ...]:
         """Parse a parameter list, which may be empty."""

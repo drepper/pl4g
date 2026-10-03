@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4693
+※ pl4g-test: expect-diag 4693 LANG_TYPEDEF_MUT_VARIANT
+
+※ `mut` before a name marks a field of a record.  A sum holds one of its
+※ variants, and is changed by being given another: there is no part of it that
+※ stays while another changes.
+
+type Either = mut one : u8 | two : u16
+
+@[startup]
+fn main() → u6:
+    0u6

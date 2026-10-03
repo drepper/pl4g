@@ -4477,3 +4477,12 @@ parses it; the tokens it made are kept on the job (`lexed`), and the bill of mat
 signature's tokens and those.  A source is hashed by its bytes (`ReadUnit.text`); a module's definition rows are its functions
 whose bodies were read.  `std` is lexed in 4.3 ms rather than 7.6, its signatures being about half its tokens.
 
+**A `mut` field** (`ast.Field.mutable`, `ProductType.mutable_fields`).  The parser takes `mut` before a field's name; the checker
+records the names on the record type (`_mutable_fields`) and refuses one on a sum's variant (4693).  `_lifted(base, name, record)`
+answers whether a field is writable whatever its record is: it, or a field on the path to it, is `mut`, and no `&` that only reads
+lies on the path (`_behind_a_reader`), the types along the path read off the definitions with nothing lowered
+(`_record_type_of`).  `&mut` of a field asks `_lifted` or the record's own writability (`_may_write`), and assigning a field asks
+`_lifted` before `_record_may_change`.  A variable at the top level whose type holds a `mut` field is given a writable pointer type
+(`_has_mutable_field`), which is what places it in writable data.  `std.Io`'s three streams are `mut`, and `std` has no `io`
+variable any more.
+

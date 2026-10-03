@@ -6,8 +6,8 @@
 ※ through the module that wrote it does not change that: a reference may be taken of it, a
 ※ field of it is read at an offset from it, and the reference lasts as long as the program.
 ※
-※ What wanted it is `std.io.output`, which has to be somewhere for a write to be given a
-※ `&mut` to it.
+※ What first wanted it was a module's own streams, which have to be somewhere for a write
+※ to be given a `&mut` to them.
 
 let m := ⎕import("held")
 

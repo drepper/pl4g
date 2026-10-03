@@ -183,7 +183,7 @@ def test_the_hash_of_the_whole_is_the_hash_of_the_parts(tmp_path: Path) -> None:
 USES_STD = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
 @[startup, impure]
-fn main(init: mut std.Init) \N{RIGHTWARDS ARROW} u6:
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     if std.error_name(2i32) = "not_found": 0u6 else: 1u6
 """
 

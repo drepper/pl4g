@@ -1533,6 +1533,9 @@ class Field(Node):
     name: str
     name_span: Span
     type: TypeExpr
+    #: `mut NAME : TYPE`: a field that may be written, and lent by `&mut`, where
+    #: the record holding it may not -- C++'s `mutable`.
+    mutable: bool = False
 
 
 @dataclass(frozen=True, slots=True)

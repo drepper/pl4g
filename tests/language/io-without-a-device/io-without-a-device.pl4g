@@ -1,19 +1,21 @@
 ※ pl4g-test: compile=error diag=4538
+※ pl4g-test: expect-diag 4538 LANG_IO_WITHOUT_A_DEVICE
 
 ※ A function that was handed no device may not read or write one.
 ※
-※ Reaching a device through a *variable* is not being handed one: `std.io` is ambient, so a
-※ function that writes through it is doing something its signature does not account for and
-※ says so with `@[io]`.  That one word is the whole difference between the two ways of
-※ reaching the same three devices, and it is what makes the other way mean anything.
+※ Reaching a device through a *variable* is not being handed one: a variable at the
+※ top level is ambient, so a function that writes through it is doing something its
+※ signature does not account for and says so with `@[io]`.  The standard streams are
+※ no such variable -- they arrive in `init.io` and are handed on by `&mut` -- but a
+※ program may make one of its own, and this is what writing through it asks.
 ※
 ※ What it is *not* is `@[impure]`, and the note says which attribute would answer it.
 
-※ expect-diag 4560 would have to say
-
 let std := ⎕import("std")
+
+let out: mut std.Writer = std.Writer(.fd ← 1i32)
 
 @[startup]
 fn main() → u6:
-    ⎕drop(std.Io.println(&mut std.io.output, ⎕bytes("ambient")) ?? 0)
+    ⎕drop(std.Io.println(&mut out, ⎕bytes("ambient")) ?? 0)
     0u6

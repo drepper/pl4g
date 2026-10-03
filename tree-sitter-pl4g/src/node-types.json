@@ -10627,6 +10627,16 @@
     "type": "type_part",
     "named": true,
     "fields": {
+      "field_mut": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "mutable",
+            "named": true
+          }
+        ]
+      },
       "name": {
         "multiple": false,
         "required": true,
