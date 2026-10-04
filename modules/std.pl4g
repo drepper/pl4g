@@ -37,8 +37,8 @@ type Io = mut input : io.Reader ; mut output : io.Writer ; mut error : io.Writer
 ※※ I/O with, and the words it was named with.
 ※※
 ※※ \details `fs` holds the ring every request goes through.  It is `mut`, so
-※※ `&mut init.fs` may be lent to `run` and `spawn`, and `&init.fs` to
-※※ `std.fs.State.cwd`, which answers the directory the process is in.
+※※ `&mut init.fs` may be lent to `run` and `spawn`, and it needs to be lent to
+※※ nothing else: `std.fs.cwd()` answers the directory the process is in.
 ※
 ※ A record rather than the two of them outright, so that whatever else a program
 ※ inherits has somewhere to go without changing the one signature every program

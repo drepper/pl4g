@@ -44,7 +44,18 @@ RODATA_SECTION = ".rodata"
 
 
 def emit_globals(asm: Assembler, module: Module, layout: DataLayout) -> None:
-    """Emit every variable of *module* into the section its type calls for."""
+    """Emit every variable of *module* into the section its type calls for.
+
+    An address of the program's ring -- what the directory `std.fs.cwd()`
+    answers holds -- points into the record the entry point lays out, and how
+    far in is known only now that the layout is.
+    """
+    from . import started
+    if module.ring_addresses:
+        at = started.ring_at(module, layout)
+        assert at is not None, "an address of the ring, and no record to hold one"
+        for one in module.ring_addresses:
+            one.offset = at
     variables = list(module.globals.values())
     _emit_group(asm, [v for v in variables if not v.mutable], RODATA_SECTION,
                 False, layout)

@@ -1546,17 +1546,20 @@ class Parser:
             self._advance()
             indented = True
         fields: list[ast.Field] = []
+        singletons: list[ast.Field] = []
         kind: ast.TypeKind | None = None
         separator: Token | None = None
         while True:
             if indented:
                 self._skip_newlines()
-            if not fields and self._ends_the_parts(braced, indented):
+            if not fields and not singletons \
+                    and self._ends_the_parts(braced, indented):
                 # Nothing at all between the delimiters, which is a definition
                 # that said nothing about what the type is.
                 self._diags.emit(D.LANG_TYPEDEF_NO_PARTS, name_token.span)
                 raise _Bail()
-            fields.append(self._parse_field())
+            part = self._parse_field()
+            (singletons if part.singleton else fields).append(part)
             # The separator ends the line it is on, where the definition is
             # written over several.  Looking for it before skipping any end of
             # line is what keeps "this pair was the last" decidable where it is
@@ -1580,10 +1583,15 @@ class Parser:
         elif indented:
             self._skip_newlines()
             self._accept(TokKind.DEDENT)
+        if not fields:
+            # Only singletons: a type no value of which holds anything.
+            self._diags.emit(D.LANG_TYPEDEF_NO_PARTS, name_token.span)
+            raise _Bail()
         return ast.TypeDef(span=start.to(end), name=name_token.text,
                            name_span=name_token.span,
                            kind=kind if kind is not None else ast.TypeKind.PRODUCT,
-                           fields=tuple(fields), attrs=attrs, params=tuple(params),
+                           fields=tuple(fields), singletons=tuple(singletons),
+                           attrs=attrs, params=tuple(params),
                            param_spans=tuple(places), clauses=clauses, doc=doc,
                            doc_lines=doc_lines)
 
@@ -1674,13 +1682,29 @@ class Parser:
                               name_span=written.span, value=value)
 
     def _parse_field(self) -> ast.Field:
-        """Parse one ``['mut'] NAME ':' TYPE`` of a type definition.
+        """Parse one ``['mut'] NAME ':' TYPE`` of a type definition, or one
+        ``'singleton' NAME ':' TYPE ['=' VALUE]``.
+
+        A singleton is written among the fields because it belongs to the type
+        as they do, and is not one because it is no part of a value: one object
+        for the whole program, which the checker takes out of the list.
 
         `mut` before the name says the field may be written where the record
         holding it may not; `mut` before the type says what it says of a
         collection there.  Two places, because they are two questions: whether
         this part of the record changes, and whether what it holds does.
         """
+        single = self._accept(TokKind.KW_SINGLETON)
+        if single is not None:
+            name_token = self._expect(TokKind.IDENT)
+            self._expect(TokKind.COLON, D.LANG_TYPEDEF_EXPECTED_COLON)
+            written = self._parse_type_ref()
+            value = (self._parse_expression()
+                     if self._accept(TokKind.EQUALS) is not None else None)
+            return ast.Field(span=single.span.to(value.span if value is not None
+                                                 else written.span),
+                             name=name_token.text, name_span=name_token.span,
+                             type=written, singleton=True, value=value)
         field_mut = self._accept(TokKind.KW_MUT)
         name_token = self._expect(TokKind.IDENT)
         self._expect(TokKind.COLON, D.LANG_TYPEDEF_EXPECTED_COLON)

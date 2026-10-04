@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4004 LANG_VARDEF_NOT_MUTABLE
+
+※ Nor is a field of one: a singleton is in the image, and everything holding a
+※ reference to it reads the same thing for as long as the program runs.
+
+let std := ⎕import("std")
+
+type Limits = low : u8 ; singleton usual : Limits = Limits(.low ← 1u8)
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    Limits.usual.low ← 2u8
+    0u6

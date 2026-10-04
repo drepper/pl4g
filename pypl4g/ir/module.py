@@ -12,7 +12,7 @@ from .types import (ArrayType, BoolType, CHAR, CharType, EnumType, FloatType,
                     IntType, MEM,
                     ProductType, PtrType, ResultType, Type,
                     TypeContext)
-from .value import (ArrayConst, BoolConst, CharConst, Const, EnumConst,
+from .value import (AddressConst, ArrayConst, BoolConst, CharConst, Const, EnumConst,
                     FloatConst, IntConst, RecordConst, ResultConst, Value)
 
 
@@ -100,6 +100,10 @@ class Module:
     #: `⎕environ`.  Nothing where it does not: the variable is made on first
     #: ask, so this being here is what says the entry point has one to fill.
     environ: GlobalVar | None = None
+    #: Addresses in the image of where the program's ring is, which only the
+    #: entry point's record knows: each points into that record, and how far
+    #: in is settled when the record is laid out (`target/started.py`).
+    ring_addresses: list[AddressConst] = field(default_factory=list)
     ctors: list[Function] = field(default_factory=list)
     dtors: list[Function] = field(default_factory=list)
     tests: list[Function] = field(default_factory=list)

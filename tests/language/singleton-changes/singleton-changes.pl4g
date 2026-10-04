@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4696 LANG_SINGLETON_CHANGES
+
+※ A singleton is read-only, so a type with a field written where its record is not
+※ cannot be one.
+
+let std := ⎕import("std")
+
+type Counter = mut n : u8 ; singleton zero : Counter = Counter(.n ← 0u8)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

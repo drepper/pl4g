@@ -2258,6 +2258,21 @@ def _path_text(expr: ast.Expr) -> str:
     return "an expression"
 
 
+#: The one singleton the compiler fills in: the type, the name, and the module
+#: of the installation's it is in.  What it holds is the directory the process
+#: is in, and where the program's ring is.
+FILLED_SINGLETON: Final[tuple[str, str, str]] = ("State", "cwd", "fs")
+
+#: `AT_FDCWD`, which is the same number on every one of these targets.
+AT_FDCWD: Final[int] = -100
+
+#: The record the entry point lays out, as what an address in the image may
+#: point into.  It is the target's to emit (`target/started.py`, under this
+#: name), so it is no variable of the module: it stands here only to be named.
+_STARTUP_RECORD: Final[GlobalVar] = GlobalVar(
+    "__pl4g_init", U8, PtrType(U8, mutable=True))
+
+
 def _is_exported(what: object) -> bool:
     """Whether a top-level definition is one an importing file may name."""
     return bool(getattr(what, "exported", False))
@@ -3532,6 +3547,8 @@ class Checker:
                             collected.append(gathered)
                     case ast.VarDef():
                         self._collect_global(item)
+                    case ast.TypeDef() if item.singletons:
+                        self._collect_singletons(item)
                     case (ast.ModuleImport() | ast.TypeDef() | ast.EnumDef()
                           | ast.UnitDef() | ast.BundleDef()):
                         pass
@@ -3898,6 +3915,90 @@ class Checker:
         if _is_a_table(ty) and not static and initializer is None:
             self._built_globals.append((var, node))
 
+    def _collect_singletons(self, node: ast.TypeDef) -> None:
+        """Make the singletons of a record's type: one variable each, in the image.
+
+        A singleton is a definition at the top level that the program reaches
+        through the type -- `T.name`, `m.T.name` -- and by no name of its own:
+        it is filed under `T.name`, which no program can write, and as a member
+        of `T`, which is how a path finds it.  What it holds is what `in
+        ⎕static` takes, said without the words, a singleton being in the image
+        by what it is; and it is read-only, so a type with a field that may be
+        written where its record may not is refused (4696).
+
+        One is written without a value only where the compiler fills it in: the
+        directory `std.fs.cwd()` answers, which holds where the program's ring
+        is -- something only the record the entry point lays out knows.
+        """
+        defined = self._top.get(node.name)
+        for one in node.singletons:
+            if node.kind is ast.TypeKind.SUM:
+                self._diags.emit(D.LANG_SINGLETON_IN_A_SUM, one.name_span,
+                                 name=one.name, type=node.name)
+                continue
+            filed = ".".join((node.name, one.name))
+            exported = isinstance(defined, _NamedType) and defined.exported
+            if one.value is None:
+                var = self._filled_singleton(node, one, filed, exported)
+                if var is None:
+                    continue
+            else:
+                value = one.value
+                if not _in_the_image(value) and _a_container_written(value):
+                    # In the image by what it is: `in ⎕static` is not written.
+                    where = ast.NameRef(span=value.span, name=STATIC_NAME)
+                    value = (replace(value, arena=where)
+                             if isinstance(value, (ast.SetLit, ast.DictLit))
+                             else ast.Allocated(span=value.span, value=value,
+                                                arena=where))
+                export = (ast.Attribute(span=one.span, name="export",
+                                        name_span=one.name_span),) if exported else ()
+                self._collect_global(ast.VarDef(
+                    span=one.span, name=filed, name_span=one.name_span,
+                    type=one.type, value=value, mutable=False, attrs=export))
+                var = self._top.get(filed)
+                if not isinstance(var, GlobalVar):
+                    continue
+            if _has_mutable_field(var.value_type):
+                self._diags.emit(D.LANG_SINGLETON_CHANGES, one.name_span,
+                                 name=one.name, type=var.value_type.written())
+                continue
+            self._members[(node.name, one.name)] = var
+
+    def _filled_singleton(self, node: ast.TypeDef, one: ast.Field, filed: str,
+                          exported: bool) -> GlobalVar | None:
+        """The singleton the compiler fills in, where this is the one (4695).
+
+        `std.fs.State.cwd`: a directory whose descriptor is `AT_FDCWD` and whose
+        ring is the program's.  The ring's address is a relocation to the record
+        the entry point lays out, how far into it settled when that is laid out.
+        """
+        if not (node.name == FILLED_SINGLETON[0] and one.name == FILLED_SINGLETON[1]
+                and any(self._path == (where / FILLED_SINGLETON[2]).with_suffix(SUFFIX)
+                        for where in system_modules())):
+            self._diags.emit(D.LANG_SINGLETON_WITHOUT_VALUE, one.name_span,
+                             name=one.name)
+            return None
+        ty = self._resolve_type(one.type)
+        if not isinstance(ty, ProductType) \
+                or [name for name, _ in ty.fields] != ["fd", "ring"]:
+            self._diags.internal("the directory the compiler fills in is not 'fd ; ring'")
+            return None
+        if not self._declare(filed, one.name_span):
+            return None
+        ring = AddressConst(ty.fields[1][1], _STARTUP_RECORD)
+        self._module.ring_addresses.append(ring)
+        var = self._module.add_global(GlobalVar(
+            name=filed, value_type=ty,
+            ptr_type=self._module.types.ptr_type(ty, mutable=False),
+            initializer=self._module.record_const(
+                ty, (self._module.int_const(ty.fields[0][1], AT_FDCWD), ring)),
+            span=one.span, name_span=one.name_span, exported=exported),
+            key=self._key(filed))
+        self._top[filed] = var
+        self._owned.append(var)
+        return var
+
     # -- modules ---------------------------------------------------------------
 
     def _collect_import(self, node: ast.ModuleImport) -> None:
@@ -4051,8 +4152,14 @@ class Checker:
         Both at once where the enumeration came from a module: `std.Error.again`
         is the value of a type reached through the name the module was bound to,
         which is the two readings one after the other and not a third one.
+
+        A singleton is read the same way, `T.name` or `m.T.name`: what is read is
+        the one object the type has.
         """
         base = expr.base
+        single = self._member_named(expr)
+        if isinstance(single, GlobalVar):
+            return builder.load(single, expr.span)
         if isinstance(base, ast.Member):
             # A type another module exports, and a value of it.  Nothing else a
             # module holds is reached through two marks, so what stands here is
@@ -9898,8 +10005,12 @@ class Checker:
 
     def _checked_index(self, builder: IRBuilder, written: ast.Expr,
                        along: int | None, length: Value,
-                       span: Span) -> Value | None:
+                       span: Span, one_past: bool = False) -> Value | None:
         """Lower one index and see to it that it is one the array has.
+
+        *one_past* is a slice's start, which may be the length itself: `a⟦3…3⟧`
+        of three elements is the empty run at the end, a place and a count of
+        nought, as the half-open convention says.
 
         Where both the index and the dimension are written down the answer is
         known while compiling and a program that could only fail is refused.
@@ -9928,13 +10039,14 @@ class Checker:
             self._diags.emit(D.LANG_UNIT_INDEX, written.span, found=found.written())
             return None
         if isinstance(written, ast.IntLit) and along is not None:
-            if not 0 <= written.value < along:
+            if not 0 <= written.value < along + (1 if one_past else 0):
                 self._diags.emit(D.LANG_ARRAY_INDEX_OUTSIDE, written.span,
                                  index=str(written.value), length=along)
                 return None
             return builder.int_const(U64, written.value)
         wide = self._as_count(builder, index, found, span)
-        builder.check(builder.compare(CmpPred.ULT, wide, length, span),
+        builder.check(builder.compare(CmpPred.ULE if one_past else CmpPred.ULT,
+                                      wide, length, span),
                       "an index outside its array",
                       statuses.OUT_OF_RANGE, span)
         return wide
@@ -10675,7 +10787,7 @@ class Checker:
             return UndefConst(ERROR)
         start, lengths = self._shape_of(builder, base, ty, span)
         first = self._checked_index(builder, written.start, ty.shape[0],
-                                    lengths[0], span)
+                                    lengths[0], span, one_past=True)
         if first is None:
             return UndefConst(ERROR)
         # The end may be the length itself, which is one past the last element
@@ -10797,6 +10909,13 @@ class Checker:
         read, not copied and not touched, which is what having an address for
         each field is for.
         """
+        whole = ast.Member(span=stmt.span, base=stmt.base, name=stmt.name,
+                           name_span=stmt.name_span)
+        if isinstance(self._member_named(whole), GlobalVar):
+            # A singleton, `T.name ← …`: one object in the image, never written.
+            self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, stmt.span,
+                             name=_path_text(whole))
+            return
         found = self._record_at(builder, stmt.base, writing=True)
         if found is None:
             self._diags.emit(D.LANG_ASSIGN_NOT_A_RECORD, stmt.base.span)
@@ -10956,7 +11075,18 @@ class Checker:
         not get to say it again.
         """
         match expr:
-            case ast.Member() | ast.Element():
+            case ast.Member():
+                # A path that names a variable at the top level itself -- another
+                # module's, or a singleton -- is as mutable as that variable.
+                named = self._exported_variable(expr)
+                if named is not None:
+                    if named.mutable:
+                        return True
+                    self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, where,
+                                     name=_path_text(expr))
+                    return False
+                return self._record_may_change(expr.base, where)
+            case ast.Element():
                 return self._record_may_change(expr.base, where)
             case ast.Deref():
                 if not isinstance(expr.operand, ast.NameRef):
@@ -12953,6 +13083,10 @@ class Checker:
         taken of it and a field of it read at an offset, which is what every variable
         at the top level already is.
         """
+        single = self._member_named(expr)
+        if isinstance(single, GlobalVar):
+            # A singleton, `T.name` or `m.T.name`: the one object the type has.
+            return single
         held = self._module_at(expr.base)
         if held is None:
             return None

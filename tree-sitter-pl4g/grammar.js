@@ -170,11 +170,24 @@ module.exports = grammar({
     // field may be written where the record holding it may not -- C++'s
     // `mutable` -- which is a question about the part and not about what it
     // holds, so it stands in the other place.
-    type_part: $ => seq(
-      optional(field('field_mut', $.mutable)),
-      field('name', $.identifier), ':', optional($.mutable),
-      field('type', $.type),
+    //
+    // `singleton` before the name says it is no part of a value: one object for
+    // the whole program, read-only, with what it holds after `=` -- or nothing,
+    // where the compiler fills it in.
+    type_part: $ => choice(
+      seq(
+        optional(field('field_mut', $.mutable)),
+        field('name', $.identifier), ':', optional($.mutable),
+        field('type', $.type),
+      ),
+      seq(
+        field('singleton', $.singleton),
+        field('name', $.identifier), ':', field('type', $.type),
+        optional(seq('=', field('value', $._expression))),
+      ),
     ),
+
+    singleton: _ => 'singleton',
 
     // The arrow and what follows it say what the function answers with.
     // Leaving them off is how a function says it answers with nothing; there is

@@ -248,11 +248,12 @@ fn Writer.close(w: Writer)
 fn ReadWriter.close(rw: ReadWriter)
 
 ※ std.fs: files and directories, and what a program does its I/O with
-type State      = ring : io.Ring ; tasks : [Task]       ※ init.fs: the ring, and what std.run drives
+type State      = ring : io.Ring ; tasks : [Task] ;     ※ init.fs: the ring, and what std.run drives
+                  singleton cwd : Dir                   ※ the one directory the process is in
 type Dir        = fd : i32 ; ring : u64                 ※ a directory files are opened in
 
-fn State.cwd(s: &State) → Dir                           ※ the directory the process is in: AT_FDCWD
-fn Dir.open(d: Dir, name: str, kind: ⌜T'⌝) → T' ? i32  ※ T' is io.Reader, io.Writer or io.ReadWriter
+fn cwd() → &static Dir                                  ※ State.cwd: the directory the process is in, AT_FDCWD
+fn Dir.open(d: &Dir, name: str, kind: ⌜T'⌝) → T' ? i32 ※ T' is io.Reader, io.Writer or io.ReadWriter
 
 ※ std
 type Io   = mut input : io.Reader ; mut output : io.Writer ; mut error : io.Writer
@@ -273,7 +274,8 @@ fn error_name_of(e: Error) → str
 ```
 
 **Every device carries where the ring is.**  The ring is a field of `init.fs`, which is in the image, so where it is does not
-change; `State.cwd(&init.fs)` hands out a directory carrying that address, every file opened in it carries it on, and the three a
+change; `std.fs.cwd()` answers the directory carrying that address -- `&State.cwd`, a singleton in the image -- every file opened
+in it carries it on, and the three a
 process inherits carry it from the start -- the address is written into the image, not worked out at run time.  So whatever reads
 or writes reaches the ring through what it was handed, and **nothing in `std`, `std.io` or `std.fs` names a variable at the top level** to
 do I/O: a function holding a device may do I/O through it and says neither `@[io]` nor `@[impure]` to.  What the runtime is
@@ -291,7 +293,7 @@ not there and left as it is.  **`error_name(code)` names what the kernel refused
 not_found` -- read from a table in the image (`⸨…⸩ in ⎕static`), so asking is pure and nothing is filled in while the program
 runs; `error_name_of(e)` is the same for a value of `Error`.  The table is written out beside the enumeration, nothing yet working
 one out from `⎕fields` while compiling, and a test asks it of every value `⎕fields` finds.  `Error` names what reading, writing and opening by name can give, and `other` is everything else.  It answers that type, or the number the kernel refused with.  The name is relative to `d` -- the
-kernel's `openat` -- unless it begins with `/`; the directory `State.cwd` answers is `AT_FDCWD`, the one the process is in, and
+kernel's `openat` -- unless it begins with `/`; the directory `std.fs.cwd()` answers is `AT_FDCWD`, the one the process is in, and
 is never closed.  A name with a nul inside it or longer than 4095 bytes is refused before the kernel is asked.  The type is the
 argument rather than a mode beside the name because what comes back is a different type for each: a `Reader` cannot be written to,
 which the compiler can say only if it knows which was opened, and a fourth kind is one more type a program may hand.
@@ -2703,6 +2705,40 @@ way to write through `&` there; **D**, whose `const` is transitive and has no wa
 every field and a class is the way out; **C#**, whose `readonly` struct is the opposite default; **Go** and **C**, which have no
 read-only binding for it to lift.
 
+**`singleton NAME : TYPE = VALUE` among a record's fields is no part of a value of the type**: it is one object for the whole
+program, read-only and in the image, belonging to the type.  It is reached through the type as a function inside one is --
+`Limits.usual`, `m.Limits.usual`, `std.fs.State.cwd` -- read as a value, or lent as `&Limits.usual`, a `&static`: it lasts as
+long as the program does.
+
+```
+type Limits =
+    low : u8 ; high : u8 ;
+    singleton usual : Limits = Limits(.low ← 1u8, .high ← 9u8) ;
+    singleton names : ⸨u8: str⸩ = ⸨1u8: "one", 9u8: "nine"⸩
+
+fn widest(l: &Limits) → u8: l⌖.high - l⌖.low
+widest(&Limits.usual)                     ※ 8
+```
+
+**What it holds is what `in ⎕static` takes** -- numbers, text, records and containers of what the compiler knows -- without the
+words: a singleton is in the image by what it is, so a table written as one is laid out there.  **It is never written** (4004): not
+assigned, not a field of it, not lent by `&mut` (4537); and so its type may not have a field written where its record is not
+(4696).  **Only a record's type has them** (4694): a sum is a choice between its variants, and there is nowhere in one for
+something that is no choice.  A value of the type has none of it -- a singleton takes no room in one, is not given when one is made,
+and is not among what `⎕fields` answers -- and it goes wherever its type goes: exported with it, and reached through every module
+that hands the type's module on.
+
+**One is written without a value only where the compiler fills it in** (4695): `std.fs.State.cwd`, the directory the process is
+in, whose descriptor is `AT_FDCWD` and which holds where the program's ring is -- something only the record the entry point lays
+out knows, and which is written into the image as a relocation.
+
+Compare: **C++**'s `static const` data member, which this is, defined once for the program and reached as `T::name`; **Java**'s
+and **C#**'s `static final` / `static readonly` fields; **Zig**, whose declarations inside a `struct` are reached as `T.name` and
+are one object each; **Rust**'s associated constants, `T::NAME`, which are copied where used rather than being one object with an
+address -- this has the address, which `&T.name` gives; **Kotlin**'s `companion object` and **Scala**'s `object`, where the word
+for "one for the program" is `object`.  The keyword is `singleton` because that is what it is: one object, and the type is only
+where it is found.
+
 **A field is read with the same mark**: `p.x`.  That mark does three things -- a module's name, an enumeration's value, and a
 record's field -- told apart by what stands on its left, which is what Go, Rust and Zig all do.
 
@@ -2971,7 +3007,7 @@ exists.  That is Rust's arrangement and C++'s intent, and it is what lets `r⌖`
 back -- a file, a socket, a lock.  `std`'s `Reader`, `Writer` and `ReadWriter` are marked `@[closed_by(close)]`:
 
 ```
-match std.fs.Dir.open(std.fs.State.cwd(&init.fs), "notes.txt", ⌜std.io.Reader⌝):
+match std.fs.Dir.open(std.fs.cwd(), "notes.txt", ⌜std.io.Reader⌝):
     std.io.Reader(r):
         let from: mut std.io.Reader = r
         defer std.io.Reader.close(from)
@@ -3521,7 +3557,8 @@ does not come back -- the same shape an addition that does not fit has, and repo
 and where, and the program stops.
 
 `a⟦i…j⟧` is the elements from `i` up to but not including `j`, which is a `T⟦⟧`.  It is the same half-open convention a range has
-everywhere else, so the count is the difference between the ends.  A step there is refused (4453): what a slice is, is a place and
+everywhere else, so the count is the difference between the ends -- and either end may be the length: `a⟦#a…#a⟧` is the empty run
+after the last element, which is what the arguments after a program's own name are when it was given none.  A step there is refused (4453): what a slice is, is a place and
 a count, and every other element is not something a place and a count can say.
 
 **Only a vector is sliced** (4459), for the same reason.  A row of a table is a run of elements and a column is not: its elements
@@ -5146,8 +5183,8 @@ nothing of the scheduler is at the top level either.  `std.done(a)` reads an ans
 ```
 let std := ⎕import("std")
 
-fn say(dir: std.fs.Dir, name: str, what: u8⟦⟧) ⇉ std.io.Pending ⇇ std.io.Answer:
-    match std.fs.Dir.open(dir, name, ⌜std.io.Writer⌝):
+fn say(name: str, what: u8⟦⟧) ⇉ std.io.Pending ⇇ std.io.Answer:
+    match std.fs.Dir.open(std.fs.cwd(), name, ⌜std.io.Writer⌝):
         std.io.Writer(to):
             let out: mut std.io.Writer = to
             defer std.io.Writer.close(out)
@@ -5162,9 +5199,8 @@ fn say(dir: std.fs.Dir, name: str, what: u8⟦⟧) ⇉ std.io.Pending ⇇ std.io
 
 @[startup, impure]
 fn main(init: std.Init) → u6:
-    let here: std.fs.Dir = std.fs.State.cwd(&init.fs)
-    std.spawn(&mut init.fs, ⎕start(say(here, "one.txt", ⎕bytes("one\n")) in ⎕heap))
-    std.spawn(&mut init.fs, ⎕start(say(here, "two.txt", ⎕bytes("two\n")) in ⎕heap))
+    std.spawn(&mut init.fs, ⎕start(say("one.txt", ⎕bytes("one\n")) in ⎕heap))
+    std.spawn(&mut init.fs, ⎕start(say("two.txt", ⎕bytes("two\n")) in ⎕heap))
     if std.run(&mut init.fs) = 2u64: 0u6 else: 1u6
 ```
 
@@ -7105,7 +7141,7 @@ those functions -- a body nobody read was never lexed, and is in the hash of the
 **A parameter may be handed a type**, written `name: ⌜T'⌝` and given `⌜u8⌝` at the call, which settles the type parameter inside
 it where nothing else the call hands does.  Nothing is handed at run time: the parameter is gone from every function the definition
 becomes, and the body asks about the type with `comptime if`.  It is what lets one function answer a different type for each of
-several -- `std.fs.Dir.open(dir, name, ⌜std.io.Reader⌝)` answers a `Reader`.  Its argument is a lifted type (4688), and only a parameter of a
+several -- `std.fs.Dir.open(std.fs.cwd(), name, ⌜std.io.Reader⌝)` answers a `Reader`.  Its argument is a lifted type (4688), and only a parameter of a
 generic function is handed one (4689).  **A condition comparing types** -- `pre(⌜T'⌝ = ⌜Reader⌝ ∨ …)` -- **is settled at the
 call**, before the function is made, so a type it was not meant for is refused there (4918) rather than wherever its body first goes
 wrong.  Compare **Zig**'s `comptime T: type`, which this is; **C++**'s explicit template arguments, `make<A>(3)`; **Rust**'s

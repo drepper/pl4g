@@ -19,8 +19,8 @@ let std := ⎕import("std")
 let turns: mut [u8] = []
 
 @[impure]
-fn say(dir: std.fs.Dir, name: str, what: u8⟦⟧, who: u8) ⇉ std.io.Pending ⇇ std.io.Answer:
-    match std.fs.Dir.open(dir, name, ⌜std.io.Writer⌝):
+fn say(name: str, what: u8⟦⟧, who: u8) ⇉ std.io.Pending ⇇ std.io.Answer:
+    match std.fs.Dir.open(std.fs.cwd(), name, ⌜std.io.Writer⌝):
         std.io.Writer(to):
             let out: mut std.io.Writer = to
             defer std.io.Writer.close(out)
@@ -41,9 +41,8 @@ fn say(dir: std.fs.Dir, name: str, what: u8⟦⟧, who: u8) ⇉ std.io.Pending �
 
 @[startup, impure]
 fn main(init: std.Init) → u6:
-    let here: std.fs.Dir = std.fs.State.cwd(&init.fs)
-    std.spawn(&mut init.fs, ⎕start(say(here, "/dev/null", ⎕bytes("one\n"), 1u8) in ⎕heap))
-    std.spawn(&mut init.fs, ⎕start(say(here, "/dev/null", ⎕bytes("two\n"), 2u8) in ⎕heap))
+    std.spawn(&mut init.fs, ⎕start(say("/dev/null", ⎕bytes("one\n"), 1u8) in ⎕heap))
+    std.spawn(&mut init.fs, ⎕start(say("/dev/null", ⎕bytes("two\n"), 2u8) in ⎕heap))
     if std.run(&mut init.fs) ≠ 2u64:
         return 1u6
     let ones: mut u8 = 0u8

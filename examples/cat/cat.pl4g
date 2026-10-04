@@ -92,7 +92,6 @@ fn main(init: std.Init) → u6:
         return reported(copied(&mut init.io.input, &mut init.io.output, state).error, "-",
                         &mut init.io.error)
     options ← true
-    let here: std.fs.Dir = std.fs.State.cwd(&init.fs)
     let excode: mut u6 = 0
     foreach arg: str = init.args⟦1…#init.args⟧:
         let bytes: u8⟦⟧ = ⎕bytes(arg)
@@ -103,7 +102,7 @@ fn main(init: std.Init) → u6:
                 state ← copied(&mut init.io.input, &mut init.io.output, state)
                 excode ← excode | reported(state.error, arg, &mut init.io.error)
             else:
-                match std.fs.Dir.open(here, arg, ⌜std.io.Reader⌝):
+                match std.fs.Dir.open(std.fs.cwd(), arg, ⌜std.io.Reader⌝):
                     std.io.Reader(r):
                         let from: mut std.io.Reader = r
                         defer std.io.Reader.close(from)

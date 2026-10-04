@@ -1,0 +1,5 @@
+※ pl4g-test: module
+※※ Hands `shapes` on.
+
+@[export]
+let shapes := ⎕import("shapes")

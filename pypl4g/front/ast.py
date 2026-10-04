@@ -1539,6 +1539,12 @@ class Field(Node):
     #: `mut NAME : TYPE`: a field that may be written, and lent by `&mut`, where
     #: the record holding it may not -- C++'s `mutable`.
     mutable: bool = False
+    #: `singleton NAME : TYPE = VALUE`: not a part of a value of the type but
+    #: one object for the whole program, read-only and in the image, reached as
+    #: `T.NAME` -- C++'s `static const` member.
+    singleton: bool = False
+    #: What a singleton holds; nothing for one the compiler fills in.
+    value: "Expr | None" = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1549,6 +1555,9 @@ class TypeDef(Node):
     name_span: Span
     kind: TypeKind
     fields: tuple[Field, ...]
+    #: `singleton NAME : TYPE = VALUE`: what belongs to the type as one object
+    #: for the whole program, and is no part of a value of it.
+    singletons: tuple[Field, ...] = ()
     attrs: tuple[Attribute, ...] = ()
     #: `type Pair(T') = ...`: the type parameters, in the order a reference to
     #: the type gives them, and where each is written.  Nothing for a type that

@@ -1,0 +1,20 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=2 diag=none
+
+※ A slice is half-open, so it may begin where the array ends: `a⟦3…3⟧` of three
+※ elements is the empty run after the last of them, which is what walking what is
+※ left of an array once all of it has been taken comes to -- the arguments after
+※ the program's own name, where it was given none.
+
+let std := ⎕import("std")
+
+@[inline(never)]
+fn count(a: u8⟦⟧, from: u64 ¤idx) → u64:
+    let n: mut u64 = 0u64
+    foreach _: u8 = a⟦from…#a⟧:
+        n ← n + 1u64
+    n
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let a: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
+    ⎕narrow(count(a, 3) + count(a, 1) + ⎕drop(#a⟦3…3⟧), ⌜u6⌝) ?? 63u6

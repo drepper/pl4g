@@ -23,13 +23,17 @@ type Task = walk : ⌖⇉io.Pending ⇇ io.Answer in ⎕heap ; waiting : io.Pend
 
 ※※ What a program does its I/O with: the ring, and the tasks `std.run` drives.
 ※※
-※※ \details A device: a function handed one may read and write through it.  One of these is a field of what a program is started with,
-※※ `init.fs`, and in the image: where it is does not change, so a device made
-※※ from it carries that address and reaches the ring through it.  The ring's
-※※ own descriptor is `ring.fd`, made by the runtime the first time a request
-※※ is started.
+※※ \details A device: a function handed one may read and write through it.  One
+※※ of these is a field of what a program is started with, `init.fs`, and in the
+※※ image: where it is does not change, so a device made from it carries that
+※※ address and reaches the ring through it.  The ring's own descriptor is
+※※ `ring.fd`, made by the runtime the first time a request is started.
+※※
+※※ `cwd` is the directory the process is in, one object for the whole program
+※※ and read-only: its descriptor is `AT_FDCWD`, and its ring the program's, which
+※※ the compiler fills in -- the one singleton written without a value.
 @[export, device]
-type State = ring : io.Ring ; tasks : [Task]
+type State = ring : io.Ring ; tasks : [Task] ; singleton cwd : Dir
 
 ※※ A directory, to open files in.
 ※※
@@ -46,12 +50,11 @@ fn refusal(of: i64) → i32:
 
 ※※ The directory the process is in, to open files relative to.
 ※※
-※※ \param s what the program does its I/O with: `&init.fs`
-※※ \return the directory, whose descriptor is `AT_FDCWD` and which is never closed
+※※ \return the one such directory the program has, `State.cwd`, whose
+※※ descriptor is `AT_FDCWD` and which is never closed
 @[export]
-fn State.cwd(s: &State) → Dir:
-    ※ `AT_FDCWD`, which is the same number on every one of these targets
-    Dir(.fd ← 0i32 - 100i32, .ring ← ⎕address(&s⌖.ring))
+fn cwd() → &static Dir:
+    &State.cwd
 
 ※※ Wait for the kernel to answer something -- anything.
 @[export]
@@ -80,16 +83,16 @@ fn State.drain(s: &mut State):
 ※ kind is a fourth arm here and one more type a program may hand.  The numbers
 ※ handed to the runtime are the ways it knows: reading, writing and both.
 @[export]
-fn Dir.open(d: Dir, name: str, kind: ⌜T'⌝) → T' ? i32
+fn Dir.open(d: &Dir, name: str, kind: ⌜T'⌝) → T' ? i32
         pre(⌜T'⌝ = ⌜io.Reader⌝ ∨ ⌜T'⌝ = ⌜io.Writer⌝ ∨ ⌜T'⌝ = ⌜io.ReadWriter⌝):
     let bytes: u8⟦⟧ = ⎕bytes(name)
     let at: u64 = if #bytes = 0: 0u64 else: ⎕address(&bytes⟦0⟧)
     comptime if ⌜T'⌝ = ⌜io.Reader⌝:
-        let fd: i64 = io_open(0i32, d.fd, at, ⎕drop(#bytes))
-        if fd < 0i64: ⊥ refusal(fd) else: io.Reader(.fd ← ⎕narrow(fd, ⌜i32⌝) ?? 0i32, .ring ← d.ring)
+        let fd: i64 = io_open(0i32, d⌖.fd, at, ⎕drop(#bytes))
+        if fd < 0i64: ⊥ refusal(fd) else: io.Reader(.fd ← ⎕narrow(fd, ⌜i32⌝) ?? 0i32, .ring ← d⌖.ring)
     comptime elif ⌜T'⌝ = ⌜io.Writer⌝:
-        let fd: i64 = io_open(1i32, d.fd, at, ⎕drop(#bytes))
-        if fd < 0i64: ⊥ refusal(fd) else: io.Writer(.fd ← ⎕narrow(fd, ⌜i32⌝) ?? 0i32, .ring ← d.ring)
+        let fd: i64 = io_open(1i32, d⌖.fd, at, ⎕drop(#bytes))
+        if fd < 0i64: ⊥ refusal(fd) else: io.Writer(.fd ← ⎕narrow(fd, ⌜i32⌝) ?? 0i32, .ring ← d⌖.ring)
     else:
-        let fd: i64 = io_open(2i32, d.fd, at, ⎕drop(#bytes))
-        if fd < 0i64: ⊥ refusal(fd) else: io.ReadWriter(.fd ← ⎕narrow(fd, ⌜i32⌝) ?? 0i32, .ring ← d.ring)
+        let fd: i64 = io_open(2i32, d⌖.fd, at, ⎕drop(#bytes))
+        if fd < 0i64: ⊥ refusal(fd) else: io.ReadWriter(.fd ← ⎕narrow(fd, ⌜i32⌝) ?? 0i32, .ring ← d⌖.ring)

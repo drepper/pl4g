@@ -1,0 +1,27 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=13 diag=none
+
+※ `singleton NAME : TYPE = VALUE` among a record's fields is no part of a value of
+※ the type: it is one object for the whole program, read-only and in the image,
+※ reached through the type -- `Limits.usual` read as a value, `&Limits.usual` lent
+※ for as long as the program runs.  What it holds is what `in ⎕static` takes,
+※ without the words: a table here is in the image by being a singleton.
+
+let std := ⎕import("std")
+
+type Limits =
+    low : u8 ; high : u8 ;
+    singleton usual : Limits = Limits(.low ← 1u8, .high ← 9u8) ;
+    singleton names : ⸨u8: str⸩ = ⸨1u8: "one", 9u8: "nine"⸩
+
+fn widest(l: &Limits) → u8:
+    l⌖.high - l⌖.low
+
+fn shared() → &static Limits:
+    &Limits.usual
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: Limits = Limits.usual
+    let w: u8 = widest(shared())                     ※ 8
+    let n: str = Limits.names⸨l.high⸩ ?? "?"          ※ "nine"
+    (⎕narrow(w + l.low, ⌜u6⌝) ?? 0u6) + (⎕narrow(⎕drop(#n), ⌜u6⌝) ?? 0u6)

@@ -9747,6 +9747,26 @@ length into one piece; `std.error_name_of(e)` is new, the name of a value of `Er
 check the table against the enumeration; a program cannot read the number a value of an enumeration is stored as, so the test
 could not ask `error_name` itself.
 
+## 2026-10-04T12:00+02:00 — language
+
+**`singleton`: one object for the whole program, belonging to a type; and `std.fs.cwd()`**
+
+The user asked for `std.fs.cwd()`, taking nothing, answering a shared reference to a const object inside `std.fs.State`.  Its
+`Dir` has to carry the ring's address, and the ring is in `init.fs`, which `fs` cannot name.  Asked, the user chose a static member
+of the type, **spelled `singleton`** -- against moving the ring back to the top level of `fs`, and against a compiler-provided name
+for the startup record.  So `type State = … ; singleton cwd : Dir`, `fn cwd() → &static Dir: &State.cwd`, and `Dir.open` takes
+`&Dir`.  Compare C++'s `static const` member, Java's and C#'s `static final` and `static readonly`, Zig's container-level
+declarations, Rust's associated constants (copied, with no address), Kotlin's `companion object` and Scala's `object`.
+
+Taken without asking: a singleton is written among the fields, `singleton NAME : TYPE = VALUE`, with what `in ⎕static` takes and
+without the words; it is read-only -- never assigned, no field of it written, not lent by `&mut` -- so its type may not have a `mut`
+field (4696); only a record's type has them (4694); it is exported with its type and reached by every path the type is; a value of
+the type has none of it.  One may be written without a value only where the compiler fills it in (4695), which is `std.fs.State.cwd`
+alone: the address of the ring is a relocation into the record the entry point lays out, settled with its layout.
+`std.fs.State.cwd` the function went, the singleton having the name.  Writing a field of another module's variable that is not
+`mut` was not refused and now is, the same check covering a singleton.  And a slice may begin at the length, `a⟦n…n⟧` being the
+empty run at the end: `cat` with no arguments stopped on it.
+
 Open questions
 --------------
 

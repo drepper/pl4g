@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4695 LANG_SINGLETON_WITHOUT_VALUE
+
+※ A singleton is made while compiling, so what it holds is written where it is
+※ defined.  Only the compiler's own -- `std.fs.State.cwd` -- goes without.
+
+let std := ⎕import("std")
+
+type Limits = low : u8 ; singleton usual : Limits
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

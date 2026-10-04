@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=2 diag=none
+
+※ A singleton of a type another module exports is reached as `m.T.name`, and
+※ through a module that hands that one on as `m.inner.T.name`.
+
+let std := ⎕import("std")
+let shapes := ⎕import("shapes")
+let outer := ⎕import("outer")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let a: shapes.Box = shapes.Box.one
+    let b: &static shapes.Box = &outer.shapes.Box.one
+    ⎕narrow(a.n + b⌖.n, ⌜u6⌝) ?? 0u6

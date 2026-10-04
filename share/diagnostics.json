@@ -6528,6 +6528,82 @@
       "option": null
     },
     {
+      "number": 4694,
+      "name": "LANG_SINGLETON_IN_A_SUM",
+      "severity": "error",
+      "message": "'{name}' is a singleton, and '{type}' is a sum: only a record's type has singletons",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the singleton"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the sum"
+        }
+      ],
+      "cause": "A singleton belongs to a record's type as one object for the whole program.  A sum is a choice between its variants, and what is written among them is one of the choices; there is nowhere in it for something that is no choice at all.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "A singleton is written among a record's fields."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4695,
+      "name": "LANG_SINGLETON_WITHOUT_VALUE",
+      "severity": "error",
+      "message": "the singleton '{name}' says nothing it holds: it is written 'singleton {name} : TYPE = VALUE'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the singleton"
+        }
+      ],
+      "cause": "A singleton is in the image, made while compiling, so what it holds is written where it is defined.  Only one the compiler fills in itself -- `std.fs.State.cwd`, which holds where the program's ring is -- is written without a value.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "A singleton is written with what it holds."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4696,
+      "name": "LANG_SINGLETON_CHANGES",
+      "severity": "error",
+      "message": "the singleton '{name}' is never written, and '{type}' has a field written where its record is not",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the singleton"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "its type"
+        }
+      ],
+      "cause": "A singleton is one object, read-only, in the image: everything holding a reference to it reads the same thing for as long as the program runs.  A `mut` field is one that may be written where the record is not, which would make it the one thing about the singleton that changes.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "A singleton is read-only."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

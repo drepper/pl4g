@@ -4431,7 +4431,7 @@ A generator written into its walk binds what each `yield` gives with the generat
 of an answer and one of a failure are both the result.
 
 **`std.fs.Dir.open` and the closes** are `pl4g_io_open` and `pl4g_io_close` in `runtime/io.c`: the name copied to a buffer on the
-stack with a nul added, `openat(dir, …)` with the directory's descriptor -- `AT_FDCWD` for what `State.cwd` answers --
+stack with a nul added, `openat(dir, …)` with the directory's descriptor -- `AT_FDCWD` for what `std.fs.cwd()` answers --
 `O_CLOEXEC` and the flags of the kind; a close enters the ring until nothing is
 outstanding and then calls `close`.  Every request the ring is handed now carries the offset −1, the file's own position: a nought
 there is the absolute offset nought, which a pipe ignores and a file does not.
@@ -4534,3 +4534,25 @@ program's `init.fs`.  A function of either hands the runtime `⎕at(x.ring, ⌜&
 **Several values in a result.**  `Dir.open` answers `Reader ? i32`, four registers, which the code generator did not do before:
 `leaves_of` spreads a result's answer into registers (see above), and a coroutine holding such a result in its frame needed
 `extract` of a result to count the answer's registers and `tuple` to give a member of several values that many.
+
+
+Singletons
+----------
+
+**`singleton NAME : TYPE = VALUE`** is parsed among a type's fields and kept apart from them (`TypeDef.singletons`), so nothing
+that walks the fields -- the layout, construction, `⎕fields` -- sees one.  `_collect_singletons` turns each into a definition at
+the top level filed as `T.name`, which no program can write, with its container value treated as `in ⎕static`, and registers it
+as the member `(T, name)`: the paths a function inside a type is found by (`_member_named`) find it, `_lower_member` reads it and
+`_exported_variable` makes it a place for `&`.  It is exported with its type.  Writing one is refused where the assignment is
+lowered and, for a field of one, by `_record_may_change`, which now asks whether a path names a variable at the top level before
+walking to its root -- which also refuses writing a field of another module's variable that is not `mut`, before the check
+missed it.
+
+**`std.fs.State.cwd` is the one written without a value** (`FILLED_SINGLETON`): a `Dir` of `AT_FDCWD` whose `ring` is an
+`AddressConst` to `__pl4g_init` -- the record `target/started.py` lays out, which no module defines, so the constant points at a
+stand-in variable of that name.  The constant is kept in `Module.ring_addresses`, and `emit_globals` sets how far into the record
+it points from `started.ring_at` once the layout is known.  The singleton is read-only, so it is in `.rodata`, with an `R_*_64`
+relocation the linker settles.
+
+**A slice may begin at the length** (`_checked_index(…, one_past=True)`): `a⟦n…n⟧` is the empty run at the end.  The start was
+checked as an element index, which refused it, and `cat` with no arguments stopped on `init.args⟦1…#init.args⟧`.

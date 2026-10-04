@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4694 LANG_SINGLETON_IN_A_SUM
+
+※ A sum is a choice between its variants; there is nowhere in one for something
+※ that is no choice at all.
+
+let std := ⎕import("std")
+
+type Shape = round : u8 | square : u16 | singleton single : u8 = 1u8
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

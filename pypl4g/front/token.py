@@ -554,6 +554,9 @@ class TokKind(StrEnum):
     KW_DEFER = "'defer'"
     KW_LET = "'let'"
     KW_MUT = "'mut'"
+    #: A member of a record's type that is one object for the whole program
+    #: rather than a part of every value: `singleton NAME : TYPE = VALUE`.
+    KW_SINGLETON = "'singleton'"
     KW_UNIT = "'unit'"
     KW_TYPE = "'type'"
     #: A name written between grave accents, which is an operator standing where
@@ -751,6 +754,7 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "yield": TokKind.KW_YIELD,
     "let": TokKind.KW_LET,
     "mut": TokKind.KW_MUT,
+    "singleton": TokKind.KW_SINGLETON,
     "unit": TokKind.KW_UNIT,
     "type": TokKind.KW_TYPE,
     "pre": TokKind.KW_PRE,

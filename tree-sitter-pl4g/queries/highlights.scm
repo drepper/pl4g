@@ -87,6 +87,7 @@
 ; `static` is the whole of what one node is, and `mut` of another.
 (lasting) @keyword.modifier
 (mutable) @keyword.modifier
+(singleton) @keyword.modifier
 ["and" "or" "in"] @keyword.operator
 ["⎕import"] @keyword.import
 

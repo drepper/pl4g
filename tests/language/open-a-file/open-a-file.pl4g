@@ -3,7 +3,7 @@
 ※ `std.fs.Dir.open(dir, name, ⌜T⌝)` opens a file in a directory for what the type it
 ※ is handed says -- `⌜std.io.Reader⌝`, `⌜std.io.Writer⌝` or `⌜std.io.ReadWriter⌝` -- and
 ※ answers that type, or the number the kernel refused with.  The directory here is
-※ the one the process is in, which `std.fs.State.cwd(&init.fs)` answers; a name that
+※ the one the process is in, which `std.fs.cwd()` answers by reference; a name that
 ※ begins with `/` does not depend on it.  What it answers is closed by whoever holds
 ※ it: `std.io.Writer.close` and its two siblings, here put off with `defer`.
 ※
@@ -18,7 +18,7 @@
 
 let std := ⎕import("std")
 
-fn written(dir: std.fs.Dir) → u6:
+fn written(dir: &std.fs.Dir) → u6:
     match std.fs.Dir.open(dir, "/dev/null", ⌜std.io.Writer⌝):
         std.io.Writer(w):
             let out: mut std.io.Writer = w
@@ -27,7 +27,7 @@ fn written(dir: std.fs.Dir) → u6:
         ⊥:
             2u6
 
-fn read(dir: std.fs.Dir) → u6:
+fn read(dir: &std.fs.Dir) → u6:
     match std.fs.Dir.open(dir, "/dev/null", ⌜std.io.Reader⌝):
         std.io.Reader(r):
             let from: mut std.io.Reader = r
@@ -37,7 +37,7 @@ fn read(dir: std.fs.Dir) → u6:
         ⊥:
             4u6
 
-fn both(dir: std.fs.Dir) → u6:
+fn both(dir: &std.fs.Dir) → u6:
     match std.fs.Dir.open(dir, "/dev/null", ⌜std.io.ReadWriter⌝):
         std.io.ReadWriter(rw):
             let held: std.io.ReadWriter = rw
@@ -46,7 +46,7 @@ fn both(dir: std.fs.Dir) → u6:
         ⊥:
             5u6
 
-fn missing(dir: std.fs.Dir) → u6:
+fn missing(dir: &std.fs.Dir) → u6:
     match std.fs.Dir.open(dir, "/nonexistent/pl4g", ⌜std.io.Reader⌝):
         std.io.Reader(r):
             std.io.Reader.close(r)
@@ -56,7 +56,7 @@ fn missing(dir: std.fs.Dir) → u6:
 
 @[startup]
 fn main(init: std.Init) → u6:
-    let here: std.fs.Dir = std.fs.State.cwd(&init.fs)
+    let here: &static std.fs.Dir = std.fs.cwd()
     let a := written(here)
     if a ≠ 0u6: return a
     let b := read(here)

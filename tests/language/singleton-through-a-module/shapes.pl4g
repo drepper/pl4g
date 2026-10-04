@@ -1,0 +1,5 @@
+※ pl4g-test: module
+※※ A type with a singleton, exported: the singleton goes with the type.
+
+@[export]
+type Box = n : u8 ; singleton one : Box = Box(.n ← 1u8)
