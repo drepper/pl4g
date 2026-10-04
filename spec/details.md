@@ -786,7 +786,13 @@ compiler to work out:
 | `place-local` | a variable put in storage of its own rather than a register |
 | `instantiate` | the types one instance of a generic function was compiled for |
 | `lifetime` | how long the reference one call answers with turned out to live |
+| `type-inferred` | a variable whose type was not written in full, and the type it was given |
 | `fatal`, `error`, `warning`, `note` | what the compiler said, with its number |
+
+**`type-inferred`** is recorded where a name is bound -- a definition in a body or at the top level, the names a taking apart
+binds, a loop's name, each turn of a loop written out -- by `_report_inferred`, which asks the name for the type it was given.  No
+type written is reported as such; a type written is resolved again and compared with what the name holds, so `⟦⟧` alone and anything
+else the value completed are reported with what was written, and a type the name holds as it was written is not.
 
 The first two happen at every optimization level, because a function nothing can reach is code the program cannot run; the
 sweep's two happen from `-O1`, because an unoptimized build keeps what the program wrote and so decides nothing about it.  The

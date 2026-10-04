@@ -3046,6 +3046,10 @@ What it answers is its own business.
 **Every move and every end of a lifetime is in the report log** (`move`, `lifetime-ended`), at the line it happened on, with what
 the value was handed to: a reader asking "who closes this" is asking that.
 
+**Every variable whose type was not written in full is in the report log** (`type-inferred`): `let x :=`, `let x: mut =`, `⟦⟧`
+alone, the names a taking apart or a loop binds -- each at its name, with the type the compiler gave it, and what was written where
+something was.  A reader asking what a name is, of a program that never said, is asking this.
+
 Compare: **Rust**, whose moves are these and whose `Drop` closes on its own, so that forgetting is impossible and *when* is decided
 by scope rather than written; **Austral** and **Linear Haskell**, whose linear types are this with any consuming function allowed
 in place of one named closer; **C++**, whose destructor closes on its own and whose moved-from object still exists to be destroyed;

@@ -3908,6 +3908,8 @@ class Checker:
             key=self._key(node.name))
         self._top[node.name] = var
         self._owned.append(var)
+        if ty is not ERROR:
+            self._record_inferred(node.name, node.name_span, ty, node.type)
         # The expectation stays alive rather than being settled here: whether
         # anything reads this variable is not known until every function has
         # been checked, so an `@[expect]` written on the definition -- where a
@@ -3917,6 +3919,56 @@ class Checker:
                                        expected_pairs=list(pairs)))
         if _is_a_table(ty) and not static and initializer is None:
             self._built_globals.append((var, node))
+
+    def _report_inferred(self, names: Sequence[tuple[str, Span]],
+                         written: ast.TypeExpr | None) -> None:
+        """Record the type of each of *names* the program did not write in full.
+
+        Asked once the names are bound, of the type each was given, so that
+        whatever filled it in -- the value, a loop's turn, a taking apart -- is
+        what is said.  A written type is compared with the one the name ended up
+        with rather than inspected: a shape stated in part is a type written in
+        part, and the comparison says so however it was completed.
+        """
+        for name, span in names:
+            if name == WILDCARD_NAME:
+                continue
+            local = self._find_local(name)
+            if local is None:
+                continue
+            held = self._held_by(local)
+            if isinstance(held, Type) and held is not ERROR:
+                self._record_inferred(name, span, held, written)
+
+    def _record_inferred(self, name: str, span: Span, held: Type,
+                         written: ast.TypeExpr | None) -> None:
+        """Record that *name* was given *held*, where *written* does not say it."""
+        if written is None:
+            reason = "".join(("its type was not written, and is '", held.written(),
+                              "', worked out from what it was given"))
+        else:
+            said = (None if isinstance(written, ast.ArrayTypeRef)
+                    and written.element is None
+                    else self._quietly_resolved(written))
+            if said is not None and said.written() == held.written():
+                return
+            reason = "".join(("'", self._sources.snippet(written.span) or "?",
+                              "' was written and the type is '",
+                              held.written(), "', the rest worked out from what it was "
+                              "given"))
+        self._module.reports.record(ReportKind.TYPE_INFERRED, name, reason, span)
+
+    def _quietly_resolved(self, written: ast.TypeExpr) -> Type | None:
+        """The type *written* names, asked again.  It was resolved where the
+        definition was, and a variable whose type could not be has the error
+        type and is never asked about -- so nothing is said here, and an editor
+        is told nothing twice."""
+        kept, self._notes = self._notes, None
+        try:
+            found = self._resolve_type(written)
+        finally:
+            self._notes = kept
+        return None if found is ERROR else found
 
     def _collect_singletons(self, node: ast.TypeDef) -> None:
         """Make the singletons of a record's type: one variable each, in the image.
@@ -9496,9 +9548,13 @@ class Checker:
                 self._lower_return(builder, stmt, func)
             case ast.VarDef() if stmt.made_in is not None:
                 self._lower_receiving(builder, stmt)
+                self._report_inferred(((stmt.name, stmt.name_span), *stmt.more),
+                                      stmt.type)
             case ast.VarDef():
                 self._lower_local(builder, stmt)
                 self._made_in(stmt.name, stmt.value, stmt.span)
+                self._report_inferred(((stmt.name, stmt.name_span), *stmt.more),
+                                      stmt.type)
             case ast.AssignStmt():
                 # An assignment stands for the variable it changed, so it can be
                 # a function's result the way any other last statement can.
@@ -14847,6 +14903,8 @@ class Checker:
         if stmt.more:
             self._name_value(value, stmt.name, stmt.name_span)
             self._bind_apart(builder, stmt, value)
+            self._report_inferred(((stmt.name, stmt.name_span), *stmt.more),
+                                  stmt.type)
             return
         if stmt.name == WILDCARD_NAME:
             # The name that is not a name, as it is in a `match` arm: the loop
@@ -14856,6 +14914,7 @@ class Checker:
         self._name_value(value, stmt.name, stmt.name_span)
         self._bind_local(stmt.name, value, stmt.name_span,
                          value_span=stmt.iterable.span, builder=builder)
+        self._report_inferred(((stmt.name, stmt.name_span),), stmt.type)
 
     # -- what a loop can take its values from ----------------------------------
 
@@ -14910,6 +14969,7 @@ class Checker:
                 member, stmt.span)
             self._push_scope()
             self._bind_local(stmt.name, turn, stmt.name_span, builder=builder)
+            self._report_inferred(((stmt.name, stmt.name_span),), stmt.type)
             self._lower_block(builder, stmt.body, func, as_result=False)
             self._pop_scope(stmt.body.span if not builder.is_terminated else None)
         return UndefConst(VOID)
@@ -14937,6 +14997,7 @@ class Checker:
                                   for which in range(len(text))], holder, stmt.span)
             self._push_scope()
             self._bind_local(stmt.name, turn, stmt.name_span, builder=builder)
+            self._report_inferred(((stmt.name, stmt.name_span),), stmt.type)
             local = self._find_local(stmt.name)
             if local is not None:
                 self._field_types[id(local)] = kind

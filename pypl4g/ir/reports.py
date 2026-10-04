@@ -120,6 +120,11 @@ class ReportKind(StrEnum):
     #: Where such a variable's lifetime ended: by a move, by being closed, or
     #: by its scope ending with it closed on every way out.
     LIFETIME_ENDED = "lifetime-ended"
+    #: A variable whose type the program did not write in full -- `let x :=`,
+    #: `let x: mut =`, `⟦⟧` alone, a shape stated in part, a name a loop or a
+    #: taking apart binds -- and the type it was given.  A reader asking "what
+    #: is this" of a name the program never said a type for is asking this.
+    TYPE_INFERRED = "type-inferred"
 
 
 #: What the severities of the diagnostic catalog are called here.  One name for
