@@ -102,10 +102,10 @@ fn main(init: std.Init) → u6:
                 state ← copied(&mut init.io.input, &mut init.io.output, state)
                 excode ← excode | reported(state.error, arg, &mut init.io.error)
             else:
-                match std.fs.Dir.open(std.fs.cwd(), arg, ⌜std.io.Reader⌝):
+                match std.fs.cwd().open(arg, ⌜std.io.Reader⌝):
                     std.io.Reader(r):
                         let from: mut std.io.Reader = r
-                        defer std.io.Reader.close(from)
+                        defer from.close()
                         state ← copied(&mut from, &mut init.io.output, state)
                         excode ← excode | reported(state.error, arg, &mut init.io.error)
                     ⊥(code):

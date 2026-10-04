@@ -1,0 +1,7 @@
+※ pl4g-test: module
+@[export]
+type Box = n : u8
+
+@[export]
+fn Box.twice(b: Box) → u8:
+    b.n + b.n

@@ -1,0 +1,34 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=24 diag=none
+
+※ `v.f(args)` is `T.f(v, args)`, `T` being the type of `v` or what `v` is a
+※ reference to.  Where `T.f` takes a reference and `v` is a place, the reference
+※ is taken -- `&v` or `&mut v` -- and where `v` is a reference already, or `T.f`
+※ takes the value, `v` is handed as it is.  A type another module exports is
+※ reached the same way, and a call's answer may be what the call is written on.
+
+let std := ⎕import("std")
+let shapes := ⎕import("shapes")
+
+type Counter = n : u8
+
+@[impure]
+fn Counter.bump(c: &mut Counter):
+    c⌖.n ← c⌖.n + 1u8
+
+fn Counter.get(c: &Counter) → u8:
+    c⌖.n
+
+fn Counter.twice(c: Counter) → u8:
+    c.n + c.n
+
+fn made() → Counter:
+    Counter(.n ← 5u8)
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let c: mut Counter = Counter(.n ← 1u8)
+    c.bump()                                  ※ &mut c: 2
+    let r: &Counter = &c
+    let b: shapes.Box = shapes.Box(.n ← 3u8)
+    ※ 2 + 2 + 4 + 10 + 6
+    ⎕narrow(c.get() + r.get() + c.twice() + made().twice() + b.twice(), ⌜u6⌝) ?? 63u6

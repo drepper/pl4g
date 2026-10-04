@@ -1,0 +1,18 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4697 LANG_METHOD_OR_FIELD
+
+※ A field holding a function and a function of the type by one name: `h.f(…)`
+※ could be either, so neither is chosen.
+
+let std := ⎕import("std")
+
+type Counter = n : u8
+type Holder = f : fn(u8) → u8
+
+fn Holder.f(h: Holder, x: u8) → u8:
+    x
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let h: Holder = Holder(.f ← λ x: u8 → u8 { x })
+    ⎕narrow(h.f(1u8), ⌜u6⌝) ?? 0u6

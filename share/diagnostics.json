@@ -6604,6 +6604,65 @@
       "option": null
     },
     {
+      "number": 4697,
+      "name": "LANG_METHOD_OR_FIELD",
+      "severity": "error",
+      "message": "'{type}' has a field '{name}' holding a function and a function '{type}.{name}': write '({value}.{name})(…)' for the field or '{type}.{name}({value}, …)' for the function",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name both have"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "description": "what the call was written on"
+        }
+      ],
+      "cause": "`v.f(…)` calls the function `T.f` with `v` first, and a field of `v` called `f` that holds a function would be called the same way.  Neither is the obvious one, so neither is chosen: the call says which.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Named inside a type",
+        "requirement": "A call through a value is refused where both a field and a function of that name exist."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4698,
+      "name": "LANG_METHOD_RECEIVER_IS_A_REFERENCE",
+      "severity": "error",
+      "message": "'{type}.{name}' takes a '{type}', and this is a reference to one: nothing is copied out of it without being written",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "`v.f(…)` takes a reference where the function wants one, and passes a value as it is -- but it does not read the value out of a reference, which would be a copy, or for a value that is closed, a move, nobody wrote.  `T.f(v⌖, …)` writes it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Named inside a type",
+        "requirement": "A call through a reference to a function taking the value is refused."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

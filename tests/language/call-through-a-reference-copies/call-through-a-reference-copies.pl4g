@@ -1,0 +1,18 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4698 LANG_METHOD_RECEIVER_IS_A_REFERENCE
+
+※ A reference is never read out for a function that takes the value: that would
+※ be a copy, or a move, nobody wrote.
+
+let std := ⎕import("std")
+
+type Counter = n : u8
+
+fn Counter.twice(c: Counter) → u8:
+    c.n + c.n
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let c: Counter = Counter(.n ← 1u8)
+    let r: &Counter = &c
+    ⎕narrow(r.twice(), ⌜u6⌝) ?? 0u6

@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4609 LANG_MEMBER_UNKNOWN
+
+※ What a call through a value names has to be a function inside its type.
+
+let std := ⎕import("std")
+
+type Counter = n : u8
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let c: Counter = Counter(.n ← 1u8)
+    ⎕narrow(c.missing(), ⌜u6⌝) ?? 0u6

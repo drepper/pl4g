@@ -20,10 +20,10 @@ let turns: mut [u8] = []
 
 @[impure]
 fn say(name: str, what: u8⟦⟧, who: u8) ⇉ std.io.Pending ⇇ std.io.Answer:
-    match std.fs.Dir.open(std.fs.cwd(), name, ⌜std.io.Writer⌝):
+    match std.fs.cwd().open(name, ⌜std.io.Writer⌝):
         std.io.Writer(to):
             let out: mut std.io.Writer = to
-            defer std.io.Writer.close(out)
+            defer out.close()
             foreach _ := 0u8…3u8:
                 turns ← turns ⧺ [who]
                 match std.write(&mut out, what):

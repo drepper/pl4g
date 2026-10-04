@@ -9767,6 +9767,22 @@ alone: the address of the ring is a relocation into the record the entry point l
 `mut` was not refused and now is, the same check covering a singleton.  And a slice may begin at the length, `a⟦n…n⟧` being the
 empty run at the end: `cat` with no arguments stopped on it.
 
+## 2026-10-04T13:00+02:00 — language
+
+**`v.f(args)`: calling a function inside a type through a value**
+
+The user asked that `std.fs.cwd().open(arg, ⌜std.io.Reader⌝)` be written for `std.fs.Dir.open(std.fs.cwd(), arg, …)` -- the
+question the decision of named functions inside a type left open.  `v.f(args)` is `T.f(v, args)` for `T` the type of `v` or what it
+refers to, found by the path from this file.  Asked, the user decided that **the receiver is lent where the function takes a
+reference and is a place, and a reference is never read out for a function taking the value** (Rust's auto-ref without its
+auto-deref; Go's rule for addressable values) -- against exact types only, and against reading through references as Rust and D
+do -- and that **a field holding a function and a function of the same name refuse the call** (4697) rather than either winning,
+as the field does in C++ and Rust.
+
+Taken without asking: a value that is no place is lowered once and handed where the function takes the value, and refused where
+it takes a reference (4533); the function is found in the type's file or through any module this file reaches that exports the
+type, handed on or not; a name the type does not have is 4609; closing by `defer from.close()` counts as closing.
+
 Open questions
 --------------
 

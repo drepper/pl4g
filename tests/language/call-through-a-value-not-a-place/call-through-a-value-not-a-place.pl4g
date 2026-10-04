@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4533 LANG_REF_NOT_A_PLACE
+
+※ A function taking a reference is lent what the call is written on, and a value
+※ that is no place has nothing to lend.
+
+let std := ⎕import("std")
+
+type Counter = n : u8
+
+fn Counter.get(c: &Counter) → u8:
+    c⌖.n
+
+fn made() → Counter:
+    Counter(.n ← 5u8)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ⎕narrow(made().get(), ⌜u6⌝) ?? 0u6

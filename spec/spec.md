@@ -6358,8 +6358,9 @@ receiver would be the first thing a reader has to know is there without seeing i
 namespacing is what it is for -- two types may each have a `next`, neither reserves the word, and a free function may be called
 `next` as well.
 
-**It is called as a path**, which is the notation a module's member already uses.  `value.name(args)` is **not** part of this: what
-a path names is found by the path, and nothing is looked up on a value.  Nothing is implicit about which function a call names.
+**It is called as a path**, which is the notation a module's member already uses, **or through a value**: `v.name(args)` is
+`T.name(v, args)`, `T` being the type of `v` or what `v` is a reference to (see [Calling through a value](#calling-through-a-value)).
+Which function a call names is still found by a path -- the type's, which the value's type says.
 
 **The first part must be a type this file defines** (4608).  A type's own file is where what belongs to it is written; a type from
 another module is deliberately out, since saying yes brings with it the question of who may add what to whose type.  That is a
@@ -6385,12 +6386,37 @@ Compare: **Go**, whose methods are declared this way round -- a receiver before 
 having the methods; **Rust**'s `impl` blocks, which group what belongs to a type and introduce a receiver; **Zig**, where a
 function inside a struct is reached as `T.f(x)` and `x.f()` is sugar for exactly that; **Python**, where the receiver is written
 out as `self` and the sugar is the only way to call; **C++** and **Java**, where a method is part of the type's definition and the
-receiver is implicit.  This is Zig's answer without the sugar: the path is the call, and whether `value.name(args)` is ever added
-is a separate question that this leaves open.
+receiver is implicit.  This is Zig's answer: the path is the call, and `x.f()` is written for it.
 
-What this does **not** decide: whether a type may be extended from outside its file; whether the same rule applies to an
-enumeration, a tuple, a unit or a built-in type (`u8.next` is a question nobody has asked); and whether `value.name(args)` is
-sugar worth having.
+What this does **not** decide: whether a type may be extended from outside its file; and whether the same rule applies to a tuple,
+a unit or a built-in type (`u8.next` is a question nobody has asked).
+
+###### Calling through a value
+
+**`v.f(args)` calls the function `T.f` with `v` first**, where `T` is the type of `v` or the type `v` is a reference to:
+
+```
+std.fs.cwd().open(name, ⌜std.io.Reader⌝)      ※ std.fs.Dir.open(std.fs.cwd(), name, ⌜std.io.Reader⌝)
+defer from.close()                            ※ defer std.io.Reader.close(from)
+c.bump()                                      ※ Counter.bump(&mut c)
+```
+
+**What `v` is handed as follows what `T.f` takes.**  A function taking `&T` or `&mut T` is lent `v` where `v` is a place -- `&v`,
+`&mut v`, with what lending asks of the place (4537) -- and a reference is handed as it is.  A function taking `T` is handed `v` as
+it is: moved, where `T` is closed, exactly as writing `T.f(v)` would.  **A reference is never read out** for a function that
+takes the value (4698): that would be a copy, or a move, nobody wrote, and `T.f(r⌖)` writes it.  A value that is no place -- what
+a call answered -- is handed where the function takes the value, and has nothing to lend where it takes a reference (4533).
+
+**The function is found as the path finds it**: in the type's own file, or exported by a module this file reaches, directly or
+handed on.  A type with nothing of that name is reported as one (4609).  A record with a field of that name holding a function and
+a function of that name is a call that could mean either, so it is refused (4697): `(v.f)(…)` is the field and `T.f(v, …)` the
+function.
+
+Compare: **Rust**, whose method call takes the reference a method asks for -- auto-ref -- and also reads through references to
+reach a method taking the value, which is the half left out here; **Go**, which takes the address of an addressable value for a
+pointer receiver and copies for a value receiver; **Zig**, where `x.f()` passes `x` or `&x` as `f` asks; **D**'s and **Nim**'s
+uniform call syntax, which make any function's first argument a receiver, not only the type's own; **C++**, where `this` is always a
+pointer and a method is part of the type.
 
 ##### Operators
 

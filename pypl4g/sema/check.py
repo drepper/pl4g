@@ -2258,6 +2258,9 @@ def _path_text(expr: ast.Expr) -> str:
     return "an expression"
 
 
+#: What a rewriting of a call says where it refused one and said why.
+_REFUSED: Final[object] = object()
+
 #: The one singleton the compiler fills in: the type, the name, and the module
 #: of the installation's it is in.  What it holds is the directory the process
 #: is in, and where the program's ring is.
@@ -21098,6 +21101,11 @@ class Checker:
             through = self._type_exported(expr.callee)
             if isinstance(through, ProductType):
                 return self._lower_record(builder, expr, through, expected)
+            written = self._through_a_value(builder, expr)
+            if written is _REFUSED:
+                return UndefConst(ERROR)
+            if written is not None:
+                return self._lower_call(builder, written, expected)
         held = self._callee_value(expr.callee)
         if held is not None:
             return self._lower_indirect(builder, expr, held, expected)
@@ -21115,6 +21123,130 @@ class Checker:
         if func is None:
             return UndefConst(ERROR)
         return self._through(builder, expr, func, expected)
+
+    def _through_a_value(self, builder: IRBuilder,
+                         expr: ast.Call) -> "ast.Call | object | None":
+        """`v.f(args)` as the call it stands for, `T.f(v, args)`, or nothing.
+
+        Nothing where the path is not one through a value: a module's name, a
+        type's, a path to a function inside a type.  `T` is the type of `v`, or
+        what `v` is a reference to, and `T.f` a function inside it -- found by a
+        path from this file, so the call goes on as one written that way, with
+        every check a call has.
+
+        `v` is lent where `T.f` takes a reference and `v` is a place -- `&v`, or
+        `&mut v` -- and handed as it is where it is a reference already or `T.f`
+        takes the value.  A reference is never read out for a function that
+        takes the value (4698): that would be a copy, or a move, nobody wrote.
+        A field of that name holding a function makes the call one that could
+        mean either, and it is refused (4697).  A value that is no place is
+        lowered here, once, and stands in the call as what it came to.
+        """
+        callee = expr.callee
+        assert isinstance(callee, ast.Member)
+        base = callee.base
+        if self._module_at(base) is not None or self._member_named(callee) is not None \
+                or isinstance(base, ast.Member) and self._type_exported(base) is not None:
+            return None
+        if isinstance(base, ast.NameRef) and self._find_local(base.name) is None \
+                and not isinstance(self._provided(base.name), GlobalVar):
+            # A name that is no value -- a type, a module, nothing at all -- is
+            # the ordinary path's to say something about.
+            return None
+        place = isinstance(base, (ast.NameRef, ast.Member, ast.Deref, ast.Element)) \
+            and self._record_type_of(base) is not None
+        lowered: Value | None = None
+        if place:
+            ty = self._record_type_of(base)
+        else:
+            lowered = self._lower_expr(builder, base, None)
+            ty = self._value_type_of(lowered)
+            if ty is ERROR:
+                return _REFUSED
+        named = ty.pointee if isinstance(ty, PtrType) else ty
+        owner = getattr(named, "name", "")
+        if not owner or not isinstance(named, (ProductType, SumType, EnumType)):
+            return None if lowered is None else self._no_such_member(callee, ty)
+        path = self._path_to_member(named, callee.name, callee)
+        if path is None:
+            if lowered is None and isinstance(named, ProductType) \
+                    and _field_index(named, callee.name) is not None:
+                return None
+            return self._no_such_member(callee, named)
+        if isinstance(named, ProductType):
+            at = _field_index(named, callee.name)
+            if at is not None and isinstance(named.fields[at][1], FuncType):
+                self._diags.emit(D.LANG_METHOD_OR_FIELD, callee.name_span,
+                                 type=owner, name=callee.name,
+                                 value=_path_text(base) if place else "…")
+                return _REFUSED
+        takes = self._first_taken(self._member_named(path))
+        receiver: ast.Expr = base if lowered is None else _Ready(span=base.span, value=lowered)
+        if isinstance(ty, PtrType):
+            if takes is None:
+                self._diags.emit(D.LANG_METHOD_RECEIVER_IS_A_REFERENCE, base.span,
+                                 type=owner, name=callee.name)
+                return _REFUSED
+        elif takes is not None:
+            if lowered is not None:
+                self._diags.emit(D.LANG_REF_NOT_A_PLACE, base.span)
+                return _REFUSED
+            receiver = ast.AddressOf(span=base.span, operand=base, mutable=takes)
+        return replace(expr, callee=path, args=(receiver, *expr.args))
+
+    def _no_such_member(self, callee: ast.Member, ty: Type) -> object:
+        """Report that the type of what a call was written on has nothing by
+        the name it asked for, and answer that the call is refused."""
+        self._diags.emit(D.LANG_MEMBER_UNKNOWN, callee.name_span, name=callee.name,
+                         held=ty.written())
+        return _REFUSED
+
+    def _path_to_member(self, ty: Type, name: str,
+                        at: ast.Member) -> ast.Expr | None:
+        """A path from this file to the function `name` inside *ty*, or nothing.
+
+        The type's own file reaches it as `T.name`; another reaches it through a
+        module that exports the type, directly or handed on: `m.T.name`,
+        `m.inner.T.name`.  The first such path found is as good as any, all of
+        them naming the one function.
+        """
+        def same(held: object) -> bool:
+            return isinstance(held, _NamedType) and not held.takes_types \
+                and self._resolved(held) is ty
+        span, where = at.span, at.name_span
+        owner = getattr(ty, "name", "")
+        if (owner, name) in self._members and same(self._top.get(owner)):
+            return ast.Member(span=span, base=ast.NameRef(span=span, name=owner),
+                              name=name, name_span=where)
+        queue: list[tuple[ast.Expr, LoadedModule]] = [
+            (ast.NameRef(span=span, name=key), held) for key, held in self._top.items()
+            if isinstance(held, LoadedModule)]
+        seen: set[int] = set()
+        while queue:
+            path, held = queue.pop(0)
+            if id(held) in seen:
+                continue
+            seen.add(id(held))
+            if (owner, name) in held.members and same(held.exports.get(owner)):
+                return ast.Member(span=span, base=ast.Member(
+                    span=span, base=path, name=owner, name_span=where),
+                    name=name, name_span=where)
+            queue.extend((ast.Member(span=span, base=path, name=key, name_span=where), inner)
+                         for key, inner in held.exports.items()
+                         if isinstance(inner, LoadedModule))
+        return None
+
+    def _first_taken(self, found: object) -> bool | None:
+        """How a function inside a type takes its first parameter: nothing for
+        by value, otherwise whether the reference it takes may write."""
+        if isinstance(found, Function):
+            first = found.ty.params[0] if found.ty.params else None
+            return first.mutable if isinstance(first, PtrType) else None
+        node = getattr(found, "node", None)
+        if isinstance(node, ast.FuncDef) and node.params:
+            written = node.params[0].type
+            return written.mutable if isinstance(written, ast.RefTypeRef) else None
+        return None
 
     @contextmanager
     def _in_scope_of(self, defined: "_NamedType | _Generic") -> Iterator[None]:
