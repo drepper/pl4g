@@ -423,3 +423,22 @@ def test_a_column_counts_characters_and_not_bytes(tmp_path: Path) -> None:
         where = entry["where"]
         at = lines[where["line"] - 1][where["column"] - 1:]
         assert at.startswith("worked_out"), (entry, at)
+
+
+def test_a_system_module_s_unused_functions_are_not_logged_as_dropped(tmp_path: Path) -> None:
+    """A library offers more than any one program uses, and what one does not use
+    is not news about the program: `std` is a system module, and none of it is
+    logged as dropped.  A function of the program's own that nothing reaches is."""
+    source = tmp_path / "t.pl4g"
+    source.write_text("".join((
+        "fn unused() \N{RIGHTWARDS ARROW} u8:\n    1u8\n\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n\n",
+        "@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    0u6\n")),
+        encoding="utf-8")
+    log = tmp_path / "reports.json"
+    proc = run_compiler(["-o", str(tmp_path / "out"),
+                         "".join(("--report-log=", str(log))), str(source)])
+    assert proc.returncode == ExitCode.SUCCESS, proc.stderr
+    dropped = [entry for entry in json.loads(log.read_text(encoding="utf-8"))["reports"]
+               if entry["kind"] in ("drop-function", "drop-variable")]
+    assert [entry["subject"] for entry in dropped] == ["unused"], dropped

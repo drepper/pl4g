@@ -3938,6 +3938,7 @@ class Checker:
             found = self._sources.file_of(unit.span.start) if unit.span.is_valid else None
             if found is not None:
                 self._diags.mark_system(found.base, found.end)
+                self._module.system_files.append((found.base, found.end))
 
     def _report_inferred(self, names: Sequence[tuple[str, Span]],
                          written: ast.TypeExpr | None) -> None:
