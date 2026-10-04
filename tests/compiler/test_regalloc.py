@@ -499,3 +499,38 @@ def test_a_value_written_in_two_arms_shares_a_register_with_what_lives_before() 
     assert isinstance(held, MCReg) and isinstance(other, MCReg)
     assert held.reg.unit is other.reg.unit, \
         "a value not live where another lives was kept out of its register"
+
+
+def _read_twice(between: list[MCInst]) -> tuple[list[MCInst], int, object]:
+    """A value spilled and read twice, with *between* standing between the
+    reads: the instructions as they came out, the slot, and what was decided."""
+    values = [virtual() for _ in range(len(ORDER) + 2)]
+    instructions = [inst("mov", MCReg(v), MCImm(1, 32)) for v in values]
+    instructions += [inst("mov", MCMem(disp=8, size_bits=32), MCReg(v))
+                     for v in values[1:]]
+    instructions += [inst("mov", MCMem(disp=16, size_bits=32), MCReg(values[0])),
+                     *between,
+                     inst("mov", MCMem(disp=32, size_bits=32), MCReg(values[0]))]
+    built = function(*instructions)
+    result = allocate(built, INFO, ORDER, SELECTOR)
+    assert values[0].ident in result.spilled, "the value under test was not spilled"
+    return built.instructions(), result.spilled[values[0].ident], result
+
+
+def test_a_spilled_value_still_in_a_register_is_not_read_back() -> None:
+    """Read twice with something else between: the register it was read into the
+    first time still holds it, nothing having written that register, so the
+    second read is that register and not the frame."""
+    out, slot, result = _read_twice(
+        [inst("mov", MCMem(disp=24, size_bits=32), MCImm(7, 32))])
+    reloads = [i for i in out if _reads_slot(i, slot)]
+    assert len(reloads) == 1 and result.forwarded >= 1, out
+
+
+def test_a_register_written_in_between_is_read_back() -> None:
+    """Where every register the value could be in is written before the second
+    read, the frame is what still holds it."""
+    out, slot, result = _read_twice(
+        [inst("mov", MCReg(INFO.view(unit, 64)), MCImm(0, 32)) for unit in ORDER])
+    reloads = [i for i in out if _reads_slot(i, slot)]
+    assert len(reloads) == 2, out

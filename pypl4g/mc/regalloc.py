@@ -221,6 +221,13 @@ class Assignment:
     coalesced: int = 0
     #: The virtual registers that had to go to the frame, by their identity.
     spilled: dict[int, int] = field(default_factory=dict)
+    #: The reads and writes of the frame the spilling put in, by the identity
+    #: of the instruction: which slot, and the register standing in.
+    reloads: dict[int, tuple[int, VirtReg]] = field(default_factory=dict)
+    stores: dict[int, tuple[int, VirtReg]] = field(default_factory=dict)
+    #: Reads of the frame made into nothing or into a move between registers,
+    #: because what the slot holds was still in a register.
+    forwarded: int = 0
 
 
 def _merged(stretches: Sequence[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
@@ -342,6 +349,7 @@ class LinearScan:
             assignment.ranges = ranges
             crowded = self._assign(ranges, blocked, assignment)
             if not crowded:
+                self._forward_reloads(function, assignment)
                 self._rewrite(function, assignment)
                 assignment.coalesced = self._drop_identity_moves(function)
                 return assignment
@@ -702,16 +710,81 @@ class LinearScan:
                 else:
                     fresh = self._registers.new_virtual(victim.cls, victim.bits)
                     if reads:
-                        before.extend(
-                            self._selector.select_reload(fresh, slot, inst.span))
+                        loaded = self._selector.select_reload(fresh, slot, inst.span)
+                        if len(loaded) == 1:
+                            assignment.reloads[id(loaded[0])] = (slot, fresh)
+                        before.extend(loaded)
                 replacement[ident] = fresh
                 if writes:
-                    after.extend(self._selector.select_spill(slot, fresh, inst.span))
+                    stored = self._selector.select_spill(slot, fresh, inst.span)
+                    if len(stored) == 1:
+                        assignment.stores[id(stored[0])] = (slot, fresh)
+                    after.extend(stored)
                 held[ident] = (fresh, index)
             out.extend(before)
             out.append(self._substituted(inst, replacement))
             out.extend(after)
         return out
+
+    def _forward_reloads(self, function: MachineFunction,
+                         assignment: Assignment) -> None:
+        """Read a spilled value from the register it is still in, where it is.
+
+        Within a block, the register a slot's value was last written from or read
+        into holds it until something writes that register.  A read of the slot
+        before then is the value already at hand: nothing at all where it reads
+        into that very register, and a move between registers where it reads into
+        another.  This runs once every value has its unit, so it holds nothing it
+        was not holding anyway -- the cheap half of keeping a spilled value in a
+        register, the half that needs no reckoning of what holding it costs.
+
+        Only within a block, and only the frame reads the spilling put in: what
+        reaches a block from more than one way is not one register's.
+        """
+        move = getattr(self._selector, "select_move", None)
+        for block in function.blocks:
+            held: dict[int, RegUnit] = {}
+            out: list[MCInst] = []
+            for inst in block.insts:
+                loaded = assignment.reloads.get(id(inst))
+                if loaded is not None:
+                    slot, fresh = loaded
+                    target = assignment.units.get(fresh.ident)
+                    source = held.get(slot)
+                    if target is not None and source is not None:
+                        assignment.forwarded += 1
+                        if source is not target:
+                            if move is None:
+                                out.append(inst)
+                            else:
+                                out.extend(move(fresh, MCReg(self._registers.view(
+                                    source, fresh.bits)), inst.span))
+                        self._forget(held, target)
+                        held[slot] = target
+                        continue
+                out.append(inst)
+                defs, _ = defs_and_uses(inst)
+                for reg in defs:
+                    unit = (assignment.units.get(reg.ident) if isinstance(reg, VirtReg)
+                            else reg.unit)
+                    if unit is not None:
+                        self._forget(held, unit)
+                if loaded is not None:
+                    unit = assignment.units.get(loaded[1].ident)
+                    if unit is not None:
+                        held[loaded[0]] = unit
+                stored = assignment.stores.get(id(inst))
+                if stored is not None:
+                    unit = assignment.units.get(stored[1].ident)
+                    if unit is not None:
+                        held[stored[0]] = unit
+            block.insts = out
+
+    @staticmethod
+    def _forget(held: dict[int, RegUnit], unit: RegUnit) -> None:
+        """Note that *unit* no longer holds what any slot holds."""
+        for slot in [s for s, u in held.items() if u is unit]:
+            del held[slot]
 
     def _substituted(self, inst: MCInst, replacement: dict[int, VirtReg]) -> MCInst:
         """One instruction, with the spilled registers standing in for their own.

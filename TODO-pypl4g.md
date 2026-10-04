@@ -151,6 +151,9 @@ removed or decided otherwise, which its last paragraph says.
     causes a spill somewhere else, which is exactly what the x86-64 measurement above shows in miniature.  The weight by loop
     depth the allocator now chooses a victim with is what such a model would be built on: it already says how often an
     instruction runs, which is the number this has to compare against a reload.
+    The half that needs no cost model is done (2026-10-04): once every value has its unit, a reload of a slot whose value is
+    still in the register it was last written from or read into, within a block, is nothing or a move between registers
+    (`_forward_reloads`).  What is left is holding a register on purpose, which is what costs another value one.
 
 [ ] a frame larger than the immediate a stack adjustment can carry is reported rather than built in steps.  RISC-V reaches this
     first, at about two hundred and fifty slots, and AArch64 at about five hundred; x86-64 does not.  Now that a constant of any
