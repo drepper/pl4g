@@ -13,10 +13,10 @@ import subprocess
 import pytest
 
 from conftest import compiler_targets, describe, function_ir, run_compiler, runner_for
-from pypl4g.ir.callgraph import (called_by_count, in_a_cycle, in_call_order,
-                                 size_of_body)
+from pypl4g.ir.callgraph import (CALL_COST, called_by_count, cost_of_body,
+                                 in_a_cycle, in_call_order, size_of_body)
 from pypl4g.ir.function import FuncAttrs, Function
-from pypl4g.ir.inst import CallInst, RetInst
+from pypl4g.ir.inst import BinOp, BinaryInst, CallInst, CastInst, CastKind, RetInst
 from pypl4g.ir.module import Module
 from pypl4g.ir.types import U8
 
@@ -105,6 +105,25 @@ def test_the_size_is_the_instructions() -> None:
     module = Module("t")
     leaf = built(module, "leaf", [])
     assert size_of_body(leaf) == 1
+
+
+def test_what_a_body_costs_is_what_it_comes_to_where_it_is_generated() -> None:
+    """A conversion of a representation is nothing, a call is the call and the
+    moves to it, and a checked multiplication is the operation with its test and
+    its way to the fault -- where a count of instructions says one each."""
+    module = Module("t")
+    leaf = built(module, "leaf", [])
+    func = module.add_function(Function(
+        "measured", module.types.func_type((), U8), FuncAttrs()))
+    block = func.add_block()
+    six = module.int_const(U8, 6)
+    block.append(CastInst(CastKind.BITCAST, six, U8))
+    product = block.append(BinaryInst(BinOp.MUL, six, six))
+    block.append(BinaryInst(BinOp.WRAP_ADD, product, six))
+    block.append(CallInst(leaf, (), U8))
+    block.append(RetInst(module.int_const(U8, 0)))
+    assert size_of_body(func) == 5
+    assert cost_of_body(func) == 0 + 8 + 1 + CALL_COST + 1
 
 
 # -- what is inlined ------------------------------------------------------------

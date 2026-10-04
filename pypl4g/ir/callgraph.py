@@ -20,9 +20,13 @@ inliner must not do anyway.
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Final, Sequence
 
 from .function import Function
+from .inst import (AddressInst, AssertInst, BinOp, BinaryInst, CallInst, CastInst,
+                   CastKind, ErrorInst, ExtractInst, FailedInst, Instruction,
+                   MemStartInst, SizeOfInst, SumMakeInst, SwitchInst, SyscallInst,
+                   TupleInst, UnreachableInst, UnwrapInst, WrapInst)
 from .module import Module
 
 
@@ -134,6 +138,56 @@ def size_of_body(func: Function) -> int:
     counted.
     """
     return sum(len(block.insts) for block in func.blocks)
+
+
+#: What one of each costs where it is generated, in machine instructions -- the
+#: answer the back ends give, read off the language tests at `-O0`, where every
+#: operation of the representation is one stretch of the code.  An estimate and
+#: not a measure: the same operation is a different number on each target and
+#: next to different neighbours.  What it gets right is that some operations are
+#: nothing -- they name registers -- and some carry a whole fault path.
+#:
+#: Naming a register, or reading one of several: nothing.
+_FREE: Final[tuple[type, ...]] = (MemStartInst, TupleInst, ExtractInst, WrapInst,
+                                  UnwrapInst, ErrorInst, FailedInst, SizeOfInst,
+                                  UnreachableInst)
+#: A checked operation is the operation, the test and the way to the fault.
+_CHECKED: Final[dict[BinOp, int]] = {
+    BinOp.ADD: 6, BinOp.SUB: 6, BinOp.MUL: 8,
+    BinOp.SDIV: 5, BinOp.UDIV: 5, BinOp.SREM: 5, BinOp.UREM: 5,
+    BinOp.SAT_ADD: 2, BinOp.SAT_SUB: 2, BinOp.SAT_MUL: 3,
+    BinOp.SMAX: 2, BinOp.UMAX: 2, BinOp.SMIN: 2, BinOp.UMIN: 2,
+}
+#: The arguments put where the callee wants them and the call itself.
+CALL_COST: Final[int] = 4
+
+
+def cost_of(inst: Instruction) -> int:
+    """What *inst* comes to where it is generated, in machine instructions."""
+    match inst:
+        case _ if isinstance(inst, _FREE):
+            return 0
+        case CastInst():
+            return 0 if inst.kind is CastKind.BITCAST else 1
+        case BinaryInst():
+            return _CHECKED.get(inst.op, 1)
+        case CallInst() | SyscallInst():
+            return CALL_COST
+        case AssertInst():
+            return 8
+        case AddressInst() | SumMakeInst():
+            return 2
+        case SwitchInst():
+            return 1 + 2 * len(inst.cases)
+    return 1
+
+
+def cost_of_body(func: Function) -> int:
+    """What a copy of *func* comes to where it is generated, which is what an
+    inliner weighs: `cost_of` every instruction.  A count of instructions says
+    a `bitcast` and a checked multiplication are one each, and the one is
+    nothing and the other eight."""
+    return sum(cost_of(inst) for block in func.blocks for inst in block.insts)
 
 
 def names(functions: Sequence[Function]) -> list[str]:

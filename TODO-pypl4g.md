@@ -128,9 +128,13 @@ removed or decided otherwise, which its last paragraph says.
     Done on 2026-10-04: what follows the call takes the token the body ended at, each `ret` handing over its own, and every
     block it dominates reads that one; a body that wrote nothing adds no parameter.
 
-[ ] weigh what a copy costs where it is *generated* rather than where it is written.  The inliner measures a callee in IR
+[x] weigh what a copy costs where it is *generated* rather than where it is written.  The inliner measures a callee in IR
     instructions, which is what it can see; how many bytes it comes to, which registers it wants and whether it calls anything are
     the backend's answers, and a cost model over those is what an inliner that inlines the doubtful cases would want.
+    Done on 2026-10-04: `cost_of_body` weighs each operation by the machine instructions it comes to -- read off the language
+    tests at `-O0`, where a plain count of instructions is off by 28 a function on x86-64 and a weight per operation by 7 --
+    with `SMALL` 16 and `BUDGET` 300 in that measure, chosen as leaving both less code and fewer calls than before.  Still an
+    estimate: the backend's own answer is not there when the inliner asks.
 
 [ ] a bespoke convention per function rather than one for all of them.  Today `pl4g` is one convention, shaped so that the common
     small function costs nothing; the specification allows a different one per function, which would mean parameters placed where

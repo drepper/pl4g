@@ -40,8 +40,8 @@ from __future__ import annotations
 from copy import copy
 from typing import Final
 
-from ...ir.callgraph import (called_by_count, in_a_cycle, in_call_order,
-                             size_of_body)
+from ...ir.callgraph import (called_by_count, cost_of_body, in_a_cycle,
+                             in_call_order)
 from ...ir.function import (BasicBlock, DEFAULT_CCONV, Function, InlineHint,
                             Linkage)
 from ...ir.inst import (BlockTarget, BrInst, CallInst, CondBrInst, Instruction,
@@ -53,15 +53,18 @@ from ...ir.types import MEM, VOID
 from ...ir.value import BlockParam, Value
 from ..flow import dominators
 
-#: How many instructions a function may be and still be copied where it is
-#: called.  A handful: the point is the call that goes, and a body much longer
-#: than the sequence a call is made of pays for itself only where the copy opens
-#: something further up, which nothing here looks for.
-SMALL: Final[int] = 12
+#: What a function may come to where it is generated -- `cost_of_body`, in
+#: machine instructions -- and still be copied where it is called.  A handful:
+#: the point is the call that goes, and a body much longer than the sequence a
+#: call is made of pays for itself only where the copy opens something further
+#: up, which nothing here looks for.  Chosen over the language tests: against
+#: the twelve instructions of the representation this replaced, it leaves both
+#: less code and fewer calls, and a larger one buys calls with code.
+SMALL: Final[int] = 16
 
-#: And how much a caller may grow in total, so that a function calling many
-#: small ones does not become one enormous one.
-BUDGET: Final[int] = 200
+#: And how much a caller may grow in total, in the same measure, so that a
+#: function calling many small ones does not become one enormous one.
+BUDGET: Final[int] = 300
 
 
 class Inlining:
@@ -103,7 +106,7 @@ class Inlining:
                                               grown):
                     at += 1
                     continue
-                grown += size_of_body(callee)
+                grown += cost_of_body(callee)
                 module.reports.record(
                     ReportKind.INLINE, callee.name,
                     "".join(("put where ", caller.name, " calls it, ",
@@ -137,7 +140,7 @@ class Inlining:
             return True
         if grown >= BUDGET:
             return False
-        if size_of_body(callee) <= SMALL:
+        if cost_of_body(callee) <= SMALL:
             return True
         # Called once and named by nothing else: the copy is the only one there
         # is, so what this costs is nothing and what it saves is the call.
@@ -148,9 +151,9 @@ class Inlining:
         """Why it was inlined, for the log."""
         if callee.attrs.inline is InlineHint.ALWAYS:
             return "which the program asked for"
-        if size_of_body(callee) <= SMALL:
-            return "".join(("being ", str(size_of_body(callee)),
-                            " instructions"))
+        if cost_of_body(callee) <= SMALL:
+            return "".join(("coming to about ", str(cost_of_body(callee)),
+                            " machine instructions"))
         return "the whole program calling it once"
 
     def _splice(self, caller: Function, block: BasicBlock, at: int,
