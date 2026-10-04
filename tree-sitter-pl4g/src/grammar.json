@@ -23,53 +23,82 @@
       ]
     },
     "_item": {
-      "type": "SEQ",
+      "type": "CHOICE",
       "members": [
         {
-          "type": "CHOICE",
+          "type": "SEQ",
           "members": [
             {
-              "type": "SYMBOL",
-              "name": "function_definition"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "function_definition"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "variable_definition"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "module_import"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "type_definition"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "enum_definition"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "unit_definition"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "bundle_definition"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "macro_definition"
+                }
+              ]
             },
             {
-              "type": "SYMBOL",
-              "name": "variable_definition"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "module_import"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "type_definition"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "enum_definition"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "unit_definition"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "bundle_definition"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "macro_definition"
+              "type": "REPEAT",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_newline"
+              }
             }
           ]
         },
         {
-          "type": "REPEAT",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_newline"
-          }
+          "type": "SYMBOL",
+          "name": "file_attributes"
         }
       ]
+    },
+    "file_attributes": {
+      "type": "PREC",
+      "value": -1,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "SYMBOL",
+            "name": "attribute_list"
+          },
+          {
+            "type": "REPEAT",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_newline"
+            }
+          }
+        ]
+      }
     },
     "type_definition": {
       "type": "SEQ",
@@ -7156,6 +7185,9 @@
     }
   ],
   "conflicts": [
+    [
+      "attribute_list"
+    ],
     [
       "_plain_type"
     ],

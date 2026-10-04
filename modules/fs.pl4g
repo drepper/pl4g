@@ -1,3 +1,5 @@
+@[system]
+
 ※※ Files and directories, and what a program does its I/O with.
 ※
 ※ Imported by `std` and handed on, so a program knows it as `std.fs`.  The

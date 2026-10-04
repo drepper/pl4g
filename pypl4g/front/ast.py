@@ -1617,3 +1617,7 @@ class SourceUnit(Node):
 
     path: str
     items: tuple[Definition, ...] = ()
+    #: What was said of the file itself: an attribute list at the top level with
+    #: a blank line after it, or the end of the file, is attached to nothing that
+    #: follows, and is about the file -- `@[system]`.
+    attrs: tuple[Attribute, ...] = ()

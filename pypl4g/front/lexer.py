@@ -14,11 +14,13 @@ import unicodedata
 
 from typing import Final
 
+from dataclasses import replace
+
 from ..diag import ids as D
 from ..diag.engine import DiagEngine
 from ..source.location import Span
 from ..source.manager import SourceFile
-from .token import (ABOVE_NOT_ALIKE_GLYPH, ABOVE_OR_ALIKE_GLYPH, ALIKE_GLYPH,
+from .token import (ABOVE_NOT_ALIKE_GLYPH, BLANK_LINE, ABOVE_OR_ALIKE_GLYPH, ALIKE_GLYPH,
                     HOLE_GLYPH,
                     OPNAME_GLYPH, OPERATOR_CATEGORIES, OPERATOR_GLYPHS,
                     OPENER_CATEGORY, CLOSER_CATEGORY,
@@ -320,7 +322,13 @@ class Lexer:
         is_doc = self._text.startswith(COMMENT_GLYPH * 2, self._pos)
         if ch == "" or ch == "\n" or (is_comment and not is_doc):
             # A blank line and a plain comment carry no layout; a documentation
-            # comment is a token, so it goes through the ordinary path.
+            # comment is a token, so it goes through the ordinary path.  A blank
+            # line is still noted on the end of line before it, which is the one
+            # place it means anything: after an attribute list at the top level.
+            if ch == "\n" and not is_comment and self._tokens \
+                    and self._tokens[-1].kind is TokKind.NEWLINE \
+                    and not self._tokens[-1].text:
+                self._tokens[-1] = replace(self._tokens[-1], text=BLANK_LINE)
             self._skip_to_end_of_line()
             return False
         self._at_line_start = False
@@ -439,6 +447,11 @@ class Lexer:
                     if self._tokens and self._tokens[-1].kind is not TokKind.NEWLINE:
                         self._tokens.append(Token(TokKind.NEWLINE,
                                                   self._span(self._pos - 1, self._pos)))
+                    elif self._tokens and self._blank_line_ended():
+                        # Lines with nothing on them are one end of a line, and the
+                        # one says that there was one: an attribute list before it
+                        # is attached to nothing that follows.
+                        self._tokens[-1] = replace(self._tokens[-1], text=BLANK_LINE)
                     return True
                 continue
             if self._text.startswith(COMMENT_GLYPH, self._pos):
@@ -580,6 +593,11 @@ class Lexer:
             self._at_line_start = True
             if self._tokens and self._tokens[-1].kind is not TokKind.NEWLINE:
                 self._tokens.append(Token(TokKind.NEWLINE, self._span(end, self._pos)))
+
+    def _blank_line_ended(self) -> bool:
+        """Whether the line the end of line just read ended has nothing on it."""
+        before = self._text.rfind("\n", 0, self._pos - 1)
+        return self._text[before + 1:self._pos - 1].strip(" \t\r") == ""
 
     def _lex_identifier(self, start: int) -> None:
         """Lex an identifier or a keyword.

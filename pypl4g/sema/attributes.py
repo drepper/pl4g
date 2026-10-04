@@ -37,8 +37,11 @@ class AttrTarget(Flag):
     #: of requirements.  It has a target of its own for exactly that reason --
     #: what may be said of a type says nothing about one.
     BUNDLE = auto()
+    #: A file, said by a list standing alone at the top level with a blank line
+    #: after it: what the file is, rather than what any definition in it is.
+    FILE = auto()
     ANY = (FUNCTION | TYPE | VARIABLE | MODULE | PARAMETER | STATEMENT
-           | CALLABLE | BUNDLE)
+           | CALLABLE | BUNDLE | FILE)
 
 
 #: How a target is named in a diagnostic.
@@ -51,6 +54,7 @@ TARGET_NAMES: Final[dict[AttrTarget, str]] = {
     AttrTarget.STATEMENT: "a statement",
     AttrTarget.CALLABLE: "a lambda or a function type",
     AttrTarget.BUNDLE: "a bundle",
+    AttrTarget.FILE: "a file",
 }
 
 
@@ -169,6 +173,9 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
                  (_param("symbol", "string"),),
                  doc="the function is defined somewhere else, under this "
                      "symbol, and the compiler fills it in"),
+        AttrSpec("system", AttrTarget.FILE,
+                 doc="a system module: what it alone would be warned about or "
+                     "have logged is left unsaid, as a system header is in C"),
         AttrSpec("export",
                  AttrTarget.FUNCTION | AttrTarget.VARIABLE | AttrTarget.TYPE
                  | AttrTarget.BUNDLE | AttrTarget.MODULE,

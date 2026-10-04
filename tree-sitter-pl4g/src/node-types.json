@@ -3901,6 +3901,21 @@
     }
   },
   {
+    "type": "file_attributes",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "attribute_list",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "foreach_statement",
     "named": true,
     "fields": {
@@ -9359,6 +9374,10 @@
         },
         {
           "type": "enum_definition",
+          "named": true
+        },
+        {
+          "type": "file_attributes",
           "named": true
         },
         {

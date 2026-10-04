@@ -9783,6 +9783,25 @@ Taken without asking: a value that is no place is lowered once and handed where 
 it takes a reference (4533); the function is found in the type's file or through any module this file reaches that exports the
 type, handed on or not; a name the type does not have is 4609; closing by `defer from.close()` counts as closing.
 
+## 2026-10-04T14:00+02:00 — language
+
+**System modules: `@[system]` on the file; the modules the installation provides write every type**
+
+The user asked that the `std` sources write every type -- "a general rule" -- and that nothing be left for the compiler to work
+out.  Every binding in `std`, `std.fs` and `std.io` has its type written but one: `comptime foreach f := ⎕fields(v)` in
+`std.text`, whose name is of a different type on every turn.  Asked, the user decided that **a module can be marked a system
+module, exempt from rules like the log of types left unwritten, as GCC treats system headers**; that **it is marked in the file
+itself** -- GCC's `#pragma GCC system_header` -- against marking by the directory it is found in (`-isystem`) and against both;
+and that **a system module is exempt from logs and warnings**: what is only noted or warned about in it is not said, errors and
+what the program's use of it caused still are.
+
+Taken without asking: the mark is `@[system]` in a list standing alone at the top of the file with a blank line after it --
+the entry in TODO-language.md about a list attached to nothing, done now: the lexer notes a blank line on the end of line before
+it, the parser keeps such a list on the unit, and a new attribute target `a file` takes only `system`, so `@[export]` there is
+refused (3204); a second list before a definition is 3208 only where no blank line stands between.  The warnings are left unsaid
+by the diagnostic engine, by where they point, so those found once the whole program is known are left unsaid too.  A test walks
+the installation's modules and refuses any binding without a written type, the `⎕fields` loop excepted.
+
 Open questions
 --------------
 

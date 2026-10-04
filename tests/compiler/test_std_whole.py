@@ -61,3 +61,42 @@ def test_a_program_compiles_only_what_it_names() -> None:
                                          for one in lowered), lowered
     assert not any("read_lines" in one for one in lowered), lowered
     assert not any("error_name" in one for one in lowered), lowered
+
+
+def _untyped(node: object, found: list[str], path: str) -> None:
+    """Every definition under *node* that leaves its type to the compiler."""
+    from dataclasses import fields, is_dataclass
+    from pypl4g.front import ast
+
+    match node:
+        case ast.VarDef() if node.type is None:
+            found.append("".join((path, ": let ", node.name)))
+        case ast.ForEach() if node.type is None and node.name != "_" and not (
+                node.comptime and isinstance(node.iterable, ast.Call)
+                and isinstance(node.iterable.callee, ast.NameRef)
+                and node.iterable.callee.name == "\N{APL FUNCTIONAL SYMBOL QUAD}fields"):
+            found.append("".join((path, ": foreach ", node.name)))
+    if is_dataclass(node):
+        for one in fields(node):
+            _untyped(getattr(node, one.name), found, path)
+    elif isinstance(node, (tuple, list)):
+        for one in node:
+            _untyped(one, found, path)
+
+
+def test_std_writes_every_type() -> None:
+    """The modules the installation provides say every type they use: nothing in
+    them is left for the compiler to work out.
+
+    The one exception is a `comptime foreach` over `⎕fields`, whose name is of a
+    different type on every turn and so of none that could be written; the
+    modules are system modules, so it is not logged either."""
+    found: list[str] = []
+    for where in system_modules():
+        for path in sorted(where.glob("*.pl4g")):
+            sources = SourceManager()
+            engine, _ = collecting_engine(None)
+            unit = parse(tokenize(sources.add(path, path.read_text(encoding="utf-8")),
+                                  engine), str(path), engine)
+            _untyped(unit.items, found, path.name)
+    assert found == [], found

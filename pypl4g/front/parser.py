@@ -14,7 +14,7 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine
 from ..source.location import INVALID_SPAN, Span
 from . import ast
-from .token import (AWAIT_NAME, COMMENT_GLYPH, HEAP_NAME, IMPORT_NAME,
+from .token import (AWAIT_NAME, BLANK_LINE, COMMENT_GLYPH, HEAP_NAME, IMPORT_NAME,
                     LASTING_WORD, TokKind, Token, WILDCARD_NAME)
 
 #: Tokens at which error recovery stops, because a new definition can begin there.
@@ -395,11 +395,15 @@ class Parser:
     def parse_unit(self) -> ast.SourceUnit:
         """Parse a whole source file."""
         items: list[ast.Definition] = []
+        about_the_file: list[ast.Attribute] = []
         start = self._current.span
         while not self._check(TokKind.EOF):
             self._skip_newlines()
             if self._check(TokKind.EOF):
                 break
+            if self._attached_to_nothing():
+                about_the_file.extend(self._parse_attributes())
+                continue
             try:
                 item = self._parse_item()
             except _Bail:
@@ -408,7 +412,35 @@ class Parser:
             if item is not None:
                 items.append(item)
         end = self._current.span
-        return ast.SourceUnit(span=start.to(end), path=self._path, items=tuple(items))
+        return ast.SourceUnit(span=start.to(end), path=self._path, items=tuple(items),
+                              attrs=tuple(about_the_file))
+
+    def _attached_to_nothing(self) -> bool:
+        """Whether an attribute list starts here that a blank line, or the end of
+        the file, follows: one that is about the file and not what comes next."""
+        if not self._check(TokKind.AT_LBRACKET):
+            return False
+        depth = 0
+        for at in range(self._pos, len(self._tokens)):
+            kind = self._tokens[at].kind
+            if kind is TokKind.AT_LBRACKET or kind is TokKind.LBRACKET:
+                depth += 1
+            elif kind is TokKind.RBRACKET:
+                depth -= 1
+                if depth == 0:
+                    after = self._tokens[at + 1] if at + 1 < len(self._tokens) else None
+                    if after is None or after.kind is TokKind.EOF:
+                        return True
+                    if after.kind is TokKind.AT_LBRACKET:
+                        return False
+                    if after.kind is TokKind.NEWLINE:
+                        following = self._tokens[at + 2] if at + 2 < len(self._tokens) else None
+                        return after.text == BLANK_LINE or following is None \
+                            or following.kind is TokKind.EOF
+                    return False
+            elif kind is TokKind.EOF:
+                return False
+        return False
 
     def _parse_item(self) -> ast.Definition | None:
         """Parse one top-level definition together with what precedes it."""

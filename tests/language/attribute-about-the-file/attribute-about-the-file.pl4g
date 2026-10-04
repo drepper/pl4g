@@ -1,0 +1,16 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3204 LANG_ATTR_NOT_APPLICABLE
+
+※ A list standing alone at the top level with a blank line after it is attached
+※ to nothing that follows: it is about the file.  `@[export]` says nothing about a
+※ file, so it is refused there; what a file may be said to be is `@[system]`.
+@[export]
+
+@[visible]
+let shared: u8 = 7u8
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ⎕narrow(shared, ⌜u6⌝) ?? 0u6

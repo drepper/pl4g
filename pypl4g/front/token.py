@@ -748,6 +748,11 @@ OPERATORS_NOT_NAMEABLE: Final[frozenset[str]] = frozenset({
     "(", ")", "[", "]", "{", "}", TUPLE_OPEN_GLYPH, TUPLE_CLOSE_GLYPH,
 })
 
+#: What an end of line says where lines with nothing on them followed it, which
+#: is the one place a blank line means anything: after an attribute list at the
+#: top level, it says the list is attached to nothing that follows.
+BLANK_LINE: Final[str] = "blank"
+
 KEYWORDS: Final[dict[str, TokKind]] = {
     "fn": TokKind.KW_FN,
     "return": TokKind.KW_RETURN,

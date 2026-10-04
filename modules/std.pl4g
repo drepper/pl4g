@@ -1,3 +1,5 @@
+@[system]
+
 ※※ What every program starts with, and the devices it starts with open.
 ※
 ※ One module for now, named `std` and found beside the compiler.  What a program

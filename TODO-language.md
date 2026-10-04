@@ -621,7 +621,7 @@ removed or decided otherwise, which its last paragraph says.
     Found done on 2026-10-04: decided 2026-10-01T03:30 ("Attaching code to a type: design B"), and `v.f(args)` added
     2026-10-04T13:00.
 
-[ ] if an attribute definition is followed by an empty line or the end of the file, it is not attached to anything and the
+[x] if an attribute definition is followed by an empty line or the end of the file, it is not attached to anything and the
     action is global.  Implementable now and needed by `@[required(NAME)]` below.  Note that the parser currently skips newlines
     after an attribute list precisely so that one can stand on its own line above the thing it belongs to, so the rule has to
     distinguish a blank line from a line break.
@@ -632,6 +632,8 @@ removed or decided otherwise, which its last paragraph says.
     A blank line between two lists deliberately does *not* make them two things today, so this entry changes that reading: the
     blank line will mean the earlier list attached to nothing rather than meaning nothing at all, and the diagnostic for two lists
     before one definition then only arises where they really are both attached.
+    Done on 2026-10-04: such a list is about the file (`SourceUnit.attrs`, target `a file`), the lexer noting a blank line on the
+    end of line before it; `@[system]` is the first attribute it takes.
 
 [?] add an attribute `@[required(NAME)]` which does not have to be attached to a variable, function, or statement but can be.
     The attribute checks whether the implementation or supported language version supports the feature named by NAME.  The

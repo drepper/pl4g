@@ -83,9 +83,17 @@ def compiler_parses(path: Path, tmp_path: Path) -> bool:
     # Anything in the lexical or syntactic blocks is the parser refusing; a
     # number outside them means the program parsed and something later objected.
     for number in _diagnostic_numbers(proc.stderr):
-        if 2000 <= number < 4000:
+        if 2000 <= number < 4000 and number not in BEYOND_THE_GRAMMAR:
             return False
     return True
+
+
+#: What the parser refuses and no grammar of this shape could: 3204, an attribute
+#: where it does not apply, which is about what the attribute means and not how
+#: it is written; and 3208, two attribute lists before one definition, which is a
+#: second list only where no blank line stands between them -- and a blank line is
+#: nothing to the grammar, which reads one list there as about the file.
+BEYOND_THE_GRAMMAR: frozenset[int] = frozenset({3204, 3208})
 
 
 def _diagnostic_numbers(text: str) -> list[int]:

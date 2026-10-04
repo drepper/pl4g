@@ -3503,6 +3503,8 @@ class Checker:
                 one for one in unit.items if not only_for_macros(one)))
                 for unit in units]
         self._units = units
+        for unit in units:
+            self._mark_system(unit)
         self._definitions = {item.name: item for unit in units
                              for item in unit.items
                              if isinstance(item, ast.FuncDef)}
@@ -3920,6 +3922,23 @@ class Checker:
         if _is_a_table(ty) and not static and initializer is None:
             self._built_globals.append((var, node))
 
+    def _mark_system(self, unit: ast.SourceUnit) -> None:
+        """Bind what was said of the file itself, and note a system file.
+
+        `@[system]` alone at the top, a blank line after it, says the file is a
+        system module: what is wrong only in it is not warned about and what the
+        compiler worked out for it is not logged -- GCC's system headers, which
+        a library ships with and a reader of the program did not write.  Errors
+        are still reported, and so is what the program's use of it caused.
+        """
+        if not unit.attrs:
+            return
+        bound = self._bind_attributes(unit.attrs, AttrTarget.FILE)
+        if any(attr.name == "system" for attr in bound):
+            found = self._sources.file_of(unit.span.start) if unit.span.is_valid else None
+            if found is not None:
+                self._diags.mark_system(found.base, found.end)
+
     def _report_inferred(self, names: Sequence[tuple[str, Span]],
                          written: ast.TypeExpr | None) -> None:
         """Record the type of each of *names* the program did not write in full.
@@ -3942,7 +3961,11 @@ class Checker:
 
     def _record_inferred(self, name: str, span: Span, held: Type,
                          written: ast.TypeExpr | None) -> None:
-        """Record that *name* was given *held*, where *written* does not say it."""
+        """Record that *name* was given *held*, where *written* does not say it.
+
+        Not in a system module, whose types are its own business."""
+        if self._diags.in_system(span):
+            return
         if written is None:
             reason = "".join(("its type was not written, and is '", held.written(),
                               "', worked out from what it was given"))

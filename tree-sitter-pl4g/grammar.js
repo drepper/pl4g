@@ -53,6 +53,9 @@ module.exports = grammar({
   // condition is that name and whose body begins there.  The compiler's parser
   // asks the same question by looking one token further.
   conflicts: $ => [
+    // An attribute list at the top level is the start of a definition or about
+    // the file, and which is what follows it: the generalized parse carries both.
+    [$.attribute_list],
     // A name followed by `(` in a `match` arm is a variant taking its value
     // apart or a type given its arguments; which it is, is what follows.
     [$._plain_type],
@@ -85,12 +88,21 @@ module.exports = grammar({
 
     // -- items -------------------------------------------------------------
 
-    _item: $ => seq(
-      choice($.function_definition, $.variable_definition, $.module_import,
-             $.type_definition, $.enum_definition, $.unit_definition,
-             $.bundle_definition, $.macro_definition),
-      repeat($._newline),
+    _item: $ => choice(
+      seq(
+        choice($.function_definition, $.variable_definition, $.module_import,
+               $.type_definition, $.enum_definition, $.unit_definition,
+               $.bundle_definition, $.macro_definition),
+        repeat($._newline),
+      ),
+      $.file_attributes,
     ),
+
+    // An attribute list with a blank line after it, or the end of the file, is
+    // about the file and not about what follows -- `@[system]`.  A blank line is
+    // nothing to this grammar, so what it reads is a list standing where an item
+    // may, which it takes only where no definition can have it.
+    file_attributes: $ => prec(-1, seq($.attribute_list, repeat($._newline))),
 
     // `type NAME = ` and then a sequence of `NAME : TYPE` pairs.  The separator
     // is what says which kind of type it is: `;` for a product, which holds all

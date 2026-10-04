@@ -130,6 +130,10 @@ class DiagEngine:
         self._because: list[tuple[DiagID, Span, dict[str, object],
                                   frozenset[DiagID] | None]] = []
         self.warning_count: int = 0
+        #: Where the files marked `@[system]` are, as the range of locations each
+        #: covers: a warning pointing into one is left unsaid, as a compiler says
+        #: nothing about what is wrong only in a system header.
+        self._system: list[tuple[int, int]] = []
         #: The expectations in force, innermost last.
         self._expectations: list[Expectation] = []
         #: Whether warnings are being left unsaid for now: a generic function is
@@ -189,6 +193,14 @@ class DiagEngine:
         self._expectations.remove(expectation)
         return expectation
 
+    def mark_system(self, start: int, end: int) -> None:
+        """Note that the locations from *start* up to *end* are a system file's."""
+        self._system.append((start, end))
+
+    def in_system(self, span: Span) -> bool:
+        """Whether *span* begins in a file marked `@[system]`."""
+        return span.is_valid and any(a <= span.start < b for a, b in self._system)
+
     def _absorb(self, info: DiagInfo) -> bool:
         """Whether an expectation takes this diagnostic instead of reporting it."""
         for expectation in reversed(self._expectations):
@@ -220,7 +232,8 @@ class DiagEngine:
                 note = self.make(ident_of, span_of, **args_of)
                 diag.notes.append(note)
         if info.severity == "warning" and (self.errors_only
-                                           or not self._control.is_enabled(info)):
+                                           or not self._control.is_enabled(info)
+                                           or self.in_system(span)):
             return diag
         if info.is_error or (info.severity == "warning" and self._control.warnings_are_errors):
             self.error_count += 1

@@ -226,6 +226,29 @@ the name is the last element; and C, where `#include` is text and there are no m
 means and to neither in how it is found: the file doing the importing decides first, which is what makes a directory of sources
 work with nothing configured.
 
+#### System modules
+
+**An attribute list standing alone at the top level, a blank line or the end of the file after it, is about the file** and not
+about what follows: `@[system]` there makes the file a **system module**.
+
+```
+@[system]
+
+※※ What every program starts with …
+```
+
+What is wrong only in a system module is not warned about, and what the compiler worked out for it -- the types it left to be
+inferred (`type-inferred`) -- is not logged: a reader of the program did not write it and cannot change it.  Errors in one are
+reported as anywhere, and so is what the program's use of it caused -- what was inlined, what was dropped.  `std`, `std.fs` and
+`std.io` are system modules.  A list with a blank line after it is attached to nothing, so a second list before a definition is a
+second list only where no blank line stands between them (3208); `@[system]` is the one attribute a file takes (3204).
+
+Compare: **GCC** and **Clang**, whose system headers -- found through `-isystem` or marked `#pragma GCC system_header` -- are where
+no warning is given; **MSVC**'s `/external:I`; **Rust**, which lints the crate being compiled and not its dependencies.  This is
+GCC's pragma, written as the attribute the language already has; the modules the installation provides also write every type,
+which a test checks, so the log has nothing to leave out of them but what cannot be written -- a `comptime foreach` over
+`⎕fields`, whose name is of a different type each turn.
+
 #### The `std` module
 
 One module the installation provides, holding what a program is started with and the devices it is started with open, and

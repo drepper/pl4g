@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=6 diag=none
+
+※ `@[system]` alone at the top of a module, a blank line after it, marks it as a
+※ system module, as a system header is in C: a warning about something only in
+※ it -- `unread` is never read -- is left unsaid, and so is what the compiler
+※ worked out for it.  An error in it would still be reported.
+
+let std := ⎕import("std")
+let quiet := ⎕import("quiet")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ⎕narrow(quiet.twice(3u8), ⌜u6⌝) ?? 0u6

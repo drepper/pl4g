@@ -2,10 +2,9 @@
 ※ pl4g-test: expect-diag 3208 LANG_ATTR_SEPARATE_LISTS
 
 ※ Everything one definition is told is written in one list.  Two lists say what
-※ one list holding both would say, and the blank line between them changes
-※ nothing about what they attach to.
+※ one list holding both would say.  (With a blank line between them, the first
+※ is about the file and not about the definition: attribute-about-the-file.)
 @[export]
-
 @[visible]
 let shared: u8 = 7u8
 
