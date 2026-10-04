@@ -17,8 +17,10 @@
 
 let std := ⎕import("std")
 
-※※ What the options asked for, and where numbering has got to.
-type State = numbered : bool ; blank_too : bool ; count : u64 ; at_start : bool
+※※ What the options asked for, where numbering has got to, and what went wrong
+※※ with the last file copied: nought where nothing did.
+type State =
+    numbered : bool ; blank_too : bool ; count : u64 ; at_start : bool ; error : i32
 
 ※※ Write `n` six columns wide and a tab after it.
 fn number(out: &mut std.io.Writer, n: u64) → bool:
@@ -32,31 +34,41 @@ fn number(out: &mut std.io.Writer, n: u64) → bool:
         left ← left ÷ 10u64 ?? 0u64
     (std.Io.print(out, text) ?? 0) = 7
 
-※※ Copy everything `from` holds to `out` a line at a time, numbering as `state`
-※※ says, and answer what went wrong: nought where nothing did.
-@[impure]
-fn copied(from: &mut std.io.Reader, out: &mut std.io.Writer, state: &mut State) → i32:
+※※ Copy everything `from` holds to `out` a line at a time, numbering as `before`
+※※ says, and answer the state after it: where numbering got to, and in `error`
+※※ what went wrong -- nought where nothing did.
+※
+※ The state is handed in and handed back rather than lent by `&mut`: what is
+※ written is this function's own copy, so it changes nothing it did not make and
+※ needs no `@[impure]`.  The devices are lent, which is permission to read and
+※ write them and nothing more.
+fn copied(from: &mut std.io.Reader, out: &mut std.io.Writer, before: State) → State:
+    let state: mut State = before
+    state.error ← 0i32
     foreach line := std.read_lines(from):
         match line:
             u8⟦⟧(text):
                 ※ A line begins where the last one ended; one that runs on from the
                 ※ end of the file before is not numbered again.
                 let blank: bool = #text = 1 ∧ text⟦0⟧ = 10u8
-                if state⌖.at_start ∧ state⌖.numbered ∧ (state⌖.blank_too ∨ ¬blank):
-                    state⌖.count ← state⌖.count + 1u64
-                    if ¬number(out, state⌖.count):
-                        return 0i32 - 1i32
+                if state.at_start ∧ state.numbered ∧ (state.blank_too ∨ ¬blank):
+                    state.count ← state.count + 1u64
+                    if ¬number(out, state.count):
+                        state.error ← 0i32 - 1i32
+                        return state
                 if (std.Io.print(out, text) ?? 0) ≠ #text:
-                    return 0i32 - 1i32
-                state⌖.at_start ← text⟦⎕unit(⎕drop(#text) - 1u64, ⌜idx⌝)⟧ = 10u8
+                    state.error ← 0i32 - 1i32
+                    return state
+                state.at_start ← text⟦⎕unit(⎕drop(#text) - 1u64, ⌜idx⌝)⟧ = 10u8
             ⊥(code):
-                return code
-    0i32
+                state.error ← code
+                return state
+    state
 
 @[startup, impure]
 fn main(init: std.Init) → u6:
     let state: mut State = State(.numbered ← false, .blank_too ← true, .count ← 0u64,
-                                 .at_start ← true)
+                                 .at_start ← true, .error ← 0i32)
     let files: mut u64 = 0u64
     let options: mut bool = true
     let failed: mut bool = false
@@ -78,7 +90,7 @@ fn main(init: std.Init) → u6:
         else:
             files ← files + 1u64
     if files = 0u64:
-        return reported(copied(&mut init.io.input, &mut init.io.output, &mut state), "-",
+        return reported(copied(&mut init.io.input, &mut init.io.output, state).error, "-",
                         &mut init.io.error)
     options ← true
     let here: std.fs.Dir = std.fs.State.cwd(&init.fs)
@@ -88,16 +100,16 @@ fn main(init: std.Init) → u6:
             options ← false
         elif ¬(options ∧ #bytes > 1 ∧ bytes⟦0⟧ = 45u8):
             if arg = "-":
-                if reported(copied(&mut init.io.input, &mut init.io.output, &mut state),
-                            arg, &mut init.io.error) ≠ 0u6:
+                state ← copied(&mut init.io.input, &mut init.io.output, state)
+                if reported(state.error, arg, &mut init.io.error) ≠ 0u6:
                     failed ← true
             else:
                 match std.fs.Dir.open(here, arg, ⌜std.io.Reader⌝):
                     std.io.Reader(r):
                         let from: mut std.io.Reader = r
                         defer std.io.Reader.close(from)
-                        if reported(copied(&mut from, &mut init.io.output, &mut state), arg,
-                                    &mut init.io.error) ≠ 0u6:
+                        state ← copied(&mut from, &mut init.io.output, state)
+                        if reported(state.error, arg, &mut init.io.error) ≠ 0u6:
                             failed ← true
                     ⊥(code):
                         _ ← reported(code, arg, &mut init.io.error)
