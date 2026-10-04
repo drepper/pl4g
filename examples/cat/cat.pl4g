@@ -71,7 +71,6 @@ fn main(init: std.Init) → u6:
                                  .at_start ← true, .error ← 0i32)
     let files: mut u64 = 0u64
     let options: mut bool = true
-    let failed: mut bool = false
     foreach arg: str = init.args⟦1…#init.args⟧:
         let bytes: u8⟦⟧ = ⎕bytes(arg)
         if options ∧ arg = "--":
@@ -94,6 +93,7 @@ fn main(init: std.Init) → u6:
                         &mut init.io.error)
     options ← true
     let here: std.fs.Dir = std.fs.State.cwd(&init.fs)
+    let excode: mut u6 = 0
     foreach arg: str = init.args⟦1…#init.args⟧:
         let bytes: u8⟦⟧ = ⎕bytes(arg)
         if options ∧ arg = "--":
@@ -101,20 +101,18 @@ fn main(init: std.Init) → u6:
         elif ¬(options ∧ #bytes > 1 ∧ bytes⟦0⟧ = 45u8):
             if arg = "-":
                 state ← copied(&mut init.io.input, &mut init.io.output, state)
-                if reported(state.error, arg, &mut init.io.error) ≠ 0u6:
-                    failed ← true
+                excode ← excode | reported(state.error, arg, &mut init.io.error)
             else:
                 match std.fs.Dir.open(here, arg, ⌜std.io.Reader⌝):
                     std.io.Reader(r):
                         let from: mut std.io.Reader = r
                         defer std.io.Reader.close(from)
                         state ← copied(&mut from, &mut init.io.output, state)
-                        if reported(state.error, arg, &mut init.io.error) ≠ 0u6:
-                            failed ← true
+                        excode ← excode | reported(state.error, arg, &mut init.io.error)
                     ⊥(code):
                         _ ← reported(code, arg, &mut init.io.error)
-                        failed ← true
-    if failed: 1u6 else: 0u6
+                        excode ← 1
+    excode
 
 ※※ Say what went wrong with `name`, where `code` says something did, and answer the
 ※※ status that comes to.
