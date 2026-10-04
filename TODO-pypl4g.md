@@ -121,10 +121,12 @@ removed or decided otherwise, which its last paragraph says.
     asked for, what the whole program calls once, and what is small.  What is left behind is dropped by the pass that drops what
     nothing reaches, which is what makes the second rule free.
 
-[ ] thread the memory chain through an inlined body.  A call is not in the chain -- it neither takes a token nor answers with one
+[x] thread the memory chain through an inlined body.  A call is not in the chain -- it neither takes a token nor answers with one
     -- so the caller's loads after an inlined body still read the token that stood before it.  Nothing reorders memory today, so
     it is bookkeeping rather than a defect; the day something does, the body's last token has to reach what follows it, which
     means the block after the call taking one and every `ret` handing one over.
+    Done on 2026-10-04: what follows the call takes the token the body ended at, each `ret` handing over its own, and every
+    block it dominates reads that one; a body that wrote nothing adds no parameter.
 
 [ ] weigh what a copy costs where it is *generated* rather than where it is written.  The inliner measures a callee in IR
     instructions, which is what it can see; how many bytes it comes to, which registers it wants and whether it calls anything are
@@ -624,10 +626,12 @@ Optimizations
 [x] test a comparison where it is branched on.  Done on 2026-10-03: a check absorbs a comparison only it reads, on all three
     targets.
 
-[ ] thread the memory chain through a body the inliner put in place.  A read after an inlined call still takes the token from
+[x] thread the memory chain through a body the inliner put in place.  A read after an inlined call still takes the token from
     before it, so `samevalues` cannot trust a token and refuses to share a read across any store; with the chain threaded, a
     store would only stop the reads that take its token's predecessor.  The entry about the chain and inlining above is the same
     thing from the other side.
+    Done on 2026-10-04 with the entry above: a store is no longer a barrier to `samevalues`, a read after one taking
+    another token; a call and a request to the kernel still are.
 
 [ ] let the instruction selectors read a value worked out in a block laid out later.  Each walks the blocks in layout order and
     wants every value it reads already selected, so `samevalues` shares a value only from a block laid out earlier, however it

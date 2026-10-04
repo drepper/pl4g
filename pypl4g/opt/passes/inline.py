@@ -26,6 +26,13 @@ arguments as the copy's parameters.  Every `ret` in the copy becomes a branch to
 the second half.  The callee's `mem.start` is the token in force at the call --
 a chain begun again in the middle of a function would be a chain saying nothing
 about what came before it.
+
+**The chain runs through the copy and out of it.**  The second half takes a
+token as well as the answer, each `ret` handing over the token it stood at, and
+everything the second half reaches -- what it dominates -- reads that token
+where it read the one in force at the call.  So a read after the body is ordered
+after what the body wrote, by the chain and not by the hope that nothing moves
+it; which is what lets `samevalues` take a store for what it is.
 """
 
 from __future__ import annotations
@@ -44,6 +51,7 @@ from ...ir.reports import ReportKind
 from ...ir.rewrite import stands_for
 from ...ir.types import MEM, VOID
 from ...ir.value import BlockParam, Value
+from ..flow import dominators
 
 #: How many instructions a function may be and still be copied where it is
 #: called.  A handful: the point is the call that goes, and a body much longer
@@ -164,6 +172,8 @@ class Inlining:
         del block.insts[at:]
         answer = (after.add_param(call.ty, "answer") if call.ty is not VOID
                   else None)
+        # And the token the body ends at, which what follows the call reads.
+        resumed = after.add_param(MEM, "memory")
 
         # The copy: one block per block of the callee, its parameters carried
         # over so that the entry block's are where the arguments arrive.
@@ -187,11 +197,15 @@ class Inlining:
                     values[id(one)] = token
                     continue
                 if isinstance(one, RetInst):
-                    # What it answered with is carried to what follows the call.
+                    # What it answered with is carried to what follows the call,
+                    # and the token this way through the body ended at.
+                    ended = _last_token(original, original.insts.index(one))
                     made.append(BrInst(
                         BlockTarget(after,
-                                    () if answer is None
-                                    else (one.operands[0],)),
+                                    (ended if ended is not None else token,)
+                                    if answer is None
+                                    else (one.operands[0],
+                                          ended if ended is not None else token)),
                         one.span))
                     continue
                 clone = copy(one)
@@ -224,6 +238,23 @@ class Inlining:
         position = next(at for at, one in enumerate(rest)
                         if one is block) + 1
         caller.blocks = [*rest[:position], *made, *rest[position:]]
+        # Where every way out of the body hands on one token -- a body that wrote
+        # nothing hands on the one it was given -- that token is what follows
+        # the call reads, and a parameter for it would only stand between two
+        # reads of one place that are one read.
+        endings = [block.insts[-1].target for block in made[:-1]
+                   if isinstance(block.insts[-1], BrInst)
+                   and block.insts[-1].target.block is after]
+        handed = {id(target.args[-1]) for target in endings}
+        if len(handed) == 1:
+            one = endings[0].args[-1]
+            after.params.remove(resumed)
+            for target in endings:
+                target.args = list(target.args[:-1])
+            if one is not token:
+                _resume_chain(caller, after, token, one)
+        else:
+            _resume_chain(caller, after, token, resumed)
 
 
 def _map_into(made: Instruction, values: dict[int, Value],
@@ -260,6 +291,41 @@ def _mapped(value: Value, values: dict[int, Value]) -> Value:
     so there is nothing to copy and nothing to map.
     """
     return values.get(id(value), value)
+
+
+def _last_token(block: BasicBlock, at: int) -> Value | None:
+    """The token in force just before instruction *at* of *block*, as far as the
+    block says: the nearest memory-valued instruction above, or the parameter it
+    took one in.  Nothing where the token comes from the function's start."""
+    for earlier in reversed(block.insts[:at]):
+        if earlier.ty is MEM:
+            return earlier
+    for param in block.params:
+        if param.ty is MEM:
+            return param
+    return None
+
+
+def _resume_chain(func: Function, after: BasicBlock, token: Value,
+                  resumed: Value) -> None:
+    """Have what follows an inlined body read the token the body ended at.
+
+    Every block *after* dominates read *token* -- the one in force at the call
+    -- where it read the chain at all; each reads *resumed* now, which is in
+    view there because *after* takes it.  A block *after* does not dominate is
+    left alone: control reaches it some other way too, and what it reads is
+    already handed to it by a branch.
+    """
+    found = dominators(func)
+    for block in func.blocks:
+        if not found.dominates(after, block):
+            continue
+        for inst in block.insts:
+            inst.operands = [resumed if one is token else one
+                             for one in inst.operands]
+            for target in (inst.successors() if hasattr(inst, "successors") else ()):
+                target.args = [resumed if one is token else one
+                               for one in target.args]
 
 
 def _token_before(func: Function, block: BasicBlock, at: int) -> Value:

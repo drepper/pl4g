@@ -7,6 +7,7 @@ walks the same way, so that a callee it reaches is one whose size is final.
 
 from __future__ import annotations
 
+import re
 import subprocess
 
 import pytest
@@ -289,3 +290,39 @@ fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
             pytest.skip("".join((runner[0], " is not installed")))
     ran = subprocess.run([*runner, str(out)], capture_output=True, timeout=60)
     assert ran.returncode == 9
+
+
+WRITES_IN_PLACE = """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+let counter: mut u8 = 1u8
+
+@[impure]
+fn bump():
+    counter \N{LEFTWARDS ARROW} counter + 1u8
+
+@[startup, impure]
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
+    let before: u8 = counter
+    bump()
+    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(before + counter, \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 0u6
+"""
+
+
+def test_the_chain_runs_through_an_inlined_body(compile_source) -> None:  # noqa: ANN001
+    """A read after the body takes the token the body's store made, so it is
+    ordered after the write by the chain, and is no read before it."""
+    text = function_ir(emitted(compile_source, WRITES_IN_PLACE, "-O1"))
+    assert "call" not in text
+    stored = re.search(r"(%\d+) = store\.u8 %\d+, @counter", text)
+    assert stored is not None, text
+    reads = re.findall(r"= load\.u8 (%\d+), @counter", text)
+    assert len(reads) == 2 and reads[1] == stored.group(1), text
+
+
+def test_a_body_that_writes_nothing_adds_no_token(compile_source) -> None:  # noqa: ANN001
+    """Every way out of a body that wrote nothing hands on the token it was
+    given, so what follows the call reads that one and no parameter stands
+    between two reads of one place."""
+    text = function_ir(emitted(compile_source, SMALL, "-O1"))
+    assert "call" not in text and ": mem" not in text, text

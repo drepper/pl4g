@@ -17,13 +17,15 @@ whose every instance is room of its own, and the memory chain's beginning.  A
 call is never shared here -- `purecalls` is what knows which calls may be.
 
 **A read is shared where nothing could have written between.**  Two loads from
-one address taking one memory token ought to read the same thing, a store making
-a new token for what follows it -- but the chain is not that reliable yet.  A
-call is not in it, and may write what it was handed or, answering through the
-caller's storage, the caller's own room; and a body inlined in place of a call
-keeps the chain it had, so a read after it takes the token from before.  So a
-load stands for an earlier one only where no call, no store and no request to
-the kernel lies on any way from the one to the other.
+one address taking one memory token read the same thing: a store makes a new
+token for what follows it, so a read after a store takes another token and is no
+match for a read before it.  The token is among what a load is numbered by, and
+that is the whole of how a store is accounted for -- a body inlined in place of a
+call hands on the token it ended at, so the chain runs through it too.  What the
+chain does not cover is a call, which is not in it and may write what it was
+handed or, answering through the caller's storage, the caller's own room; and a
+request to the kernel.  So a load stands for an earlier one only where no call
+and no request to the kernel lies on any way from the one to the other.
 """
 
 from __future__ import annotations
@@ -31,8 +33,8 @@ from __future__ import annotations
 from typing import Hashable
 
 from ...ir.function import BasicBlock, Function
-from ...ir.inst import (CallInst, CodeInst, FrameInst, Instruction, LoadInst,
-                        MemStartInst, Ordering, StoreInst, SyscallInst,
+from ...ir.inst import (CallInst, FrameInst, Instruction, LoadInst,
+                        MemStartInst, Ordering, SyscallInst,
                         Terminator)
 from ...ir.module import Module
 from ...ir.value import Value
@@ -73,11 +75,12 @@ def _shareable(inst: Instruction) -> bool:
 def _writes_unseen(inst: Instruction) -> bool:
     """Whether *inst* may change memory a later read with the same token reads.
 
-    A store is among them although it makes a token of its own: a body inlined
-    in place of a call keeps the chain it had, so a read in the caller after it
-    still takes the token from before the call.
+    A store is not among them: it makes a token of its own, and a read after it
+    takes that one -- inlined bodies included, which hand on the token they
+    ended at.  A call and a request to the kernel are not in the chain, and an
+    ordered load is a fence as well as a read.
     """
-    return isinstance(inst, (CallInst, SyscallInst, StoreInst)) or (
+    return isinstance(inst, (CallInst, SyscallInst)) or (
         isinstance(inst, LoadInst) and inst.ordering is not Ordering.PLAIN)
 
 
