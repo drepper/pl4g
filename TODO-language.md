@@ -2,7 +2,8 @@ To Do List for the PL4g language
 ================================
 
 `[ ]` open, `[x]` done, `[?]` needs a decision before it can be started -- such an entry carries a
-`Question:` paragraph saying what is undecided and what the choices are.
+`Question:` paragraph saying what is undecided and what the choices are.  `[-]` no longer applies: what it asked about was
+removed or decided otherwise, which its last paragraph says.
 
 [x] expressions can use `(` and `)` for grouping, like most other languages.  Done with the expression parser.
 
@@ -39,6 +40,8 @@ To Do List for the PL4g language
 [ ] a growing run of records in the language, which is what would make `add_executable` an ordinary function rather than one the
     compiler provides.  It wants the heap and a list type whose elements are records, both of which exist for values that are not
     records; what is missing is the one that would let a build object hold its own artifacts.
+    **Out of date (2026-10-04):** Lists of records exist now (`[Job]`, joined with `⧺`); what is still missing is copying a record
+    holding text into a container (4623), and `add_executable` is still built in.
 
 [ ] let a build function raise the ceiling on what the compiler will work out.  A hundred thousand steps is beyond anything a
     person writes and is not beyond what a generator writes; Zig has `@setEvalBranchQuota` for exactly this.
@@ -47,10 +50,12 @@ To Do List for the PL4g language
     4604) and shown by the language server; nothing writes them out as a manual.  What it would need is already there -- the
     summary, the parameters, what is answered with -- and what it would have to decide is what a page looks like.
 
-[ ] answer with a tuple that wants more registers than the convention has.  Refused today (8501): a tuple is one register per
+[x] answer with a tuple that wants more registers than the convention has.  Refused today (8501): a tuple is one register per
     member and these conventions answer in two per kind, so a tuple of three integers cannot be answered with.  What every ABI
     does instead is hand the callee a place to put it, which needs the caller to reserve one -- so it waits on holding a value in
     memory at all, which the entry in TODO-pypl4g.md carries.
+    Found done on 2026-10-04: tests/language/tuple-answered-through-storage answers a five-member tuple through the caller's
+    storage, and a result of several values goes the same way (result-of-several-values).
 
 [x] add sets and dictionaries with Python's semantics and a lookup that does not grow with what is in the collection.  The front
     end is done: `⸨a, b⸩` is a set and `⸨k: v⸩` a dictionary, a type is written the same way, a lookup in a set answers with a
@@ -165,6 +170,9 @@ To Do List for the PL4g language
     checked; the "nine operators from one line" case wants exactly that.  Following a reference to what it names, which expansion
     running before the definitions are installed leaves nothing to ask.  And whether a macro may be exported, which bundles answered
     with `@[export]`.
+    **Out of date (2026-10-04):** Exporting a macro and `⎕name` are done (macro-imported, macro-reads-a-literal); `⎕kind` answers
+    a number rather than the enumeration the spec wants; `⎕apply`, macros writing definitions and following references are still
+    open.
 
 [ ] turn a value into text, and format.  **Decided** on 2026-10-01, nothing implemented;
     [spec/formatting.md](spec/formatting.md) has the proposal and
@@ -182,10 +190,12 @@ To Do List for the PL4g language
         (4924), and a definition in the importing file wins silently.  An operator a
         module does not export cannot be told from one it never wrote, there being no
         name to ask about, which is where this differs from a bundle.
-    [ ] **a macro may be exported and invoked through a module's name.**  Measured:
+    [x] **a macro may be exported and invoked through a module's name.**  Measured:
         `m.twice⌜3u8⌝` does not parse, and `@[export]` on a macro crashes the compiler
         with 9901 from the module loader.  The macros entry left this open; `std.format`
         closes it, and the internal error is a bug either way.
+        Found done on 2026-10-04: `@[export] macro format` in `std`, invoked as `std.format⌜…⌝`, and
+        tests/language/macro-imported.
     [x] **a generic function may be exported.**  Done, and it was three things: a
         `_Generic` had no export flag at all, so `@[export]` on one was silently ignored
         and a module could ship no generic function whatever; an instance made for an
@@ -256,15 +266,19 @@ To Do List for the PL4g language
         keys and values go in as they are, and nothing is given back.
     [ ] **copying records, tuples and nested arrays into an allocator** (4623), which a container
         of them needs.
-    [ ] **a top-level array of text** is refused (9902), which is what a table of literal text
+    [x] **a top-level array of text** is refused (9902), which is what a table of literal text
         such as `std.text`'s digits would want.
+        Found done on 2026-10-04: `in ⎕static` (2026-10-02T20:00): `std.text`'s digits are a `str⟦10⟧ … in ⎕static`, and
+        tests/language/static-data.
     [ ] **tail calls between functions**: a cycle `f` → `g` → `f` takes stack; the guarantee
         covers a function calling itself.  Wants frames and arguments arranged alike across
         the cycle.
     [ ] **`in` per component** -- `(str in a, str in b)`, or a record field holding text made
         in an arena -- which wants `⧖` names on types that are not references.
-    [ ] **a type `T⟦3,⟧` that states some dimensions and not others** is accepted, though
+    [-] **a type `T⟦3,⟧` that states some dimensions and not others** is accepted, though
         the spec says every dimension says how many or none does; nothing refuses it yet.
+        No longer applies (2026-10-04): decided the other way: a shape may be stated in part (spec.md, "A shape may be stated in
+        part"; tests/language/array-shape-told-in-part).
     [ ] **`errdefer`**, Zig's defer that runs only on the way out with a failure, once
         something wants it.
     Left over and named in the proposal: float text, which is the large piece; whether an
@@ -272,6 +286,8 @@ To Do List for the PL4g language
     format-by-specification and which nothing yet needs; and a chain of joins folded into
     one allocation, which every join wants and which is measured at three allocations for
     four pieces today.
+    **Out of date (2026-10-04):** "Nothing implemented" is no longer true: `⍕`, `std.text`, `std.format`, `print`, `println` and
+    their pools are done (std-format, print-and-println, std-text, format-in-a-pool); what is left is in the items below.
 
 [ ] let a program write an iterator.  The compiler is the only implementor of the protocol, and there are five of its
     implementations now: a range, an array, a list, a string and a table.  What the entry used to say waits on "something to
@@ -313,12 +329,18 @@ To Do List for the PL4g language
     answers the element and the next iterator together -- `fn next(it: Walk) → 〈T, Walk〉?` -- and a result whose answer is a
     tuple cannot be written at all: the `?` is parsed only after a named type, in the compiler and in the grammar alike.  That is
     an entry of its own below, and this one waits on it if the pure shape is the one wanted.
+    **Out of date (2026-10-04):** Programs write iterators as generators (`fn g(…) ⇉ T`, 2026-10-03), a cursor is spelled `⌖⇉T ⇇
+    U`, and `value.name(args)` exists since 2026-10-04T13:00; only a `foreach` over a program's own record with a `T.next` is
+    still refused (4438).
 
 [ ] let a result's answer be any type.  `u8 ? ⎕narrowing` is written today and `〈u8, u8〉 ? ⎕narrowing` is not: the `?` is read
     only after a named type, in `_parse_named_type` and in the grammar's `_plain_type` alike, so a tuple, a list, a set or an
     array cannot be the answer of one.  Nothing in the representation minds -- `parts_of` spreads a result's answer out whatever
     it is, and a tuple holding a result already works -- so this is the type grammar and nothing else.  What wants it first is a
     function that answers several values and may fail, which is the shape a pure iterator's `next` has.
+    **Out of date (2026-10-04):** An array may be a result's answer now (`u8⟦⟧ ? i32`), and strings and records compile
+    (result-of-several-values); tuples, lists and sets still cannot take `?`, and generators have made the pure `next` less
+    pressing.
 
 [ ] a range as a value.  Refused today (4443): a range stands where a loop takes its values from and nowhere else.  Making it a
     value means a type for it, a layout, and a rule about what a range of one type compared with a range of another means; Rust
@@ -393,6 +415,8 @@ To Do List for the PL4g language
     so.  Rust says it with a lifetime, Zig by leaving it to the programmer, Go by putting everything a slice can point at on a
     collected heap.  The arena is the shape of an answer here -- a value could name the arena its elements are in, which is what the
     entry about giving an arena back already wants for collections -- and the two should be answered together.
+    **Out of date (2026-10-04):** The arena machinery it would pair with exists now (`→ T in a`, `in ⎕static`); the refusal (4454)
+    is what is left.
 
 [x] iterate over an array, a set and a dictionary.  Done: four things are iterators and none of them is called.  An array gives
     each element where it has one dimension and each row of the outermost where it has more; a set gives each key; a dictionary
@@ -481,6 +505,8 @@ To Do List for the PL4g language
     `⸨str: str⸩` is refused by the backend (8501): the loop variable is bound to a value of several parts, which the instruction
     selectors do not build.  Reading by key, writing and counting work whatever the table holds; only the walk is waiting, and
     the environment is the first thing anybody would want to walk.
+    **Out of date (2026-10-04):** Measured: the 8501 is gone, and walking a `⸨str: str⸩` now ends in an internal compiler error
+    (9901, "making a 〈str, str〉 out of 2 values"), which is worse.
 
 [ ] give the room back.  A table that has lost most of its keys keeps the array it grew into: nothing shrinks one, and the
     arena it came out of hands nothing back either.  What would decide it is the same two counts the growth already reads.
@@ -488,6 +514,8 @@ To Do List for the PL4g language
 [ ] a read that does not wait.  `std.write` answers a handle and `std.read` does not: what a read is for is the bytes, and a
     program that has not waited does not have them.  A program that wants several reads in flight -- from several descriptors --
     wants the same pair `write` and `flush` are, and wants somewhere to say which buffer each filled.
+    **Out of date (2026-10-04):** `std.io.Reader.start` answers a `Pending` without waiting and `std.flush` waits for it; a `std`
+    read that does not wait is what is missing.
 
 [x] use `ReadWriter`.  Done on 2026-10-03: `std.Io.open(name, ⌜std.ReadWriter⌝)` answers one.  The decision of 2026-09-18 that
     there is no `open` call was reversed by the user's asking for `std.Io.open`, with the kind of device handed as a type.
@@ -503,6 +531,8 @@ To Do List for the PL4g language
 [ ] say how long a buffer handed to the runtime must last.  `std` hands over the buffer's address as a number, so nothing relates
     the two at all: the request is complete before the call returns and that is a property of the runtime's design rather than of
     the type.  A ring that answered later would need the language to say it, and `⎕address` is where it stops being able to.
+    **Out of date (2026-10-04):** "The request is complete before the call returns" is no longer true: `std.write` and
+    `Reader.start`/`Writer.start` answer a `Pending`, and tasks run under `std.run`, so the lifetime question is a real one now.
 
 [ ] let `@[external]` reach something the compiler does not carry.  What it may name today is what the packaged runtime defines,
     there being no linker.  A program that wants to call something else wants either a linker or a way to add to what is
@@ -532,6 +562,8 @@ To Do List for the PL4g language
 [ ] name the whole errno table, or carry the number beside the name.  `std.Error` names eighteen of them and everything else is
     `other`, which loses which one it was.  The tidy answer is a record of a named kind and the raw number -- but a record as a
     result's error is a part that is itself several values, which `parts_of` and `through_storage` would both have to be taught.
+    **Out of date (2026-10-04):** `std.Error` names 21 values now, and every result carries the kernel's own number (`? i32`);
+    only `as_error` and `error_name` fold what they do not name into `other`.
 
 [x] write a `str`.  Done on 2026-09-18: `⎕bytes(TEXT)` answers what a string is made of, which is what a device takes.
 
@@ -539,6 +571,8 @@ To Do List for the PL4g language
     nothing says an array may not be written; bound to a `mut` name and assigned into, it would write where the image is and the
     program would fault.  It is the fixed-array question below asked of something that is definitely not writable, and the two
     want one answer.
+    **Out of date (2026-10-04):** Measured: the program does not fault -- the literal's bytes are in writable `.data` -- and
+    writing through `⎕bytes("abc")` changes the literal itself, so the next `⎕bytes("abc")` reads `Abc`.  Worse than a fault.
 
 [x] ask which variant a sum holds: `match`.  Done, and it takes an enumeration and a result apart as well.  A result and an
     enumeration run; for a sum every rule about the arms is checked and the compiler then says it cannot generate for one, what is
@@ -571,17 +605,21 @@ To Do List for the PL4g language
     of one type, and the block the arms join at carries it out -- which is what lets an assignment be pulled out of the arms and
     written once.  The same question for `if` is still open below and should be answered the same way.
 
-[?] read a field of a product.
+[x] read a field of a product.
     Question: `p.x` is the obvious spelling and is what the grammar already parses for a name reached through a module, so the
     two would be one syntax with two meanings decided by what the base is -- which is what Go, Rust and Zig all do.  A product's
     fields may be reordered by the compiler, so a field is reached by name and never by position.
+    Found done on 2026-10-04: `p.x` is done (the `[x]` entry on reading a field), and the layout keeps the order the fields were
+    declared in.
 
-[?] allowing definition member functions
+[x] allowing definition member functions
     Question: this needs a syntax for the receiver.  Considered: Go's `fn (p: Point) length() → f64`, which keeps functions at the
     top level and makes the receiver an ordinary parameter; a block nested inside the type after Rust's `impl`, which groups them;
     and the receiver being implicit, as in C++ and Java, which the language's preference for saying things outright argues
     against.  A second question rides on it: whether a member function is a different kind of thing from a function whose first
     parameter happens to be the type, or only a different way of writing one -- the second is simpler and is what Go does.
+    Found done on 2026-10-04: decided 2026-10-01T03:30 ("Attaching code to a type: design B"), and `v.f(args)` added
+    2026-10-04T13:00.
 
 [ ] if an attribute definition is followed by an empty line or the end of the file, it is not attached to anything and the
     action is global.  Implementable now and needed by `@[required(NAME)]` below.  Note that the parser currently skips newlines
@@ -619,6 +657,8 @@ To Do List for the PL4g language
     cannot before there is a heap; and what it does when the write itself fails, since there is nowhere left to report that.
     Also whether the message is a fixed string, which needs no formatting and so no runtime, or may carry a number, which needs
     the smallest possible integer-to-text routine in every binary that might fault.
+    **Out of date (2026-10-04):** A ring that cannot be made is no longer an error path: the runtime falls back to plain system
+    calls (details.md); the questions about descriptor 2 and the message remain.
 
 [?] the sentence "the grammar has to be context-free, there is no process definitions in order" in spec/spec.md is garbled.  It
     is read as "there is no *need to* process definitions in order", so a forward reference at the top level is legal, and the
@@ -668,18 +708,21 @@ To Do List for the PL4g language
     The fixed pair of registers x86-64 divides through needed nothing new after all: the instruction declares that it writes them,
     and the allocator already keeps a value out of a register whose life overlaps its own.
 
-[ ] implement `↑` for exponentiation.  Not begun, and it needs a decision first: with a constant exponent it is a few
+[-] implement `↑` for exponentiation.  Not begun, and it needs a decision first: with a constant exponent it is a few
     multiplications and every one of them checks, which is straightforward; with an exponent that is not known until the program
     runs it is a loop, and the language has no way to write one, so the loop would have to be emitted -- or the operator
     restricted to constant exponents, which is what every language that has an integer `**` other than Python effectively does.
+    No longer applies (2026-10-04): exponentiation is `a ⁿ b` and written raised, `a²` (tests/language/power-operator and its
+    siblings), and `↑` rounds up.
 
 [x] decide what a string is, now that there is a character.  Done: `str` is where its bytes are and how many there are, always
     well-formed UTF-8, walked by `foreach` a character at a time and joined with `⧺`.  There is no index, the n-th byte of
     UTF-8 not being the n-th character; a grapheme cluster is the larger question and stays open.
 
-[ ] take the type a set or a dictionary holds down to what is written inside it.  `let s: ⸨u8⸩ = ⸨1, 2, 4⸩` does not
+[x] take the type a set or a dictionary holds down to what is written inside it.  `let s: ⸨u8⸩ = ⸨1, 2, 4⸩` does not
     compile: the numbers have nothing to say what they are, where an array and a list in the same place do take it.  Found while
     making `foreach x: T = ...` hand the declared type to what the loop walks.
+    Found done on 2026-10-04: `_entries_written` takes the type from the declaration where no entry says one.
 
 [ ] decide what else a condition settled while compiling may ask.  Today it asks whether two types are the one type and joins
     those answers; whether a number written down is what it is, whether a function has an attribute, and whether a type is one
@@ -710,10 +753,11 @@ To Do List for the PL4g language
     one in needs both, and a rule for what happens to a name holding the list when the elements move.  The place-and-count that
     `†` already writes back is what such a rule would be written in terms of.
 
-[ ] compare two strings.  `"a" = "a"` is refused today, which is honest and not enough: what two strings being equal means is
+[x] compare two strings.  `"a" = "a"` is refused today, which is honest and not enough: what two strings being equal means is
     that their bytes are equal, UTF-8 being a one-to-one encoding of a sequence of code points -- so it is a length test and a
     comparison of the bytes, and the run-at-a-time machinery is what would do the second.  Ordering is a different question and
     a much larger one: which order is a collation, and there is more than one.
+    Found done on 2026-10-04: all six comparisons are defined on strings, in code-point order (tests/language/string-compare).
 
 [x] say how long a string is.  Done as `#`, which answers characters -- the number that needs a walk, on the grounds that the
     number that does not is the one nobody wants.  What is still open is how the *byte* count is spelled, it being in the value
@@ -731,13 +775,19 @@ To Do List for the PL4g language
 [ ] decide whether `char` may be a key of a set or a dictionary, and whether it may be the tag of an enumeration.  Both are
     questions about which types are alike enough to be hashed and compared, and a code point is a number as far as either is
     concerned -- but a type that is deliberately not an integer type should say so once rather than have every such place ask.
+    **Out of date (2026-10-04):** The key half is done (`char` is a key); an enumeration held as a `char` is refused by 4420, with
+    no decision written down.
 
-[ ] the same arithmetic on floating-point values, where IEEE infinity and IEEE not-a-number are what an overflow or an underflow
+[x] the same arithmetic on floating-point values, where IEEE infinity and IEEE not-a-number are what an overflow or an underflow
     produces and are what the check looks for.  Waits on the float entry above.
+    Found done on 2026-10-04: an infinity or a NaN as an answer stops the program (float-arithmetic,
+    float-overflow-stops-the-program, float-division-overflow-stops-the-program).
 
 [ ] report an overflow that can be seen at compile time as a compilation error rather than leaving it to fault at run time.  The
     constant folder already computes the answer and declines to fold where it does not fit, which is where the report belongs;
     what it needs is somewhere to report from, the folder being an optimization that does not run at every level.
+    **Out of date (2026-10-04):** An operation whose operands are both written down is reported already (4214, 4215); only an
+    overflow the optimizer's folder finds is not.
 
 [?] Implement strings.  Literal strings are always encoded in UTF-8.  They are not mutable.  Variables can be defined as type `str`
     which can be initialized with a string literal.  If not marked mut a `str` object cannot be modified and has a fixed length and
@@ -752,6 +802,8 @@ To Do List for the PL4g language
     through the same path an arithmetic fault takes, rather than answering with a result: a result would put a `?` on every value
     a program builds rather than computes.  What is left for the `mut` half is the spelling -- naming which arena a value lives in
     -- which is the entry below.  Small-string optimization is an implementation choice underneath either answer.
+    **Out of date (2026-10-04):** The immutable `str` is done -- join, walk, compare, `#`, `⎕bytes`, `in ⎕static`, `in a` -- and
+    nothing waits on a pointer any more; what is left is the growable `mut str`, which is its own entry.
 
 [x] Implement boolean values.  Only the values `true` and `false` are defined.  Assigning any other value is an error.  Done and
     tested in both directions; a constant `bool` goes in `.rodata` and a `mut` one beside the variables, like any other value.
@@ -810,6 +862,8 @@ To Do List for the PL4g language
     this is modelled on, is relative -- |a-b| ≤ t × max(|a|,|b|) -- which costs two magnitudes and a multiplication and a
     comparison, and answers both of those correctly.  The question is whether that cost is worth paying by default, whether both
     should exist under separate spellings, or whether the tolerance itself should say which kind it is.
+    **Out of date (2026-10-04):** `⎕tolerance` exists, assignable, at 1e-13 (float-tolerance); only relative against absolute is
+    open.
 
     The comparison here is true as long as the difference is not larger than a limit.  For the time being, make this a builtin
     variable with the value 1e-13.  In future this will be a runtime-time variable.  Compare this with `⎕CT` in APL.
@@ -842,12 +896,13 @@ To Do List for the PL4g language
     wanted is the successful one, which is Zig's arrangement and C++'s and the only way to write one, there being no constructor.
     `÷` and `%` are the operations that answer with one, on every numeric type.
 
-[ ] let the error of a result carry a value: `TYPE1?TYPE2`.  The syntax is parsed and refused (9902), and this is now the only
+[x] let the error of a result carry a value: `TYPE1?TYPE2`.  The syntax is parsed and refused (9902), and this is now the only
     part of the result type that is not implemented.  It is not a question about the result type any more: the sum type exists,
     and what is missing is a way to *write* a value of one, which is the `[?]` entry above.  Until something can construct an
     error, such a type is one no program could put anything in.  A decision rides on it: what the error type of a division should
     then be, the two cases a division cannot answer -- a zero divisor and the one overflowing signed pair -- not being told apart
     today.  In memory such a result is the larger of the two payloads and a tag, which is what a sum of two variants already is.
+    Found done on 2026-10-04: 2026-09-16T06:30, with `⊥(x)`; `std` answers `? i32` throughout.
 
 [x] let a variable at the top level hold a result, and a parameter take one.  Done: in memory a result is its answer and one byte
     beside it saying whether there is one, so reading such a variable is two reads of one place and writing it is two writes; in
@@ -919,13 +974,16 @@ To Do List for the PL4g language
     already and there is one style, so there is nothing yet to choose between; when there is a second, an attribute beside
     `@[cdecl]` is where it goes, and `ReturnStyle` is what it sets.
 
-[ ] say what order a call's arguments are worked out in.
+[x] say what order a call's arguments are worked out in.
+    Found done on 2026-10-04: it is the `[x]` entry above it: every argument is worked out left to right.
 
 Runtime
 -------
 
-[?] Create a data type for for an output streams which is used for
+[x] Create a data type for for an output streams which is used for
     standard output/error.  For now a simple representation with a file descriptor and `write` functions is sufficient.
+    Found done on 2026-10-04: `std.io.Writer` is that type, and `init.io.output` and `init.io.error` are of it (2026-10-04T09:00
+    and 10:00).
 
 [x] decide whether `@[export]` should mean one thing or two.  Two: `export` says what a file importing this module may name,
     `visible` says whether the finished image offers the symbol, and neither implies the other.  A definition a module lends and
@@ -952,6 +1010,8 @@ Runtime
 
 [ ] let a variable at the top level hold a lambda (4550).  It needs the image to hold an address of code, which is what a string
     at the top level needs as well (9902).
+    **Out of date (2026-10-04):** Text at the top level is no longer refused: it is in the image with `in ⎕static` (static-data);
+    the lambda is still refused.
 
 [ ] give a lambda's environment back.  One kept in `⎕heap` stays there, as a string a name held does; the third word says which
     allocator it came from, and a sized free needs the size, which a header word before the environment would carry.
@@ -1148,6 +1208,8 @@ Runtime
 
 [ ] let a task read.  `std.read` waits where it is called, so a task reading holds up every other; it wants a `read` answering a
     `Pending` as `write` does, and the buffer it reads into kept where the task is -- in `⎕heap`, or the task's own frame.
+    **Out of date (2026-10-04):** `std.io.Reader.start` starts a read without waiting; a `std` read for tasks, with the buffer
+    where the task is, is what remains.
 
 [ ] let a task wait in a function it calls.  `⎕await` is a `yield`, so only a task's own body waits; a helper that waits is a
     generator delegated to with `yield ⇉`.  Whether that is enough, or the language wants a function that may wait without being
@@ -1157,6 +1219,7 @@ Runtime
 [ ] open a directory.  `std.fs.Dir` is made only by `std.fs.State.cwd`, which answers `AT_FDCWD`; a `Dir.open_dir` answering a
     `Dir` with a descriptor of its own, closed like the devices it opens (`@[closed_by]`), is what makes `openat` worth having
     beyond the one directory.  Zig's `Dir.openDir` and `Dir.close` are the shape.
+    **Out of date (2026-10-04):** `std.fs.State.cwd` is a singleton now, reached by `std.fs.cwd()`, and `Dir.open` takes `&Dir`.
 
 [ ] make a device out of a descriptor without spelling out the ring.  A program that has a descriptor from somewhere else -- a
     pipe made with `⎕syscall` -- writes `std.io.Writer(.fd ← n, .ring ← init.io.error.ring)`, copying the address from a device

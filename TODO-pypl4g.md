@@ -2,7 +2,8 @@ To Do List for the pypl4g compiler
 ==================================
 
 `[ ]` open, `[x]` done, `[?]` needs a decision before it can be started -- such an entry carries a
-`Question:` paragraph saying what is undecided and what the choices are.
+`Question:` paragraph saying what is undecided and what the choices are.  `[-]` no longer applies: what it asked about was
+removed or decided otherwise, which its last paragraph says.
 
 [x] a system call from the language: `⎕syscall(NUMBER, ARG...)`, answering the kernel's own `i64`.  Done, on all three
     targets: an IR instruction outside the token chain, `asm.kernel` to say what the entering instruction destroys and reads,
@@ -165,6 +166,8 @@ To Do List for the pypl4g compiler
     floating-point types or constants, calls, casts, the result type or the three instructions that make and read one.  Nothing
     depends on it today -- the golden round-trip test names the cases it covers -- and what it costs is that a dump of a program
     using any of those cannot be fed back in.  Worth closing in one piece rather than a shape at a time.
+    **Out of date (2026-10-04):** `f32` and `f64`, casts and records named but not defined are read back now; floating-point
+    constants, calls and results are what remain.
 
 [ ] build a jump table for a switch with enough cases.  `SwitchInst` is lowered now, as a chain of comparisons in one block --
     one per case, in the order the instruction holds them, with what falls off the end going the default way -- and a `match` over
@@ -191,24 +194,30 @@ To Do List for the pypl4g compiler
     `⎕heap` is the one the compiler provides, and `in` says which arena a collection comes out of.  A program makes as many as it
     wants, and a collection made out of two others comes out of the same arena the first of them did.
 
-[ ] give an arena back from a program.  The runtime has `__pl4g_release` and the language has no way to call it, so nothing a
+[x] give an arena back from a program.  The runtime has `__pl4g_release` and the language has no way to call it, so nothing a
     program writes can give an arena back -- which is why nothing a program writes can yet be left pointing into one that went.
     What it needs is a way to write the call, and, before that, the rule that makes it safe: a value that lives in an arena has to
     say so in its type, so that one from an arena that has been given back cannot be stored where one from another is expected.
     Today `in` says where a collection went and is no part of its type, and this entry is what would change that.
+    Found done on 2026-10-04: `⎕empty(NAME)` gives an arena back (2026-10-01T09:40), made safe by tracking what it held
+    (4613-4615).
 
 [ ] hash a value that is not one word.  Done for everything that can be a key today -- an integer, a truth value, an enumeration
     -- by one multiplication, because all of them fit in a word.  A string or a product would want a hash over its bytes, emitted
     per type, which is what the entry about a wider key in TODO-language.md waits on.
+    **Out of date (2026-10-04):** Text keys are hashed over their bytes (FNV-1a); only records and other keys of several words
+    remain.
 
-[ ] an allocator that gives memory back.  An arena frees nothing until the whole of it goes, which is right for a compiler and
+[x] an allocator that gives memory back.  An arena frees nothing until the whole of it goes, which is right for a compiler and
     wrong for a program that runs for a long time.  A size-class allocator is the thing every language ends up with; what it needs
     first is a program that runs long enough for the difference to show.
+    Found done on 2026-10-04: `⎕heap` gives memory back an object at a time, in size classes with free lists (2026-10-01T23:30;
+    `pl4g_heap_free`).
 
 [x] hash a value.  Done: Fibonacci hashing, one multiplication with the high bits folded down, generated once rather than per key
     type -- every key is one word, so there is nothing per type to generate.
 
-[ ] hold a value whose type is a product or a sum.  Both are refused today (8501): a product is every one of its fields at once
+[x] hold a value whose type is a product or a sum.  Both are refused today (8501): a product is every one of its fields at once
     and a sum is one variant and a tag, and neither is a thing a register holds.  What they want is a place in memory, an address
     to reach it by, and a convention for passing one to a function and answering with one -- which on all three targets means
     small aggregates in registers and large ones behind a pointer.  Nothing in the language writes such a value yet, so this waits
@@ -216,6 +225,8 @@ To Do List for the pypl4g compiler
     `pypl4g/ir/layout.py`, including where each field starts, and the result type shows the shape the answer takes: two registers
     inside a function and in the convention, two accesses of one place in memory, and a side map from a value to its second half
     so that the allocator sees ordinary values and nothing aggregate.
+    Found done on 2026-10-04: a record travels as its fields and a sum is held in memory (spec.md, "Product and sum types"); what
+    is left is the two entries above, a record holding a sum and a sum at the top level.
 
 [x] produce a truth value in a register.  Done: `setcc` and a widening move on x86-64, `cset` on AArch64, and `slt`/`sltu` with
     the operands exchanged or the answer inverted on RISC-V, equality there being a subtraction and then a question about the
@@ -296,6 +307,8 @@ To Do List for the pypl4g compiler
     is wrong yet; the loads the `largeanswers` pass writes after a call are the first code that depends on it, and a scheduler
     would be the thing that breaks them.  A callee can write a variable at the top level, so this is wanted for every call and not
     only for those.
+    **Out of date (2026-10-04):** `has_effects` is the callee's purity now, so a pure call may be dropped; the token is still
+    missing.
 
 [x] compute a narrow sum or difference at its own width and read the flags, rather than widening and comparing.  Done: the
     backend states which widths its arithmetic writes flags about -- all four on x86-64, thirty-two and sixty-four on AArch64,
@@ -307,9 +320,11 @@ To Do List for the pypl4g compiler
     which is false for the trapping one, so a trapping addition took the branch written for a subtraction -- and the widest signed
     and unsigned sums did not notice they had gone past.  Every such test now names the ordinary operation the two are built from.
 
-[ ] let the grammar read an array literal that goes over more than one line.  The compiler reads one -- a bracket is not a
+[x] let the grammar read an array literal that goes over more than one line.  The compiler reads one -- a bracket is not a
     place a line ends, so the layout rule lets it continue -- and `tree-sitter-pl4g` does not, which the agreement test catches
     the moment a program in the suite is written that way.  Found while writing one; the program was put on one line instead.
+    Found done on 2026-10-04: a line break inside brackets is an extra in the scanner (tree-sitter-pl4g/src/scanner.c), and an
+    array literal over several lines parses.
 
 [ ] use the widest registers the newest level has for a run of elements.  `v4` promises AVX-512, whose registers are
     sixty-four bytes; what is emitted for it today is AVX2's thirty-two, which `v3` already promises.  Two things are in the
@@ -328,6 +343,8 @@ To Do List for the pypl4g compiler
 
 [ ] multiply a run at once.  Seeing that a product went past wants the upper half of it, which none of these machines gives at
     every lane width -- the same reason the narrow scalar arithmetic leaves multiplication to the widening path.
+    **Out of date (2026-10-04):** The wrapping multiply is done a run at a time already, on x86-64 and AArch64; only the checked
+    one is missing.
 
 [ ] shift a whole run at once.  A shift by one value in every lane is one instruction on both machines that have runs, and a
     shift by a lane apiece is another on the newer x86-64 levels; neither is emitted, so a shift over an array is still an
@@ -357,6 +374,8 @@ To Do List for the pypl4g compiler
 [ ] raise a whole run at once, and fold a power of a value written down.  `v²` over an array is one element at a time, where
     each multiplication could be one instruction per register's worth; and `2u32³` reaches the code generator as two
     multiplications, where the same arithmetic written out is folded.
+    **Out of date (2026-10-04):** A power of constants folds now; a power over an array and a floating-point power are what
+    remain.
 
 [ ] use what the RISC-V extensions offer beyond the two the code generator asks about today.  `b` brings Zbb, whose `min`,
     `max`, `minu` and `maxu` are one instruction where `⌈` and `⌊` are a comparison and a conditional move, and whose
@@ -376,6 +395,8 @@ To Do List for the pypl4g compiler
 [ ] fold the four roundings of a value written down.  `↓2.5f64` reaches the code generator as an instruction, where the
     arithmetic on two written-down floating-point values is folded away.  Three of the four are settled while compiling; the
     fourth is not, which is the whole of why it is impure.
+    **Out of date (2026-10-04):** `constfold` folds integers only, so floating-point arithmetic on constants does not fold either;
+    this wants that first.
 
 [ ] round a whole run at once.  All three machines round a register of lanes in one instruction, and the operators are listable,
     so rounding an array is an element at a time where it could be one instruction per register's worth.  It wants a `unary`
@@ -393,6 +414,7 @@ To Do List for the pypl4g compiler
     today (8501): the answer is a row, and how long a row is, is not known until the program runs, so the room for it has to be
     taken while it runs and the walk has to be two loops rather than one written out.  It is the same piece of work walking such
     an array wants (4482).
+    **Out of date (2026-10-04):** It is refused with 9902 now, not 8501.
 
 [ ] leave out the comparison where one side of `⌈` is a constant at the end of the type.  `x ⌈ 0u8` is `x` and
     `x ⌊ 255u8` is `x`, and both are what a generator writes when the bound comes from somewhere else.  Neither folds
@@ -402,6 +424,8 @@ To Do List for the pypl4g compiler
     ("no encoding of 'mov' accepts ..."), because what a tuple travels in is one register per part and a part that is itself
     several has nowhere to go.  It is what stops `⎕enumerate` counting the turns of a dictionary, whose turn is already a
     pair, and it is the same gap as the array below.
+    **Out of date (2026-10-04):** A tuple holding a tuple works (comptime-tuple-of-strings; ebdbe9c); `⎕enumerate` over a
+    dictionary is still refused.
 
 [ ] make the bill of materials the same in two directories.  A source's row names the path it was read from, so the same program
     built from two places gives two images.  What should be recorded instead -- a path relative to something, or only the name --
@@ -410,6 +434,8 @@ To Do List for the pypl4g compiler
 [ ] leave the definitions that were dropped out of the bill of materials, or say in the table that they were dropped.  Every
     definition of every source read gets a row, including one the image did not need and the reachability pass removed, so the
     table names things the binary does not contain.  Which of the two a reader wants is the question.
+    **Out of date (2026-10-04):** An imported module's dropped definitions get no row any more, only bodies that were read do; the
+    program's own files still list every definition.
 
 [ ] carry the memory token out of an `elif` condition that writes.  A store in the condition of an `elif` that is neither the
     first arm nor the last, inside a nested `if`, leaves a token the join block reads without its being passed as a block
@@ -556,6 +582,7 @@ Optimizations
     that calls one is refused as asking about a piece of the program where nothing has one.  `⎕head`, `⎕parts`, `⎕part` and `=` are
     what the tests needed.  What `⎕kind` should answer for a clause, a bundle or an operator definition is the open part, and
     `⎕apply` wants a decision about whether a macro may build a piece the parser could not have produced.
+    **Out of date (2026-10-04):** `⎕name` is done (macro-reads-a-literal); `⎕kind` and `⎕apply` are what remain.
 
 [ ] The timing table compares columns that are not comparable.  Measured three times on 2026-09-30/10-01: the same code, timed
     hours apart on this machine, differs by up to 14% -- `enum-values` recorded 6.49 ms in one column and 7.42 in the next with
@@ -629,9 +656,13 @@ Optimizations
     imports `std` and the entry point calls `pl4g_io_drain`, every image carries all of it -- `pl4g_env`, `io_open`, the heap --
     some four kilobytes of code on x86-64 for a program that calls none of them.  The relocations say which function calls which,
     so the same walk `dropunreached` makes would do, given the package keeps each function's extent.
+    **Out of date (2026-10-04):** What pulls the runtime in is the entry point -- `pl4g_args` and `pl4g_io_drain` -- not a
+    destructor of `std`, which is gone.
 
 [ ] give the startup function's `std.Init` no register where nothing reads it.  Every startup function takes the record now, and
     on x86-64 one that never names it still copies the pointer (`mov rcx, rax`) before anything else.
+    **Out of date (2026-10-04):** Measured: the copy is there only where the body needs the register, at -O1 (`exit0`), not in
+    every startup function.
 
 [ ] lower `std` on demand in the macro pass as well.  `check_macros` reads the program's imports itself, and since every program
     imports `std` a program with a macro pays for `std` there: the `macro-*` samples went from about 8 ms of work to about 51 at
