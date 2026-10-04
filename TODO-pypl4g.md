@@ -138,10 +138,13 @@ removed or decided otherwise, which its last paragraph says.
     already done by another route -- a call destroys what the callee turned out to destroy -- and the first half wants the
     ordering above, since a caller has to know what its callee chose.
 
-[ ] split a virtual register's live range the way a physical one's is split.  A physical register is written wherever a convention
+[x] split a virtual register's live range the way a physical one's is split.  A physical register is written wherever a convention
     says it is and holds nothing between a write and the read that takes the value away, so its range is several stretches.  A
     virtual register still gets one hull, which is right for a value with one definition and wrong for one the spill rewrite
     redefines; the hull is conservative, so this is a missed register rather than a defect.
+    Done on 2026-10-04: a virtual register's range keeps the stretches it is live in, worked out block by block as a
+    physical one's are, and two ranges whose stretches never meet may hold one unit.  2.0-2.6% less `.text` over the language
+    tests on the three targets.
 
 [ ] keep a spilled value in a register across instructions that do not read it, where that is cheaper than reloading.  The step
     beyond the entry above, and the one that needs a cost model: the register held is one another value cannot have, so holding it

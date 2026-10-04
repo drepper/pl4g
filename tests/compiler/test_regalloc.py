@@ -459,3 +459,43 @@ def test_a_target_with_one_kind_needs_no_list_of_lists() -> None:
     assignment = Assignment()
     assert scan._assign([LiveRange(reg=whole, start=0, end=4)], [], assignment) == []
     assert assignment.units[whole.ident] in ORDER
+
+
+# -- stretches --------------------------------------------------------------------
+
+def test_two_ranges_meet_only_where_their_stretches_do() -> None:
+    """A hull says when a value starts and stops being wanted; its stretches say
+    where it is.  Two whose hulls overlap and whose stretches never meet are
+    never live at one point."""
+    from pypl4g.mc.regalloc import LiveRange
+    first = LiveRange(reg=virtual(), start=0, end=20, stretches=((0, 4), (15, 20)))
+    second = LiveRange(reg=virtual(), start=6, end=12)
+    third = LiveRange(reg=virtual(), start=3, end=8)
+    assert not first.covers(second) and not second.covers(first)
+    assert first.covers(third) and third.covers(first)
+    assert first.length == 11
+
+
+def test_a_value_written_in_two_arms_shares_a_register_with_what_lives_before() -> None:
+    """A value written in each arm of a branch and read where they join -- which is
+    what a block's parameter is -- is not live in the second arm until it is
+    written there.  What lives and dies in that arm before the write may have the
+    register the value gets, though the value's hull covers it."""
+    joined, scratch = virtual(), virtual()
+    built = MachineFunction(name="t")
+    first = built.add_block("first")
+    first.append(inst("mov", MCReg(joined), MCImm(1, 32)))
+    first.successors.append("join")
+    second = built.add_block("second")
+    second.append(inst("mov", MCReg(scratch), MCImm(5, 32)))
+    second.append(inst("mov", MCMem(disp_sym=None, disp=8, size_bits=32), MCReg(scratch)))
+    second.append(inst("mov", MCReg(joined), MCImm(2, 32)))
+    second.successors.append("join")
+    join = built.add_block("join")
+    join.append(inst("mov", MCMem(disp_sym=None, disp=16, size_bits=32), MCReg(joined)))
+    out = assigned(built)
+    held = out[0].operands[0]
+    other = out[1].operands[0]
+    assert isinstance(held, MCReg) and isinstance(other, MCReg)
+    assert held.reg.unit is other.reg.unit, \
+        "a value not live where another lives was kept out of its register"

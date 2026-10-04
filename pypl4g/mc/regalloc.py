@@ -5,13 +5,14 @@ says nothing about where it lives.  This decides that, and the encoders refuse a
 virtual register, so nothing can quietly skip it.
 
 The method is linear scan.  Every instruction of the function is given a
-position, each register gets the hull of the positions at which it is live, and
-the ranges are walked in order of their start, holding a unit for as long as a
-range needs one and releasing it as soon as the range ends.  That is a great
-deal less than a colouring allocator would do, and it is the right amount here:
-what it gives up is the ability to say that two values whose spans overlap are
-never live at the same moment, which costs a register now and again and never
-costs correctness.
+position, each register gets the hull of the positions at which it is live and
+the stretches inside it where it actually is, and the ranges are walked in order
+of their start, holding a unit for as long as a range needs one and releasing it
+as soon as the range ends.  Two ranges whose stretches never meet may hold one
+unit however their hulls overlap -- the holes in a lifetime, which is what a
+value written in both arms of a branch, or one a loop carries round, has -- so
+what linear scan gives up next to a colouring allocator is little more than
+which order it decides in.
 
 Which positions a register is live at is settled over the control-flow graph and
 not read off the layout.  That distinction does nothing while control only falls
@@ -42,10 +43,11 @@ assignment as it goes.  A spill adds instructions, which moves every position
 after it and so changes every range; recomputing is simpler than repairing, and
 a function is small.
 
-One thing it does not do: split a range.  A value is in one place for its whole
-life, so a value live across a point where the convention demands a particular
-register is simply not given that register.  Nothing yet produces such a point
-except the move to the register a result is returned in, which nothing outlives.
+One thing it does not do: put one value in two places.  A value is in one unit
+for its whole life, holes and all, so a value live across a point where the
+convention demands a particular register is simply not given that register.
+Nothing yet produces such a point except the move to the register a result is
+returned in, which nothing outlives.
 """
 
 from __future__ import annotations
@@ -84,7 +86,17 @@ class RegisterPressureError(Exception):
 
 @dataclass(slots=True)
 class LiveRange:
-    """Where a register starts being wanted and where it stops."""
+    """Where a register starts being wanted and where it stops, and the
+    stretches in between where it is.
+
+    `start` and `end` are the hull, which is what the scan walks by; `stretches`
+    are the points the register is actually live at, in order and apart.  A
+    value is often not live everywhere in its hull: one written in two arms of
+    a branch is live in each and in neither of the other's, and a value that
+    reaches round a loop is live at the top and the bottom and not in a stretch
+    nothing between reads it.  Two ranges whose stretches never meet may hold
+    one register however their hulls overlap.  Nothing written means the hull.
+    """
 
     reg: Reg
     start: int
@@ -94,15 +106,33 @@ class LiveRange:
     #: only mentions outside a loop is counted once per mention, and one read
     #: inside a loop is counted as the ten times it runs.
     cost: int = 0
+    stretches: tuple[tuple[int, int], ...] = ()
+
+    def _parts(self) -> tuple[tuple[int, int], ...]:
+        """The stretches, or the hull where none were worked out."""
+        return self.stretches or ((self.start, self.end),)
 
     def covers(self, other: LiveRange) -> bool:
-        """Whether the two ranges are wanted at the same time."""
-        return self.start <= other.end and other.start <= self.end
+        """Whether the two ranges are wanted at the same time: whether a
+        stretch of one meets a stretch of the other."""
+        if not (self.start <= other.end and other.start <= self.end):
+            return False
+        mine, theirs = self._parts(), other._parts()
+        i = j = 0
+        while i < len(mine) and j < len(theirs):
+            (a, b), (c, d) = mine[i], theirs[j]
+            if a <= d and c <= b:
+                return True
+            if b < d:
+                i += 1
+            else:
+                j += 1
+        return False
 
     @property
     def length(self) -> int:
         """How many points it holds a unit for, which is never fewer than one."""
-        return self.end - self.start + 1
+        return sum(b - a + 1 for a, b in self._parts())
 
     @property
     def price(self) -> Fraction:
@@ -191,6 +221,17 @@ class Assignment:
     coalesced: int = 0
     #: The virtual registers that had to go to the frame, by their identity.
     spilled: dict[int, int] = field(default_factory=dict)
+
+
+def _merged(stretches: Sequence[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
+    """Stretches in order, with those that meet or touch made one."""
+    out: list[tuple[int, int]] = []
+    for a, b in sorted(stretches):
+        if out and a <= out[-1][1] + 1:
+            out[-1] = (out[-1][0], max(out[-1][1], b))
+        else:
+            out.append((a, b))
+    return tuple(out)
 
 
 def _victim_order(found: LiveRange) -> tuple[Fraction, int]:
@@ -372,10 +413,15 @@ class LinearScan:
                 touch(key, flow.entry_point)
             for key in flow.live_out:
                 touch(key, flow.exit_point)
+        stretched = self._stretches(function, flows, seen, virtual=True)
         virtual = [LiveRange(reg=reg, start=first[key], end=last[key],
-                             cost=cost.get(key, 0))
+                             cost=cost.get(key, 0),
+                             stretches=_merged(stretched.get(key, ())))
                    for key, reg in seen.items() if isinstance(reg, VirtReg)]
-        physical = self._physical_ranges(function, flows, seen)
+        physical = [LiveRange(reg=seen[key], start=a, end=b)
+                    for key, found in self._stretches(function, flows, seen,
+                                                      virtual=False).items()
+                    for a, b in found]
         virtual.sort(key=lambda r: (r.start, r.end))
         return virtual, physical
 
@@ -398,41 +444,50 @@ class LinearScan:
             found.extend([10 ** depth] * (flow.last - flow.first + 1))
         return found
 
-    def _physical_ranges(self, function: MachineFunction,
-                         flows: Sequence[BlockFlow],
-                         seen: Mapping[int, Reg]) -> list[LiveRange]:
-        """Every stretch over which each physical register is holding something.
+    def _stretches(self, function: MachineFunction, flows: Sequence[BlockFlow],
+                   seen: Mapping[int, Reg],
+                   virtual: bool) -> dict[int, list[tuple[int, int]]]:
+        """Every stretch over which each register is holding something: the
+        virtual ones, or the physical ones.
 
-        Several stretches per register and not one, which is what a virtual
-        register gets.  A physical register is written where a convention says
-        it is -- an argument into the register the callee reads it from, an
-        answer into the register the caller reads it from -- and between one
-        such write and the read that takes the value away it holds nothing.  A
-        hull over all of them would say it was busy the whole time, and a value
-        that could have had it would be sent somewhere else; the code that comes
-        out is a move into a register and a move straight back out of it.
+        A physical register is written where a convention says it is -- an
+        argument into the register the callee reads it from, an answer into the
+        register the caller reads it from -- and between one such write and the
+        read that takes the value away it holds nothing.  A hull over all of them
+        would say it was busy the whole time, and a value that could have had it
+        would be sent somewhere else; the code that comes out is a move into a
+        register and a move straight back out of it.  Each stretch of one is a
+        range of its own.
+
+        A virtual register is one value, but it is not live everywhere between
+        its first write and its last read either -- a parameter of a block is
+        written in each block that branches to it, and is live in none of them
+        but where it is written and what follows -- so its stretches are kept
+        on its one range, and asked where it meets another.
 
         Within a block the stretch runs from a write to the last read before the
         next write; at the edges of a block it is what the graph says is live
         coming in and going out.  Nothing is lost by splitting: every read of
         the register is a point the stretch holding that value covers.
         """
-        physical = {key: reg for key, reg in seen.items()
-                    if not isinstance(reg, VirtReg)}
-        found: list[LiveRange] = []
+        wanted = {key for key, reg in seen.items()
+                  if isinstance(reg, VirtReg) is virtual}
+        found: dict[int, list[tuple[int, int]]] = {}
         for block, flow in zip(function.blocks, flows):
             if flow.empty:
                 continue
             start: dict[int, int] = {}
             reached: dict[int, int] = {}
             for key in flow.live_in:
-                if key in physical:
+                if key in wanted:
                     start[key] = reached[key] = flow.entry_point
             for at, inst in enumerate(block.insts):
                 position = flow.first + at
                 defs, uses = defs_and_uses(inst)
-                read = {self._key(r) for r in uses if not isinstance(r, VirtReg)}
-                written = {self._key(r) for r in defs if not isinstance(r, VirtReg)}
+                read = {self._key(r) for r in uses
+                        if isinstance(r, VirtReg) is virtual}
+                written = {self._key(r) for r in defs
+                           if isinstance(r, VirtReg) is virtual}
                 for key in read:
                     start.setdefault(key, position * 2)
                     reached[key] = position * 2
@@ -441,14 +496,12 @@ class LinearScan:
                         # What it held before this is gone, and what it holds
                         # from here is another value.
                         if key in start:
-                            found.append(LiveRange(reg=physical[key],
-                                                   start=start[key],
-                                                   end=reached[key]))
+                            found.setdefault(key, []).append((start[key], reached[key]))
                         start[key] = position * 2 + 1
                     reached[key] = position * 2 + 1
             for key, began in start.items():
                 end = (flow.exit_point if key in flow.live_out else reached[key])
-                found.append(LiveRange(reg=physical[key], start=began, end=end))
+                found.setdefault(key, []).append((began, end))
         return found
 
     def _flow(self, function: MachineFunction
@@ -509,13 +562,20 @@ class LinearScan:
 
         The incoming range is a candidate like any other: where it is the
         cheapest, it is the one that goes and the unit stays where it is.
+
+        A unit is taken only by the ranges whose stretches meet the incoming
+        one's: two values never live at one point may hold one register, however
+        their hulls overlap.  So several active ranges may hold one unit, and
+        giving one up frees the unit only where it is the one there that meets
+        the incoming range -- and only for a range of the class the unit is.
         """
         active: list[tuple[LiveRange, RegUnit]] = []
         crowded: list[VirtReg] = []
         for found in ranges:
             active = [(r, u) for r, u in active if r.end >= found.start]
-            taken = {u for _, u in active}
-            taken.update(self._blocked_by(found, blocked))
+            meeting = [(r, u) for r, u in active if r.covers(found)]
+            fixed = self._blocked_by(found, blocked)
+            taken = {u for _, u in meeting} | fixed
             unit = self._choose(found, taken)
             assert isinstance(found.reg, VirtReg)
             if unit is not None:
@@ -523,9 +583,16 @@ class LinearScan:
                 active.append((found, unit))
                 continue
             # Only a value that may be spilled can be the one given up, and one
-            # that may not has to be kept whatever else goes.
-            candidates = [pair for pair in active
-                          if isinstance(pair[0].reg, VirtReg) and pair[0].reg.spillable]
+            # that may not has to be kept whatever else goes; and giving it up
+            # has to leave its unit free for this one.
+            holders: dict[RegUnit, int] = {}
+            for _, u in meeting:
+                holders[u] = holders.get(u, 0) + 1
+            usable = set(self._order_for(found.reg))
+            candidates = [pair for pair in meeting
+                          if isinstance(pair[0].reg, VirtReg) and pair[0].reg.spillable
+                          and holders[pair[1]] == 1 and pair[1] not in fixed
+                          and pair[1] in usable]
             cheapest = min(candidates, key=lambda pair: _victim_order(pair[0]),
                            default=None)
             if cheapest is None:
