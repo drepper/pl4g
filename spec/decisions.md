@@ -9802,6 +9802,16 @@ refused (3204); a second list before a definition is 3208 only where no blank li
 by the diagnostic engine, by where they point, so those found once the whole program is known are left unsaid too.  A test walks
 the installation's modules and refuses any binding without a written type, the `⎕fields` loop excepted.
 
+The user then named the other entries a system module still put in the log -- `answer-in-storage`, `generic-deferred`,
+`allocator`, `lifetime-ended`, `place-local`, `answer-thin`, `fat-value`, `iterator`, `generic-checked`, `instantiate`,
+`name-lambda` -- and asked for an option that ignores `@[system]` and logs them.  **Nothing the compiler chose about something in
+a system module is logged; what it said is**: the log knows where the system files are and leaves out every entry of a kind that
+is not a diagnostic, so a kind added later is covered without a list to keep, and an error in `std` is still on record.  This
+replaces the two checks made earlier, for inferred types and for what nothing reaches.  **`--ignore-system`** reads the mark and
+does nothing with it, so such a module is warned about and logged like any other -- GCC's `-Wsystem-headers`, which brings back
+the warnings only; Clang's is the same.  One option for both, because a reader looking into `std` wants all of what it was told
+and chosen, not half.
+
 Open questions
 --------------
 
