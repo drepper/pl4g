@@ -1,0 +1,11 @@
+@[system]
+
+※ pl4g-test: module
+※※ A system module: what is wrong only in it is not warned about, and the types
+※※ it leaves to the compiler are not logged.
+
+@[export]
+fn twice(n: u8) → u8:
+    let unread: u8 = n
+    let doubled := n + n
+    doubled

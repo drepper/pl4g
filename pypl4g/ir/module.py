@@ -104,16 +104,7 @@ class Module:
     #: entry point's record knows: each points into that record, and how far
     #: in is settled when the record is laid out (`target/started.py`).
     ring_addresses: list[AddressConst] = field(default_factory=list)
-    #: Where the files marked `@[system]` are, as the range of locations each
-    #: covers: what the passes would log about something only in one -- a
-    #: function nothing reaches -- is left unsaid, as it is of a system header.
-    system_files: list[tuple[int, int]] = field(default_factory=list)
 
-    def in_system(self, span: object) -> bool:
-        """Whether *span* begins in a file marked `@[system]`."""
-        start = getattr(span, "start", -1)
-        return bool(getattr(span, "is_valid", False)) \
-            and any(a <= start < b for a, b in self.system_files)
     ctors: list[Function] = field(default_factory=list)
     dtors: list[Function] = field(default_factory=list)
     tests: list[Function] = field(default_factory=list)

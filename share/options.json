@@ -208,6 +208,13 @@
     },
     {
       "short": null,
+      "long": "--ignore-system",
+      "arg": "none",
+      "since": "0.1",
+      "help": "treat modules marked @[system] like any other: warn about them and log what was chosen for them"
+    },
+    {
+      "short": null,
       "long": "--incremental",
       "arg": "none",
       "since": "0.1",

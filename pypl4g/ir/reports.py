@@ -138,6 +138,10 @@ OF_SEVERITY: Final[dict[str, ReportKind]] = {
 }
 
 
+#: The kinds that are something the compiler said rather than chose.
+_SAID: Final[frozenset[ReportKind]] = frozenset(OF_SEVERITY.values())
+
+
 @dataclass(frozen=True, slots=True)
 class Report:
     """One thing the compiler said or chose, and what it was about."""
@@ -163,14 +167,27 @@ class ReportLog:
     """Everything said and chosen about one compilation, in the order it happened."""
 
     entries: list[Report] = field(default_factory=list)
+    #: Where the files marked `@[system]` are, as the range of locations each
+    #: covers.  What the compiler chose or worked out about something in one is
+    #: not recorded -- a reader of the program did not write a system module and
+    #: cannot change it, as nothing is said of a system header in C -- while what
+    #: the compiler *said*, an error above all, is.
+    system_files: list[tuple[int, int]] = field(default_factory=list)
 
     def record(self, kind: ReportKind, subject: str, reason: str,
                span: Span = INVALID_SPAN, number: int | None = None) -> Report:
-        """Record one report and return it."""
+        """Record one report and return it -- not kept where it is a choice
+        about something in a system module."""
         entry = Report(kind=kind, subject=subject, reason=reason, span=span,
                        number=number)
-        self.entries.append(entry)
+        if kind in _SAID or not self.in_system(span):
+            self.entries.append(entry)
         return entry
+
+    def in_system(self, span: Span) -> bool:
+        """Whether *span* begins in a file marked `@[system]`."""
+        return span.is_valid and any(a <= span.start < b
+                                     for a, b in self.system_files)
 
     def said(self, severity: str, name: str, message: str, number: int,
              span: Span = INVALID_SPAN) -> Report | None:

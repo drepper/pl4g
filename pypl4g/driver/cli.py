@@ -194,6 +194,8 @@ class CommandLine:
         parser.add_argument("--report-log", dest="report_log")
         parser.add_argument("--test-runner", dest="test_runner")
         parser.add_argument("--incremental", action="store_true")
+        parser.add_argument("--ignore-system", dest="ignore_system",
+                            action="store_true")
         parser.add_argument("-v", "--verbose", action="store_true")
         parser.add_argument("--time-report", dest="time_report",
                             action="store_true")
@@ -285,6 +287,7 @@ class CommandLine:
             options.report_log = Path(found.report_log)
         options.test_runner = found.test_runner
         options.incremental = found.incremental
+        options.ignore_system = found.ignore_system
         if found.incremental:
             self._diags.emit(D.IMPL_CLI_NOT_IMPLEMENTED, option="--incremental")
         options.verbose = found.verbose

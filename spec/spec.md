@@ -238,8 +238,9 @@ about what follows: `@[system]` there makes the file a **system module**.
 ```
 
 What is wrong only in a system module is not warned about, and what the compiler worked out for it -- the types it left to be
-inferred (`type-inferred`) -- is not logged: a reader of the program did not write it and cannot change it.  Nor is what of it
-nothing reaches logged as dropped (`drop-function`, `drop-variable`): a library offers more than any one program uses.  Errors in one are
+inferred, what of it nothing reaches, the allocators, instances and storage it was given, what of it was put in place -- is not
+logged: a reader of the program did not write it and cannot change it.  `--ignore-system` reads `@[system]` and does nothing with
+it, so a system module is warned about and logged like any other: GCC's `-Wsystem-headers`.  Errors in one are
 reported as anywhere, and so is what the program's use of it caused -- what was inlined, what was dropped.  `std`, `std.fs` and
 `std.io` are system modules.  A list with a blank line after it is attached to nothing, so a second list before a definition is a
 second list only where no blank line stands between them (3208); `@[system]` is the one attribute a file takes (3204).

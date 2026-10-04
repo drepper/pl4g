@@ -334,7 +334,8 @@ class Driver:
                         reports=self.reports)
         registry = self._registry()
         check(module, units, self.diags, registry, self.sources, self.notes,
-              conditions=self.options.conditions)
+              conditions=self.options.conditions,
+              ignore_system=self.options.ignore_system)
         # Before anything is dropped: which tests this binary runs is what
         # decides which of them are reachable at all.
         module.test_plan.extend(_planned(module, self.wanted_tests))

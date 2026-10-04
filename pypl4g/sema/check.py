@@ -3114,9 +3114,14 @@ class Checker:
                  conditions: Conditions = Conditions.CHECK,
                  for_macros: bool = False,
                  quoted: list[ast.Quote] | None = None,
-                 whole_modules: bool = False) -> None:
+                 whole_modules: bool = False,
+                 ignore_system: bool = False) -> None:
         self._module = module
         self._diags = diags
+        #: Whether `@[system]` is read and then not acted on, so that a system
+        #: module is warned about and logged like any other -- what
+        #: `--ignore-system` asks for, as `-Wsystem-headers` does of GCC.
+        self._ignore_system = ignore_system
         #: Whether a module read from here is lowered whole rather than as far as
         #: what names it.  Asked for by whatever has to see every body of one --
         #: the test that `std` checks as a whole -- and handed on to the modules
@@ -3934,11 +3939,11 @@ class Checker:
         if not unit.attrs:
             return
         bound = self._bind_attributes(unit.attrs, AttrTarget.FILE)
-        if any(attr.name == "system" for attr in bound):
+        if any(attr.name == "system" for attr in bound) and not self._ignore_system:
             found = self._sources.file_of(unit.span.start) if unit.span.is_valid else None
             if found is not None:
                 self._diags.mark_system(found.base, found.end)
-                self._module.system_files.append((found.base, found.end))
+                self._module.reports.system_files.append((found.base, found.end))
 
     def _report_inferred(self, names: Sequence[tuple[str, Span]],
                          written: ast.TypeExpr | None) -> None:
@@ -3962,11 +3967,7 @@ class Checker:
 
     def _record_inferred(self, name: str, span: Span, held: Type,
                          written: ast.TypeExpr | None) -> None:
-        """Record that *name* was given *held*, where *written* does not say it.
-
-        Not in a system module, whose types are its own business."""
-        if self._diags.in_system(span):
-            return
+        """Record that *name* was given *held*, where *written* does not say it."""
         if written is None:
             reason = "".join(("its type was not written, and is '", held.written(),
                               "', worked out from what it was given"))
@@ -4160,7 +4161,8 @@ class Checker:
                             conditions=self._conditions,
                             for_macros=self._for_macros,
                             quoted=self.quoted,
-                            whole_modules=self._whole_modules)
+                            whole_modules=self._whole_modules,
+                            ignore_system=self._ignore_system)
             inner.run([unit], whole_program=False)
             loaded.want = inner.want
             loaded.exports = {name: what for name, what in inner._top.items()
@@ -24353,7 +24355,8 @@ def check(module: Module, units: Sequence[ast.SourceUnit], diags: DiagEngine,
           sources: SourceManager | None = None,
           notes: Notes | None = None,
           conditions: Conditions = Conditions.CHECK,
-          whole_modules: bool = False) -> Module:
+          whole_modules: bool = False,
+          ignore_system: bool = False) -> Module:
     """Check *units* and lower them into *module*.
 
     The units are the files named on the command line, which share one
@@ -24367,6 +24370,7 @@ def check(module: Module, units: Sequence[ast.SourceUnit], diags: DiagEngine,
     path = Path(units[0].path) if units else None
     result = Checker(module, diags, found, path, "", sources,
                      notes=notes, conditions=conditions,
-                     whole_modules=whole_modules).run(units)
+                     whole_modules=whole_modules,
+                     ignore_system=ignore_system).run(units)
     found.settle_names()
     return result

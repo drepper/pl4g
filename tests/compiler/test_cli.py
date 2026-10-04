@@ -442,3 +442,29 @@ def test_a_system_module_s_unused_functions_are_not_logged_as_dropped(tmp_path: 
     dropped = [entry for entry in json.loads(log.read_text(encoding="utf-8"))["reports"]
                if entry["kind"] in ("drop-function", "drop-variable")]
     assert [entry["subject"] for entry in dropped] == ["unused"], dropped
+
+
+def _system_entries(tmp_path: Path, *extra: str) -> list[dict]:
+    """What the log of compiling `cat` says about the system modules."""
+    log = tmp_path / "reports.json"
+    proc = run_compiler(["-O1", "-o", str(tmp_path / "out"), *extra,
+                         "".join(("--report-log=", str(log))),
+                         str(Path(__file__).resolve().parents[2] / "examples" / "cat"
+                             / "cat.pl4g")])
+    assert proc.returncode == ExitCode.SUCCESS, proc.stderr
+    return [entry for entry in json.loads(log.read_text(encoding="utf-8"))["reports"]
+            if "where" in entry and "/modules/" in entry["where"]["file"]]
+
+
+def test_nothing_chosen_about_a_system_module_is_logged(tmp_path: Path) -> None:
+    """`std`, `std.fs` and `std.io` are system modules: what the compiler chose
+    or worked out about something in them -- an allocator, an instance, a value
+    put in storage, what was put in place -- is not the program's news."""
+    assert _system_entries(tmp_path) == []
+
+
+def test_ignoring_system_logs_it_like_any_other(tmp_path: Path) -> None:
+    """`--ignore-system` reads `@[system]` and does nothing with it, so the same
+    compilation logs what it chose about the modules as it would of any."""
+    found = {entry["kind"] for entry in _system_entries(tmp_path, "--ignore-system")}
+    assert {"allocator", "instantiate", "drop-function", "inline"} <= found, found

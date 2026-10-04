@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=6
+※ pl4g-test: args --ignore-system
+※ pl4g-test: expect-diag 4006 LANG_VARDEF_VALUE_UNUSED
+
+※ `--ignore-system` reads `@[system]` and does nothing with it: the module is
+※ warned about like any other, so its unread value is reported.
+
+let std := ⎕import("std")
+let quiet := ⎕import("quiet")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ⎕narrow(quiet.twice(3u8), ⌜u6⌝) ?? 0u6

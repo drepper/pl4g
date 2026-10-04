@@ -65,18 +65,16 @@ class DropUnreached:
         Each thing dropped is recorded.  Leaving something out of a binary is a
         report about the program, and one a reader is entitled to ask about:
         "I wrote that function, where is it?" has an answer, and this is where
-        the answer is kept.  Not of a system module's: the reader did not write
-        it, and a library offers more than any one program uses.
+        the answer is kept.  Not of a system module's, which the log leaves out:
+        the reader did not write it, and a library offers more than any one
+        program uses.
         """
         reachable = self._reachable(module)
         functions = {name: func for name, func in module.functions.items()
                      if id(func) in reachable}
         changed = len(functions) != len(module.functions)
         for key, func in module.functions.items():
-            # One a system module defines and the program does not use is not
-            # news about the program: a library offers more than any one uses.
-            if key not in functions \
-                    and not module.in_system(_where(func.name_span, func.span)):
+            if key not in functions:
                 # The name the source wrote, not what the module files it
                 # under: the key tells two files' definitions apart and is
                 # nothing a reader of the log should have to know about.
@@ -95,8 +93,7 @@ class DropUnreached:
             for key, var in module.globals.items():
                 # One the compiler made -- a piece of text, the default arena --
                 # is nothing anybody wrote, so nobody asks where it went.
-                if key not in variables and not var.name.startswith(COMPILER_MADE) \
-                        and not module.in_system(_where(var.name_span, var.span)):
+                if key not in variables and not var.name.startswith(COMPILER_MADE):
                     module.reports.record(
                         ReportKind.DROP_VARIABLE, var.name,
                         "no function that is itself reached names it, and it is "

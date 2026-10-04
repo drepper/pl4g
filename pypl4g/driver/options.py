@@ -102,6 +102,9 @@ class Options:
     #: file first and to where the compiler was run second.
     module_path: list[Path] = field(default_factory=list)
     incremental: bool = False
+    #: Whether `@[system]` is acted on: with this set, a system module is warned
+    #: about and logged like any other module.
+    ignore_system: bool = False
     #: What `-Dname=value` said, which is how a build file is told something
     #: from outside.  Read by `std.option` while the build function runs and by
     #: nothing else.

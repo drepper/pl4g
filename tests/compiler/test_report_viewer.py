@@ -100,11 +100,11 @@ def test_the_records_come_out_in_the_order_of_the_file(compiled) -> None:  # noq
     order anyone reads a file in."""
     source, log = compiled
     out = view(log, "--only-reports").stdout
-    # Each file's in its order: `std`'s are there too, every program importing it.
-    for name in (str(source), "std.pl4g"):
-        numbers = [int(line.split(":")[1]) for line in out.splitlines()
-                   if ":" in line and line.split(":")[0].endswith(name)]
-        assert numbers and numbers == sorted(numbers), out
+    # The program's own file; what the compiler chose about `std` is not logged,
+    # it being a system module.
+    numbers = [int(line.split(":")[1]) for line in out.splitlines()
+               if ":" in line and line.split(":")[0].endswith(str(source))]
+    assert numbers and numbers == sorted(numbers), out
 
 
 # -- finding the sources --------------------------------------------------------
