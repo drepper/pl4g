@@ -1,8 +1,10 @@
 ※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
 
 ※ `std.error_name(code)` is the name of the `std.Error` a number the kernel gave
-※ is -- read off the enumeration with `⎕fields` into a dictionary the first time
-※ it is asked -- and `other` for a number it does not name.
+※ is -- read from a table in the image, so asking is pure -- and `other` for a
+※ number it does not name.  The table is written out in `std`, so every value
+※ `⎕fields` finds in the enumeration is asked of `std.error_name_of`: one added
+※ to `Error` and not to the table is caught here.
 ※
 ※ Compare: **C**'s `strerror` and **Go**'s `Errno.Error`, which answer the
 ※ system's message; **Rust**'s `io::ErrorKind`, whose `Debug` is the name, as
@@ -10,8 +12,10 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
+    comptime foreach member := ⎕fields(⌜std.Error⌝):
+        if std.error_name_of(member⟦1⟧) ≠ member⟦0⟧: return 7u6
     if std.error_name(2i32) ≠ "not_found": return 1u6
     if std.error_name(13i32) ≠ "not_allowed": return 2u6
     if std.error_name(105i32) ≠ "no_buffer": return 3u6

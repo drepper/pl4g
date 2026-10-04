@@ -1161,3 +1161,12 @@ Runtime
 [ ] make a device out of a descriptor without spelling out the ring.  A program that has a descriptor from somewhere else -- a
     pipe made with `⎕syscall` -- writes `std.io.Writer(.fd ← n, .ring ← init.io.error.ring)`, copying the address from a device
     it holds.  A `State.adopt(&init.fs, n, ⌜Writer⌝)` would say it once.
+
+[ ] work out a table in the image while compiling.  `std.error_names` is written out beside `Error` because neither way of building
+    it from `⎕fields(⌜Error⌝)` works: an initializer `in ⎕static` that calls a function is refused (4636), there being no
+    evaluation of one while compiling, and a macro cannot splice a run of entries of any length into a literal.  Either would do.
+
+[ ] decide whether filling a container a function made itself is impure.  A function that makes `let names: mut ⸨Colour: str⸩ =
+    ⸨⸩` and puts entries in it is refused as writing memory it did not make (4479): the entries go into `⎕heap`, which outlives the
+    call.  What it changes is nothing anyone else can see until it answers the table, which is what D's weakly pure functions and
+    Rust's `&mut`-free functions allow.

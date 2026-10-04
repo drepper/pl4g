@@ -269,6 +269,7 @@ fn spawn(s: &mut fs.State, walk: ⌖⇉io.Pending ⇇ io.Answer in ⎕heap)
 fn run(s: &mut fs.State) → u64
 fn as_error(n: i32) → Error
 fn error_name(code: i32) → str       ※ "not_found" for 2; "other" for one Error does not name
+fn error_name_of(e: Error) → str
 ```
 
 **Every device carries where the ring is.**  The ring is a field of `init.fs`, which is in the image, so where it is does not
@@ -287,8 +288,9 @@ This is Zig's arrangement with the one ring a process has written into every han
 handed says**:
 `⌜Reader⌝` to read it; `⌜Writer⌝` to write it, made if it is not there and emptied if it is; `⌜ReadWriter⌝` for both, made if it is
 not there and left as it is.  **`error_name(code)` names what the kernel refused with** as `Error` writes it -- `cat: x:
-not_found` -- read off the enumeration with `⎕fields` into a dictionary the first time it is asked, so a program that never fails
-pays for none of it; `Error` names what reading, writing and opening by name can give, and `other` is everything else.  It answers that type, or the number the kernel refused with.  The name is relative to `d` -- the
+not_found` -- read from a table in the image (`⸨…⸩ in ⎕static`), so asking is pure and nothing is filled in while the program
+runs; `error_name_of(e)` is the same for a value of `Error`.  The table is written out beside the enumeration, nothing yet working
+one out from `⎕fields` while compiling, and a test asks it of every value `⎕fields` finds.  `Error` names what reading, writing and opening by name can give, and `other` is everything else.  It answers that type, or the number the kernel refused with.  The name is relative to `d` -- the
 kernel's `openat` -- unless it begins with `/`; the directory `State.cwd` answers is `AT_FDCWD`, the one the process is in, and
 is never closed.  A name with a nul inside it or longer than 4095 bytes is refused before the kernel is asked.  The type is the
 argument rather than a mode beside the name because what comes back is a different type for each: a `Reader` cannot be written to,

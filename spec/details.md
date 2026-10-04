@@ -4461,8 +4461,9 @@ entries are image variables made writable (`_image_variable(…, mutable=True)`)
 `__pl4g_heap`; the variable's initializer is the block's address, and it is not given to `_build_the_tables`.  Growing allocates a
 new run from the heap and leaves the old one; nothing hands a table's runs back.
 
-**`std.error_name`** fills the top-level `error_names: mut ⸨Error: str⸩` with `comptime foreach` over `⎕fields(⌜Error⌝)` when it is
-empty, and looks up `as_error(code)`.
+**`std.error_name`** looks up `as_error(code)` in `error_names: ⸨Error: str⸩ … in ⎕static`, a table in the image written out in
+`std` (since 2026-10-04; it was filled on first use with `comptime foreach` over `⎕fields(⌜Error⌝)`, which made every caller
+impure).  `tests/language/error-name` walks `⎕fields(⌜std.Error⌝)` and asks `error_name_of` of each value, so the two cannot drift.
 
 **`dropunreached` runs second**, right after `dropignored`, at every level, and again at the end.  A module brings every function it
 defines into the program's module, and the passes before it used to work on all of them -- `largeanswers`, `coroutines` and

@@ -65,7 +65,7 @@ fn copied(from: &mut std.io.Reader, out: &mut std.io.Writer, before: State) → 
                 return state
     state
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let state: mut State = State(.numbered ← false, .blank_too ← true, .count ← 0u64,
                                  .at_start ← true, .error ← 0i32)
@@ -118,7 +118,6 @@ fn main(init: std.Init) → u6:
 
 ※※ Say what went wrong with `name`, where `code` says something did, and answer the
 ※※ status that comes to.
-@[impure]
 fn reported(code: i32, name: str, err: &mut std.io.Writer) → u6:
     if code = 0i32:
         return 0u6

@@ -9731,6 +9731,22 @@ the other two**.  `fs` keeps `State`, `Dir`, `cwd`, `Dir.open` and the task reco
 `std.Io` holds the reader and writer interfaces and the I/O implementation and whose `std.fs` builds files and directories on
 it; **Rust**'s `std::io` (`Read`, `Write`) beside `std::fs` (`File`, `OpenOptions`); **Go**'s `io` and `os`.
 
+## 2026-10-04T11:00+02:00 — std
+
+**`cat` with no `@[impure]`: the state handed back, and `error_name` a read of the image**
+
+The user asked for `cat` to need no `@[impure]`, its `copied` handing the state back with the error in it.  `copied` now takes the
+state by value and answers it, `error` a field of it, writing only its own copy.  What kept `main` and `reported` impure was
+`std.error_name`, which filled a table at the top level of `std` on first use -- the user's own choice of 2026-10-03.  Asked, the
+user decided that **the table goes into the image** -- `⸨…⸩ in ⎕static`, read and never written, so the lookup is pure -- against
+a lookup with no table (a comparison per value), and against keeping it.
+
+Taken without asking: the table is written out in `std`, there being no way yet to work one out from `⎕fields` while compiling --
+a function building it is refused as running while the program runs (4636), and a macro cannot splice a run of entries of any
+length into one piece; `std.error_name_of(e)` is new, the name of a value of `Error`, which is what lets a test walk `⎕fields` and
+check the table against the enumeration; a program cannot read the number a value of an enumeration is stored as, so the test
+could not ask `error_name` itself.
+
 Open questions
 --------------
 

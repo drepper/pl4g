@@ -100,8 +100,31 @@ enum Error:
 fn as_error(n: i32) → Error:
     ⎕narrow(n, ⌜Error⌝) ?? Error.other
 
-※※ The name of each `Error`, filled the first time `error_name` is asked.
-let error_names: mut ⸨Error: str⸩ = ⸨⸩
+※※ The name of each `Error`, in the image.
+※
+※ Written out rather than read off the enumeration with `⎕fields`: a table in
+※ the image holds only what is written down, and nothing yet works one out
+※ while compiling.  A test walks `⎕fields(⌜std.Error⌝)` and asks `error_name_of`
+※ of every value, so a value added to `Error` and not here is caught.
+let error_names: ⸨Error: str⸩ = ⸨
+    Error.other: "other", Error.not_found: "not_found", Error.interrupted: "interrupted",
+    Error.device: "device", Error.not_a_device: "not_a_device", Error.would_block: "would_block",
+    Error.no_memory: "no_memory", Error.not_allowed: "not_allowed",
+    Error.bad_address: "bad_address", Error.not_a_directory: "not_a_directory",
+    Error.is_a_directory: "is_a_directory", Error.invalid: "invalid",
+    Error.too_many_open: "too_many_open", Error.too_big: "too_big", Error.no_room: "no_room",
+    Error.read_only: "read_only", Error.broken_pipe: "broken_pipe",
+    Error.name_too_long: "name_too_long", Error.link_loop: "link_loop", Error.reset: "reset",
+    Error.no_buffer: "no_buffer"
+⸩ in ⎕static
+
+※※ The name of an `Error`, as the enumeration writes it.
+※※
+※※ \param e the value
+※※ \return its name: `not_allowed` for `Error.not_allowed`
+@[export]
+fn error_name_of(e: Error) → str:
+    error_names⸨e⸩ ?? "other"
 
 ※※ The name of what the kernel answered, as `Error` writes it.
 ※※
@@ -110,15 +133,11 @@ let error_names: mut ⸨Error: str⸩ = ⸨⸩
 ※※ \return the name of the `Error` it is: `not_allowed` for 13, and `other` for
 ※※ a number the enumeration does not name
 ※
-※ The names are the enumeration's own, read off it with `⎕fields` rather than
-※ written out a second time, and put in a dictionary the first time they are
-※ wanted: a program that never fails pays nothing for them.
-@[export, impure]
+※ A read of a table in the image, so it is pure: nothing is filled in, and a
+※ program that never fails carries the table and does nothing with it.
+@[export]
 fn error_name(code: i32) → str:
-    if #error_names = 0:
-        comptime foreach member := ⎕fields(⌜Error⌝):
-            error_names⸨member⟦1⟧⸩ ← member⟦0⟧
-    error_names⸨as_error(code)⸩ ?? "other"
+    error_name_of(as_error(code))
 
 ※ -- reading and writing --------------------------------------------------------
 ※
