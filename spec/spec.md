@@ -2403,9 +2403,16 @@ those bytes, and what is passed to a function, matched on, or answered with is w
 is handed the room by its caller, which is the convention an answer of more values than the registers hold already takes; nothing
 about that is written in the program.
 
+**A sum at the top level is bytes in the image**, as a record there is: which part it is and what that part carries are both
+written down, so `let a: Shape = Shape(.line ← 7u32)` is laid out while compiling -- the part at the start, the tag after it --
+and nothing runs to make it.  What it is written with is held to the rules a value made inside a function is (4800, 4801,
+4802), and a value of another type written there is a mismatch (4203).  Reading one is where its bytes are, as with any sum; one
+that may change is copied into the frame where it is read, so that what was read goes on holding what it held when the variable is
+given another value, and giving it one copies the new value's bytes in.
+
 What is not there yet: a **record or a tuple holding a sum** (9902), which would have to be held in memory itself for the same
-reason, and a **sum at the top level**, which waits on the same thing a collection there waited on.  Reading a field of a product
-and asking which part a sum holds are both there: the first is `p.x`, the second is `match`.
+reason.  Reading a field of a product and asking which part a sum holds are both there: the first is `p.x`, the second is
+`match`.
 
 ##### What a value of one occupies
 

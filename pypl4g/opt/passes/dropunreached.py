@@ -41,7 +41,7 @@ from typing import Final
 
 from ...ir.module import GlobalVar, Module
 from ...ir.value import (AddressConst, ArrayConst, PartsConst, RecordConst,
-                         ResultConst)
+                         ResultConst, SumConst)
 from ...source.location import Span
 
 
@@ -208,6 +208,8 @@ def _addresses_in(held: object) -> list[GlobalVar]:
             return [one for part in held.fields for one in _addresses_in(part)]
         case ResultConst():
             return _addresses_in(held.answer)
+        case SumConst() if held.part is not None:
+            return _addresses_in(held.part)
     return []
 
 

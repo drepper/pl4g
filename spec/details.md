@@ -3513,6 +3513,12 @@ the rewrite is shorter than for a record: the answer is copied into the room wit
 a copy written out in the largest pieces that fit, and at the call there is
 nothing to read back, the room being the answer.
 
+**At the top level** a sum is a `SumConst` -- which part, the tag, and the constant the part carries -- that `emit_globals` lays
+out as `ResultConst` is: the part at the start, the tag at `tag_offset_of`, zeroes between.  `_read_global` is the one way a
+function reads a variable at the top level: a load for a value in registers, and for one held in memory -- a sum, an array of
+known shape -- the variable's own address, except that a `mut` sum is copied into the frame first.  Assigning to one copies
+the bytes in with `_copy_bytes`.
+
 **What is refused** is a record or a tuple holding a sum (9902).  Both travel as
 the values they are made of, so one holding a sum would carry the address of the
 room the sum was made in -- which is the caller's frame going down and nothing at

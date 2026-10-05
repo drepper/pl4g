@@ -41,15 +41,15 @@ from ..ir.inst import (AddressInst, AssertInst, BinaryInst, BinOp, BrInst,
                        SumMakeInst, SumTagInst, SwitchInst, TupleInst,
                        UnaryInst, UnOp, UnreachableInst, WrapInst)
 from ..ir.layout import (DataLayout, align_of, member_offsets_of, offsets_of,
-                         size_of)
+                         size_of, tag_offset_of)
 from ..ir.types import (BOOL, BoolType, CharType, EnumType, FloatType, IntType,
-                        ProductType, PtrType, SyntaxType, TupleType, Type, U64,
-                        VOID, parts_of)
+                        ProductType, PtrType, SumType, SyntaxType, TupleType, Type,
+                        U8, U64, VOID, parts_of)
 from ..ir.module import GlobalVar
 from ..ir.value import (AddressConst, ArrayConst, BlockParam, BoolConst,
                         CharConst, Const,
                         EnumConst, IntConst, PartsConst, RecordConst,
-                        UndefConst, Value)
+                        SumConst, UndefConst, Value)
 
 #: How many instructions one expansion may run before it is stopped.  A macro that
 #: loops for ever would otherwise hang the compiler, and a limit is the only answer:
@@ -435,6 +435,13 @@ class Machine:
             case RecordConst():
                 for which, one in enumerate(held.fields):
                     self._put(at + offsets_of(held.ty, LAYOUT)[which], one)
+            case SumConst():
+                # What the part carries at the start, and which part it is in the
+                # tag after it.
+                if held.part is not None:
+                    self._put(at, held.part)
+                assert isinstance(held.ty, SumType)
+                self._write(at + tag_offset_of(held.ty, LAYOUT), U8, held.index)
             case AddressConst():
                 # Another variable of the image, placed in turn; nought for none.
                 self._write(at, U64, 0 if held.target is None

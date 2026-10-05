@@ -166,6 +166,24 @@ class ResultConst(Const):
         self.failed = failed
 
 
+class SumConst(Const):
+    """A value of a sum whose part, and what it carries, are known while
+    compiling.
+
+    What a variable of a sum type at the top level starts out holding: the part
+    at the start of its room and the tag after it, which is what a program
+    making one in its frame writes.  *index* is which part, and is the tag;
+    *part* is what it carries, nothing for a part that carries nothing.
+    """
+
+    __slots__ = ("index", "part")
+
+    def __init__(self, ty: Type, index: int, part: Const | None) -> None:
+        super().__init__(ty)
+        self.index = index
+        self.part = part
+
+
 class AddressConst(Const):
     """Where a variable is, known while compiling: a word the image holds.
 

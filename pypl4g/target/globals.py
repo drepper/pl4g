@@ -27,10 +27,10 @@ from ..ir.layout import (DataLayout, align_of, encode_float, encode_scalar,
 from ..ir.function import Linkage
 from ..ir.module import GlobalVar, Module
 from ..ir.types import (ArrayType, CharType, EnumType, ProductType,
-                        ResultType, TupleType, Type, parts_of)
+                        ResultType, SumType, TupleType, Type, parts_of)
 from ..ir.value import (AddressConst, ArrayConst, BoolConst, CharConst,
                         EnumConst, FloatConst, IntConst, PartsConst, RecordConst,
-                        ResultConst)
+                        ResultConst, SumConst)
 from ..mc.fixup import ABS64, MCFixup
 from ..mc.operand import BinExpr, ConstExpr, MCExpr, SymExpr
 from ..mc.asmbuilder import Assembler
@@ -206,6 +206,17 @@ def _encoded(initializer: object, ty: Type, layout: DataLayout,
             answer = _encoded(initializer.answer, ty.ok, layout, addresses, at)
             out[:len(answer)] = answer
             out[tag_offset_of(ty, layout)] = 1 if initializer.failed else 0
+            return bytes(out)
+        case SumConst() if isinstance(ty, SumType):
+            # What the part carries at the start, the tag -- which part it is --
+            # where the layout puts it, and the rest zeroes: the bytes a program
+            # making the value in its frame would have written.
+            out = bytearray(size_of(ty, layout))
+            if initializer.part is not None:
+                part = _encoded(initializer.part, ty.variants[initializer.index][1],
+                                layout, addresses, at)
+                out[:len(part)] = part
+            out[tag_offset_of(ty, layout)] = initializer.index
             return bytes(out)
         case _:
             return bytes(size_of(ty, layout))

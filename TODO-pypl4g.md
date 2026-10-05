@@ -107,9 +107,10 @@ removed or decided otherwise, which its last paragraph says.
     only ever handed over by reference -- so the fix is one thing for both: a type holding a value held in memory is itself held in
     memory, passed as an address and answered through the caller's room.
 
-[ ] a sum at the top level.  Refused today by the rule that a variable there is bytes in the image (9902).  What it needs is what
+[x] a sum at the top level.  Refused today by the rule that a variable there is bytes in the image (9902).  What it needs is what
     a collection there needed: the bytes are known while compiling -- a part and a tag -- so this one is a constant to lay out
-    rather than a constructor to generate.
+    rather than a constructor to generate.  Done on 2026-10-05: a `SumConst` laid out as a result is, read as where its bytes
+    are -- copied into the frame first where the variable may change -- and assigned by copying the bytes in.
 
 [x] generate the functions in the order the call graph gives.  Done on 2026-09-29: `ir/callgraph.py` answers the graph and the
     order, a depth-first walk left in the order it finished, and the three backends generate in it.  Round a cycle there is no

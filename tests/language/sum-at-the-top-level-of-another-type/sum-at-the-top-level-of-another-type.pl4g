@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4203
+
+※ A value of another type written where a sum is wanted at the top level is a
+※ mismatch, as it is inside a function -- not something the image cannot hold.
+
+type Point = x : u8 ; y : u8
+type Shape = dot : Point | line : u32
+
+let std := ⎕import("std")
+
+let wrong: Shape = Point(.x ← 1u8, .y ← 2u8)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

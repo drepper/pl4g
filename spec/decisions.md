@@ -9856,6 +9856,16 @@ read before the choice -- else every early `return` would list every variable al
 gets nothing of its own.  This is the per-path view of a data-flow liveness analysis -- what LLVM's and GCC's liveness compute on
 the control-flow graph -- written over the tree, which is all a structured language without `goto` needs.
 
+**A sum at the top level: bytes in the image; a `mut` one is copied where it is read**
+
+The user asked for the entry in TODO-pypl4g.md.  Taken without asking: a sum written out at the top level is a constant laid out
+while compiling, as a record is -- C's and Rust's static initializers, and what Zig's comptime-known `union` is.  Reading one is
+its address, as a sum anywhere is; but one that may change is copied into the frame where it is read, because a value read is a
+value and must not change when the variable is given another -- the address would make it an alias, which is what C's union
+behind a pointer is and what Rust's borrow rules forbid while the variable is written.  An array of known shape at the top level
+is read as its address whether it may change or not, as before; that is left as it is.  A value of another type written where a
+record or a sum is wanted at the top level is now a mismatch (4203) rather than a feature the image lacks (9902).
+
 Open questions
 --------------
 

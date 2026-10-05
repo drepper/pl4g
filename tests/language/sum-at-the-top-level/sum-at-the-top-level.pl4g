@@ -1,0 +1,54 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A value of a sum at the top level.
+※
+※ **It is bytes in the image**, as a record there is: which part it is and what
+※ that part carries are both written down, so the compiler lays out what a
+※ program making the value in its frame would write -- the part at the start
+※ and the tag after it -- and nothing runs to make it.
+※
+※ **Reading one is where its bytes are**, as a sum anywhere is.  One that may
+※ change is copied into the frame where it is read, so that what was read goes
+※ on holding what it held when the variable is given another value; giving it
+※ one copies the new value's bytes in.
+
+type Point = x : u8 ; y : u8
+type Shape = dot : Point | line : u32 | empty : void
+
+let std := ⎕import("std")
+
+let a_line: Shape = Shape(.line ← 7u32)
+let a_dot: Shape = Shape(.dot ← Point(.x ← 2u8, .y ← 3u8))
+let nothing: Shape = Shape(.empty ← true)
+let changing: mut Shape = Shape(.line ← 40u32)
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    if size(a_line) ≠ 7u32:
+        1u6
+    elif size(a_dot) ≠ 5u32:
+        2u6
+    elif size(nothing) ≠ 0u32:
+        3u6
+    else:
+        rest()
+
+@[impure]
+fn rest() → u6:
+    let before: Shape = changing
+    changing ← Shape(.dot ← Point(.x ← 1u8, .y ← 1u8))
+    if size(before) ≠ 40u32:
+        4u6
+    elif size(changing) ≠ 2u32:
+        5u6
+    else:
+        0u6
+
+fn size(s: Shape) → u32:
+    match s:
+        Point(p):
+            ⎕widen(p.x, ⌜u32⌝) + ⎕widen(p.y, ⌜u32⌝)
+        u32(n):
+            n
+        void:
+            0u32

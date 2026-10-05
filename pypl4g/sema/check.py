@@ -84,7 +84,7 @@ from ..ir.value import (AddressConst, ArrayConst, BlockParam, BoolConst,
                         CharConst, Const, EnumConst,
                         FloatConst,
                         IntConst, PartsConst, RecordConst,
-                        UndefConst,
+                        SumConst, UndefConst,
                         Value)
 from pathlib import Path
 
@@ -4261,7 +4261,7 @@ class Checker:
         base = expr.base
         single = self._member_named(expr)
         if isinstance(single, GlobalVar):
-            return builder.load(single, expr.span)
+            return self._read_global(builder, single, expr.span)
         if isinstance(base, ast.Member):
             # A type another module exports, and a value of it.  Nothing else a
             # module holds is reached through two marks, so what stands here is
@@ -4305,7 +4305,7 @@ class Checker:
                              name=expr.name, module=_path_text(base))
             return UndefConst(ERROR)
         if isinstance(found, GlobalVar):
-            return builder.load(found, expr.span)
+            return self._read_global(builder, found, expr.span)
         # A function is not a value, so naming one outside a call is naming
         # something there is nothing to do with.
         self._diags.emit(D.LANG_CALL_NOT_A_FUNCTION, expr.span, name=expr.name)
@@ -4682,6 +4682,11 @@ class Checker:
                 # out.  It is the same shape a definition inside a body writes
                 # and is checked by the same rules -- every field, each once.
                 return self._constant_record(node, ty)
+            case ast.Call() if isinstance(ty, SumType):
+                # A value of a sum written out: which part, and what it carries,
+                # both known -- so bytes in the image, laid out as a program
+                # making one in its frame would lay them out.
+                return self._constant_sum(node, ty)
             case ast.Member():
                 # A value of an enumeration is written `TYPE.NAME` and is known
                 # while compiling, so it is a constant like any literal.
@@ -5030,10 +5035,7 @@ class Checker:
         written = node.value
         assert isinstance(written, ast.Call)
         if not self._is_record_literal(written, ty):
-            self._diags.emit(
-                D.IMPL_UNIMPLEMENTED_FEATURE, written.span,
-                feature="a top-level variable whose value is not a literal")
-            return None
+            return self._not_this_type(node, ty)
         given = self._fields_given(written, ty)
         if given is None:
             return None
@@ -5045,6 +5047,84 @@ class Checker:
                 return None
             held.append(found)
         return self._module.record_const(ty, held)
+
+    def _not_this_type(self, node: ast.VarDef, ty: Type) -> None:
+        """A call at the top level that does not write a value of *ty* out: a
+        value of another type written out is a mismatch, and anything else --
+        a call of a function -- is what the image cannot hold yet."""
+        written = node.value
+        assert isinstance(written, ast.Call)
+        named = self._top.get(written.callee.name) \
+            if isinstance(written.callee, ast.NameRef) else None
+        if isinstance(named, _NamedType) and not named.takes_types:
+            return self._wrong_initializer(node, ty,
+                                           self._resolved(named).written())
+        self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, written.span,
+                         feature="a top-level variable whose value is not a literal")
+        return None
+
+    def _constant_sum(self, node: ast.VarDef, ty: SumType) -> Const | None:
+        """A value of a sum written out at the top level, as the bytes it comes to.
+
+        Checked by the rules a value made inside a body is (`_lower_sum`): one
+        part, named, one the type has, and `true` for a part that carries
+        nothing.
+        """
+        written = node.value
+        assert isinstance(written, ast.Call)
+        if not isinstance(written.callee, ast.NameRef) \
+                or not isinstance(self._top.get(written.callee.name), _NamedType) \
+                or self._resolved(self._top[written.callee.name]) is not ty:
+            return self._not_this_type(node, ty)
+        if len(written.args) != 1:
+            self._diags.emit(D.LANG_SUM_ONE_PART, written.span, type=ty.written(),
+                             found="none" if not written.args
+                             else str(len(written.args)))
+            return None
+        given = written.args[0]
+        if not isinstance(given, ast.Named):
+            self._diags.emit(D.LANG_PRODUCT_FIELD_NOT_NAMED, given.span,
+                             type=ty.written())
+            return None
+        at = next((index for index, (name, _) in enumerate(ty.variants)
+                   if name == given.name), None)
+        if at is None:
+            self._diags.emit(D.LANG_SUM_NO_SUCH_PART, given.span,
+                             type=ty.written(), name=given.name)
+            return None
+        held = ty.variants[at][1]
+        if held is VOID:
+            if not isinstance(given.value, ast.BoolLit) \
+                    or given.value.value is not True:
+                self._diags.emit(D.LANG_SUM_PART_CARRIES_NOTHING, given.span,
+                                 type=ty.written(), name=given.name)
+                return None
+            return SumConst(ty, at, None)
+        found = self._constant_value(replace(node, value=given.value), held)
+        if not isinstance(found, Const):
+            return None
+        return SumConst(ty, at, found)
+
+    def _read_global(self, builder: IRBuilder, var: GlobalVar,
+                     span: Span) -> Value:
+        """Read a variable at the top level.
+
+        A value held in registers is a load.  One held in memory -- a sum, an
+        array whose type says its shape -- *is* where its bytes are, so the
+        variable's own address is the value: nothing is read out of memory.
+        Except a sum that may change, which is copied into the frame first, so
+        that what was read goes on holding what it held when the variable is
+        given another value -- as a sum read out of a local does.
+        """
+        held = var.value_type
+        if not _held_in_memory(held):
+            return builder.load(var, span)
+        where = builder.address(var, span)
+        if isinstance(held, SumType) and var.mutable:
+            room = builder.frame(held, span)
+            self._copy_bytes(builder, room, where, size_of(held, _LAYOUT), span)
+            where = room
+        return builder.cast(CastKind.BITCAST, where, held, span)
 
     def _constant_elements(self, node: ast.VarDef, ty: ArrayType,
                            written: ast.ArrayLit,
@@ -18096,8 +18176,14 @@ class Checker:
             return None
         self._an_effect(D.LANG_PURE_CHANGES_A_VARIABLE, node.span, name=node.name)
         value = self._checked_value(builder, node, target.value_type)
-        builder.store(target, value, node.span)
-        return builder.load(target, node.span) if wants_value else None
+        if isinstance(target.value_type, SumType):
+            # Bytes in a place: the new value's are copied into the variable's.
+            self._copy_bytes(builder, builder.address(target, node.span), value,
+                             size_of(target.value_type, _LAYOUT), node.span)
+        else:
+            builder.store(target, value, node.span)
+        return self._read_global(builder, target, node.span) if wants_value \
+            else None
 
     def _check_mutable(self, node: ast.AssignStmt, mutable: bool, where: Span) -> bool:
         """Report an assignment to something whose definition did not allow it."""
@@ -24006,16 +24092,9 @@ class Checker:
                              what="a variable at the top level")
             return UndefConst(ERROR)
         if isinstance(resolved, GlobalVar):
-            held = resolved.value_type
-            if isinstance(held, ArrayType) and held.fixed:
-                # What a value of an array type *is*, is where the elements are:
-                # how many there are is in the type, so there is nothing else to
-                # carry and nothing to read out of memory.
-                resolved = builder.cast(CastKind.BITCAST,
-                                        builder.address(resolved, ref.span),
-                                        held, ref.span)
-            else:
-                resolved = builder.load(resolved, ref.span)
+            # What a value of an array type whose shape is known *is*, is where
+            # the elements are, and the same holds of a sum: `_read_global`.
+            resolved = self._read_global(builder, resolved, ref.span)
         if not self._accepts(expected, resolved.ty):
             self._report_mismatch(ref.span, resolved.ty, expected)
         return resolved
