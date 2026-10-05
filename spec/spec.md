@@ -3069,7 +3069,8 @@ init.io.error.ring)`, may be put into a record's field, which is how those are m
 What it answers is its own business.
 
 **Every move and every end of a lifetime is in the report log** (`move`, `lifetime-ended`), at the line it happened on, with what
-the value was handed to: a reader asking "who closes this" is asking that.
+the value was handed to: a reader asking "who closes this" is asking that.  A move in a deferred statement is logged at the
+statement, once, as made when the block is left: the variable holds its value until then, and the block may go on reading it.
 
 **Every variable whose type was not written in full is in the report log** (`type-inferred`): `let x :=`, `let x: mut =`, `⟦⟧`
 alone, the names a taking apart or a loop binds -- each at its name, with the type the compiler gave it, and what was written where

@@ -31,11 +31,32 @@ fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
 let std := ⎕import("std")
 """
 
+#: Closed by a deferred call, read after it, and with two ways out of the block.
+DEFERRED = """\
+@[closed_by(close)]
+type Handle = n : u8
 
-def _said(compile_source, tmp_path) -> dict[str, dict[int, list[str]]]:  # noqa: ANN001
+fn Handle.close(h: Handle):
+    let n: u8 = h.n
+
+@[startup]
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
+    let h: Handle = Handle(.n \N{LEFTWARDS ARROW} 1u8)
+    defer Handle.close(h)
+    if #init.args > 5:
+        return 1u6
+    let n: u8 = h.n
+    if n = 0u8: 2u6 else: 0u6
+
+let std := ⎕import("std")
+"""
+
+
+def _said(compile_source, tmp_path,  # noqa: ANN001
+          program: str = PROGRAM) -> dict[str, dict[int, list[str]]]:
     """What the log says about moves and lifetimes, by kind and line."""
     log = tmp_path / "report.json"
-    proc, _ = compile_source(PROGRAM, "".join(("--report-log=", str(log))))
+    proc, _ = compile_source(program, "".join(("--report-log=", str(log))))
     assert proc.returncode == 0, describe(proc)
     found: dict[str, dict[int, list[str]]] = {"move": {}, "lifetime-ended": {}}
     for one in json.loads(log.read_text(encoding="utf-8"))["reports"]:
@@ -55,3 +76,13 @@ def test_moves_and_ends_are_logged_where_they_happen(compile_source, tmp_path) -
     assert any(one.startswith("b: ") for one in said["lifetime-ended"][14]), said
     assert any("closed: this is 'Handle.close'" in one
                for one in said["lifetime-ended"][4]), said
+
+
+def test_a_deferred_move_is_made_when_the_block_is_left(compile_source, tmp_path) -> None:  # noqa: ANN001
+    """The move is logged where it is written, once, as made when the block is left
+    -- not as the end of the variable there, which is read on the lines after."""
+    said = _said(compile_source, tmp_path, DEFERRED)
+    assert said["move"][10] == ["h: handed to 'Handle.close' as its argument 1, "
+                                "when the block is left"], said
+    ended = said["lifetime-ended"][10]
+    assert len(ended) == 1 and "moved when the block is left" in ended[0], said

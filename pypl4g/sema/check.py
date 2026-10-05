@@ -3356,6 +3356,10 @@ class Checker:
         #: told.  One is lowered at every way out of its block, and a mistake in it
         #: is one mistake however many ways out there are.
         self._defer_told: set[int] = set()
+        #: Whether a deferred statement is being lowered, and if so whether for
+        #: the first time: what it moves is moved as the block is left, and is
+        #: logged once however many ways out there are.
+        self._in_deferred: Literal["first", "again"] | None = None
         #: The arenas given back in each block being lowered, by the identity of
         #: their names, innermost last -- kept beside the deferred statements and
         #: for the same reason: a block is what a way out leaves, and what was given
@@ -5291,10 +5295,19 @@ class Checker:
             return False
         local.owes = False
         local.ended_at, local.ended_how = span, how
+        if self._in_deferred == "again":
+            return True
+        if self._in_deferred is None:
+            ended = "".join(("moved, so it holds nothing from here: ", how))
+        else:
+            # Put off: the move is made where the block is left, which is where
+            # the lifetime ends -- not here, where it is written.
+            ended = "".join(("moved when the block is left, by what is put off "
+                             "here; until then it holds what it held: ", how))
+            how = "".join((how, ", when the block is left"))
         self._module.reports.record(ReportKind.MOVE, local.name, how, span)
-        self._module.reports.record(
-            ReportKind.LIFETIME_ENDED, local.name,
-            "".join(("moved, so it holds nothing from here: ", how)), span)
+        self._module.reports.record(ReportKind.LIFETIME_ENDED, local.name,
+                                    ended, span)
         return True
 
     def _told_ended(self, local: _Local, span: Span) -> None:
@@ -9106,7 +9119,8 @@ class Checker:
         """
         told = id(entry.node) in self._defer_told
         self._defer_told.add(id(entry.node))
-        kept = (self._scopes, self._unit_scopes, self._diags)
+        kept = (self._scopes, self._unit_scopes, self._diags, self._in_deferred)
+        self._in_deferred = "again" if told else "first"
         self._scopes = kept[0][:entry.depth]
         self._unit_scopes = kept[1][:entry.depth]
         if told:
@@ -9118,7 +9132,7 @@ class Checker:
             # before the next one runs -- as at the end of any statement.
             self._statement_ended()
         finally:
-            self._scopes, self._unit_scopes, self._diags = kept
+            self._scopes, self._unit_scopes, self._diags, self._in_deferred = kept
 
     def _unrun_deferred(self, func: Function, frame: int) -> None:
         """Check, once, what a block put off and no way out of it ever ran.
