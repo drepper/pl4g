@@ -2410,8 +2410,15 @@ and nothing runs to make it.  What it is written with is held to the rules a val
 that may change is copied into the frame where it is read, so that what was read goes on holding what it held when the variable is
 given another value, and giving it one copies the new value's bytes in.
 
-What is not there yet: a **record or a tuple holding a sum** (9902), which would have to be held in memory itself for the same
-reason.  Reading a field of a product and asking which part a sum holds are both there: the first is `p.x`, the second is
+**A record or a tuple holding a sum is held in memory as a whole**, and so is one holding an array whose type says its shape, or
+holding such a record, however deep.  Travelling as its values, it would carry where the sum's bytes were -- the room it was made
+in, which is gone the moment a function answers with it.  So it is bytes in a place, each field where the layout puts it and
+the sum's bytes among them, and a value of it is where that place is: passed as an address, answered through the room its
+caller gives, as a sum is.  Reading a field reads it from there; reading such a value anywhere copies its bytes, and so does
+putting it somewhere -- a field, an element, what a lambda brings in -- so what was read goes on holding what it held when the
+place it came from is written.  A name that may change and holds such a value, or a sum, has storage of its own, and giving it a
+value copies the bytes in: a value made on one turn of a loop and kept for the next is not the one the next turn makes in the
+same room.  Reading a field of a product and asking which part a sum holds are both there: the first is `p.x`, the second is
 `match`.
 
 ##### What a value of one occupies

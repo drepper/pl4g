@@ -1,0 +1,138 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A record holding a sum, and one holding an array whose type says its shape.
+※
+※ **It is held in memory as a whole.**  A sum is where its bytes are, and a
+※ record travelling as its values would carry where the sum's bytes were -- the
+※ room it was made in, gone the moment a function answers with the record.  So a
+※ record holding one is bytes in a place itself, each field where the layout puts
+※ it and the sum's bytes among them, and a value of it is where that place is:
+※ passed as an address and answered through the room its caller gives, as a sum
+※ is.  The same holds of a record holding such a record, however deep, and of an
+※ array whose type says its shape.
+※
+※ **Reading one copies its bytes**, and so does writing one somewhere: what was
+※ read goes on holding what it held when the place it was read from is written,
+※ and a lambda bringing one in keeps the bytes and not where they were.
+
+type Shape = line : u32 | empty : void
+type Tagged = label : u8 ; shape : Shape
+type Outer = before : u16 ; inner : Tagged ; after : u8
+type Box(T') = held : T' ; count : u8
+type Row = cells : u16⟦3⟧ ; mark : u8
+
+let std := ⎕import("std")
+
+let fixed: Tagged = Tagged(.label ← 4u8, .shape ← Shape(.line ← 20u32))
+let changing: mut Tagged = Tagged(.label ← 1u8, .shape ← Shape(.empty ← true))
+
+fn size(s: Shape) → u32:
+    match s:
+        u32(n):
+            n
+        void:
+            0u32
+
+fn weight(t: Tagged) → u32:
+    ⎕widen(t.label, ⌜u32⌝) + size(t.shape)
+
+※ answered with, and answered with from inside another
+fn made(n: u32) → Tagged:
+    Tagged(.label ← 5u8, .shape ← Shape(.line ← n))
+
+fn wrapped(n: u32) → Outer:
+    Outer(.before ← 1u16, .inner ← made(n), .after ← 2u8)
+
+fn chosen(first: bool) → Tagged:
+    if first:
+        Tagged(.label ← 1u8, .shape ← Shape(.line ← 100u32))
+    else:
+        Tagged(.label ← 2u8, .shape ← Shape(.line ← 200u32))
+
+fn row(a: u16) → Row:
+    Row(.cells ← ⟦a, a + 1u16, a + 2u16⟧, .mark ← 7u8)
+
+fn through(t: &Tagged) → u32:
+    size(t⌖.shape)
+
+fn total(l: [Tagged]) → u32:
+    let sum: mut u32 = 0u32
+    foreach x: Tagged = l:
+        sum ← sum + size(x.shape)
+    sum
+
+fn maybe(n: u32) → Tagged ? i32:
+    if n = 0u32: ⊥ 5i32 else: made(n)
+
+fn tags(n: u32) ⇉ Tagged:
+    foreach i := 1u32…n:
+        yield made(i)
+
+fn walked(n: u32) → u32:
+    let sum: mut u32 = 0u32
+    foreach t := tags(n):
+        sum ← sum + size(t.shape)
+    sum
+
+※ a lambda that outlives the frame the record was made in
+fn adder(n: u32) → fn(u32) in ⎕heap → u32:
+    let kept: Tagged = made(n)
+    λ a: u32 [kept] in ⎕heap → u32 { a + size(kept.shape) }
+
+fn noise(n: u32) → u32:
+    weight(made(n × 1000u32)) + weight(made(n × 7u32))
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let o: Outer = wrapped(11u32)
+    if weight(made(9u32)) ≠ 14u32 ∨ weight(o.inner) ≠ 16u32:
+        1u6
+    elif o.after ≠ 2u8 ∨ o.before ≠ 1u16:
+        2u6
+    else:
+        changed()
+
+@[impure]
+fn changed() → u6:
+    ※ a field given another value, while what was read before keeps its own
+    let m: mut Tagged = Tagged(.label ← 1u8, .shape ← Shape(.empty ← true))
+    let before: Shape = m.shape
+    m.shape ← Shape(.line ← 6u32)
+    changing.shape ← Shape(.line ← 55u32)
+    if size(before) ≠ 0u32 ∨ size(m.shape) ≠ 6u32:
+        3u6
+    elif size(fixed.shape) ≠ 20u32 ∨ size(changing.shape) ≠ 55u32:
+        4u6
+    else:
+        held(m)
+
+@[impure]
+fn held(m: Tagged) → u6:
+    let b: Box(Shape) = Box(.held ← Shape(.line ← 12u32), .count ← 1u8)
+    let r: Row = row(10u16)
+    let t: Tagged = chosen(false)
+    let many: [Tagged] = [chosen(true), t]
+    if size(b.held) ≠ 12u32 ∨ r.cells⟦2⟧ ≠ 12u16 ∨ r.mark ≠ 7u8:
+        5u6
+    elif through(&t) ≠ 200u32 ∨ total(many) ≠ 300u32:
+        6u6
+    else:
+        later(m)
+
+@[impure]
+fn later(m: Tagged) → u6:
+    let got: u32 = match maybe(4u32):
+        Tagged(t):
+            size(t.shape)
+        _:
+            0u32
+    let f: fn(u32) in ⎕heap → u32 = adder(40u32)
+    let z: u32 = noise(5u32)
+    if got ≠ 4u32 ∨ size(m.shape) ≠ 6u32:
+        7u6
+    elif walked(4u32) ≠ 6u32:
+        8u6
+    elif f(2u32) ≠ 42u32 ∨ z = 0u32:
+        9u6
+    else:
+        0u6

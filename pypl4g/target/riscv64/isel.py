@@ -38,7 +38,7 @@ from ..narrow import normalize
 from ...ir.value import Value
 from ...ir.layout import (DataLayout, align_of, leaf_offsets_of, size_of,
                           tag_offset_of)
-from ...ir.types import (ResultType, leaves_of, made_of_parts, parts_of)
+from ...ir.types import (ResultType, leaves_of, made_of_parts, parts_of, held_in_memory)
 from ..callconv import (TooManyArguments, argument_places, destroyed_by,
                         result_places)
 from ..bitcount import COUNTING, lower_count
@@ -1999,13 +1999,14 @@ def _new_value(ty: Type, registers: RegisterInfo,
     """
     from ...ir.types import FloatType, ProductType
 
-    if isinstance(ty, ProductType):
+    if isinstance(ty, ProductType) and not held_in_memory(ty):
         # A record travels as the values it is made of, and whatever asks for a
         # register asks once per value -- so what arrives here is a record whose
         # values are one, which is a register of whatever that one is.  A record
         # of more than one has no register to be in and says so.
         inner = parts_of(ty)
-        if len(inner) == 1 and not made_of_parts(inner[0]):
+        if len(inner) == 1 and inner[0] is not ty \
+                and not made_of_parts(inner[0]):
             return _new_value(inner[0], registers, hint=hint)
         raise UnsupportedOperation("".join((
             "a value of type '", ty.written(), "'")), None)
@@ -2060,7 +2061,8 @@ def _width_of(ty: Type) -> int:
         # A record of one value is that value, which is what it is held as and
         # what a load or a store of it touches.
         inner = parts_of(ty)
-        if len(inner) == 1 and not made_of_parts(inner[0]):
+        if len(inner) == 1 and inner[0] is not ty \
+                and not made_of_parts(inner[0]):
             return _width_of(inner[0])
     return 8 if isinstance(ty, BoolType) else 64
 

@@ -1,0 +1,39 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A tuple holding a sum is held in memory, as a record holding one is: its
+※ members where the layout puts them, and a value of it where that place is.
+※ Taking it apart, reading a member and spreading it read the members from
+※ there.
+
+type Shape = line : u32 | empty : void
+
+let std := ⎕import("std")
+
+fn size(s: Shape) → u32:
+    match s:
+        u32(n):
+            n
+        void:
+            0u32
+
+fn pair(n: u32) → 〈u8, Shape〉:
+    〈2u8, Shape(.line ← n)〉
+
+fn both(a: u8, s: Shape) → u32:
+    ⎕widen(a, ⌜u32⌝) + size(s)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let p: 〈u8, Shape〉 = pair(30u32)
+    let a: mut u8 = 0u8
+    let s: mut Shape = Shape(.empty ← true)
+    @[ignore(4006)]
+    a, s ← pair(9u32)
+    if p⟦0⟧ ≠ 2u8 ∨ size(p⟦1⟧) ≠ 30u32:
+        1u6
+    elif a ≠ 2u8 ∨ size(s) ≠ 9u32:
+        2u6
+    elif both(⁂p) ≠ 32u32:
+        3u6
+    else:
+        0u6

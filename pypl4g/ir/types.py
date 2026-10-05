@@ -1386,8 +1386,29 @@ def held_in_memory(ty: Type) -> bool:
     value of one *is*, is where those bytes are.  Everything that has to know
     whether a value travels in registers asks this, so the answer cannot drift
     between the parts of the compiler that ask it.
+
+    A record or a tuple holding such a value is held in memory too, however deep
+    it is held: one travelling as its values would carry where the bytes of the
+    one inside were, which is the room it was made in -- gone the moment a
+    function answers with it.  So it is bytes in a place as a whole, its fields
+    where the layout puts them, and a value of it is where that place is.
     """
-    return isinstance(ty, SumType) or (isinstance(ty, ArrayType) and ty.fixed)
+    return _held_in_memory(ty, set())
+
+
+def _held_in_memory(ty: Type, seen: set[int]) -> bool:
+    """`held_in_memory`, not going round a type it is already asking about."""
+    if isinstance(ty, SumType) or (isinstance(ty, ArrayType) and ty.fixed):
+        return True
+    if id(ty) in seen:
+        return False
+    if isinstance(ty, ProductType):
+        seen.add(id(ty))
+        return any(_held_in_memory(one, seen) for _, one in ty.fields)
+    if isinstance(ty, TupleType):
+        seen.add(id(ty))
+        return any(_held_in_memory(one, seen) for one in ty.members)
+    return False
 
 
 def made_of_parts(ty: Type) -> bool:
@@ -1463,6 +1484,9 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
     `parts_within` is what says which of the leaves belong to which member, for
     the places that read a member out.
     """
+    if isinstance(ty, (TupleType, ProductType)) and held_in_memory(ty):
+        # Held in memory as a whole: one value, where its bytes are.
+        return (ty,)
     if isinstance(ty, ResultType):
         # The answer, whether there is one, and -- where the error carries a
         # value of its own -- that value.  The truth value stays the *second*

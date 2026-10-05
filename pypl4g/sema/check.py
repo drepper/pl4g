@@ -4366,9 +4366,14 @@ class Checker:
         # A record that arrived as a value and not as a place -- what a call
         # answered with -- is put somewhere first, so that one rule reads a
         # field however the record got here and a field of a field needs no
-        # second one.
-        place = builder.frame(ty, expr.span)
-        self._record_into(builder, place, value, ty, expr.span)
+        # second one.  One held in memory is somewhere already.
+        if _held_in_memory(ty):
+            place = builder.cast(CastKind.BITCAST, value,
+                                 self._module.types.ptr_type(ty, mutable=True),
+                                 expr.span)
+        else:
+            place = builder.frame(ty, expr.span)
+            self._record_into(builder, place, value, ty, expr.span)
         return self._field_of_place(builder, place, ty, expr, expected)
 
     def _field_of_place(self, builder: IRBuilder, where: Value,
@@ -5327,9 +5332,17 @@ class Checker:
         # address: a field is read at an offset, so the record has to be
         # somewhere for there to be an offset from.  Binding one then copies it,
         # which is what a record being a value rather than a place means.
+        # And a name that may change, holding a value held in memory -- a sum, a
+        # record or a tuple holding one: giving it another value copies the
+        # bytes into its own storage, rather than making it stand for the room
+        # the new value was made in, which a loop's next turn makes again.
+        changing = (mutable and _held_in_memory(held)
+                    and not isinstance(held, ArrayType))
         placed = (builder is not None
-                  and (name in self._addressed or isinstance(held, ProductType))
-                  and (_can_be_referred_to(held) or isinstance(held, ListType)))
+                  and (name in self._addressed or isinstance(held, ProductType)
+                       or changing)
+                  and (_can_be_referred_to(held) or isinstance(held, ListType)
+                       or changing))
         if placed:
             assert builder is not None
             # A variable the program wrote as an ordinary name and the compiler
@@ -5345,7 +5358,10 @@ class Checker:
                 "own rather than in a register"
                 if name in self._addressed else
                 "it is a record, and a field is read at an offset, so it is kept "
-                "in storage of its own for there to be an offset from",
+                "in storage of its own for there to be an offset from"
+                if isinstance(held, ProductType) else
+                "it may change and its value is bytes in memory, so it is kept "
+                "in storage of its own and a new value is copied in",
                 span)
             place = builder.frame(held, span)
             if isinstance(held, ProductType):
@@ -6999,16 +7015,6 @@ class Checker:
             if ty is ERROR:
                 spoiled = True
                 continue
-            if node.kind is ast.TypeKind.PRODUCT and _held_in_memory(ty) \
-                    and isinstance(ty, SumType):
-                # A record travels as the values it is made of, and a sum is
-                # not one of those: what a value of one is, is where its bytes
-                # are.  A record holding one would therefore have to be held in
-                # memory itself, which is the next step and not this one.
-                self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, field.type.span,
-                                 feature="a record holding a sum")
-                spoiled = True
-                continue
             if node.kind is ast.TypeKind.SUM:
                 # An arm of a `match` names the type of the alternative it
                 # takes, so two alternatives of one type would be two no arm
@@ -7183,15 +7189,6 @@ class Checker:
             members = [self._resolve_type(m) for m in ref.members]
             if any(m is ERROR for m in members):
                 return ERROR
-            for written, held in zip(ref.members, members):
-                if isinstance(held, SumType):
-                    # A tuple travels as its members, and a sum is where its
-                    # bytes are: a tuple holding one and handed back would hand
-                    # back where the room it was made in was.  The same step a
-                    # record holding one waits on.
-                    self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, written.span,
-                                     feature="a tuple holding a sum")
-                    return ERROR
             return self._module.types.tuple_type(members)
         if isinstance(ref, ast.RefTypeRef):
             return self._reference_type(ref)
@@ -9838,11 +9835,9 @@ class Checker:
             return UndefConst(ERROR)
         # A tuple travels as its leaves and not as its members, the same way a
         # record does: a member that is itself several values is that many
-        # values here, since what travels is values.
-        leaves: list[Value] = []
-        for value, member in zip(values, types):
-            leaves.extend(builder.leaves(value, member, expr.span))
-        return builder.make_tuple(tuple(leaves), ty, expr.span)
+        # values here, since what travels is values -- unless it is held in
+        # memory, when it is bytes in a place.
+        return self._made_tuple(builder, values, ty, expr.span)
 
     def _taken_apart(self, value: Value, names: Sequence[tuple[str, Span]],
                      span: Span) -> list[Type] | None:
@@ -9860,6 +9855,61 @@ class Checker:
                              count=str(len(ty.members)))
             return None
         return list(ty.members)
+
+    def _member_place(self, builder: IRBuilder, place: Value,
+                      ty: TupleType | ProductType, at: int, span: Span) -> Value:
+        """Where member *at* of the tuple or record at *place* is."""
+        if isinstance(ty, ProductType):
+            return self._field_place(builder, place, ty, at, span)
+        member = ty.members[at]
+        where = builder.cast(CastKind.BITCAST, place,
+                             self._module.types.ptr_type(U8, mutable=True), span)
+        offset = member_offsets_of(ty, _LAYOUT)[at]
+        if offset:
+            where = builder.binary(BinOp.ADD, where,
+                                   builder.int_const(U64, offset), span)
+        return builder.cast(CastKind.BITCAST, where,
+                            self._module.types.ptr_type(member, mutable=True), span)
+
+    def _member(self, builder: IRBuilder, value: Value,
+                ty: TupleType | ProductType, at: int, span: Span) -> Value:
+        """Member *at* of a tuple or a record, as the one value it is.
+
+        One held in memory is where its bytes are, so the member is read from
+        where the layout puts it.  Otherwise it is the leaves the member is made
+        of among the whole's, put back together.
+        """
+        member = ty.members[at] if isinstance(ty, TupleType) else ty.fields[at][1]
+        if _held_in_memory(ty):
+            place = builder.cast(CastKind.BITCAST, value,
+                                 self._module.types.ptr_type(ty, mutable=True),
+                                 span)
+            return builder.load(self._member_place(builder, place, ty, at, span),
+                                span)
+        first, count = parts_within(ty)[at]
+        pieces = parts_of(ty)
+        return builder.whole(
+            [builder.extract(value, first + which, pieces[first + which], span)
+             for which in range(count)], member, span)
+
+    def _made_tuple(self, builder: IRBuilder, values: Sequence[Value],
+                    ty: TupleType, span: Span) -> Value:
+        """A tuple of *values*, one for each member.
+
+        One held in memory is room in the frame with each member written where
+        the layout puts it, and the room is the value; otherwise it travels as
+        its leaves, a member that is several values being that many.
+        """
+        if _held_in_memory(ty):
+            room = builder.frame(ty, span)
+            for at, value in enumerate(values):
+                builder.store(self._member_place(builder, room, ty, at, span),
+                              value, span)
+            return builder.cast(CastKind.BITCAST, room, ty, span)
+        leaves: list[Value] = []
+        for value, member in zip(values, ty.members):
+            leaves.extend(builder.leaves(value, member, span))
+        return builder.make_tuple(tuple(leaves), ty, span)
 
     # -- sets and dictionaries --------------------------------------------------
 
@@ -10150,6 +10200,13 @@ class Checker:
         a record is spread out where it stands, so `first` is which of them this
         one begins at and what comes back is where the next would.
         """
+        if _held_in_memory(ty):
+            # Bytes in a place: what the value is, is where they are, and they
+            # are copied.
+            builder.store(builder.cast(
+                CastKind.BITCAST, where,
+                self._module.types.ptr_type(ty, mutable=True), span), value, span)
+            return first + 1
         at_part = first
         for at, (_, held) in enumerate(ty.fields):
             place = self._field_place(builder, where, ty, at, span)
@@ -10168,7 +10225,12 @@ class Checker:
 
     def _record_from(self, builder: IRBuilder, where: Value, ty: ProductType,
                      span: Span) -> Value:
-        """Read a record out of the place *where*, a leaf at a time."""
+        """Read a record out of the place *where*, a leaf at a time -- or, for
+        one held in memory, its bytes into room of its own."""
+        if _held_in_memory(ty):
+            return builder.load(builder.cast(
+                CastKind.BITCAST, where,
+                self._module.types.ptr_type(ty, mutable=True), span), span)
         return builder.make_tuple(
             tuple(self._leaves_from(builder, where, ty, span)), ty, span)
 
@@ -10658,12 +10720,7 @@ class Checker:
         # Where that member's own parts begin among the tuple's, and how many
         # of them there are: a member is one value to the program and may be
         # several to the machine.
-        first, count = parts_within(ty)[at]
-        pieces = parts_of(ty)
-        return builder.whole(
-            [builder.extract(base, first + which, pieces[first + which],
-                             expr.span) for which in range(count)],
-            member, expr.span)
+        return self._member(builder, base, ty, at, expr.span)
 
     def _constant(self, expr: ast.Expr) -> _Folded | None:
         """What *expr* comes to while compiling, where it is a constant.
@@ -15123,17 +15180,11 @@ class Checker:
         # A member is one value to the program and may be several to the machine,
         # so which leaves belong to it is asked rather than assumed: a member that
         # is itself a tuple, or holds a string, is more than one.
-        inside = parts_within(ty)
-        held = parts_of(ty)
         for at, member in enumerate(ty.members):
             if declared is not None and declared is not member:
                 self._report_mismatch(stmt.iterable.span, member, declared)
                 return UndefConst(ERROR)
-            first, count = inside[at]
-            turn = builder.whole(
-                [builder.extract(value, first + which, held[first + which],
-                                 stmt.span) for which in range(count)],
-                member, stmt.span)
+            turn = self._member(builder, value, ty, at, stmt.span)
             self._push_scope()
             self._bind_local(stmt.name, turn, stmt.name_span, builder=builder)
             self._report_inferred(((stmt.name, stmt.name_span),), stmt.type)
@@ -18039,7 +18090,8 @@ class Checker:
                 # A part of a turn that is not wanted, as `_` on its own is a
                 # turn that is not: nothing is bound, so nothing is unread.
                 continue
-            part = builder.extract(value, index, members[index], node.span)
+            part = self._member(builder, value, self._value_type_of(value),
+                                index, node.span)
             self._name_value(part, name, where)
             self._bind_local(name, part, where, mutable, value_span=node.span,
                              builder=builder)
@@ -18206,7 +18258,8 @@ class Checker:
         if members is None:
             return
         for index, (name, where) in enumerate(names):
-            part = builder.extract(value, index, members[index], node.span)
+            part = self._member(builder, value, self._value_type_of(value),
+                                index, node.span)
             one = ast.AssignStmt(span=where, name=name, name_span=where,
                                  value=node.value)
             self._store_into(builder, one, part)
@@ -18215,6 +18268,27 @@ class Checker:
                     value: Value) -> None:
         """Put an already lowered value into the variable *node* names."""
         local = self._find_local(node.name)
+        if local is not None and local.placed:
+            # A name with storage of its own is written the way an assignment
+            # writes one: what it holds, and not where it is, is compared, and
+            # the value is put in its storage.
+            if not self._check_mutable(node, local.mutable, local.span):
+                return
+            assert local.held is not None
+            if self._value_type_of(value) is not local.held:
+                self._report_mismatch(node.span, self._value_type_of(value),
+                                      local.held)
+                return
+            if self._lent_out(node.name, node.span, True):
+                return
+            if isinstance(local.held, ProductType):
+                self._record_into(builder, local.value, value, local.held,
+                                  node.span)
+            else:
+                builder.store(local.value, value, node.span)
+            local.written = True
+            local.is_parameter = False
+            return
         if local is not None:
             if not self._check_mutable(node, local.mutable, local.span):
                 return
@@ -20539,8 +20613,8 @@ class Checker:
             if not self._ordered(ty.members[0]):
                 return None
             return self._folded(builder, expr,
-                                [builder.extract(value, at, member, expr.span)
-                                 for at, member in enumerate(ty.members)],
+                                [self._member(builder, value, ty, at, expr.span)
+                                 for at in range(len(ty.members))],
                                 ty.members[0])
         if isinstance(ty, ArrayType):
             # A type that says its shape is walked while compiling, whatever its
@@ -21882,11 +21956,21 @@ class Checker:
                 spoiled = True
         if spoiled:
             return UndefConst(ERROR)
-        leaves: list[Value] = []
-        for name, held in ty.fields:
-            leaves.extend(self._leaves_of(builder, given[name], held,
-                                          expr.span))
-        made = builder.make_tuple(tuple(leaves), ty, expr.span)
+        if _held_in_memory(ty):
+            # Bytes in a place as a whole: room in the frame, each field written
+            # where the layout puts it, and the room is the value -- as a sum's
+            # is.
+            room = builder.frame(ty, expr.span)
+            for at, (name, _) in enumerate(ty.fields):
+                builder.store(self._field_place(builder, room, ty, at, expr.span),
+                              given[name], expr.span)
+            made = builder.cast(CastKind.BITCAST, room, ty, expr.span)
+        else:
+            leaves: list[Value] = []
+            for name, held in ty.fields:
+                leaves.extend(self._leaves_of(builder, given[name], held,
+                                              expr.span))
+            made = builder.make_tuple(tuple(leaves), ty, expr.span)
         if not self._accepts(expected, ty):
             self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)
@@ -22232,6 +22316,22 @@ class Checker:
         # value per leaf and not one per member: a `str` is two of them and so is
         # a field that is itself several values, which is why the pairs are not
         # assembled one at a time and then put together.
+        if _held_in_memory(found):
+            # A record held in memory: each field read where it is, and each pair
+            # and the whole made of members rather than of leaves.
+            pairs: list[Value] = []
+            for at, (name, kind) in enumerate(found.fields):
+                pair = self._module.types.tuple_type((STR, kind))
+                pairs.append(self._made_tuple(builder, (
+                    self._written_text(builder, name, expr.span),
+                    self._member(builder, given, found, at, expr.span)),
+                    pair, expr.span))
+            whole = self._module.types.tuple_type(
+                tuple(one.ty for one in pairs))
+            if not self._accepts(expected, whole):
+                self._report_mismatch(expr.span, whole, expected)
+                return UndefConst(ERROR)
+            return self._made_tuple(builder, pairs, whole, expr.span)
         inside = parts_within(found)
         held = parts_of(found)
         text = parts_of(STR)
@@ -23794,8 +23894,8 @@ class Checker:
         if ty is ERROR:
             return None
         if isinstance(ty, TupleType):
-            return [builder.extract(value, at, member, spread.span)
-                    for at, member in enumerate(ty.members)]
+            return [self._member(builder, value, ty, at, spread.span)
+                    for at in range(len(ty.members))]
         if not isinstance(ty, ArrayType):
             self._diags.emit(D.LANG_SPREAD_NOT_SEVERAL, spread.operand.span,
                              found=ty.written())

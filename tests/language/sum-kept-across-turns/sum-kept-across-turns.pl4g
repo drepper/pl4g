@@ -1,0 +1,29 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A sum made on one turn of a loop and kept for the next.
+※
+※ The room a sum is made in is the frame's, one for each place in the program a
+※ sum is made at, so the next turn makes its value in the same room.  A name that
+※ may change and holds such a value has storage of its own, and giving it a
+※ value copies the bytes in: what it was given on one turn is still what it
+※ holds on the next, whatever the next made in the room the value came from.
+type Shape = line : u32 | empty : void
+
+let std := ⎕import("std")
+
+fn size(s: Shape) → u32:
+    match s:
+        u32(n):
+            n
+        void:
+            0u32
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let prev: mut Shape = Shape(.empty ← true)
+    let seen: mut u32 = 0u32
+    foreach i := 1u32…4u32:
+        let cur: Shape = Shape(.line ← i)
+        seen ← seen × 10u32 + size(prev)
+        prev ← cur
+    if seen = 12u32: 0u6 else: 1u6

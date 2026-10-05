@@ -22,10 +22,17 @@ from .inst import (SyscallInst,
                    Terminator,
                    TupleInst, UnaryInst, UnOp,
                    UnreachableInst, UnwrapInst, WrapInst)
+from .layout import DataLayout, align_of, size_of
 from .module import Module
 from .types import (FloatType, BOOL, IntType, ListType, PtrType, ResultType, StrType, Type,
-                    U8, U64, VecType, parts_of)
+                    U8, U16, U32, U64, VecType, held_in_memory, parts_of)
 from .value import Value
+
+#: The layout a copy is worked out with: every target is one of 64-bit words.
+_LAYOUT = DataLayout(pointer_size=8)
+
+#: What the bytes of a value held in memory are copied in, largest first.
+_CHUNKS: tuple[tuple[IntType, int], ...] = ((U64, 8), (U32, 4), (U16, 2), (U8, 1))
 
 
 class IRBuilder:
@@ -262,20 +269,66 @@ class IRBuilder:
 
     def load(self, address: Value, span: Span = INVALID_SPAN,
              ordering: Ordering = Ordering.PLAIN) -> Value:
-        """Append a load of whatever *address* points at."""
+        """Append a load of whatever *address* points at.
+
+        A value held in memory -- a sum, an array of known shape, a record holding
+        either -- is not something a register holds: what a value of one *is*, is
+        where its bytes are.  Reading one copies its bytes into room of its own,
+        and that room is the value, so that what was read goes on holding what it
+        held when the place it was read from is written.
+        """
         pointee = address.ty
         assert isinstance(pointee, PtrType)
+        if held_in_memory(pointee.pointee):
+            room = self.frame(pointee.pointee, span)
+            self.copy(room, address, pointee.pointee, span)
+            return self.cast(CastKind.BITCAST, room, pointee.pointee, span)
         return self._append(LoadInst(pointee.pointee, (self.memory(), address),
                                      span, ordering))
 
     def store(self, address: Value, value: Value,
               span: Span = INVALID_SPAN,
               ordering: Ordering = Ordering.PLAIN) -> Value:
-        """Append a store of *value* through *address*, and take the new token."""
+        """Append a store of *value* through *address*, and take the new token.
+
+        A value held in memory is where its bytes are, and storing it copies
+        those bytes: the place gets the value, and not where the value was.
+        """
+        if held_in_memory(value.ty):
+            return self.copy(address, value, value.ty, span)
         written = self._append(StoreInst(self.memory(), address, value, span,
                                          ordering))
         self._memory = written
         return written
+
+    def copy(self, into: Value, from_: Value, ty: Type,
+             span: Span = INVALID_SPAN) -> Value:
+        """Append a copy of the bytes of a value of *ty* from *from_* to *into*,
+        and take the new token.
+
+        Written out in the largest pieces the type's alignment allows rather than
+        looped over: the size is known while compiling and is a handful of words.
+        """
+        size = size_of(ty, _LAYOUT)
+        widest = max(1, align_of(ty, _LAYOUT))
+        at = 0
+        while at < size:
+            part, width = next(one for one in _CHUNKS
+                               if one[1] <= size - at and one[1] <= widest)
+            read = self._append(LoadInst(part, (self.memory(), self._piece(
+                from_, part, at, span)), span))
+            self._memory = self._append(StoreInst(
+                self.memory(), self._piece(into, part, at, span), read, span))
+            at += width
+        return self.memory()
+
+    def _piece(self, place: Value, part: Type, offset: int, span: Span) -> Value:
+        """Where one piece of a copy is, as a pointer to a value of *part*."""
+        where = self.cast(CastKind.BITCAST, place,
+                          self._module.types.ptr_type(part, mutable=True), span)
+        if offset == 0:
+            return where
+        return self.binary(BinOp.ADD, where, self.int_const(U64, offset), span)
 
     def syscall(self, number: Value, args: Sequence[Value], result_ty: Type,
                 span: Span = INVALID_SPAN) -> Value:

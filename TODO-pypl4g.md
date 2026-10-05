@@ -101,11 +101,17 @@ removed or decided otherwise, which its last paragraph says.
     array's is.  Answering with one goes through the caller's room, by the convention an answer of more values than the registers
     hold already took: `ReturnStyle.in_registers` says no for anything held in memory, and the rewrite copies the bytes in.
 
-[ ] hold a record or a tuple in memory, so that one may hold a sum.  Refused today (9902): both travel as the values they are
+[x] hold a record or a tuple in memory, so that one may hold a sum.  Refused today (9902): both travel as the values they are
     made of, so one holding a sum would carry the address of the room the sum was made in, which dangles the moment it is answered
     with.  An array in a record has the same hazard and is not refused -- the one such record in the language is `@[abi]` and is
     only ever handed over by reference -- so the fix is one thing for both: a type holding a value held in memory is itself held in
     memory, passed as an address and answered through the caller's room.
+    Done on 2026-10-05: `held_in_memory` covers a product or a tuple holding such a value, `parts_of` answers it whole, the
+    builder's `load` and `store` copy bytes, and a `mut` local of such a type has storage of its own.
+
+[ ] read a field of a record a lambda brought in.  `λ a: u32 [kept] → u32 { a + kept.y }` is refused with 4103, "'kept' is not
+    a module": inside the lambda's body the name is not taken for a variable holding a record.  Found on 2026-10-05 while testing
+    records held in memory; it is so for every record, held in memory or not.  Handing the whole record on works.
 
 [x] a sum at the top level.  Refused today by the rule that a variable there is bytes in the image (9902).  What it needs is what
     a collection there needed: the bytes are known while compiling -- a part and a tag -- so this one is a constant to lay out

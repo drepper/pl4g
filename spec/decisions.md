@@ -6780,7 +6780,7 @@ an argument and would need its own syntax in a call; and `void`, which is a type
 and not a value.
 
 **A record or a tuple holding a sum is refused** (9902) rather than quietly
-wrong.  Both travel as the values they are made of, so one holding a sum would
+wrong (since lifted: see the entry on holding a record in memory).  Both travel as the values they are made of, so one holding a sum would
 carry the address of the room the sum was made in -- safe going down and dangling
 coming back.  What fixes both is holding a record or a tuple in memory too, which
 is the next step and a larger one.  An array in a record has the same hazard
@@ -9865,6 +9865,17 @@ value and must not change when the variable is given another -- the address woul
 behind a pointer is and what Rust's borrow rules forbid while the variable is written.  An array of known shape at the top level
 is read as its address whether it may change or not, as before; that is left as it is.  A value of another type written where a
 record or a sum is wanted at the top level is now a mismatch (4203) rather than a feature the image lacks (9902).
+
+**A record or a tuple holding a sum is held in memory; a value held in memory is copied where it is read and written**
+
+The user asked for the entry in TODO-pypl4g.md, whose design was settled when it was written: a type holding a value held in
+memory is held in memory itself, passed as an address and answered through the caller's room.  Taken without asking, each
+following from that: the rule covers an array whose type says its shape as the entry said, and any depth; `load` and `store`
+of such a value copy its bytes, which also corrects a sum put in a field or behind a reference -- it had been stored as the
+address of its room; and a `mut` local of such a type has storage of its own, which corrects a sum kept across the turns of a
+loop reading the next turn's value -- found while testing, and already wrong on `main`.  This is what C and Rust do with a struct
+holding a union or an enum: it is laid out inline, passed in memory where it is large, and copied by assignment; a register is
+an optimisation of the small case, which here is a record of values in registers and a record of anything held in memory not.
 
 Open questions
 --------------

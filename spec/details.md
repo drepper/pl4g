@@ -3519,11 +3519,26 @@ function reads a variable at the top level: a load for a value in registers, and
 known shape -- the variable's own address, except that a `mut` sum is copied into the frame first.  Assigning to one copies
 the bytes in with `_copy_bytes`.
 
-**What is refused** is a record or a tuple holding a sum (9902).  Both travel as
-the values they are made of, so one holding a sum would carry the address of the
-room the sum was made in -- which is the caller's frame going down and nothing at
-all coming back.  Holding either in memory is the step that fixes both, and the
-to-do list carries it.
+**A record or a tuple holding one** is held in memory itself: `held_in_memory`
+answers yes for a product or a tuple with a member it answers yes for, however
+deep, and `parts_of` then answers the type itself -- one part, an address -- so
+the convention, `largeanswers` and the coroutine frames treat it as they treat a
+sum without knowing the difference.  The checker builds one as room in the frame
+with each member stored where `offsets_of` or `member_offsets_of` puts it
+(`_lower_record`, `_made_tuple`), reads a member from there (`_member`,
+`_field_of_place`), and `_record_from` and `_record_into` become a load and a
+store of the whole.
+
+**The builder's `load` and `store` copy a value held in memory.**  Storing one
+copies its bytes, in the largest pieces its alignment allows (`IRBuilder.copy`);
+loading one copies them into room of its own, which is the value.  Before, a sum
+put in a field or behind a reference was stored as the address of its room -- a
+pointer where the layout said bytes, which read back only while that room lived.
+A `mut` local of such a type, an array excepted, is given storage of its own
+(`_bind_local`), so assigning to it copies rather than rebinding the name to the
+room the new value was made in: that room belongs to a place in the program and
+not to a turn of a loop, so a value kept from one turn to the next would
+otherwise read what the next turn made.
 
 A cursor is where the list is, and how far along
 -----------------------------------------------
