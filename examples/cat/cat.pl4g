@@ -23,7 +23,10 @@ type State =
     numbered : bool ; blank_too : bool ; count : u64 ; at_start : bool ; error : i32
 
 ※※ Write `n` six columns wide and a tab after it.
-fn number(out: &mut std.io.Writer, n: u64) → bool:
+※※
+※※ \return how many bytes went, which is all seven
+※※ \raises the number the kernel gave
+fn number(out: &mut std.io.Writer, n: u64) → u64 ¤size ? i32:
     let text: mut u8⟦7⟧ = 7 ⍴ 32u8
     text⟦6⟧ ← 9u8
     let left: mut u64 = n
@@ -32,7 +35,14 @@ fn number(out: &mut std.io.Writer, n: u64) → bool:
         at ← at - 1
         text⟦at⟧ ← 48u8 + (⎕narrow(left % 10u64 ?? 0u64, ⌜u8⌝) ?? 0u8)
         left ← left ÷ 10u64 ?? 0u64
-    (std.Io.print(out, text) ?? 0) = 7
+    std.Io.print(out, text)
+
+※※ What went wrong with a write: the number the kernel gave, or nought where
+※※ everything went.
+fn failure(of: u64 ¤size ? i32) → i32:
+    match of:
+        ⊥(code): code
+        _: 0i32
 
 ※※ Copy everything `from` holds to `out` a line at a time, numbering as `before`
 ※※ says, and answer the state after it: where numbering got to, and in `error`
@@ -53,11 +63,11 @@ fn copied(from: &mut std.io.Reader, out: &mut std.io.Writer, before: State) → 
                 let blank: bool = #text = 1 ∧ text⟦0⟧ = 10u8
                 if state.at_start ∧ state.numbered ∧ (state.blank_too ∨ ¬blank):
                     state.count ← state.count + 1u64
-                    if ¬number(out, state.count):
-                        state.error ← 0i32 - 1i32
+                    state.error ← failure(number(out, state.count))
+                    if state.error ≠ 0i32:
                         return state
-                if (std.Io.print(out, text) ?? 0) ≠ #text:
-                    state.error ← 0i32 - 1i32
+                state.error ← failure(std.Io.print(out, text))
+                if state.error ≠ 0i32:
                     return state
                 state.at_start ← text⟦⎕unit(⎕drop(#text) - 1u64, ⌜idx⌝)⟧ = 10u8
             ⊥(code):
