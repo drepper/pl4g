@@ -9828,6 +9828,16 @@ Compare Rust's non-lexical lifetimes (RFC 2094), where a borrow ends at its last
 same rule, used there to decide what is allowed and here to tell a reader; C and C++, whose objects last to the end of the block,
 which is when a destructor runs; Go and Java, where nothing is said and a collector decides.
 
+**Every report in the log says its class: `error`, `warning` or `note`; the viewer colours and filters by it**
+
+The user asked that each record of the report log say outright whether it is a note -- such as where a variable's scope ends -- a
+warning or an error, and that `pl4g-reports` draw the three in different colours and let a class be selected, a class selected
+bringing the more serious ones with it.  Taken without asking: the field is `class`, and the format version goes to 4; a note
+the compiler said is a note like a choice is; the option is `--class` with `note` the default; an error is red, a warning yellow
+and a note bright blue, the one colour the highlighter does not use.  The threshold is the shape of GCC's and Clang's `-w` and
+`-Werror` levels and of every logger's minimum level -- Python's `logging`, Rust's `RUST_LOG` -- where asking for one level is
+asking for it and everything above.
+
 Open questions
 --------------
 

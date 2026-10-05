@@ -147,6 +147,28 @@ OF_SEVERITY: Final[dict[str, ReportKind]] = {
 _SAID: Final[frozenset[ReportKind]] = frozenset(OF_SEVERITY.values())
 
 
+class ReportClass(StrEnum):
+    """How much a report asks of a reader, least first.
+
+    An error stopped the program being built and a warning is something it
+    should not have done; everything else is a note -- a note the compiler said,
+    and every choice it made, which is what the program did not state and is
+    nothing wrong.
+    """
+
+    NOTE = "note"
+    WARNING = "warning"
+    ERROR = "error"
+
+
+#: The kinds that are not notes.
+_CLASS_OF: Final[dict[ReportKind, ReportClass]] = {
+    ReportKind.FATAL: ReportClass.ERROR,
+    ReportKind.ERROR: ReportClass.ERROR,
+    ReportKind.WARNING: ReportClass.WARNING,
+}
+
+
 @dataclass(frozen=True, slots=True)
 class Report:
     """One thing the compiler said or chose, and what it was about."""
@@ -165,6 +187,11 @@ class Report:
     #: said.  A choice has none: nothing is wrong, so there is nothing to look
     #: up, quiet or turn into an error.
     number: int | None = None
+
+    @property
+    def report_class(self) -> ReportClass:
+        """Whether this is an error, a warning or a note."""
+        return _CLASS_OF.get(self.kind, ReportClass.NOTE)
 
 
 @dataclass(slots=True)

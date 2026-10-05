@@ -510,7 +510,7 @@ class Driver:
         if self.options.report_log is None:
             return
         document = {
-            "format_version": 3,
+            "format_version": 4,
             "compiler": "".join(("pypl4g ", VERSION)),
             # Where the compiler ran, so that every path below can be found from
             # anywhere: a path that is not absolute is relative to this.  It is
@@ -534,6 +534,9 @@ class Driver:
         and may be reworded.
         """
         entry: dict[str, object] = {
+            # Said outright, so that a reader asking for the errors need not know
+            # which kinds are errors: version 4 added it.
+            "class": report.report_class.value,
             "kind": report.kind.value,
             "subject": report.subject,
             "reason": report.reason,

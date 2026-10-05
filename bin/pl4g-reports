@@ -51,9 +51,29 @@ STYLES: dict[str, str] = {
 }
 
 RESET = "\033[0m"
-#: How a report record is set off from the source around it.
-MARKER = "\033[1;31m"
+#: How a report record is set off from the source around it, by its class: an
+#: error in red, a warning in yellow, a note -- most of what is there, and nothing
+#: wrong -- in a bright blue, which nothing in the source is drawn in.
+MARKER: dict[str, str] = {
+    "error": "\033[1;31m",
+    "warning": "\033[1;33m",
+    "note": "\033[94m",
+}
 GUTTER = "\033[2m"
+
+#: The classes, least first: asking for one shows it and every one after it.
+CLASSES = ("note", "warning", "error")
+
+
+def class_of(kind: str) -> str:
+    """The class of a record from a log that does not say it -- one written
+    before version 4 -- which the kind settles."""
+    match kind:
+        case "fatal" | "error":
+            return "error"
+        case "warning":
+            return "warning"
+    return "note"
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +89,8 @@ class Record:
     #: The number the diagnostic catalog gives it, where the record is something
     #: the compiler said.  What it chose has none, nothing being wrong with it.
     number: int | None = None
+    #: `error`, `warning` or `note`.
+    klass: str = "note"
 
     def written(self) -> str:
         """The record in one line, the way the compiler would have said it."""
@@ -92,7 +114,7 @@ def read_log(path: Path) -> Log:
     """Read a report log and group what it says by file."""
     document = json.loads(path.read_text(encoding="utf-8"))
     version = document.get("format_version")
-    if version not in (1, 2, 3):
+    if version not in (1, 2, 3, 4):
         raise SystemExit("".join((
             str(path), ": format version ", str(version),
             " is not one this program knows")))
@@ -107,7 +129,8 @@ def read_log(path: Path) -> Log:
         record = Record(kind=entry["kind"], subject=entry["subject"],
                         reason=entry["reason"], file=where.get("file"),
                         line=where.get("line"), column=where.get("column"),
-                        number=entry.get("number"))
+                        number=entry.get("number"),
+                        klass=entry.get("class") or class_of(entry["kind"]))
         if record.file is None or record.line is None:
             log.loose.append(record)
         else:
@@ -290,7 +313,8 @@ def _report_line(record: Record, width: int, colour: bool, line: str) -> str:
     body = "".join(("\N{BLACK DOWN-POINTING TRIANGLE} ", record.written()))
     if not colour:
         return "".join((lead, body))
-    return "".join((GUTTER, lead, RESET, MARKER, body, RESET))
+    return "".join((GUTTER, lead, RESET, MARKER.get(record.klass, MARKER["note"]),
+                    body, RESET))
 
 
 def _up_to(line: str, column: int | None) -> str:
@@ -328,9 +352,24 @@ def main() -> int:
                         help="highlight the source (default: only on a terminal)")
     parser.add_argument("--only-reports", action="store_true",
                         help="list the reports without the source around them")
+    parser.add_argument("--class", dest="least", choices=CLASSES, default="note",
+                        help="show only reports of this class and the more serious "
+                             "ones: 'note' shows everything, 'warning' warnings and "
+                             "errors, 'error' errors (default: note)")
     args = parser.parse_args()
 
     log = read_log(args.log)
+    least = CLASSES.index(args.least)
+
+    def kept(record: Record) -> bool:
+        return CLASSES.index(record.klass if record.klass in CLASSES
+                             else "note") >= least
+
+    for name in list(log.by_file):
+        log.by_file[name] = [one for one in log.by_file[name] if kept(one)]
+        if not log.by_file[name]:
+            del log.by_file[name]
+    log.loose = [one for one in log.loose if kept(one)]
     colour = (args.colour == "always"
               or (args.colour == "auto" and sys.stdout.isatty()))
     spans = highlighter() if colour else None
@@ -356,7 +395,8 @@ def main() -> int:
     if log.loose and not args.patterns:
         print("about the program as a whole:")
         for record in log.loose:
-            print("".join(("  ", record.written())))
+            print("".join(("  ", MARKER.get(record.klass, MARKER["note"]) if colour
+                           else "", record.written(), RESET if colour else "")))
     return 0
 
 

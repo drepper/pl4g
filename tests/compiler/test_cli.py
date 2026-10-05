@@ -221,7 +221,7 @@ def test_report_log_is_written(source: Path, tmp_path: Path) -> None:
                          "".join(("--report-log=", str(log))), str(source)])
     assert proc.returncode == ExitCode.SUCCESS
     document = json.loads(log.read_text(encoding="utf-8"))
-    assert document["format_version"] == 3
+    assert document["format_version"] == 4
     assert own(document["reports"], source) == []
     # Where the compiler ran, so that a path in the log can be found from
     # anywhere -- the arrangement DWARF uses for a compilation unit.

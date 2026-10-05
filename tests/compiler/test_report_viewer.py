@@ -250,3 +250,57 @@ def test_the_mark_counts_a_glyph_as_the_terminal_draws_it(tmp_path: Path) -> Non
     mark, below = _marked(shown.stdout, "drop-call")
     at = mark.index("\N{BLACK DOWN-POINTING TRIANGLE}")
     assert below[at:at + len("worked_out")] == "worked_out", shown.stdout
+
+
+#: A program with something of each class: an error, a warning, and the notes
+#: every program has.
+_EACH_CLASS = "".join((
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n",
+    "@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n",
+    "    let unused: u8 = 3u8\n",
+    "    nowhere\n"))
+
+
+@pytest.fixture
+def each_class(tmp_path: Path) -> Path:
+    """The log of the program above, which does not compile."""
+    source = tmp_path / "classes.pl4g"
+    source.write_text(_EACH_CLASS, encoding="utf-8")
+    log = tmp_path / "reports.json"
+    proc = run_compiler(["-o", str(tmp_path / "out"),
+                         "".join(("--report-log=", str(log))), str(source)])
+    assert proc.returncode != 0
+    return log
+
+
+def test_every_record_says_its_class(each_class: Path) -> None:
+    """An error and a fatal are errors, a warning a warning, and everything else
+    -- a note the compiler said and every choice it made -- a note."""
+    document = json.loads(each_class.read_text(encoding="utf-8"))
+    assert document["format_version"] == 4
+    expected = {"fatal": "error", "error": "error", "warning": "warning"}
+    classes = set()
+    for entry in document["reports"]:
+        assert entry["class"] == expected.get(entry["kind"], "note"), entry
+        classes.add(entry["class"])
+    assert classes == {"note", "warning", "error"}, document["reports"]
+
+
+def test_a_class_asked_for_brings_the_more_serious_ones(each_class: Path) -> None:
+    def shown(least: str) -> set[str]:
+        out = view(each_class, "--only-reports", "--class", least)
+        assert out.returncode == 0, out.stderr
+        return {line.split(": ")[1] for line in out.stdout.splitlines()}
+
+    everything = shown("note")
+    assert {"error", "warning", "scope-ended"} <= everything, everything
+    assert shown("warning") == {"error", "warning"}
+    assert shown("error") == {"error"}
+
+
+def test_each_class_has_its_colour(each_class: Path) -> None:
+    out = view(each_class, "--color", "always").stdout
+    for colour, what in (("\033[1;31m", "error:"), ("\033[1;33m", "warning:"),
+                         ("\033[94m", "scope-ended:")):
+        assert "".join((colour, "\N{BLACK DOWN-POINTING TRIANGLE} ", what)) in out, \
+            (what, out)

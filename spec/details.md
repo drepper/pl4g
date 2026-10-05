@@ -766,6 +766,14 @@ sentence about it; and, where the subject is written in a source file, a `where`
 compiler said carries a `number` as well, which is what the catalog gives it and what a reader looks it up by; a choice has none,
 nothing being wrong with any of it, and that absence is what tells the two apart without matching on the kinds one by one.
 
+**Every entry says its `class`** -- `error`, `warning` or `note` -- since format version 4.  A fatal and an error are errors and a
+warning is a warning; a note the compiler said and every choice it made are notes, a choice being nothing wrong and most of what a
+log holds.  The kind settles the class, so a reader could work it out, but only by knowing which kinds are which -- and a reader
+asking for the errors should not have to.  `bin/pl4g-reports` draws each class in its own colour -- an error red, a warning yellow,
+a note bright blue, which nothing in the highlighted source is drawn in -- and `--class CLASS` shows that class and the more
+serious ones: `note` everything, `warning` warnings and errors, `error` errors alone.  It reads the versions before, working the
+class out of the kind.
+
 **`where` points at the subject's own name**, not at the construct that holds it.  A definition begins at its first attribute or
 at its keyword, which at the top level is column one on every one of them; a local's value is produced somewhere else on the line
 and sometimes on another line; and the call in `_ ← f()` begins four characters in.  A column that answered "where the line
