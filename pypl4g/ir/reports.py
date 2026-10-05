@@ -117,8 +117,8 @@ class ReportKind(StrEnum):
     #: another, into a call, or out as an answer -- never copied, so the one it
     #: came from holds nothing from here on.
     MOVE = "move"
-    #: Where such a variable's lifetime ended: by a move, by being closed, or
-    #: by its scope ending with it closed on every way out.
+    #: Where such a variable's lifetime ended other than by a move, which is
+    #: logged as `move` alone: the parameter of the function that closes it.
     LIFETIME_ENDED = "lifetime-ended"
     #: Where a variable's scope ended: after its last use -- a use in a loop
     #: being one at the loop's end, one in a deferred statement one at the end

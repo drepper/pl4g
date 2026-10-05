@@ -3374,6 +3374,9 @@ class Checker:
         self._lends: dict[int, set[int]] = {}
         #: The functions whose variables' scopes have been reported.
         self._scopes_told: set[int] = set()
+        #: Where a variable is read as a value it is moved out of: its last use
+        #: there is the move, which says all there is to say about its end.
+        self._moved_from: set[int] = set()
         #: The arenas given back in each block being lowered, by the identity of
         #: their names, innermost last -- kept beside the deferred statements and
         #: for the same reason: a block is what a way out leaves, and what was given
@@ -5309,6 +5312,9 @@ class Checker:
             return False
         local.owes = False
         local.ended_at, local.ended_how = span, how
+        # The variable is done with here: the move is the one thing said about
+        # it, and the walk that says where scopes end leaves it out.
+        self._moved_from.add(span.start)
         if self._in_deferred == "again":
             return True
         if self._in_deferred is not None and self._deferred_at is not None:
@@ -5320,10 +5326,7 @@ class Checker:
             how = "".join((how, ", by what is put off on line ",
                            str(found.line) if found is not None else "?"))
             span = line_after(self._sources, block.end)
-        ended = "".join(("moved, so it holds nothing from here: ", how))
         self._module.reports.record(ReportKind.MOVE, local.name, how, span)
-        self._module.reports.record(ReportKind.LIFETIME_ENDED, local.name,
-                                    ended, span)
         return True
 
     def _told_ended(self, local: _Local, span: Span) -> None:
@@ -9332,7 +9335,7 @@ class Checker:
         if id(node) in self._scopes_told:
             return
         self._scopes_told.add(id(node))
-        LastUses(self._sources, self._lends,
+        LastUses(self._sources, self._lends, self._moved_from,
                  lambda name, reason, span: self._module.reports.record(
                      ReportKind.SCOPE_ENDED, name, reason, span)).function(node)
 

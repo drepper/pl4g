@@ -9838,6 +9838,14 @@ and a note bright blue, the one colour the highlighter does not use.  The thresh
 `-Werror` levels and of every logger's minimum level -- Python's `logging`, Rust's `RUST_LOG` -- where asking for one level is
 asking for it and everything above.
 
+**A move is the one entry about the end of what it moves out of**
+
+The user pointed at cat's log, where the deferred `from.close()` made three entries -- `move`, `lifetime-ended` and `scope-ended`
+-- about one event, and said that **a move of a variable's value is noted, but after it the variable is handled and does not exist
+any more**, so neither of the other two applies.  So a move logs `move` alone, and a variable whose last use is a move gets no
+`scope-ended`; `lifetime-ended` is left for the one end that is not a move, the parameter of the function that closes.  A variable
+moved out of and given a value again is used again, and its scope ends after that later use as any other's does.
+
 Open questions
 --------------
 

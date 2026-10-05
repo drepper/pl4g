@@ -3078,7 +3078,8 @@ what the program can still need is what a reader asks about.  A use inside a loo
 loop's end, the next turn being able to come round to it; a use in what a `foreach` walks is one too, the loop keeping that to its
 end, though not in the bounds of a range, which are worked out once; a use in a deferred statement is a use at the end of its
 block; and a variable a reference is kept to by another name lasts as long as that name.  A variable nothing uses ends where it
-is bound.  Compare the non-lexical lifetimes of **Rust**, where a borrow ends at its last use and not at the end of its block --
+is bound.  A variable whose last use moves its value out has no such entry: the `move` is logged, and says all there is -- after
+it there is no variable left to end.  A move is logged as that alone, and not as a `lifetime-ended` beside it, for the same reason.  Compare the non-lexical lifetimes of **Rust**, where a borrow ends at its last use and not at the end of its block --
 the same rule, applied there to what the borrow checker allows and here to what the log tells a reader.
 
 **Every variable whose type was not written in full is in the report log** (`type-inferred`): `let x :=`, `let x: mut =`, `⟦⟧`

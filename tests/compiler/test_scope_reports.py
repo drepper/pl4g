@@ -37,14 +37,31 @@ let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 """
 
 
-def _ended(compile_source, tmp_path) -> dict[str, tuple[int, str]]:  # noqa: ANN001
-    """Where the log says each variable of `main` ends, and why."""
+#: A use put off to the end of the block that is not a move.
+DEFERRED = """\
+fn shown(n: u8) \N{RIGHTWARDS ARROW} u6:
+    if n = 0u8: 1u6 else: 0u6
+
+@[startup]
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
+    let k: u8 = 2u8
+    defer _ \N{LEFTWARDS ARROW} shown(k)
+    0u6
+
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+"""
+
+
+def _ended(compile_source, tmp_path,  # noqa: ANN001
+           program: str = PROGRAM, after: int = 7) -> dict[str, tuple[int, str]]:
+    """Where the log says each variable of `main` -- the lines past *after* --
+    ends, and why."""
     log = tmp_path / "report.json"
-    proc, _ = compile_source(PROGRAM, "".join(("--report-log=", str(log))))
+    proc, _ = compile_source(program, "".join(("--report-log=", str(log))))
     assert proc.returncode == 0, describe(proc)
     found: dict[str, tuple[int, str]] = {}
     for one in json.loads(log.read_text(encoding="utf-8"))["reports"]:
-        if one["kind"] == "scope-ended" and one["where"]["line"] > 7:
+        if one["kind"] == "scope-ended" and one["where"]["line"] > after:
             assert one["subject"] not in found, one
             found[one["subject"]] = (one["where"]["line"], one["reason"])
     return found
@@ -77,6 +94,13 @@ def test_a_reference_keeps_what_it_names(compile_source, tmp_path) -> None:  # n
 
 
 def test_a_deferred_use_is_at_the_end_of_the_block(compile_source, tmp_path) -> None:  # noqa: ANN001
+    ended = _ended(compile_source, tmp_path, DEFERRED, 4)
+    assert ended["k"] == (9, "last used by what is put off on line 7, "
+                             "when the block is left"), ended
+
+
+def test_a_variable_moved_out_of_has_no_end_of_its_own(compile_source, tmp_path) -> None:  # noqa: ANN001
+    """`h` is closed by its last use, which moves it: the move is logged, and
+    there is no variable left after it to end."""
     ended = _ended(compile_source, tmp_path)
-    assert ended["h"] == (21, "last used by what is put off on line 19, "
-                              "when the block is left"), ended
+    assert "h" not in ended, ended

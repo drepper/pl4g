@@ -53,6 +53,9 @@ class _Binding:
     #: Where its scope ends so far, as a place in the text, and why.
     last: Loc = NO_LOC
     why: tuple[object, ...] = ()
+    #: Whether that last use moves its value out: the move is then where it
+    #: ended, and is logged as one.
+    moved: bool = False
 
 
 def end_of(node: object) -> Loc:
@@ -86,14 +89,16 @@ class LastUses:
     """Walk one function and report where each of its variables' scopes ends.
 
     *lends* maps where a name is bound to where the names it holds a reference
-    to are bound; *report* takes the variable's name, the reason and the place
-    the entry goes.
+    to are bound; *moves* holds where a name is read as a value it is moved out
+    of; *report* takes the variable's name, the reason and the place the entry
+    goes.
     """
 
     def __init__(self, sources: SourceManager, lends: dict[Loc, set[Loc]],
-                 report: Callable[[str, str, Span], None]) -> None:
+                 moves: set[Loc], report: Callable[[str, str, Span], None]) -> None:
         self._sources = sources
         self._lends = lends
+        self._moves = moves
         self._report = report
         self._file: SourceFile | None = None
         self._scopes: list[list[_Binding]] = []
@@ -335,6 +340,7 @@ class LastUses:
                 break
         if at >= binding.last:
             binding.last, binding.why = at, why
+            binding.moved = span.start in self._moves
 
     def _pop(self) -> None:
         """Leave a scope: what its names hold references to lasts as long as
@@ -346,6 +352,11 @@ class LastUses:
                 lender = self._live.get(lent)
                 if lender is not None and ends > lender.last:
                     lender.last, lender.why = ends, ("lent", binding.name)
+                    lender.moved = False
+            if binding.moved:
+                # Moved out by its last use: the move is logged, and after it
+                # there is no variable left to end.
+                continue
             self._report(binding.name, self._reason(binding),
                          line_after(self._sources, ends))
 

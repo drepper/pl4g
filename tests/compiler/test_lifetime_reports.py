@@ -68,12 +68,12 @@ def _said(compile_source, tmp_path,  # noqa: ANN001
 
 def test_moves_and_ends_are_logged_where_they_happen(compile_source, tmp_path) -> None:  # noqa: ANN001
     """Bound to another name, then handed to the function that closes it; and
-    the closing function's parameter ends with it."""
+    the closing function's parameter ends with it.  A move is the one entry about
+    where the variable it is made from ends: after it there is no variable left."""
     said = _said(compile_source, tmp_path)
     assert any(one.startswith("a: ") for one in said["move"][13]), said
-    assert any(one.startswith("a: ") for one in said["lifetime-ended"][13]), said
     assert any("handed to 'Handle.close'" in one for one in said["move"][14]), said
-    assert any(one.startswith("b: ") for one in said["lifetime-ended"][14]), said
+    assert 13 not in said["lifetime-ended"] and 14 not in said["lifetime-ended"], said
     assert any("closed: this is 'Handle.close'" in one
                for one in said["lifetime-ended"][4]), said
 
@@ -85,5 +85,4 @@ def test_a_deferred_move_is_made_when_the_block_is_left(compile_source, tmp_path
     assert 10 not in said["move"] and 10 not in said["lifetime-ended"], said
     assert said["move"][15] == ["h: handed to 'Handle.close' as its argument 1, "
                                 "by what is put off on line 10"], said
-    ended = said["lifetime-ended"][15]
-    assert len(ended) == 1 and ended[0].startswith("h: moved"), said
+    assert 15 not in said["lifetime-ended"], said
