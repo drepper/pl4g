@@ -787,7 +787,17 @@ compiler to work out:
 | `instantiate` | the types one instance of a generic function was compiled for |
 | `lifetime` | how long the reference one call answers with turned out to live |
 | `type-inferred` | a variable whose type was not written in full, and the type it was given |
+| `scope-ended` | where a variable's scope ends -- after its last use -- and why there |
 | `fatal`, `error`, `warning`, `note` | what the compiler said, with its number |
+
+**`scope-ended`** is worked out by `sema/lastuse.py`, a walk of each function's tree made once after the function is first
+lowered, however many times it is lowered.  It keeps the variables of each scope and the end of the statement each use is in; a
+use in a loop the variable was bound outside of is moved to the end of the loop's last statement -- a block's span runs on to the
+next statement, so `end_of` finds where its text ends -- and one in a deferred statement to the end of its block.  Which names keep
+a reference to which is the checker's to know from the types: `_kept_by_a_name` notes the pair in `_lends` as it promotes the
+references a statement made, and the walk lets the one referred to last as long as the one referring.  A macro's expansion carries
+the places of the macro's own text, in another file, so the walk takes the end of the invoking statement for a use in one and
+ignores what one binds.  The entry goes on the first character of the line after, which `line_after` finds.
 
 **`type-inferred`** is recorded where a name is bound -- a definition in a body or at the top level, the names a taking apart
 binds, a loop's name, each turn of a loop written out -- by `_report_inferred`, which asks the name for the type it was given.  No

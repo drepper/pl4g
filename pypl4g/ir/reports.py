@@ -120,6 +120,11 @@ class ReportKind(StrEnum):
     #: Where such a variable's lifetime ended: by a move, by being closed, or
     #: by its scope ending with it closed on every way out.
     LIFETIME_ENDED = "lifetime-ended"
+    #: Where a variable's scope ended: after its last use -- a use in a loop
+    #: being one at the loop's end, one in a deferred statement one at the end
+    #: of its block -- or where a name holding a reference to it ends.  Each
+    #: is on the line after the one the scope ends on.
+    SCOPE_ENDED = "scope-ended"
     #: A variable whose type the program did not write in full -- `let x :=`,
     #: `let x: mut =`, `⟦⟧` alone, a shape stated in part, a name a loop or a
     #: taking apart binds -- and the type it was given.  A reader asking "what

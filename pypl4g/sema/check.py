@@ -92,6 +92,7 @@ from ..source.location import INVALID_SPAN, Span
 from .notes import (FUNCTION, MODULE, PARAMETER, TYPE, VARIABLE, Note,
                     Notes)
 from ..source.manager import SourceManager
+from .lastuse import LastUses, end_of, line_after
 from .attributes import (AttrSpec, AttrTarget, BoundAttr, SPECIAL_OF_TEST_KIND,
                          TARGET_NAMES, lookup)
 
@@ -2902,6 +2903,8 @@ class _Deferred:
 
     node: ast.Defer
     depth: int
+    #: The block it runs at the end of.
+    block: Span = INVALID_SPAN
 
 
 #: What a value made in `⎕heap` is made in.  Not the identity of any name: `⎕heap`
@@ -3360,6 +3363,17 @@ class Checker:
         #: the first time: what it moves is moved as the block is left, and is
         #: logged once however many ways out there are.
         self._in_deferred: Literal["first", "again"] | None = None
+        #: The deferred statement being lowered, and the block it runs at the
+        #: end of: what it does is done there, so that is where it is logged.
+        self._deferred_at: tuple[ast.Defer, Span] | None = None
+        #: The span of each block being lowered, innermost last, beside
+        #: `_deferred`.
+        self._block_spans: list[Span] = []
+        #: Where a name is bound, to where the names it keeps a reference to are
+        #: bound, for working out where each variable's scope ends.
+        self._lends: dict[int, set[int]] = {}
+        #: The functions whose variables' scopes have been reported.
+        self._scopes_told: set[int] = set()
         #: The arenas given back in each block being lowered, by the identity of
         #: their names, innermost last -- kept beside the deferred statements and
         #: for the same reason: a block is what a way out leaves, and what was given
@@ -5297,14 +5311,16 @@ class Checker:
         local.ended_at, local.ended_how = span, how
         if self._in_deferred == "again":
             return True
-        if self._in_deferred is None:
-            ended = "".join(("moved, so it holds nothing from here: ", how))
-        else:
+        if self._in_deferred is not None and self._deferred_at is not None:
             # Put off: the move is made where the block is left, which is where
-            # the lifetime ends -- not here, where it is written.
-            ended = "".join(("moved when the block is left, by what is put off "
-                             "here; until then it holds what it held: ", how))
-            how = "".join((how, ", when the block is left"))
+            # the lifetime ends -- not where it is written -- and the entries go
+            # on the line after the block.
+            written, block = self._deferred_at
+            found = self._sources.position(written.span.start)
+            how = "".join((how, ", by what is put off on line ",
+                           str(found.line) if found is not None else "?"))
+            span = line_after(self._sources, block.end)
+        ended = "".join(("moved, so it holds nothing from here: ", how))
         self._module.reports.record(ReportKind.MOVE, local.name, how, span)
         self._module.reports.record(ReportKind.LIFETIME_ENDED, local.name,
                                     ended, span)
@@ -5733,13 +5749,14 @@ class Checker:
         "_thin_to", "_answer_arms", "_yield_answer", "_hands_out",
         "_hands_out_local", "_receiving", "_unscanned", "_borrows", "_places",
         "_iterator_loans", "_pick_in", "_pick_walked", "_demanding",
-        "_writing_in")
+        "_writing_in", "_block_spans")
 
     def _lower_set_aside(self, entry: _Collected) -> None:
         """Lower a body in the middle of another, with that one set aside."""
         saved = {name: getattr(self, name) for name in self._BODY_STATE}
         self._scopes, self._addressed = [], set()
         self._deferred, self._emptied = [], []
+        self._block_spans = []
         self._carried, self._loops, self._outside = set(), [], []
         self._borrows, self._places, self._iterator_loans = [], {}, []
         self._writing_in = []
@@ -9090,7 +9107,8 @@ class Checker:
         if why is not None:
             self._diags.emit(D.LANG_DEFER_NOT_A_THING_TO_DO, later.span, why=why)
             return
-        self._deferred[-1].append(_Deferred(node=stmt, depth=len(self._scopes)))
+        self._deferred[-1].append(_Deferred(node=stmt, depth=len(self._scopes),
+                                            block=self._block_spans[-1]))
 
     def _run_deferred(self, builder: IRBuilder, func: Function | None,
                       down_to: int) -> None:
@@ -9119,8 +9137,10 @@ class Checker:
         """
         told = id(entry.node) in self._defer_told
         self._defer_told.add(id(entry.node))
-        kept = (self._scopes, self._unit_scopes, self._diags, self._in_deferred)
+        kept = (self._scopes, self._unit_scopes, self._diags, self._in_deferred,
+                self._deferred_at)
         self._in_deferred = "again" if told else "first"
+        self._deferred_at = (entry.node, entry.block)
         self._scopes = kept[0][:entry.depth]
         self._unit_scopes = kept[1][:entry.depth]
         if told:
@@ -9132,7 +9152,8 @@ class Checker:
             # before the next one runs -- as at the end of any statement.
             self._statement_ended()
         finally:
-            self._scopes, self._unit_scopes, self._diags, self._in_deferred = kept
+            (self._scopes, self._unit_scopes, self._diags, self._in_deferred,
+             self._deferred_at) = kept
 
     def _unrun_deferred(self, func: Function, frame: int) -> None:
         """Check, once, what a block put off and no way out of it ever ran.
@@ -9293,6 +9314,7 @@ class Checker:
             self._diags.resume(entry.expectation)
         try:
             self._lower_body(entry)
+            self._report_scopes(node)
         finally:
             pairs = self._expected_pairs.get(node.name, [])
             self._end_expecting(entry.expectation)
@@ -9302,6 +9324,17 @@ class Checker:
                 self._discard(func)
             self._discard_function = previous
             self._in_build_function = was_building
+
+    def _report_scopes(self, node: ast.FuncDef) -> None:
+        """Log where each of *node*'s variables' scopes ends, once however many
+        times it is lowered: after its last use, which is what a reader asking
+        how long a variable is needed is asking."""
+        if id(node) in self._scopes_told:
+            return
+        self._scopes_told.add(id(node))
+        LastUses(self._sources, self._lends,
+                 lambda name, reason, span: self._module.reports.record(
+                     ReportKind.SCOPE_ENDED, name, reason, span)).function(node)
 
     def _discard(self, func: Function) -> None:
         """Take a function out of the module, and out of every cache of it."""
@@ -9455,6 +9488,10 @@ class Checker:
         wanted of, in which case its last statement has to have one.
         """
         self._deferred.append([])
+        # To the end of its last statement: a block's own span runs on to the
+        # next statement.
+        self._block_spans.append(Span(block.span.start,
+                                      max(block.span.start, end_of(block))))
         self._emptied.append(set())
         frame = len(self._deferred) - 1
         opened_at = len(self._scopes)
@@ -9491,6 +9528,7 @@ class Checker:
         finally:
             self._unrun_deferred(func, frame)
             self._deferred.pop()
+            self._block_spans.pop()
             self._last_emptied = self._emptied.pop()
 
     def _lower_yielding(self, builder: IRBuilder, stmt: ast.Stmt, func: Function,
@@ -12812,12 +12850,14 @@ class Checker:
             self._borrows = [b for b in self._borrows
                              if b.depth != _UNTIL_THE_STATEMENT_ENDS]
 
-    def _kept_by_a_name(self, ty: Type | None) -> None:
+    def _kept_by_a_name(self, ty: Type | None, keeper: Span) -> None:
         """Let the references this statement made live as long as this scope.
 
         Called where a name was bound to something holding one: what keeps a
         reference alive is a name, and until one does the reference is the
-        call's own and goes with the statement.
+        call's own and goes with the statement.  *keeper* is where that name is
+        bound, and which names it keeps references to is noted against it: the
+        scope of each of those lasts as long as its own.
         """
         if ty is None or not _holds_a_reference(ty):
             return
@@ -12825,6 +12865,10 @@ class Checker:
         for one in self._borrows:
             if one.depth == _UNTIL_THE_STATEMENT_ENDS:
                 one.depth = depth
+                lender = self._find_local(one.name)
+                if lender is not None:
+                    self._lends.setdefault(keeper.start, set()).add(
+                        lender.span.start)
 
     def _borrowed_name(self, expr: ast.Expr) -> tuple[str, tuple[str, ...]] | None:
         """Which local's place `&expr` reaches, where it reaches one, and which
@@ -15649,7 +15693,7 @@ class Checker:
             self._bind_local(node.name, UndefConst(ERROR), node.name_span,
                              node.mutable, value_span=node.span)
             return
-        self._kept_by_a_name(found)
+        self._kept_by_a_name(found, node.name_span)
         self._name_value(value, node.name, node.name_span)
         self._bind_local(node.name, value, node.name_span, node.mutable,
                          value_span=node.span, builder=builder)
@@ -17864,7 +17908,7 @@ class Checker:
             self._bind_apart(builder, node, value)
             return
         bound = self._as_declared(value, declared)
-        self._kept_by_a_name(declared)
+        self._kept_by_a_name(declared, node.name_span)
         self._name_value(bound, node.name, node.name_span)
         self._bind_local(node.name, bound, node.name_span, node.mutable,
                          value_span=node.span, builder=builder)
@@ -17888,7 +17932,7 @@ class Checker:
         if node.more:
             self._bind_apart(builder, node, value)
             return
-        self._kept_by_a_name(self._value_type_of(value))
+        self._kept_by_a_name(self._value_type_of(value), node.name_span)
         self._name_value(value, node.name, node.name_span)
         self._bind_local(node.name, value, node.name_span, node.mutable,
                          value_span=node.span, builder=builder)
@@ -17987,7 +18031,7 @@ class Checker:
                     and self._outlives_it(value, local.depth, node.name,
                                           node.span):
                 return None
-            self._kept_by_a_name(local.held)
+            self._kept_by_a_name(local.held, local.span)
             if isinstance(local.held, ProductType):
                 self._record_into(builder, local.value, value, local.held,
                                   node.span)
@@ -18009,7 +18053,7 @@ class Checker:
                     and self._outlives_it(value, local.depth, node.name,
                                           node.span):
                 return None
-            self._kept_by_a_name(local.value.ty)
+            self._kept_by_a_name(local.value.ty, local.span)
             # The value the name stood for is gone; if nothing read it, giving
             # it cannot have affected what the program does.
             if id(local) not in self._carried:

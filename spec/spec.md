@@ -3069,8 +3069,17 @@ init.io.error.ring)`, may be put into a record's field, which is how those are m
 What it answers is its own business.
 
 **Every move and every end of a lifetime is in the report log** (`move`, `lifetime-ended`), at the line it happened on, with what
-the value was handed to: a reader asking "who closes this" is asking that.  A move in a deferred statement is logged at the
-statement, once, as made when the block is left: the variable holds its value until then, and the block may go on reading it.
+the value was handed to: a reader asking "who closes this" is asking that.  A move in a deferred statement is logged once, on the
+line after the block, where it is made: the variable holds its value until the block is left, and the block may go on reading it.
+
+**Where every variable's scope ends is in the report log** (`scope-ended`), on the line after the one it ends on, so that the
+viewer shows it just below that line.  A scope ends after the variable's last use, not at the end of the block it was bound in:
+what the program can still need is what a reader asks about.  A use inside a loop the variable was bound outside of is a use at the
+loop's end, the next turn being able to come round to it; a use in what a `foreach` walks is one too, the loop keeping that to its
+end, though not in the bounds of a range, which are worked out once; a use in a deferred statement is a use at the end of its
+block; and a variable a reference is kept to by another name lasts as long as that name.  A variable nothing uses ends where it
+is bound.  Compare the non-lexical lifetimes of **Rust**, where a borrow ends at its last use and not at the end of its block --
+the same rule, applied there to what the borrow checker allows and here to what the log tells a reader.
 
 **Every variable whose type was not written in full is in the report log** (`type-inferred`): `let x :=`, `let x: mut =`, `⟦⟧`
 alone, the names a taking apart or a loop binds -- each at its name, with the type the compiler gave it, and what was written where

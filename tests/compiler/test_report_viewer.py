@@ -191,11 +191,14 @@ def test_colour_can_be_refused(compiled) -> None:  # noqa: ANN001
 
 
 def _marked(out: str, subject: str) -> tuple[str, str]:
-    """The mark's line and the source line under it, for one subject."""
+    """The mark's line and the source line under it, for one subject -- below
+    the other marks over the same line, if there are any."""
     lines = out.split("\n")
     for index, line in enumerate(lines):
         if "\N{BLACK DOWN-POINTING TRIANGLE}" in line and subject in line:
-            return line, lines[index + 1]
+            below = next(one for one in lines[index + 1:]
+                         if "\N{BLACK DOWN-POINTING TRIANGLE}" not in one)
+            return line, below
     raise AssertionError("".join(("no mark for ", subject, " in\n", out)))
 
 

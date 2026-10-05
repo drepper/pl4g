@@ -9812,6 +9812,22 @@ does nothing with it, so such a module is warned about and logged like any other
 the warnings only; Clang's is the same.  One option for both, because a reader looking into `std` wants all of what it was told
 and chosen, not half.
 
+**Where a scope ends: after the last use, in the log; a deferred move at the end of its block**
+
+The user pointed at cat's log, where `defer from.close()` was logged as `from` holding nothing from that line on, though the
+next line reads it and the deferred statement runs only when the block is left; and asked that **what a deferred statement does be
+logged at the end of the block, on the line after it**, and that **every variable get an entry where its scope ends -- after its
+last use, not at the end of the lexical scope**.
+
+Taken without asking, each the way the request reads: the new kind is `scope-ended`, on the first character of the line after the
+one the scope ends on, which is where the viewer shows it just below that line.  A use in a loop the variable was bound outside of
+is a use at the loop's end; a use in what a `foreach` walks lasts the loop, the bounds of a range excepted; a use in a deferred
+statement is one at the end of its block; a name keeping a reference keeps what it refers to as long as it lasts, the pairs being
+the ones the checker promotes; a variable nothing uses ends where it is bound; parameters get entries like any other variable.
+Compare Rust's non-lexical lifetimes (RFC 2094), where a borrow ends at its last use rather than at the end of its block -- the
+same rule, used there to decide what is allowed and here to tell a reader; C and C++, whose objects last to the end of the block,
+which is when a destructor runs; Go and Java, where nothing is said and a collector decides.
+
 Open questions
 --------------
 

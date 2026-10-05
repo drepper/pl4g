@@ -79,10 +79,11 @@ def test_moves_and_ends_are_logged_where_they_happen(compile_source, tmp_path) -
 
 
 def test_a_deferred_move_is_made_when_the_block_is_left(compile_source, tmp_path) -> None:  # noqa: ANN001
-    """The move is logged where it is written, once, as made when the block is left
-    -- not as the end of the variable there, which is read on the lines after."""
+    """The move is logged once, on the line after the block, where it is made --
+    not where it is written, the variable being read on the lines after that."""
     said = _said(compile_source, tmp_path, DEFERRED)
-    assert said["move"][10] == ["h: handed to 'Handle.close' as its argument 1, "
-                                "when the block is left"], said
-    ended = said["lifetime-ended"][10]
-    assert len(ended) == 1 and "moved when the block is left" in ended[0], said
+    assert 10 not in said["move"] and 10 not in said["lifetime-ended"], said
+    assert said["move"][15] == ["h: handed to 'Handle.close' as its argument 1, "
+                                "by what is put off on line 10"], said
+    ended = said["lifetime-ended"][15]
+    assert len(ended) == 1 and ended[0].startswith("h: moved"), said

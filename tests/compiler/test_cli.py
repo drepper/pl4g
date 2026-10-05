@@ -205,9 +205,12 @@ def own(reports: list[dict], source: Path) -> list[dict]:
 
     Every program imports `std`, and what the compiler decided about it -- the
     functions nothing reaches, the generic ones it checked -- is in the log too.
+    Where each variable's scope ends is left out: every program has variables, and
+    the tests of those entries are their own.
     """
     return [entry for entry in reports
-            if "where" in entry and Path(entry["where"]["file"]).resolve() == source.resolve()]
+            if "where" in entry and entry["kind"] != "scope-ended"
+            and Path(entry["where"]["file"]).resolve() == source.resolve()]
 
 
 def test_report_log_is_written(source: Path, tmp_path: Path) -> None:
