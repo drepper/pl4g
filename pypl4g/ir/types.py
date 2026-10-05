@@ -1393,22 +1393,40 @@ def held_in_memory(ty: Type) -> bool:
     function answers with it.  So it is bytes in a place as a whole, its fields
     where the layout puts them, and a value of it is where that place is.
     """
+    known = _HELD.get(id(ty))
+    if known is not None and known[0] is ty and known[1] is (
+            ty.fields if isinstance(ty, ProductType) else ty.members):
+        return known[2]
     return _held_in_memory(ty, set())
+
+
+#: What `held_in_memory` answered for a record or a tuple, by the type's identity:
+#: the type, the members it was asked of, and the answer.  `parts_of` asks it of
+#: every record and tuple it meets, which is often.  The members are kept so that
+#: a record whose fields were filled in after it was made -- one that reaches
+#: itself through a reference -- is asked again, and the type so that its
+#: identity is not given to another while the entry stands.
+_HELD: dict[int, tuple[Type, object, bool]] = {}
 
 
 def _held_in_memory(ty: Type, seen: set[int]) -> bool:
     """`held_in_memory`, not going round a type it is already asking about."""
     if isinstance(ty, SumType) or (isinstance(ty, ArrayType) and ty.fixed):
         return True
-    if id(ty) in seen:
+    if not isinstance(ty, (ProductType, TupleType)) or id(ty) in seen:
         return False
-    if isinstance(ty, ProductType):
-        seen.add(id(ty))
-        return any(_held_in_memory(one, seen) for _, one in ty.fields)
-    if isinstance(ty, TupleType):
-        seen.add(id(ty))
-        return any(_held_in_memory(one, seen) for one in ty.members)
-    return False
+    members = ty.fields if isinstance(ty, ProductType) else ty.members
+    known = _HELD.get(id(ty))
+    if known is not None and known[0] is ty and known[1] is members:
+        return known[2]
+    seen.add(id(ty))
+    held = (any(_held_in_memory(one, seen) for _, one in ty.fields)
+            if isinstance(ty, ProductType)
+            else any(_held_in_memory(one, seen) for one in ty.members))
+    # A record holds another by value only, never itself -- a reference is not
+    # walked -- so the walk cannot go round and every answer is a whole one.
+    _HELD[id(ty)] = (ty, members, held)
+    return held
 
 
 def made_of_parts(ty: Type) -> bool:
