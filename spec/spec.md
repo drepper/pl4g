@@ -3074,7 +3074,11 @@ line after the block, where it is made: the variable holds its value until the b
 
 **Where every variable's scope ends is in the report log** (`scope-ended`), on the line after the one it ends on, so that the
 viewer shows it just below that line.  A scope ends after the variable's last use, not at the end of the block it was bound in:
-what the program can still need is what a reader asks about.  A use inside a loop the variable was bound outside of is a use at the
+what the program can still need is what a reader asks about.  The last use is the last on each way through, so a variable read in
+the arms of an `if` or a `match` ends in each of them: where an arm does not read it, its entry stands at the start of that arm,
+saying which line read it last on the way in -- a condition, or the `match` itself -- and where no arm is taken, after the `if`.
+An arm that leaves, by a `return`, a `break` or a `continue`, ends there what it reads and what the choice was the last to read;
+what was last read before the choice is not said again in it, every variable there is being such a one.  A use inside a loop the variable was bound outside of is a use at the
 loop's end, the next turn being able to come round to it; a use in what a `foreach` walks is one too, the loop keeping that to its
 end, though not in the bounds of a range, which are worked out once; a use in a deferred statement is a use at the end of its
 block; and a variable a reference is kept to by another name lasts as long as that name.  A variable nothing uses ends where it

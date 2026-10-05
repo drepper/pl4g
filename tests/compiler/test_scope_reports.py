@@ -104,3 +104,56 @@ def test_a_variable_moved_out_of_has_no_end_of_its_own(compile_source, tmp_path)
     there is no variable left after it to end."""
     ended = _ended(compile_source, tmp_path)
     assert "h" not in ended, ended
+
+
+#: A variable read in the conditions and arms of a choice, and one read only
+#: by a condition whose arm leaves.
+ARMS = """\
+@[startup]
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
+    let c: u8 = 2u8
+    let total: mut u8 = 0u8
+    if c = 1u8:
+        total \N{LEFTWARDS ARROW} 1u8
+    elif c = 2u8:
+        total \N{LEFTWARDS ARROW} 2u8
+    else:
+        total \N{LEFTWARDS ARROW} c
+    if total = 0u8:
+        return 1u6
+    0u6
+
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+"""
+
+
+def _every_end(compile_source, tmp_path, program: str  # noqa: ANN001
+               ) -> dict[str, list[tuple[int, str]]]:
+    """Every end the log gives each variable, as line and reason."""
+    log = tmp_path / "report.json"
+    proc, _ = compile_source(program, "".join(("--report-log=", str(log))))
+    assert proc.returncode == 0, describe(proc)
+    found: dict[str, list[tuple[int, str]]] = {}
+    for one in json.loads(log.read_text(encoding="utf-8"))["reports"]:
+        if one["kind"] == "scope-ended":
+            found.setdefault(one["subject"], []).append(
+                (one["where"]["line"], one["reason"]))
+    return found
+
+
+def test_a_variable_ends_in_every_arm(compile_source, tmp_path) -> None:  # noqa: ANN001
+    """`c` is last read by the first condition on the way into the first arm, by
+    the second on the way into the second, and in the third arm itself: it ends
+    in each, at the start of the arm where the arm does not read it."""
+    ends = _every_end(compile_source, tmp_path, ARMS)
+    assert sorted(ends["c"]) == [(6, "last used on line 5"),
+                                 (8, "last used on line 7"),
+                                 (11, "last used on line 10")], ends
+
+
+def test_an_arm_that_leaves_and_the_way_past_the_choice_each_end_it(compile_source, tmp_path) -> None:  # noqa: ANN001
+    """`total` is last read by a condition: in the arm, which returns, and on
+    the way past the `if` when no arm is taken."""
+    ends = _every_end(compile_source, tmp_path, ARMS)
+    assert sorted(ends["total"]) == [(12, "last used on line 11"),
+                                     (13, "last used on line 11")], ends

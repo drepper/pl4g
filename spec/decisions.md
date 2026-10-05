@@ -9846,6 +9846,16 @@ any more**, so neither of the other two applies.  So a move logs `move` alone, a
 `scope-ended`; `lifetime-ended` is left for the one end that is not a move, the parameter of the function that closes.  A variable
 moved out of and given a value again is used again, and its scope ends after that later use as any other's does.
 
+**A scope ends on every way through: in each arm of a choice**
+
+The user pointed at cat's `foreach c` loop, whose `c` was shown ending only in the last arm of its `if`, and said that **where a
+variable's scope holds an `if`, the end cannot be in one arm only: it has to be in all of them**.  So the walk keeps an end for
+each way through, and an arm the variable is not read in shows where it ended on the way in.  Taken without asking: where no arm
+is taken, the end stands after the `if`; an arm that leaves shows what it reads and what the choice read last, but not what was
+read before the choice -- else every early `return` would list every variable alive there; and an arm on the condition's own line
+gets nothing of its own.  This is the per-path view of a data-flow liveness analysis -- what LLVM's and GCC's liveness compute on
+the control-flow graph -- written over the tree, which is all a structured language without `goto` needs.
+
 Open questions
 --------------
 

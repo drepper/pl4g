@@ -805,7 +805,12 @@ next statement, so `end_of` finds where its text ends -- and one in a deferred s
 a reference to which is the checker's to know from the types: `_kept_by_a_name` notes the pair in `_lends` as it promotes the
 references a statement made, and the walk lets the one referred to last as long as the one referring.  A macro's expansion carries
 the places of the macro's own text, in another file, so the walk takes the end of the invoking statement for a use in one and
-ignores what one binds.  The entry goes on the first character of the line after, which `line_after` finds.  Where a variable's
+ignores what one binds.  The entry goes on the first character of the line after, which `line_after` finds.  Each variable keeps
+one end for each way through that has come so far: a use on a straight line replaces them with itself, and an `if` or a `match`
+walks each arm from the state its conditions leave, then joins what the arms that do not leave come to.  An end carried into an
+arm unchanged is moved to the arm's first statement where the arms do not agree or a condition of the choice made it -- but only
+into an arm that starts on a later line, a one-line `if` having nowhere of its own to say it -- and the way past an `if` with no
+`else` ends after it, at its column.  Where a variable's
 last use moves its value out -- `_moved` keeps the places in `_moved_from` -- no entry is made: the move was logged, and is the end.
 
 **`type-inferred`** is recorded where a name is bound -- a definition in a body or at the top level, the names a taking apart
