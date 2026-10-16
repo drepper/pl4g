@@ -1056,11 +1056,13 @@ Runtime
     `R_RISCV_RELATIVE`) and apply them itself at startup, there being no dynamic loader: the words are already collected per
     variable (`target/globals.py`), so what is missing is the dynamic section and the code that walks it.
 
-[ ] say how long a reference held in a product lives.  A function may not answer with one inside anything else (4531) because
+[x] say how long a reference held in a product lives.  A function may not answer with one inside anything else (4531) because
     `static` belongs to one reference and a tuple may hold several, so a name on the whole answer would say nothing about
     which of them it was about.  Writing
     `static` on the field is the obvious half; borrowing per field would need what was deliberately not built, a way of naming
-    several lifetimes at once.
+    several lifetimes at once.  Done on 2026-10-17, as the user decided: `static` on the field, a record whose every reference
+    is `static` going where such a reference goes, a lifetime name on a field refused (4707); and a tuple written out in an
+    answer carrying a lifetime for each reference in it, each held to it.  A lifetime as a parameter of a type is not done.
 
 [ ] let a lifetime name relate two things that are not the answer and a parameter.  A name may stand on several parameters and on
     the answer, which is what a function handing one of its arguments back needs.  What it cannot yet say is that one parameter

@@ -1,0 +1,58 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ How long a reference held in a product lives.
+※
+※ **A record says `static` on its field, or nothing.**  A record whose every
+※ reference lasts as long as the program may go wherever such a reference may:
+※ be answered with, kept at the top level.  One holding a reference that does
+※ not stays in the function it was made in.
+※
+※ **A tuple written out in an answer says it for each reference in it**, each in
+※ a slot of its own: `static`, or a lifetime name on the parameters it was
+※ borrowed from.  Each is held to it on every way through the body, and a call
+※ works out each one's lifetime from its own arguments -- so `pair(&total,
+※ &other)`, every argument lasting, answers two references that last.
+
+type Slot = at : &static u32 ; tag : u8
+
+let std := ⎕import("std")
+
+let total: mut u32 = 5u32
+let other: u32 = 7u32
+let kept: Slot = Slot(.at ← &other, .tag ← 1u8)
+
+fn slot() → Slot:
+    Slot(.at ← &total, .tag ← 2u8)
+
+fn pair(a: &⧖x u32, b: &⧖y u32) → 〈&⧖x u32, &⧖y u32〉:
+    〈a, b〉
+
+fn swapped(first: bool, a: &⧖x u32, b: &⧖x u32) → 〈&⧖x u32, u8〉:
+    if first:
+        〈a, 1u8〉
+    else:
+        〈b, 2u8〉
+
+fn forwarded(a: &⧖x u32, b: &⧖y u32) → &⧖y u32:
+    pair(a, b)⟦1⟧
+
+fn lasting() → 〈&static u32, &static u32〉:
+    pair(&total, &other)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let n: u32 = 3u32
+    let m: u32 = 4u32
+    let p: 〈&u32, &u32〉 = pair(&n, &m)
+    let q: 〈&u32, u8〉 = swapped(false, &n, &m)
+    let l: 〈&static u32, &static u32〉 = lasting()
+    if slot().at⌖ ≠ 5u32 ∨ kept.at⌖ ≠ 7u32:
+        1u6
+    elif p⟦0⟧⌖ ≠ 3u32 ∨ p⟦1⟧⌖ ≠ 4u32:
+        2u6
+    elif q⟦0⟧⌖ ≠ 4u32 ∨ q⟦1⟧ ≠ 2u8 ∨ forwarded(&n, &m)⌖ ≠ 4u32:
+        3u6
+    elif l⟦1⟧⌖ ≠ 7u32:
+        4u6
+    else:
+        0u6

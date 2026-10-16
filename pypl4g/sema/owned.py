@@ -74,7 +74,8 @@ def points(ty: Type) -> bool:
             # is asked of a lambda where it goes and nowhere here.
             return False
     from .check import _points_somewhere  # pylint: disable=import-outside-toplevel
-    return _points_somewhere(ty, lambdas=False)
+    # Inside something else a reference has lifetimes of its own just as much.
+    return _points_somewhere(ty, lambdas=False, references=False)
 
 
 def own_function(module: Module, ty: Type) -> Function:

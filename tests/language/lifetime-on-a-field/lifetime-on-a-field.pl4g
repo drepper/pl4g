@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4707
+
+※ A lifetime name is about the rest of a signature, and a type's definition is
+※ none: a field says `static` or nothing.
+
+type Named = at : &⧖a u32
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

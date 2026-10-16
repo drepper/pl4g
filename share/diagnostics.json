@@ -7954,9 +7954,9 @@
       "number": 4531,
       "name": "LANG_REF_ANSWERED",
       "severity": "error",
-      "message": "a function may not answer with something that holds a reference",
+      "message": "a function may not answer with something holding a reference that does not last as long as the program",
       "args": [],
-      "cause": "A function answering with a reference says how long what it names lives -- `static` in the type, or `from` naming the parameter it was borrowed from.  Neither can be written about a reference inside something else: `static` belongs to the reference and there may be several, and `from` speaks for the whole answer.  So a tuple, a product or a collection holding one may not be answered with, and the reference is handed back on its own instead.",
+      "cause": "A function answering with a reference says how long what it names lives -- `static` in the type, or a lifetime name on the parameter it was borrowed from.  A reference inside a record cannot carry a name: a field says `static` or nothing, a type's definition being no signature for a name to be about.  So a record, a collection or anything else holding a reference may be answered with only where every reference in it is `static`.  A tuple written out in the signature is the exception: each reference in it has a slot of its own, and says there how long it lives.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / References",
@@ -9644,6 +9644,28 @@
         "document": "spec/spec.md",
         "section": "The Language / Types / References",
         "requirement": "A field is read through a reference with ⌖."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4707,
+      "name": "LANG_LIFETIME_ON_A_FIELD",
+      "severity": "error",
+      "message": "a field says how long a reference it holds lives with 'static' or not at all, and '{name}' is a lifetime name",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the lifetime name written"
+        }
+      ],
+      "cause": "A lifetime name means \"as long as whatever else in this signature carries it\", and a type's definition is no signature: there is nothing else for the name to be about.  A field written `&static T` holds a reference that lasts as long as the program, and a record whose every reference does may leave the function that made it -- be answered with, kept at the top level.  A field written `&T` holds one that lasts as long as the place it was taken of, so the record stays where that place is.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A field's reference says static or nothing about how long it lives."
       },
       "since": "0.1",
       "default_enabled": true,

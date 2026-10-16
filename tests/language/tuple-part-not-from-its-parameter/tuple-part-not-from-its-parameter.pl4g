@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4561
+
+※ Each reference in a tuple answered with is held to the lifetime its own slot
+※ says: here the first says it is what `a` named, and it is what `b` did.
+
+let std := ⎕import("std")
+
+fn crossed(a: &⧖x u32, b: &⧖y u32) → 〈&⧖x u32, &⧖y u32〉:
+    〈b, a〉
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

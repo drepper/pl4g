@@ -247,6 +247,11 @@ class Function:
     #: shorter of what they named, which is the only promise that holds
     #: whichever one the body picked.
     borrows_from: tuple[int, ...] = ()
+    #: The same for an answer that is a tuple, one entry for each part of it
+    #: that is a reference carrying a lifetime name: which parameters what that
+    #: part names was named by.  Keyed by where the part stands among the
+    #: tuple's leaves, which is how a part is taken out of one.
+    leaf_borrows: dict[int, tuple[int, ...]] = field(default_factory=dict)
     #: Which arena parameters the answer was made in, where `→ T in a, b` said so,
     #: and nothing where the signature said nothing -- in which case a caller takes
     #: the answer to be made in any arena it handed over.

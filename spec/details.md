@@ -813,6 +813,17 @@ into an arm that starts on a later line, a one-line `if` having nowhere of its o
 `else` ends after it, at its column.  Where a variable's
 last use moves its value out -- `_moved` keeps the places in `_moved_from` -- no entry is made: the move was logged, and is the end.
 
+**A reference in a product or a tuple answered with** is asked about in two places.  `_holds_a_short_reference` says whether a type
+holds one that does not last as long as the program, which is what `_borrowed_from` refuses in any answer (4531) and
+`_collect_global` at the top level (4532).  A tuple written out in the answer is asked member by member instead
+(`_member_borrows`), each reference's lifetime name giving the parameters it was borrowed from, kept on the function as
+`leaf_borrows`, by where the part stands among the tuple's leaves.  `_members_answered_from` walks each `return` back to where the
+tuple was made -- through a block's parameter, a cast, and a call that promised the same of that part -- and from there as a single
+reference is walked; `_reached_from` goes through a part taken out of a call's tuple in the same way.  At a call,
+`_members_as_long_as_given` makes a part lasting where every argument for it lasts.  An arena check had counted a reference inside
+a tuple as something pointing into an arena; references have lifetimes of their own inside something else too, which
+`_points_somewhere(references=False)` says.
+
 **A `foreach` name marked `&` or `&mut`** is in `ForEach.marks`, one entry for each name, the parser reading the mark before a
 name of `foreach` only.  `_Iteration.place` says where the element a turn gives is, for the walks over something that keeps its
 elements (an array of one dimension, a list, a pick); `members` says, for `⎕enumerate`, what each member of a turn is and where,

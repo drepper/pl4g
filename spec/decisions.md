@@ -9914,6 +9914,22 @@ a power, is a result holding nothing, which `??` now reads while compiling as th
 is refused as a division by nought, the evaluator having no other way to hold a result that holds nothing.  The test that used `n²`
 as the example of what the evaluator cannot run uses a `match` now.
 
+**A reference held in a product: `static` on the field; a tuple answered says it per reference**
+
+Asked, the user decided that **a record says how long a reference it holds lives with `static` on the field, or not at all**,
+against making a lifetime name on a field a parameter of the type (Rust's `struct View<'a>`); that **a tuple written out in an
+answer carries a lifetime for each reference in it**; and that **where a lifetime cannot be proved to match, the program is
+refused**.  So a record whose every reference is `static` goes where such a reference goes, one that holds any other stays in the
+function it was made in (4531, 4532), a lifetime name on a field is refused (4707), a short-lived reference put into a `static`
+field is refused where it is written (4203), and each part of a tuple answered with is walked back to the parameters its name is
+on, on every way through the body (4561).
+
+Taken without asking: a call works out each part's lifetime from its own arguments, as it does for an answer of one reference, and
+logs each; a part taken out of a call's tuple is walked back through that call's promise; a reference to a place holding a
+short-lived reference is short-lived for this question.  Found on the way: a tuple of references in an answer had passed the
+signature with nothing checking its parts afterwards, and was stopped only by an arena check that counted references inside it as
+pointing into an arena, which references outside a tuple are not taken to do.
+
 Open questions
 --------------
 

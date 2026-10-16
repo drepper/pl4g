@@ -2912,9 +2912,38 @@ a value escapes to.  What it is given is the address of another variable at the 
 at an index written down (4656) -- `let kept: &mut static u8 = &mut count`, `&origin.y`, `&table⟦2⟧` -- and `&mut` needs one that
 may be written (4537).  The image is loaded where the linker put it, so such an address is known before the program runs: it is
 written into the image as a relocation the linker settles, and nothing is worked out at startup.  A variable named only that way is
-kept.  A reference inside something else -- a tuple, a product, a collection -- may not be answered with at all
-(4531): `static` belongs to one reference and a tuple may hold several, and a name written on the whole answer would say nothing
-about which of them it was about.
+kept.
+
+**A reference held in a product says `static` on its field, or nothing** -- a lifetime name there is refused (4707), a type's
+definition being no signature for it to be about.  A record whose every reference is `static` lasts as long as the program and
+goes where such a reference goes: answered with, kept at the top level, put in a list.  One holding a reference that is not stays
+in the function it was made in, and so does a collection or anything else holding one: answering with it is refused (4531), and so
+is keeping it at the top level (4532).
+
+```
+type Slot = at : &static u32
+fn slot() → Slot:                       ※ allowed: what it holds lasts
+    Slot(.at ← &total)
+
+type View = at : &u32
+fn view(r: &⧖a u32) → View:             ※ refused: nothing could say how long
+    View(.at ← r)
+```
+
+Putting a reference that does not last into a `static` field is refused where it is written, as any other place that wants a
+reference lasting longer than the one it is given (4203).  **A tuple written out in an answer says it for each reference in it**,
+each in a slot of its own, so the record's limitation is not the tuple's:
+
+```
+fn pair(a: &⧖x u32, b: &⧖y u32) → 〈&⧖x u32, &⧖y u32〉:
+    〈a, b〉
+```
+
+Each part is held to its own slot on every way through the body (4561) -- `〈b, a〉` there is refused -- and a call works out each
+part's lifetime from its own arguments, so `pair(&total, &other)` with both at the top level answers two references that last.
+Compare **Rust**, whose struct holding only `&'static` references needs no lifetime parameter and whose tuple types carry one
+lifetime per reference, as here; and whose `struct View<'a>` -- a lifetime as a parameter of the type -- is what this does not
+have, being the several lifetimes at once that the lifetime decision did not build.
 
 Rust softens all of this with elision, which lets the common case go unwritten; nothing here does, because a missing lifetime
 there is still a lifetime being inferred and here the two answers mean different things to a caller.  C++ has no rule at all and

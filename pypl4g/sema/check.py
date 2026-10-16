@@ -1890,6 +1890,16 @@ def _reached_from(value: Value, sources: Sequence[Value],
             return any(at < len(given)
                        and _reached_from(given[at], sources, incoming, visited)
                        for at in carried)
+        if isinstance(seen, ExtractInst) and isinstance(seen.operands[0], CallInst):
+            # A part of a tuple a call answered, which promised that part the
+            # lifetime of the parameters its name is on.
+            call = seen.operands[0]
+            carried = getattr(call.callee, "leaf_borrows", {}).get(seen.index, ())
+            if carried:
+                given = call.arguments
+                return any(at < len(given)
+                           and _reached_from(given[at], sources, incoming, visited)
+                           for at in carried)
         if isinstance(seen, (CastInst, ExtractInst)) or (
                 isinstance(seen, BinaryInst)
                 and seen.op in (BinOp.ADD, BinOp.SUB)):
@@ -1899,7 +1909,7 @@ def _reached_from(value: Value, sources: Sequence[Value],
 
 
 def _points_somewhere(ty: Type, seen: frozenset[int] = frozenset(),
-                      lambdas: bool = True) -> bool:
+                      lambdas: bool = True, references: bool = True) -> bool:
     """Whether a value of *ty* may point into room something else holds.
 
     A string, a list, a collection, an array whose type does not say its length, a
@@ -1914,23 +1924,27 @@ def _points_somewhere(ty: Type, seen: frozenset[int] = frozenset(),
         return False
     deeper = seen | {id(ty)}
     match ty:
-        case StrType() | ListType() | SetType() | DictType() | PtrType() \
-                | CursorType():
+        case PtrType():
+            return references
+        case StrType() | ListType() | SetType() | DictType() | CursorType():
             return True
         case FuncType():
             return lambdas
         case ArrayType():
-            return not ty.fixed or _points_somewhere(ty.element, deeper, lambdas)
+            return not ty.fixed or _points_somewhere(ty.element, deeper, lambdas,
+                                                     references)
         case TupleType():
-            return any(_points_somewhere(m, deeper, lambdas) for m in ty.members)
+            return any(_points_somewhere(m, deeper, lambdas, references)
+                       for m in ty.members)
         case ResultType():
-            return _points_somewhere(ty.ok, deeper, lambdas) or (
-                ty.err is not None and _points_somewhere(ty.err, deeper, lambdas))
+            return _points_somewhere(ty.ok, deeper, lambdas, references) or (
+                ty.err is not None
+                and _points_somewhere(ty.err, deeper, lambdas, references))
         case ProductType():
-            return any(_points_somewhere(one, deeper, lambdas)
+            return any(_points_somewhere(one, deeper, lambdas, references)
                        for _, one in ty.fields)
         case SumType():
-            return any(_points_somewhere(one, deeper, lambdas)
+            return any(_points_somewhere(one, deeper, lambdas, references)
                        for _, one in ty.variants)
     return False
 
@@ -1955,6 +1969,37 @@ def _empties_named(node: object, into: set[str]) -> None:
 #: The expressions that call something, which is what a reference handed over in
 #: one of them lives no longer than, where the answer cannot hold it.
 _CALLING: Final = (ast.Call, ast.Fresh, ast.Allocated, ast.Binary, ast.Unary)
+
+
+def _holds_a_short_reference(ty: Type,
+                             seen: frozenset[int] = frozenset()) -> bool:
+    """Whether a value of *ty* holds, anywhere inside it, a reference that does
+    not last as long as the program -- or one that does, to a place holding such
+    a reference.  A value holding none may go anywhere: what it refers to is
+    there for as long as anything can hold it."""
+    if isinstance(ty, PtrType):
+        return not ty.lasting or _holds_a_short_reference(ty.pointee, seen)
+    if id(ty) in seen:
+        return False
+    deeper = seen | {id(ty)}
+    match ty:
+        case TupleType():
+            return any(_holds_a_short_reference(m, deeper) for m in ty.members)
+        case ResultType():
+            return (_holds_a_short_reference(ty.ok, deeper)
+                    or (ty.err is not None
+                        and _holds_a_short_reference(ty.err, deeper)))
+        case ProductType():
+            return any(_holds_a_short_reference(t, deeper) for _, t in ty.fields)
+        case SumType():
+            return any(_holds_a_short_reference(t, deeper) for _, t in ty.variants)
+        case ArrayType() | ListType() | SetType() | VecType():
+            return _holds_a_short_reference(ty.element, deeper)
+        case DictType():
+            return (_holds_a_short_reference(ty.key, deeper)
+                    or _holds_a_short_reference(ty.value, deeper))
+        case _:
+            return False
 
 
 def _holds_a_reference(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
@@ -3890,8 +3935,7 @@ class Checker:
             if ty is not None and _holds_a_lambda(ty):
                 self._diags.emit(D.LANG_LAMBDA_AT_TOP_LEVEL, node.span)
                 ty = ERROR
-            elif ty is not None and _holds_a_reference(ty) \
-                    and not (isinstance(ty, PtrType) and ty.lasting):
+            elif ty is not None and _holds_a_short_reference(ty):
                 # A variable here lasts as long as the program, so what it names
                 # has to as well -- which is what `static` says and what nothing
                 # else promises.  Asked before the value is looked at, since
@@ -5813,6 +5857,7 @@ class Checker:
                             writes_arrays=_writes_arrays(node, params),
                             defaults=self._defaults_of(node, params),
                             borrows_from=borrows,
+                            leaf_borrows=self._member_borrows(node, ret),
                             made_in=made_in, param_made_in=param_made_in,
                             exported=self._is_export(attrs),
                             cconv=(func_attrs.abi if func_attrs.abi is not None
@@ -6438,10 +6483,16 @@ class Checker:
                  else node.name_span)
         named = _lifetimes_of(node.ret_type)
         if not isinstance(ret, PtrType):
-            if _holds_a_reference(ret) and not named:
-                # A reference inside something else, written with no lifetime:
-                # there is nowhere to put `static`, which belongs to one
-                # reference and there may be several.
+            if isinstance(ret, TupleType) \
+                    and isinstance(node.ret_type, ast.TupleTypeRef):
+                # A tuple written out: each reference in it has a slot of its
+                # own, and is held to what it says there (`_member_borrows`).
+                return ()
+            if _holds_a_short_reference(ret):
+                # A reference inside something else that does not last as long
+                # as the program: a record says `static` on its field or holds
+                # it only where it was made, and there is nowhere in the answer
+                # a lifetime name could stand for it.
                 self._diags.emit(D.LANG_REF_ANSWERED, where)
             return ()
         if not named:
@@ -6457,6 +6508,44 @@ class Checker:
             self._diags.emit(D.LANG_LIFETIME_NOT_DETERMINED, where,
                              name="".join((LIFETIME_GLYPH, sorted(named)[0])))
         return carried
+
+    def _member_borrows(self, node: ast.FuncDef,
+                        ret: Type) -> dict[int, tuple[int, ...]]:
+        """For an answer that is a tuple written out, which parameters each
+        reference in it names what was named by -- by where it stands among the
+        tuple's leaves.
+
+        Each reference has a slot of its own, so each says how long it lives as
+        an answer of one reference does: `static`, or a lifetime name another
+        parameter carries (4562, 4567).  A member holding references any other
+        way -- a record, a tuple inside it -- holds none that does not last as
+        long as the program, or the answer is refused (4531).
+        """
+        written = node.ret_type
+        if not isinstance(ret, TupleType) or not isinstance(written, ast.TupleTypeRef) \
+                or len(written.members) != len(ret.members):
+            return {}
+        found: dict[int, tuple[int, ...]] = {}
+        for at, (ref, member) in enumerate(zip(written.members, ret.members)):
+            if not _holds_a_reference(member):
+                continue
+            if not isinstance(member, PtrType):
+                if _holds_a_short_reference(member):
+                    self._diags.emit(D.LANG_REF_ANSWERED, ref.span)
+                continue
+            named = _lifetimes_of(ref)
+            if not named:
+                if not member.lasting:
+                    self._diags.emit(D.LANG_BORROW_SAYS_NOTHING, ref.span)
+                continue
+            carried = tuple(one for one, param in enumerate(node.params)
+                            if named & _lifetimes_of(param.type))
+            if not carried:
+                self._diags.emit(D.LANG_LIFETIME_NOT_DETERMINED, ref.span,
+                                 name="".join((LIFETIME_GLYPH, sorted(named)[0])))
+                continue
+            found[parts_within(ret)[at][0]] = carried
+        return found
 
     def _collect_generic(self, node: ast.FuncDef, path: str,
                          attrs: list[BoundAttr],
@@ -7087,6 +7176,14 @@ class Checker:
                                  name=field.name)
                 spoiled = True
             seen[field.name] = field.name_span
+            named = _lifetimes_of(field.type)
+            if named:
+                # A lifetime name is about the rest of a signature, and a type's
+                # definition is none: `static` or nothing is what a field says.
+                self._diags.emit(D.LANG_LIFETIME_ON_A_FIELD, field.type.span,
+                                 name="".join((LIFETIME_GLYPH, sorted(named)[0])))
+                spoiled = True
+                continue
             ty = self._resolve_type(field.type)
             short = _short_lived(ty)
             if short is not None:
@@ -9612,6 +9709,10 @@ class Checker:
                 if borrowed is not None and borrowed.placed:
                     sources.append(borrowed.value)
             self._answers_from(func, node, tuple(sources))
+        if func.leaf_borrows:
+            self._members_answered_from(func, node, {
+                leaf: tuple(self._borrowed_sources(node, arriving, carried))
+                for leaf, carried in func.leaf_borrows.items()})
         self._pop_scope(node.span if not builder.is_terminated else None)
         self._addressed = outer_addressed
         self._answering = outer_answer
@@ -11881,6 +11982,7 @@ class Checker:
                 writes_arrays=_writes_arrays(node, params),
                 defaults=self._defaults_of(node, params),
                 borrows_from=self._borrowed_from(node, answer),
+                leaf_borrows=self._member_borrows(node, answer),
                 made_in=made_in, param_made_in=param_made_in)
             self._module.add_function(
                 func, key=self._key("".join((node.name, "\N{TOP LEFT CORNER}",
@@ -13315,6 +13417,76 @@ class Checker:
                 self._diags.emit(D.LANG_BORROW_NOT_FROM_IT, inst.span,
                                  name=name)
 
+    def _borrowed_sources(self, node: ast.FuncDef, arriving: Sequence[Value],
+                          carried: Sequence[int]) -> list[Value]:
+        """What the parameters *carried* arrived as, and where a parameter given
+        storage of its own keeps it: what a promised answer may come from."""
+        sources: list[Value] = []
+        for at in carried:
+            sources.append(arriving[at])
+            borrowed = self._find_local(node.params[at].name)
+            if borrowed is not None and borrowed.placed:
+                sources.append(borrowed.value)
+        return sources
+
+    def _members_answered_from(self, func: Function, node: ast.FuncDef,
+                               sources: dict[int, tuple[Value, ...]]) -> None:
+        """Check, for an answer that is a tuple, that each reference in it comes
+        from the parameters its lifetime name is on -- every `return`, every way
+        through it, member by member (4561)."""
+        incoming: dict[int, list[object]] = {}
+        for block in func.blocks:
+            last = block.insts[-1] if block.insts else None
+            if isinstance(last, Terminator):
+                for arm in last.successors():
+                    incoming.setdefault(id(arm.block), []).append(arm)
+        for block in func.blocks:
+            for inst in block.insts:
+                if not isinstance(inst, RetInst) or not inst.operands:
+                    continue
+                for leaf, given in sources.items():
+                    if self._leaf_reached(inst.operands[0], leaf, given, incoming,
+                                          set()):
+                        continue
+                    self._diags.emit(D.LANG_BORROW_NOT_FROM_IT, inst.span,
+                                     name=", ".join(
+                                         node.params[at].name
+                                         for at in func.leaf_borrows[leaf]))
+
+    def _leaf_reached(self, value: Value, leaf: int, sources: tuple[Value, ...],
+                      incoming: dict[int, list[object]], visited: set[int]) -> bool:
+        """Whether the part at *leaf* of the tuple *value* was worked out from
+        one of *sources*, or lasts as long as the program.
+
+        Walked back to where the tuple was made, through what an `if` or a loop
+        came to and through a call that made the same promise about that part,
+        and then as a single reference is walked.  A tuple got any other way is
+        not one this can say anything about, and is refused.
+        """
+        match value:
+            case TupleInst():
+                part = value.operands[leaf]
+                return self._lasting(part) or _reached_from(part, sources, incoming)
+            case BlockParam():
+                if id(value) in visited:
+                    return True
+                visited.add(id(value))
+                arms = incoming.get(id(value.block), [])
+                return bool(arms) and all(
+                    value.index < len(getattr(arm, "args", ()))
+                    and self._leaf_reached(getattr(arm, "args")[value.index], leaf,
+                                           sources, incoming, visited)
+                    for arm in arms)
+            case CallInst():
+                carried = getattr(value.callee, "leaf_borrows", {}).get(leaf, ())
+                return any(at < len(value.arguments)
+                           and _reached_from(value.arguments[at], sources, incoming)
+                           for at in carried)
+            case CastInst():
+                return self._leaf_reached(value.operands[0], leaf, sources,
+                                          incoming, visited)
+        return False
+
     def _as_long_as_given(self, builder: IRBuilder, func: Function,
                           args: Sequence[Value], answer: Value,
                           span: Span) -> Value:
@@ -13330,6 +13502,9 @@ class Checker:
         says, and where a name stands on several parameters it is not even a
         thing a reader can work out from one of them.
         """
+        if func.leaf_borrows and isinstance(answer.ty, TupleType):
+            return self._members_as_long_as_given(builder, func, args, answer,
+                                                  span)
         carried = func.borrows_from
         if not carried or max(carried) >= len(args) \
                 or not isinstance(answer.ty, PtrType):
@@ -13344,6 +13519,47 @@ class Checker:
             CastKind.BITCAST, answer,
             self._module.types.ptr_type(answer.ty.pointee, answer.ty.mutable,
                                         lasting=True), span)
+
+    def _members_as_long_as_given(self, builder: IRBuilder, func: Function,
+                                  args: Sequence[Value], answer: Value,
+                                  span: Span) -> Value:
+        """`_as_long_as_given` for each reference in an answer that is a tuple.
+
+        A part whose arguments all last as long as the program lasts as long too,
+        and the tuple is put back together with it saying so; each part's answer
+        is written to the log, naming which part.
+        """
+        ty = answer.ty
+        assert isinstance(ty, TupleType)
+        pieces = parts_of(ty)
+        leaves = [builder.extract(answer, at, piece, span)
+                  for at, piece in enumerate(pieces)]
+        changed = False
+        member_of = {first: at for at, (first, _) in enumerate(parts_within(ty))}
+        for leaf, carried in func.leaf_borrows.items():
+            if max(carried) >= len(args) or not isinstance(pieces[leaf], PtrType):
+                continue
+            lasting = all(self._lasting(args[at]) for at in carried)
+            self._module.reports.record(
+                ReportKind.LIFETIME, func.name, "".join((
+                    "part ", str(member_of.get(leaf, leaf) + 1), " of the answer ",
+                    self._how_long(func, args, carried, lasting))), span)
+            piece = pieces[leaf]
+            if lasting and not piece.lasting:
+                leaves[leaf] = builder.cast(
+                    CastKind.BITCAST, leaves[leaf],
+                    self._module.types.ptr_type(piece.pointee, piece.mutable,
+                                                lasting=True), span)
+                changed = True
+        if not changed:
+            return answer
+        members = list(ty.members)
+        for leaf, at in member_of.items():
+            if isinstance(members[at], PtrType) and leaves[leaf].ty is not members[at]:
+                members[at] = leaves[leaf].ty
+        return builder.make_tuple(tuple(leaves),
+                                  self._module.types.tuple_type(tuple(members)),
+                                  span)
 
     def _how_long(self, func: Function, args: Sequence[Value],
                   carried: Sequence[int], lasting: bool) -> str:

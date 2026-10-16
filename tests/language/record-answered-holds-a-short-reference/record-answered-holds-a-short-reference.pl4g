@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4531
+
+※ A record holding a reference that does not last as long as the program stays
+※ where it was made: nothing in the answer could say how long the reference in
+※ it lives.
+
+type View = at : &u32
+
+let std := ⎕import("std")
+
+fn view(r: &⧖a u32) → View:
+    View(.at ← r)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6
