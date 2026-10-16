@@ -18,7 +18,7 @@ from ..diag.ids import DiagID
 from ..target import statuses
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
-from ..comptime.evaluate import CannotEvaluate, Evaluator
+from ..comptime.evaluate import CannotEvaluate, Evaluator, power
 from ..front.expand import only_for_macros
 from ..front.doccomment import Part as DocPart, parse as parse_doc
 from ..front.lexer import is_operator_glyph, is_operator_name
@@ -10858,7 +10858,8 @@ class Checker:
                 inner = self._constant(expr.base)
                 if inner is None or inner is _REFUSED or inner.failed:
                     return inner if inner is _REFUSED else None
-                return self._fits(expr, inner.value ** expr.exponent, inner.ty)
+                return self._folded_power(expr, inner.value, expr.exponent,
+                                          inner.ty)
             case ast.Try():
                 inner = self._constant(expr.operand)
                 if inner is not None and inner is not _REFUSED and inner.failed:
@@ -11002,9 +11003,7 @@ class Checker:
             case ast.BinaryOp.MIN:
                 return _Folded(min(a, b), ty)
             case ast.BinaryOp.POWER:
-                if b < 0:
-                    return None
-                return self._fits(expr, a ** b, ty)
+                return self._folded_power(expr, a, b, ty)
             case ast.BinaryOp.BIT_AND | ast.BinaryOp.BIT_OR | ast.BinaryOp.BIT_XOR:
                 answer = (a & b if op is ast.BinaryOp.BIT_AND
                           else a | b if op is ast.BinaryOp.BIT_OR else a ^ b)
@@ -11014,6 +11013,16 @@ class Checker:
                 return self._folded_shift(expr, a, b, ty)
             case _:
                 return None
+
+    def _folded_power(self, expr: ast.Expr, base: int, exponent: int,
+                      ty: IntType | None) -> _Folded | None:
+        """A constant raised to a constant power, as the program raises it: a
+        negative exponent is one divided by the positive power, toward zero, and
+        has no answer where what was raised is nought."""
+        try:
+            return self._fits(expr, int(power(base, exponent)), ty)
+        except ZeroDivisionError:
+            return _Folded(0, ty, failed=True)
 
     def _folded_shift(self, expr: ast.Binary, a: int, b: int,
                       ty: IntType | None) -> _Folded | None:

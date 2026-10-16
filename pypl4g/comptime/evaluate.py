@@ -62,6 +62,12 @@ class CannotEvaluate(Exception):
         self.ran_out = ran_out
 
 
+class _NoAnswer(CannotEvaluate):
+    """A division with no answer -- by nought, or nought raised to a negative
+    power.  Its answer is a result, and that result holds nothing: `??` reads
+    it as such, and anywhere else it is refused as what it is."""
+
+
 @dataclass(slots=True)
 class Cell:
     """Somewhere a value lives, so that a reference has something to point at."""
@@ -416,6 +422,8 @@ class Evaluator:
                 return self._name(expr)
             case ast.Binary():
                 return self._binary(expr)
+            case ast.Raised():
+                return self._raised(expr)
             case ast.Unary():
                 return self._unary(expr)
             case ast.Call():
@@ -495,7 +503,10 @@ class Evaluator:
         if op is ast.BinaryOp.OR_ELSE:
             # The one that reads a result: what is on the right is worked out
             # only where the left found nothing.
-            found = self._value(expr.left, missing=True)
+            try:
+                found = self._value(expr.left, missing=True)
+            except _NoAnswer:
+                found = MISSING
             return self._value(expr.right) if found is MISSING else found
         left = self._value(expr.left)
         right = self._value(expr.right)
@@ -505,7 +516,18 @@ class Evaluator:
             raise CannotEvaluate(expr.span, "".join((
                 "'", str(op.value), "' over these"))) from None
         except ZeroDivisionError:
-            raise CannotEvaluate(expr.span, "a division by nought") from None
+            raise _NoAnswer(expr.span, "a division by nought") from None
+
+    def _raised(self, expr: ast.Raised) -> object:
+        """`n²`: a number raised to a power written down, as `ⁿ` would raise it."""
+        found = self._value(expr.base)
+        if isinstance(found, bool) or not isinstance(found, (int, float)):
+            raise CannotEvaluate(expr.span, "a power of something that is not "
+                                            "a number")
+        try:
+            return power(found, expr.exponent)
+        except ZeroDivisionError:
+            raise _NoAnswer(expr.span, "a division by nought") from None
 
     def _unary(self, expr: ast.Unary) -> object:
         """And what a one-sided operator comes to."""
@@ -734,7 +756,9 @@ def _apply(op: ast.BinaryOp, left: object, right: object) -> object:
         case ast.BinaryOp.MIN:
             return min(left, right)
         case ast.BinaryOp.POWER:
-            return left ** right
+            if not isinstance(right, int):
+                raise _NotForThis
+            return power(left, right)
         case ast.BinaryOp.DIVIDES:
             return right % left == 0
         case ast.BinaryOp.NOT_DIVIDES:
@@ -743,12 +767,29 @@ def _apply(op: ast.BinaryOp, left: object, right: object) -> object:
             raise _NotForThis
 
 
+def power(base: int | float, exponent: int) -> int | float:
+    """*base* raised to *exponent*, as the program raises it.
+
+    A negative exponent is one divided by the positive power, which is a division:
+    toward zero for a whole number, as the program divides, and none at all where
+    what was raised is nought.  Anything raised to no power is one.
+    """
+    if exponent >= 0:
+        return base ** exponent
+    divisor = base ** -exponent
+    if divisor == 0:
+        raise ZeroDivisionError
+    if isinstance(divisor, int):
+        return 0 if abs(divisor) > 1 else divisor
+    return 1 / divisor
+
+
 #: How each piece of the language this cannot work out is named in the refusal.
 #: The words are the ones the specification uses, so that what a reader is told
 #: is a thing they can look up.
 _DESCRIBED: Final[Mapping[str, str]] = {
     "Match": "a match", "Lambda": "a lambda", "Try": "a `?`",
-    "Failure": "a failure", "Lifted": "a lifted type", "Raised": "a power",
+    "Failure": "a failure", "Lifted": "a lifted type",
     "SetLit": "a set", "DictLit": "a dictionary", "Spread": "a spread",
     "Range": "a range outside a loop", "Capture": "a capture",
     "CaptureAll": "a capture", "Index": "an entry of a collection",

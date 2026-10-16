@@ -9904,6 +9904,16 @@ refused (4699).  Found on the way and corrected: writing an element by index whi
 all; a field read through a reference without `⌖` was reported as the name not being a module, and now says to write `r⌖.x`
 (4706); and a loop whose walk could not be made bound only its first name, so the others were reported again as undefined.
 
+**The compile-time evaluator raises to a power as the program does, and reads a division with no answer through `??`**
+
+The user asked for the entry in TODO-language.md.  Taken without asking, each following from the specification of powers: a raised
+power in a function the evaluator runs is worked out as `ⁿ` would work it out; a negative exponent is one divided by the positive
+power, toward nought for a whole number -- the evaluator's `ⁿ` had answered a fraction, and folding a raised power had crashed on
+nought and answered a fraction otherwise -- and nought raised to one has no answer.  A division with no answer, by `÷` or by such
+a power, is a result holding nothing, which `??` now reads while compiling as the program reads it while running; anywhere else it
+is refused as a division by nought, the evaluator having no other way to hold a result that holds nothing.  The test that used `n²`
+as the example of what the evaluator cannot run uses a `match` now.
+
 Open questions
 --------------
 

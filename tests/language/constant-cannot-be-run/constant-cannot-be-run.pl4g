@@ -12,5 +12,11 @@ fn main(init: std.Init) → u6:
     let a: u8 = t⟦picked(0)⟧
     0u6
 
+enum Side { left ; right }
+
 fn picked(n: u64) → u64:
-    n²
+    match Side.left:
+        left:
+            n
+        right:
+            1u64

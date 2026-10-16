@@ -1157,9 +1157,11 @@ Runtime
     keyword of the same kind, or recognising a condition the compiler knows is always true -- `true` itself, or any constant --
     and typing `while` that way, which needs no new word but makes the loop's type depend on whether its condition folds.
 
-[ ] let the compile-time evaluator work out a power written raised, `n²`.  A constant expression can (it folds over the syntax
+[x] let the compile-time evaluator work out a power written raised, `n²`.  A constant expression can (it folds over the syntax
     itself), but a function it runs cannot: the evaluator refuses it (7000), and a call to such a function in a constant is
-    refused with it.
+    refused with it.  Done on 2026-10-17, with the same rule for `ⁿ` and for folding: a negative exponent is one divided by the
+    positive power, and nought to one has no answer -- which folding had crashed on and `ⁿ` had answered as a fraction.  A
+    division with no answer in a call the compiler runs is read by `??`, as it is when the program runs.
 
 [x] coroutines.  Done on 2026-10-03, stackless, as [spec/coroutines.md](spec/coroutines.md) proposed and with its seven
     questions taken at their recommendations: `fn g(…) ⇉ T` with `yield` and `yield ⇉`, written into a loop that can see it and

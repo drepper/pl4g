@@ -1,0 +1,51 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A power worked out while compiling, by a call the compiler runs and by an
+※ expression it folds.
+※
+※ **It is the power the program would work out.**  A raised number is how many
+※ times to multiply, nought times being one; a negative one is one divided by
+※ the positive power -- toward nought for a whole number, and no answer at all
+※ where what was raised is nought, which `??` reads as it reads a division by
+※ nought.  So `4⁻¹` is nought and `0⁻²` has no answer.
+
+let std := ⎕import("std")
+
+fn square(n: u64) → u64:
+    n²
+
+fn cube_plus(n: i64) → i64:
+    n³ + 10i64
+
+fn inverse(n: i64) → i64:
+    n⁻¹ ?? 7i64
+
+fn quotient(n: i64) → i64:
+    100i64 ÷ n ?? 3i64
+
+fn powered(n: u64, k: u64) → u64:
+    n ⁿ k ?? 0u64
+
+fn worse(n: u64) → u64?:
+    n⁻²
+
+fn read(n: u64) → u64:
+    worse(n) ?? 4u64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let a: u8⟦square(3u64)⟧ = 9 ⍴ 0u8
+    let b: u8⟦cube_plus(⁻2i64)⟧ = 2 ⍴ 0u8
+    let c: u8⟦inverse(1i64) + inverse(0i64) + inverse(5i64)⟧ = 8 ⍴ 0u8
+    let d: u8⟦quotient(0i64) + quotient(50i64)⟧ = 5 ⍴ 0u8
+    let e: u8⟦powered(2u64, 3u64) + read(0u64)⟧ = 12 ⍴ 0u8
+    ※ and folded, with no call
+    let f: u8⟦(1u64⁻¹ ?? 5u64) + (4u64⁻¹ ?? 5u64) + (0u64⁻² ?? 6u64)⟧ = 7 ⍴ 0u8
+    if #a ≠ 9 ∨ #b ≠ 2:
+        1u6
+    elif #c ≠ 8 ∨ #d ≠ 5:
+        2u6
+    elif #e ≠ 12 ∨ #f ≠ 7:
+        3u6
+    else:
+        0u6

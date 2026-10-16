@@ -588,7 +588,10 @@ the rotations, `⌈` and `⌊`, a power -- and **a call to a pure function of th
 compiler runs the call: the function is worked out over what was written, by the same evaluator that runs a build function, which
 is why a call can stand in a type in a signature as well as anywhere else.  A function that is not pure is not run (4665) -- its
 answer could differ from call to call, or the call could do something -- nor one taking a type parameter.  What the evaluator
-cannot work out it names (7000), and one that does not finish is given up on (7001).
+cannot work out it names (7000), and one that does not finish is given up on (7001).  **A power is the one the program works out**,
+written raised or with `ⁿ`, in a call the compiler runs as in an expression it folds: a negative exponent is one divided by the
+positive power, toward nought for a whole number, and has no answer where what was raised is nought.  That, and a division by
+nought, is a result holding nothing, which `??` reads while compiling as it does while running.
 
 **The top level has no order, and neither do its constants.**  A constant may be named above where it is defined -- in a type in a
 signature, or in another constant -- and is then worked out from what was written for it when it is first asked for, as the
