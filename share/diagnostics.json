@@ -6663,6 +6663,38 @@
       "option": null
     },
     {
+      "number": 4699,
+      "name": "LANG_FOREACH_NOT_A_PLACE",
+      "severity": "error",
+      "message": "'{name}' is marked '{mark}', and {what}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name the loop binds"
+        },
+        {
+          "name": "mark",
+          "type": "string",
+          "description": "'&' or '&mut'"
+        },
+        {
+          "name": "what",
+          "type": "string",
+          "description": "why there is nothing to refer to"
+        }
+      ],
+      "cause": "A name a `foreach` binds marked `&` or `&mut` refers to each element where it is, rather than holding a copy of it.  That needs the element to be somewhere: an array's or a list's is, where they are kept.  What a range, a string, a table or a generator gives is a value made for the turn, and the count `⎕enumerate` keeps is one too, so there is nothing for a reference to name -- the name is written without the mark.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / foreach",
+        "requirement": "A name a foreach binds by reference refers to an element where it is."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",
@@ -9580,6 +9612,38 @@
         "document": "spec/spec.md",
         "section": "The Language / Statements / while",
         "requirement": "`unless` takes a condition and not a binding."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4706,
+      "name": "LANG_FIELD_THROUGH_A_REFERENCE",
+      "severity": "error",
+      "message": "'{name}' is a reference to a '{type}', so a field of it is read as '{name}⌖.{field}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name holding the reference"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the record referred to"
+        },
+        {
+          "name": "field",
+          "type": "string",
+          "description": "the field asked for"
+        }
+      ],
+      "cause": "A reference is not the record it names: what is read through one is written with `⌖`, which says the place is somewhere else -- `r⌖.x` reads the field where the record is.  Reading it without would leave nothing in the text to say that a read through memory, and through whatever else may write that memory, is what happens.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A field is read through a reference with ⌖."
       },
       "since": "0.1",
       "default_enabled": true,

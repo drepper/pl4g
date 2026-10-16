@@ -2176,9 +2176,11 @@ class Parser:
         after `while` it could not be optional anyway, a name on its own
         followed by a colon being a condition with a body after it.
         """
+        marks: list[str] = [self._reference_mark(keyword)]
         name_token = self._expect(TokKind.IDENT)
         more: list[tuple[str, Span]] = []
         while self._accept(TokKind.COMMA) is not None:
+            marks.append(self._reference_mark(keyword))
             written = self._expect(TokKind.IDENT)
             more.append((written.text, written.span))
         declared: ast.TypeExpr | None = None
@@ -2197,7 +2199,20 @@ class Parser:
                            name_span=name_token.span, type=declared,
                            iterable=iterable, body=body, more=tuple(more),
                            keyword=keyword, label=label, alternative=otherwise,
-                           comptime=comptime)
+                           comptime=comptime,
+                           marks=tuple(marks) if any(marks) else ())
+
+    def _reference_mark(self, keyword: str) -> str:
+        """`&` or `&mut` before a name a `foreach` binds, or nothing.
+
+        A name so marked refers to each element where it is instead of holding a
+        copy of it -- what a value that is never copied needs, and what writing
+        the elements in place needs.  Only `foreach` has one: what `while` binds
+        is worked out anew on every turn, and nothing holds it to refer to.
+        """
+        if keyword != "foreach" or self._accept(TokKind.AMPERSAND) is None:
+            return ""
+        return "&mut" if self._accept(TokKind.KW_MUT) is not None else "&"
 
     def _parse_if(self) -> ast.If:
         """Parse ``[comptime] if COND BODY`` with its `elif`s and its `else`.

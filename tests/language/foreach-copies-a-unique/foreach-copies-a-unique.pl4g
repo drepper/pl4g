@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error diag=4400
+
+※ A value marked `@[unique]` is never copied, and binding each element to a
+※ plain name would copy it: the name is written `&vv` to refer to it instead.
+
+let std := ⎕import("std")
+
+@[unique]
+type foo = one : i32; two : i32
+
+
+
+@[startup]
+fn main(init: std.Init) → u6:
+  let v : mut ⟦⟧ = ⟦foo(.one ← 1, .two ← 2), foo(.one ← 2, .two ← 3)⟧
+
+  foreach k, vv := ⎕enumerate(v):
+    _ ← std.println⌜&mut init.io.output, "{} {}", vv.one, vv.two⌝;
+  0

@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4566
+
+※ While a loop walks an array by reference, the array is lent to it, and an
+※ element written by index would change what a reference was promised does
+※ not change.
+
+type P = one : i32 ; two : i32
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let v: mut ⟦⟧ = ⟦P(.one ← 1i32, .two ← 2i32)⟧
+    foreach &p := v:
+        v⟦0⟧ ← P(.one ← p⌖.two, .two ← 0i32)
+    0u6

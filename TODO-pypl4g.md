@@ -439,12 +439,13 @@ removed or decided otherwise, which its last paragraph says.
     `x ⌊ 255u8` is `x`, and both are what a generator writes when the bound comes from somewhere else.  Neither folds
     today.
 
-[ ] hold a tuple whose member is itself several values.  A tuple holding a tuple reaches the code generator and fails there
+[x] hold a tuple whose member is itself several values.  A tuple holding a tuple reaches the code generator and fails there
     ("no encoding of 'mov' accepts ..."), because what a tuple travels in is one register per part and a part that is itself
     several has nowhere to go.  It is what stops `⎕enumerate` counting the turns of a dictionary, whose turn is already a
     pair, and it is the same gap as the array below.
     **Out of date (2026-10-04):** A tuple holding a tuple works (comptime-tuple-of-strings; ebdbe9c); `⎕enumerate` over a
-    dictionary is still refused.
+    dictionary is still refused.  Done on 2026-10-17: the count and the turn are made into the tuple by their leaves, so a
+    dictionary and an array of records are counted (foreach-by-reference).
 
 [ ] make the bill of materials the same in two directories.  A source's row names the path it was read from, so the same program
     built from two places gives two images.  What should be recorded instead -- a path relative to something, or only the name --

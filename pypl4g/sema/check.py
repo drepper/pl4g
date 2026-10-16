@@ -3103,6 +3103,17 @@ class _Iteration:
     #: calls tells the generator it walks to finish, so that what it put off
     #: runs.  Nothing where leaving needs nothing.
     finish: Callable[[IRBuilder], None] | None = None
+    #: Where the element this turn gives is, for a name marked `&` or `&mut`:
+    #: the walks over something that keeps its elements -- an array, a list --
+    #: have one; a walk whose turn is made for it has nothing to refer to.
+    place: Callable[[IRBuilder, tuple[Value, ...]], Value] | None = None
+    #: For a turn taken apart into several names, what each member is and where
+    #: it is, so that one marked `&` refers to it and nothing is made of the
+    #: whole: `\N{APL FUNCTIONAL SYMBOL QUAD}enumerate` gives the count and the element.  Nothing where the
+    #: turn is taken apart the ordinary way.
+    members: tuple[tuple[Callable[[IRBuilder, tuple[Value, ...]], Value],
+                         Callable[[IRBuilder, tuple[Value, ...]], Value] | None],
+                   ...] | None = None
 
 
 class Checker:
@@ -4325,7 +4336,11 @@ class Checker:
             held = self._held_by(local)
             # An array is a value too, and what a field of one is, is said
             # where a field is read: it is each element's, written with `¨`.
-            return isinstance(held, (ProductType, ArrayType)) or held is ERROR
+            # And so is a reference to a record, whose field is read with `⌖`,
+            # which is said where a field is read as well.
+            return isinstance(held, (ProductType, ArrayType)) or held is ERROR \
+                or (isinstance(held, PtrType)
+                    and isinstance(held.pointee, ProductType))
         found = self._provided(name)
         return isinstance(found, GlobalVar) \
             and isinstance(found.value_type, (ProductType, ArrayType))
@@ -4354,6 +4369,13 @@ class Checker:
         if isinstance(ty, ArrayType):
             self._diags.emit(D.LANG_FIELD_OF_AN_ARRAY, expr.name_span,
                              found=ty.written(), name=expr.name)
+            return UndefConst(ERROR)
+        if isinstance(ty, PtrType) and isinstance(ty.pointee, ProductType):
+            self._diags.emit(D.LANG_FIELD_THROUGH_A_REFERENCE, expr.span,
+                             name=_path_text(expr.base)
+                             if isinstance(expr.base, (ast.NameRef, ast.Member))
+                             else "it", type=ty.pointee.written(),
+                             field=expr.name)
             return UndefConst(ERROR)
         if not isinstance(ty, ProductType):
             self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, expr.base.span,
@@ -11181,6 +11203,12 @@ class Checker:
             # An element is written only through a name that says it may be:
             # `mut`, as a field is.
             return
+        lent = self._borrowed_name(stmt.base)
+        if lent is not None and self._lent_out(lent[0], stmt.span, True, lent[1]):
+            # A reference to one of its elements is out -- `&a⟦i⟧`, or a loop
+            # walking it by reference -- and whoever holds it was promised
+            # nothing else changes the place.
+            return
         mask = self._mask_written(builder, stmt)
         if mask is not None:
             self._assign_picked(builder, stmt, base, ty, mask)
@@ -14752,6 +14780,18 @@ class Checker:
         """
         if builder.block is None:
             return UndefConst(ERROR)
+        if stmt.marks and (stmt.comptime or self._written_in(stmt) is not None):
+            # What these give is made for the turn -- a member written out, what
+            # a generator written into the loop yields -- and is nowhere to
+            # refer to.  The names are bound as copies, so nothing more is said.
+            for (name, span), mark in zip(((stmt.name, stmt.name_span),
+                                           *stmt.more), stmt.marks):
+                if mark:
+                    self._diags.emit(
+                        D.LANG_FOREACH_NOT_A_PLACE, span, name=name, mark=mark,
+                        what="what a turn gives it is made for the turn, not "
+                        "somewhere a reference could name")
+            stmt = replace(stmt, marks=())
         if stmt.comptime:
             if self._abstract is not None:
                 # What it walks is what the types are: checked where a call says.
@@ -14769,7 +14809,9 @@ class Checker:
             # out of either, so the label is not put up: a jump naming it would
             # be reported, and what it would be reported for is this.
             self._push_scope()
-            self._bind_local(stmt.name, UndefConst(ERROR), stmt.name_span)
+            for name, span in ((stmt.name, stmt.name_span), *stmt.more):
+                if name != WILDCARD_NAME:
+                    self._bind_local(name, UndefConst(ERROR), span)
             self._lower_block(builder, stmt.body, func, as_result=False)
             self._pop_scope()
             return UndefConst(ERROR)
@@ -14851,7 +14893,7 @@ class Checker:
         self._carried = outer_carried | {id(local) for local in carried}
         builder.position_at(body)
         self._push_scope()
-        self._bind_turn(builder, stmt, found.take(builder, state))
+        self._bind_turn(builder, stmt, found, state)
         self._taken_out_of(stmt.iterable, (stmt.name, *(n for n, _ in stmt.more)))
         one = self._begin_loop(label, header, after, carried, state, found.step,
                                produces, produces and stmt.alternative is None,
@@ -15189,8 +15231,28 @@ class Checker:
         builder.set_memory(exit_token if ways is not None else token)
 
     def _bind_turn(self, builder: IRBuilder, stmt: ast.ForEach,
-                   value: Value) -> None:
-        """Bind what a turn gave to the names the loop was written with."""
+                   found: _Iteration, state: tuple[Value, ...]) -> None:
+        """Bind what a turn gave to the names the loop was written with.
+
+        A name is a copy of what the turn gives -- refused for a value that is
+        never copied (4400) -- unless it is marked `&` or `&mut`, when it is a
+        reference to the element where it is.
+        """
+        names = [(stmt.name, stmt.name_span), *stmt.more]
+        if stmt.marks:
+            self._bind_by_reference(builder, stmt, found, state, names)
+            return
+        members = ([found.element] if len(names) == 1
+                   else list(found.element.members)
+                   if isinstance(found.element, TupleType)
+                   and len(found.element.members) == len(names) else [])
+        for (name, span), member in zip(names, members):
+            if name != WILDCARD_NAME and self._never_copied(member, name, span):
+                for one, where in names:
+                    if one != WILDCARD_NAME:
+                        self._bind_local(one, UndefConst(ERROR), where)
+                return
+        value = found.take(builder, state)
         if stmt.more:
             self._name_value(value, stmt.name, stmt.name_span)
             self._bind_apart(builder, stmt, value)
@@ -15206,6 +15268,104 @@ class Checker:
         self._bind_local(stmt.name, value, stmt.name_span,
                          value_span=stmt.iterable.span, builder=builder)
         self._report_inferred(((stmt.name, stmt.name_span),), stmt.type)
+
+    def _never_copied(self, ty: Type, name: str, span: Span) -> bool:
+        """Report a name a turn would copy a value that is never copied into."""
+        if not isinstance(ty, ProductType) or not ty.unique:
+            return False
+        self._diags.emit(D.LANG_UNIQUE_COPIED, span, type=ty.written(),
+                         what="".join(("binding each one to '", name, "' would be "
+                                       "a copy of it; '&", name, "' refers to it "
+                                       "where it is")))
+        return True
+
+    def _bind_by_reference(self, builder: IRBuilder, stmt: ast.ForEach,
+                           found: _Iteration, state: tuple[Value, ...],
+                           names: list[tuple[str, Span]]) -> None:
+        """Bind the names of a turn, some of them as references to the element.
+
+        A marked name is the element's address as a `&T` -- `&mut T` where it is
+        marked so, which wants a loop over a name that may change -- and what the
+        loop walks is lent to it for the loop: written while a `&` is out, or
+        read or written while a `&mut` is, it is refused as a lent place is.  An
+        unmarked name beside it takes its member as a copy.
+        """
+        marks = stmt.marks
+        if len(names) == 1:
+            getters = ((found.take, found.place),)
+            types: list[Type] = [found.element]
+        elif found.members is not None and len(found.members) == len(names):
+            getters = found.members
+            assert isinstance(found.element, TupleType)
+            types = list(found.element.members)
+        else:
+            getters = tuple((None, None) for _ in names)
+            types = [ERROR] * len(names)
+        walked = self._walked_expr(stmt.iterable)
+        writes = False
+        for (name, span), mark, (get, where), ty in zip(names, marks, getters, types):
+            if name == WILDCARD_NAME:
+                continue
+            bound: Value = UndefConst(ERROR)
+            if mark:
+                if where is None:
+                    self._diags.emit(
+                        D.LANG_FOREACH_NOT_A_PLACE, span, name=name, mark=mark,
+                        what="what a turn gives it is made for the turn, not "
+                        "somewhere a reference could name")
+                elif not _can_be_referred_to(ty):
+                    self._diags.emit(D.LANG_REF_TYPE_NOT_ALLOWED, span,
+                                     found=ty.written())
+                elif mark == "&mut" and not self._walked_may_change(walked):
+                    self._diags.emit(D.LANG_REF_PLACE_NOT_MUTABLE, span,
+                                     name=_path_text(walked)
+                                     if isinstance(walked, (ast.NameRef, ast.Member))
+                                     else "what the loop walks")
+                else:
+                    writes = writes or mark == "&mut"
+                    bound = builder.cast(
+                        CastKind.BITCAST, where(builder, state),
+                        self._module.types.ptr_type(ty, mark == "&mut"), span)
+            elif get is not None and ty is not ERROR \
+                    and not self._never_copied(ty, name, span):
+                bound = get(builder, state)
+            self._bind_local(name, bound, span, value_span=stmt.iterable.span,
+                             builder=builder)
+        self._report_inferred(names, stmt.type)
+        lent = self._walked_name(walked)
+        if lent is not None:
+            # Lent for the loop: the references live as long as its body does.
+            before = len(self._borrows)
+            self._lend(lent, writes, walked.span)
+            for one in self._borrows[before:]:
+                one.depth = len(self._scopes) - 1
+
+    @staticmethod
+    def _walked_expr(expr: ast.Expr) -> ast.Expr:
+        """What a loop walks the elements of: what `\N{APL FUNCTIONAL SYMBOL QUAD}enumerate` was handed, where
+        it counts the turns, and the expression itself otherwise."""
+        if isinstance(expr, ast.Call) and isinstance(expr.callee, ast.NameRef) \
+                and expr.callee.name == ENUMERATE_NAME and expr.args:
+            return expr.args[0]
+        return expr
+
+    def _walked_name(self, expr: ast.Expr) -> str | None:
+        """The local name what a loop walks is, or under, where it is one."""
+        while isinstance(expr, ast.Member):
+            expr = expr.base
+        if isinstance(expr, ast.NameRef) and self._find_local(expr.name) is not None:
+            return expr.name
+        return None
+
+    def _walked_may_change(self, expr: ast.Expr) -> bool:
+        """Whether what a loop walks is a place that may be written."""
+        if isinstance(expr, ast.NameRef):
+            local = self._find_local(expr.name)
+            if local is not None:
+                return local.mutable
+            found = self._provided(expr.name)
+            return isinstance(found, GlobalVar) and found.mutable
+        return False
 
     # -- what a loop can take its values from ----------------------------------
 
@@ -15369,27 +15529,17 @@ class Checker:
                 self._diags.emit(D.LANG_ENUMERATE_COUNTS_IN_INTEGERS,
                                  from_written.span, found=index.written())
                 return None
-        if len(parts_of(inner.element)) > 1:
-            # A turn that is already several values -- a dictionary's pair --
-            # would make a tuple holding a tuple, and a value of one of those
-            # is not a thing this compiler can hold: what it travels in is one
-            # register per part, and a part that is itself several has nowhere
-            # to go.  The to-do list records it beside the tuple holding an
-            # array, which is the same gap.
-            self._diags.emit(
-                D.IMPL_UNIMPLEMENTED_FEATURE, stmt.iterable.span,
-                feature="".join((
-                    "counting the turns of something whose turn is already "
-                    "several values, which would make a tuple holding the "
-                    "tuple '", inner.element.written(), "'")))
-            return None
         element = self._module.types.tuple_type((index, inner.element))
         one = builder.int_const(index, 1)
         span = stmt.span
 
         def take(b: IRBuilder, state: tuple[Value, ...]) -> Value:
-            return b.make_tuple((state[-1], inner.take(b, state[:-1])),
-                                element, span)
+            # A turn that is itself several values -- a record, a dictionary's
+            # pair -- is made into the tuple by its leaves, as any tuple is.
+            return self._made_tuple(b, (state[-1], inner.take(b, state[:-1])),
+                                    element, span)
+
+        inner_place = inner.place
 
         declared = self._resolve_type(stmt.type) if stmt.type is not None else None
         if declared is not None and declared is not element:
@@ -15404,7 +15554,11 @@ class Checker:
             step=lambda b, s: (*inner.step(b, s[:-1]),
                                b.binary(BinOp.ADD, s[-1], one, span)),
             wanted=None if wanted is None else lambda b, s: wanted(b, s[:-1]),
-            passed=lambda b, s: (*passed(b, s[:-1]), s[-1]))
+            passed=lambda b, s: (*passed(b, s[:-1]), s[-1]),
+            members=((lambda b, s: s[-1], None),
+                     (lambda b, s: inner.take(b, s[:-1]),
+                      None if inner_place is None
+                      else lambda b, s: inner_place(b, s[:-1]))))
 
     def _iteration_of(self, builder: IRBuilder,
                       stmt: ast.ForEach) -> _Iteration | None:
@@ -15529,6 +15683,9 @@ class Checker:
         start, lengths = self._shape_of(builder, value, ty, span)
         element = ty.element if ty.rank == 1 else self._row_type(ty, 1)
 
+        def place(b: IRBuilder, s: tuple[Value, ...]) -> Value:
+            return self._element_place(b, start, ty.element, s[0], span)
+
         def take(b: IRBuilder, s: tuple[Value, ...]) -> Value:
             offset = self._by_row(b, s[0], lengths[1:], span)
             if ty.rank == 1:
@@ -15541,7 +15698,10 @@ class Checker:
             more=lambda b, s: b.compare(CmpPred.ULT, s[0], lengths[0], span),
             take=take,
             step=lambda b, s: (b.binary(BinOp.WRAP_ADD, s[0],
-                                        b.int_const(U64, 1), span),))
+                                        b.int_const(U64, 1), span),),
+            # A row is a view of the elements rather than one of them, and
+            # nothing a reference names.
+            place=place if ty.rank == 1 else None)
 
     def _over_a_pick(self, builder: IRBuilder, written: ast.Element,
                      base: Value, ty: ArrayType,
@@ -15579,7 +15739,10 @@ class Checker:
                 take=taken,
                 step=lambda b, s: (b.binary(BinOp.WRAP_ADD, s[0],
                                             b.int_const(U64, 1), span),),
-                wanted=lambda b, s: asked(b, s[0]))
+                wanted=lambda b, s: asked(b, s[0]),
+                place=(lambda b, s: self._element_place(b, start, ty.element,
+                                                        s[0], span))
+                if ty.rank == 1 else None)
         held = self._value_type_of(mask)
         assert isinstance(held, ArrayType)
         depth = held.rank
@@ -17323,7 +17486,9 @@ class Checker:
             take=lambda b, s: b.load(
                 self._element_place(b, elements, ty.element, s[0], span), span),
             step=lambda b, s: (b.binary(BinOp.WRAP_ADD, s[0],
-                                        b.int_const(U64, 1), span),))
+                                        b.int_const(U64, 1), span),),
+            place=lambda b, s: self._element_place(b, elements, ty.element,
+                                                   s[0], span))
 
     def _over_a_string(self, builder: IRBuilder, value: Value,
                        span: Span) -> _Iteration:

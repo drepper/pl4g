@@ -4944,6 +4944,27 @@ else too, so the form needs nothing of its own.  Over something that gives one v
 **`_` is the name that is not a name**, as it is in a `match` arm: the loop runs a turn for each value there is and the value
 itself is not wanted.  Nothing is bound, so nothing is reported as a value nothing reads.
 
+**A name is a copy of what the turn gives, unless it is marked `&` or `&mut`**, when it is a reference to the element where it
+is:
+
+```
+foreach p := v:                 ※ a copy each turn: changing it changes nothing in v
+foreach &p := v:                ※ a &P to each element: p⌖.one reads it in place
+foreach &mut p := v:            ※ a &mut P: p⌖.one ← … writes it, v being mut
+foreach k, &p := ⎕enumerate(v): ※ the count, and a reference beside it
+```
+
+The name is a reference like any other, so a field is read through it with `⌖` (4706) and it is handed on as it is.  **A value
+marked `@[unique]` is walked only this way**: binding each to a plain name would copy it (4400).  **`&mut` wants what is walked to
+be a name that may change** (4537).  **What is walked is lent to the loop for its duration**, as a place a reference is taken of
+is: written while a `&` is out -- an element by index included -- or read or written while a `&mut` is, it is refused (4566).
+**Only what keeps its elements can be referred to**: an array of one dimension, a list, what a mask picks out of an array.  What a
+range, a string, a table or a generator gives is made for the turn, and so is the count `⎕enumerate` keeps; a mark on a name bound
+to one of those is refused (4699).  Compare **C++**'s `for (auto& x : v)` and `for (auto x : v)`, the same mark on the same name;
+**Rust**'s `for x in &v` and `for x in &mut v`, which mark what is walked rather than the name and so cannot mark one of two;
+**Go**, whose `for _, x := range v` copies and offers nothing else, `&v[i]` written out by index being the way in place;
+**Swift**, whose `for x in v` copies and whose in-place loop is over `v.indices`.
+
 ##### Counting the turns
 
 **`⎕enumerate(x)` makes something to walk out of something a loop could already walk**, and what a turn gives is the count and
@@ -4968,8 +4989,9 @@ things from a `u6` stops the program, which is what says the type was too narrow
 **It stands where a loop takes its values from and nowhere else** (4515).  What it makes is an iterator for the loop it stands in;
 an iterator a program names and hands around is the subject of the next section.
 
-A dictionary is the one thing it cannot count, and not for a reason of its own: a dictionary's turn is already a pair, so
-counting it would make a tuple holding a tuple, and a value of one of those is not a thing this compiler can hold yet.
+**A turn of several values is counted like any other**: a dictionary's pair, a record.  What a turn gives is then a tuple holding
+it, taken apart by two names as before -- and where the second is marked `&`, nothing is made of the two: the count is bound
+beside a reference to the element where it is.
 
 Compare: **Python**, whose `enumerate` this is, including the optional start; **Rust**, whose `.enumerate()` is a method on the
 iterator and whose count is always a `usize` from zero, so counting from one is a `.map` after it; **Swift** and **Kotlin**,

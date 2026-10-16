@@ -1154,6 +1154,10 @@ class ForEach(Expr):
     #: of a different type, a tuple's members being of the types they were
     #: written with.
     comptime: bool = False
+    #: What was written before each name, the first and then those in `more`:
+    #: nothing, `&` or `&mut`.  A name so marked is a reference to the element
+    #: where it is, rather than a copy of it.
+    marks: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

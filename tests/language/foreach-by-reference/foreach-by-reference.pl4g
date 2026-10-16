@@ -1,0 +1,50 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A name a `foreach` binds is a copy of each element -- unless it is marked `&`
+※ or `&mut`, when it is a reference to the element where it is.
+※
+※ **A copy changes nothing in what is walked**, so the first loop leaves the
+※ array as it was.  **`&mut p` writes in place**, which wants a name that may
+※ change, and the array is lent to the loop for its duration.  **A value that is
+※ never copied is walked by reference**, `@[unique]` refusing a copy.  And
+※ `⎕enumerate` counts the turns of something whose turn is several values: the
+※ count is bound beside the reference, and nothing is made of the two.
+※
+※ Compare **C++**'s `for (auto& x : v)` against `for (auto x : v)`, the same
+※ mark on the same name; **Rust**'s `for x in &v` and `for x in &mut v`, which
+※ mark what is walked rather than the name.
+
+type P = one : i32 ; two : i32
+@[unique]
+type U = n : u8
+
+let std := ⎕import("std")
+
+fn total(l: [P]) → i32:
+    let sum: mut i32 = 0i32
+    foreach &p := l:
+        sum ← sum + p⌖.two
+    sum
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let v: mut ⟦⟧ = ⟦P(.one ← 1i32, .two ← 2i32), P(.one ← 3i32, .two ← 4i32)⟧
+    ※ a copy each turn: changing it changes nothing in the array
+    foreach p := v:
+        let q: mut P = p
+        q.one ← 100i32
+    ※ written in place, through a reference
+    foreach k, &mut p := ⎕enumerate(v):
+        p⌖.one ← p⌖.one + (⎕narrow(k, ⌜i32⌝) ?? 0i32)
+    let us: mut ⟦⟧ = ⟦U(.n ← 5u8), U(.n ← 6u8)⟧
+    let seen: mut u8 = 0u8
+    foreach &u := us:
+        seen ← seen + u⌖.n
+    if v⟦0⟧.one ≠ 1i32 ∨ v⟦1⟧.one ≠ 4i32:
+        1u6
+    elif seen ≠ 11u8:
+        2u6
+    elif total([v⟦0⟧, v⟦1⟧]) ≠ 6i32:
+        3u6
+    else:
+        0u6

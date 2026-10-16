@@ -656,7 +656,7 @@ module.exports = grammar({
     foreach_statement: $ => seq(
       choice(
         seq(optional('comptime'), 'foreach', optional(field('label', $.label)),
-            $._binding_names, $._binding_type),
+            $._foreach_names, $._binding_type),
         seq('while', optional(field('label', $.label)),
             $._binding_names, $._binding_type),
       ),
@@ -666,6 +666,15 @@ module.exports = grammar({
 
     _binding_names: $ => seq(field('name', $.identifier),
                              repeat(seq(',', field('name', $.identifier)))),
+
+    // A `foreach` name may be marked `&` or `&mut`: a reference to each element
+    // where it is, rather than a copy of it.
+    _foreach_names: $ => seq($._foreach_name, repeat(seq(',', $._foreach_name))),
+
+    _foreach_name: $ => seq(optional(field('reference', $.reference_mark)),
+                            field('name', $.identifier)),
+
+    reference_mark: $ => seq('&', optional($.mutable)),
 
     _binding_type: $ => seq(':', optional(field('type', $.type))),
 

@@ -9888,6 +9888,22 @@ at the top level take those values.  Compare C's `int a[] = {1, 2, 3}`, whose le
 is not; C++'s `auto` and Rust's statics, which may not leave the type out at all; Go's `var a = [...]int{1, 2, 3}`, the closest --
 the length read off, the element still written.
 
+**A `foreach` name copies each element unless it is marked `&` or `&mut`**
+
+The user pointed at a loop over an array of records marked `@[unique]`, which had been refused for a gap in `⎕enumerate`, and said
+that **it should be refused for another reason: binding each element to a name copies it, and such a value is never copied; the name
+is written `&vv`, and a `foreach` over an array of records copies the elements unless its name is a reference**.  Asked, the user
+decided that **the marked name is a reference like any other** -- its fields read as `vv⌖.one`, as through a `&T` parameter --
+against an alias for the element in C++'s manner, and that **`&mut` is offered too**, writing the elements in place.
+
+Taken without asking: the mark is written on the name, `foreach k, &vv := …`, as the user wrote it and as C++ writes `auto&`,
+rather than on what is walked as Rust does -- which could not mark one of two names; `&mut` wants a name that may change, and what is
+walked is lent to the loop for its duration, so writing it while a `&` is out and touching it while a `&mut` is are refused; only
+what keeps its elements may be referred to, a mark on a range's, a string's, a table's, a generator's turn or on the count being
+refused (4699).  Found on the way and corrected: writing an element by index while a reference to one is out was not refused at
+all; a field read through a reference without `⌖` was reported as the name not being a module, and now says to write `r⌖.x`
+(4706); and a loop whose walk could not be made bound only its first name, so the others were reported again as undefined.
+
 Open questions
 --------------
 

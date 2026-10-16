@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4699
+
+※ The count `⎕enumerate` keeps is a value made for each turn, and there is
+※ nowhere for a reference to it to name.
+
+type P = one : i32 ; two : i32
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let v: mut ⟦⟧ = ⟦P(.one ← 1i32, .two ← 2i32)⟧
+    foreach &k, &p := ⎕enumerate(v):
+        _ ← p
+    0u6

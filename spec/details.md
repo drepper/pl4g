@@ -813,6 +813,15 @@ into an arm that starts on a later line, a one-line `if` having nowhere of its o
 `else` ends after it, at its column.  Where a variable's
 last use moves its value out -- `_moved` keeps the places in `_moved_from` -- no entry is made: the move was logged, and is the end.
 
+**A `foreach` name marked `&` or `&mut`** is in `ForEach.marks`, one entry for each name, the parser reading the mark before a
+name of `foreach` only.  `_Iteration.place` says where the element a turn gives is, for the walks over something that keeps its
+elements (an array of one dimension, a list, a pick); `members` says, for `⎕enumerate`, what each member of a turn is and where,
+so that `k, &p` takes the count and refers to the element without making the tuple holding both -- which, for a value never
+copied, would be the copy.  `_bind_by_reference` binds a marked name to the place cast to `&T` or `&mut T`, and lends what is
+walked (`_walked_name`, looking through `⎕enumerate`) with the depth of the loop's body, so `_lent_out` refuses writing it while
+the loop runs; element assignment asks `_lent_out` too now, which it did not before.  A turn of several values is made with
+`_made_tuple`, which takes a record apart into its leaves -- the gap that had refused counting the turns of one.
+
 **`⟦⟧` at the top level** is read off the value before it is laid out: `_variable_type` hands a definition whose type is an array
 of no element to `_array_of_its_value`, which asks `_type_of` -- taught an array written down (`_array_written_type`, the shape
 from `_shape_written` and the element from `_said_by` or the first entry), `… in ⎕static`, a record or a sum written out, and a

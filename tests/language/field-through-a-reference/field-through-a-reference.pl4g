@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4706
+
+※ A field is read through a reference with `⌖`: `r⌖.two`, not `r.two`.
+
+type P = one : i32 ; two : i32
+
+let std := ⎕import("std")
+
+fn second(r: &P) → i32:
+    r.two
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let p: P = P(.one ← 1i32, .two ← 2i32)
+    if second(&p) = 2i32: 0u6 else: 1u6
