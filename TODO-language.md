@@ -1186,8 +1186,10 @@ Runtime
     refuses `p.age` (4103, "not a module"), the name taken apart not counting as one holding a record; a tuple member of a record
     type read through a name has the same gap.
 
-[ ] let a variable at the top level be an array of whatever it is given, `let g: ⟦⟧ = …`.  A top-level variable's type is read
-    before its value is worked out, so the element has nothing to come from yet; it is refused as not implemented.
+[x] let a variable at the top level be an array of whatever it is given, `let g: ⟦⟧ = …`.  A top-level variable's type is read
+    before its value is worked out, so the element has nothing to come from yet; it is refused as not implemented.  Done on
+    2026-10-17: the value there is something the compiler knows, so its type is read off the writing -- the shape from how deep
+    and wide it goes, the element from an entry with a suffix or else the first entry.
 
 [x] let a generator take type parameters.  Done on 2026-10-03: compiled once per set of types, written into a loop with them
     renamed and bound, or walked through calls.  What follows was the reason it was not done at first.  Refused as not implemented: its body is compiled once, as a function, and one per set

@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4203
+
+※ What is written between the brackets is held to what the value is: `⟦,⟧` asks
+※ for a table, and a row is not one.
+
+let std := ⎕import("std")
+
+let row: ⟦,⟧ = ⟦1u8, 2u8⟧ in ⎕static
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

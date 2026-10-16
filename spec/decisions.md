@@ -9877,6 +9877,17 @@ loop reading the next turn's value -- found while testing, and already wrong on 
 holding a union or an enum: it is laid out inline, passed in memory where it is large, and copied by assignment; a register is
 an optimisation of the small case, which here is a record of values in registers and a record of anything held in memory not.
 
+**`⟦⟧` at the top level: the type is read off the writing**
+
+The user asked for the entry in TODO-language.md.  Taken without asking: a value at the top level is one the compiler knows, so the
+array's type is read off what was written rather than off lowering it -- the shape from how deep and how wide the writing goes, the
+element from an entry carrying a suffix (the rule an array in a function already follows) or else from the first entry, where that
+is a record or a sum written out or a value of an enumeration, each of which says its type by name.  An array of no entries, or of
+entries none of which says its type, is refused as before, with the messages a function gives.  The same cases let `let g := …`
+at the top level take those values.  Compare C's `int a[] = {1, 2, 3}`, whose length is read off the initializer and whose element
+is not; C++'s `auto` and Rust's statics, which may not leave the type out at all; Go's `var a = [...]int{1, 2, 3}`, the closest --
+the length read off, the element still written.
+
 Open questions
 --------------
 

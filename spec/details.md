@@ -813,6 +813,13 @@ into an arm that starts on a later line, a one-line `if` having nowhere of its o
 `else` ends after it, at its column.  Where a variable's
 last use moves its value out -- `_moved` keeps the places in `_moved_from` -- no entry is made: the move was logged, and is the end.
 
+**`⟦⟧` at the top level** is read off the value before it is laid out: `_variable_type` hands a definition whose type is an array
+of no element to `_array_of_its_value`, which asks `_type_of` -- taught an array written down (`_array_written_type`, the shape
+from `_shape_written` and the element from `_said_by` or the first entry), `… in ⎕static`, a record or a sum written out, and a
+value of an enumeration -- and holds the dimensions written to it.  The value is then laid out by `_constant_value` against that
+type as any other, which is where an entry of another type is reported.  The same cases make `let g := …` at the top level work
+for those values.
+
 **`type-inferred`** is recorded where a name is bound -- a definition in a body or at the top level, the names a taking apart
 binds, a loop's name, each turn of a loop written out -- by `_report_inferred`, which asks the name for the type it was given.  No
 type written is reported as such; a type written is resolved again and compared with what the name holds, so `⟦⟧` alone and anything

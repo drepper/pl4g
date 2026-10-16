@@ -1,0 +1,48 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A variable at the top level that is an array of whatever it is given.
+※
+※ **The value says the type**, as it does in a function: how deep and how wide
+※ the writing goes is the shape, and the entries say the element -- one with a
+※ suffix for all of them, or else what the first one is: a record or a sum
+※ written out, a value of an enumeration.  What is between the brackets is held
+※ to it: `⟦,⟧` asks for a table and `⟦2⟧` for two.  The variable is bytes in the
+※ image as any other there is, so nothing runs to make it.
+
+type Point = x : u8 ; y : u8
+type Shape = line : u32 | empty : void
+enum Colour { red ; green ; blue }
+
+let std := ⎕import("std")
+
+let counts: mut ⟦⟧ = ⟦1, 2, 3u16⟧
+let table: ⟦,⟧ = ⟦⟦1i8, 2i8⟧, ⟦⁻3i8, 4i8⟧⟧ in ⎕static
+let points: ⟦2⟧ = ⟦Point(.x ← 1u8, .y ← 2u8), Point(.x ← 3u8, .y ← 4u8)⟧ in ⎕static
+let shapes: ⟦⟧ = ⟦Shape(.line ← 9u32), Shape(.empty ← true)⟧ in ⎕static
+let colours: ⟦⟧ = ⟦Colour.blue, Colour.red⟧ in ⎕static
+let words: ⟦⟧ = ⟦"one", "three"⟧ in ⎕static
+
+fn size(s: Shape) → u32:
+    match s:
+        u32(n):
+            n
+        void:
+            0u32
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    counts⟦0⟧ ← 7u16
+    if counts⟦0⟧ ≠ 7u16 ∨ counts⟦2⟧ ≠ 3u16:
+        1u6
+    elif table⟦1, 0⟧ ≠ ⁻3i8 ∨ table⟦0, 1⟧ ≠ 2i8:
+        2u6
+    elif points⟦1⟧.y ≠ 4u8:
+        3u6
+    elif size(shapes⟦0⟧) ≠ 9u32 ∨ size(shapes⟦1⟧) ≠ 0u32:
+        4u6
+    elif colours⟦0⟧ ≠ Colour.blue:
+        5u6
+    elif #words⟦1⟧ ≠ 5:
+        6u6
+    else:
+        0u6

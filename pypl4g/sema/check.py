@@ -4498,6 +4498,8 @@ class Checker:
 
     def _variable_type(self, node: ast.VarDef) -> Type | None:
         """The type of a variable: the one declared, or the one its value has."""
+        if isinstance(node.type, ast.ArrayTypeRef) and node.type.element is None:
+            return self._array_of_its_value(node, node.type)
         if node.type is not None:
             return self._resolve_type(node.type)
         derived = self._type_of(node.value)
@@ -4505,9 +4507,74 @@ class Checker:
             return None
         return derived
 
+    def _array_of_its_value(self, node: ast.VarDef,
+                            written: ast.ArrayTypeRef) -> Type | None:
+        """`let g: ⟦⟧ = …` at the top level: an array of whatever the value is.
+
+        Read off what was written, since a variable here is bytes in the image and
+        its value is something the compiler knows -- an array written down, how
+        deep and how wide saying the shape and its entries the element.  What is
+        written between the brackets is held to it, as in a function: `⟦,⟧` asks
+        for a table and `⟦4⟧` for four.
+        """
+        found = self._type_of(node.value)
+        if found is None:
+            return None
+        asked = [None if one is None else self._constant_number(one)
+                 for one in written.shape]
+        if not isinstance(found, ArrayType) or not (
+                written.shape == (None,) or (
+                    len(asked) == found.rank
+                    and all(one is None or one == along
+                            for one, along in zip(asked, found.shape)))):
+            self._diags.emit(D.LANG_TYPE_INITIALIZER_MISMATCH, node.value.span,
+                             name=node.name, expected="".join((
+                                 "\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}",
+                                 ",".join("" if one is None else str(one)
+                                          for one in asked),
+                                 "\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}")),
+                             found=found.written())
+            return ERROR
+        return found
+
+    def _array_written_type(self, expr: ast.ArrayLit) -> Type | None:
+        """The type of an array written down, read off the writing alone.
+
+        How deep and how wide it is says the shape; the element is what an entry
+        with a suffix says, or else what the first entry is.  Whether every entry
+        is one of those is asked where they are laid out, which is where every
+        other disagreement between them is reported.
+        """
+        shape, inner = self._shape_written(expr)
+        if not inner:
+            self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, expr.span,
+                             feature="a value in the image whose type nothing "
+                             "around it says")
+            return None
+        element = self._said_by(inner) or self._type_of(inner[0])
+        if element is None or element is ERROR:
+            return None
+        return self._module.types.array_type(element, shape)
+
     def _type_of(self, expr: ast.Expr) -> Type | None:
         """The type an expression has on its own, without a context to take one from."""
         match expr:
+            case ast.Allocated():
+                # Where it is kept says nothing about what it is.
+                return self._type_of(expr.value)
+            case ast.ArrayLit():
+                return self._array_written_type(expr)
+            case ast.Call() if isinstance(expr.callee, ast.NameRef) \
+                    and isinstance(self._top.get(expr.callee.name), _NamedType) \
+                    and not self._top[expr.callee.name].takes_types:
+                # A record or a sum written out says its type by its name.
+                return self._resolved(self._top[expr.callee.name])
+            case ast.Member() if isinstance(expr.base, ast.NameRef) \
+                    and isinstance(self._top.get(expr.base.name), _NamedType) \
+                    and isinstance(self._resolved(self._top[expr.base.name]),
+                                   EnumType):
+                # So does a value of an enumeration, `Colour.red`.
+                return self._resolved(self._top[expr.base.name])
             case ast.IntLit():
                 if expr.type_name is None:
                     # A literal with no suffix and no context is an untyped

@@ -5057,7 +5057,14 @@ let rows: ⟦,⟧ = m⟦⟦true, false, true⟧⟧   ※ u8⟦,2⟧
 ```
 
 Like `⇉` alone it stands only in a definition (3053), where a value says what it holds; it is refused by the parser anywhere
-else, which is also what keeps a lifted `⌜⟦1, 2⟧⌝` the array written there.  Compare: **Rust**'s `.collect::<Vec<_>>()`, which is
+else, which is also what keeps a lifted `⌜⟦1, 2⟧⌝` the array written there.
+
+**At the top level** the value is what a variable there always is, something the compiler knows, and the type is read off its
+writing alone: how deep and how wide it goes is the shape, and an entry with a suffix says the element for all of them -- or, where
+none has one, the first entry does, a record or a sum written out or a value of an enumeration saying its type by its name.  So
+`let primes: ⟦⟧ = ⟦2, 3, 5u16⟧ in ⎕static` is a `u16⟦3⟧` in the image, and nothing runs to make it.  What is between the brackets
+is held to it as in a function (4203); an array of no entries, or of entries none of which says its type, has nothing to read the
+element off.  Compare: **Rust**'s `.collect::<Vec<_>>()`, which is
 exactly this -- the container named and the element left to `_`; **C++23**'s `std::ranges::to<std::vector>()`, whose template
 template argument leaves the element to deduction; **Java**'s `.toList()` and **Kotlin**'s `.toList()`, **C#**'s `.ToArray()`,
 **Python**'s `list(…)` and **Julia**'s `collect`, which never name an element and are calls rather than types; **NumPy**'s
