@@ -1,0 +1,18 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A place lent to a name in an inner scope is free again once that scope ends.
+※
+※ A reference a name keeps is recorded at the index of the scope the name is in,
+※ and leaving that scope is what gives it back.  It had been kept until the scope
+※ around it ended, so `n` below was refused as still lent after the `if`.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let n: mut u8 = 1u8
+    if #init.args > 0:
+        let other: &mut u8 = &mut n
+        other⌖ ← other⌖ + 1u8
+    n ← n + 1u8
+    if n = 3u8: 0u6 else: 1u6

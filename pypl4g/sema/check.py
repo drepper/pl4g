@@ -5421,7 +5421,9 @@ class Checker:
             self._all_closed(self._scopes[-1:], left_at)
         # A reference kept by a name in this scope is gone with the name, so
         # the place it named is free to be lent again.
-        depth = len(self._scopes)
+        # Kept by a name of this scope is kept at its index, which is one less
+        # than how many scopes are open: everything at it or deeper goes.
+        depth = len(self._scopes) - 1
         self._borrows = [b for b in self._borrows if b.depth < depth]
         self._iterator_loans = [one for one in self._iterator_loans
                                 if one[3] < depth]
