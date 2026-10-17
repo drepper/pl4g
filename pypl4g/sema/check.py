@@ -452,6 +452,23 @@ def _addressed_in(node: object, into: set[str]) -> None:
             _addressed_in(one, into)
 
 
+def _read_through(node: object, into: set[int]) -> None:
+    """Add to *into* every name read through with `⌖` below *node*: `r⌖`, and the
+    target of `r⌖ ← v`.  Such a read is a use of the place the reference names,
+    not a copy of the reference -- which every other read of a `&mut` is, and is
+    lent for."""
+    if isinstance(node, ast.Deref) and isinstance(node.operand, ast.NameRef):
+        into.add(id(node.operand))
+    if isinstance(node, ast.DerefAssign) and isinstance(node.target, ast.NameRef):
+        into.add(id(node.target))
+    if isinstance(node, ast.Node):
+        for one in fields_of(node):
+            _read_through(getattr(node, one.name), into)
+    elif isinstance(node, (list, tuple)):
+        for one in node:
+            _read_through(one, into)
+
+
 def _shell_for(defined: _NamedType) -> Type | None:
     """The type object a definition's parts will be filled into.
 
@@ -3373,6 +3390,9 @@ class Checker:
         #: nothing of its purity, and what its body does is what its type says.
         #: Nothing where no lambda's body is being lowered.
         self._observing: list[bool] | None = None
+        #: The names read through with `⌖`, by identity: a read of a `&mut` that
+        #: is not one of them is a copy of it, and lends it (`_lower_name`).
+        self._read_through_ids: set[int] = set()
         #: Whether what is being checked may touch a device.  A function handed one
         #: may, which is what makes `@[impure]` mean "changes something global".
         self._may_do_io: bool = False
@@ -9687,6 +9707,7 @@ class Checker:
         outer_unscanned, self._unscanned = self._unscanned, node.body
         if node.body is not None:
             _addressed_in(node.body, self._addressed)
+            _read_through(node.body, self._read_through_ids)
         # Every parameter gets its register before any of them is given storage:
         # a block's parameters are what it is entered with, and the storage is
         # written by instructions that follow them.
@@ -12107,6 +12128,7 @@ class Checker:
         try:
             assert node.body is not None
             _addressed_in(node.body, self._addressed)
+            _read_through(node.body, self._read_through_ids)
             self._unscanned = node.body
             arriving = [block.add_param(one, param.name)
                         for one, param in zip(func.ty.params, node.params)]
@@ -13107,6 +13129,7 @@ class Checker:
                                len(self._scopes))
         try:
             _addressed_in(expr.body, self._addressed)
+            _read_through(expr.body, self._read_through_ids)
             brought: list[tuple[ast.Capture, _Local]] = []
             for at, ((one, local), what) in enumerate(zip(taken, held)):
                 # What is in the environment is what was put there: the value
@@ -13200,6 +13223,12 @@ class Checker:
         assigning to a name does everywhere else; this writes what is *at* the
         place, and the mark is what says which of the two was meant.
         """
+        if isinstance(stmt.target, ast.NameRef) \
+                and self._find_local(stmt.target.name) is not None \
+                and self._lent_out(stmt.target.name, stmt.span, True):
+            # A copy of the reference is out -- one that only reads included --
+            # and was promised the place does not change under it.
+            return
         target = self._lower_expr(builder, stmt.target, None)
         ty = self._value_type_of(target)
         if ty is ERROR:
@@ -18790,6 +18819,10 @@ class Checker:
                     else builder.load(local.value, node.span))
         if local is not None:
             if not self._check_mutable(node, local.mutable, local.span):
+                return None
+            if isinstance(self._held_by(local), PtrType) \
+                    and self._lent_out(node.name, node.span, True):
+                # A copy of it is out, promised the place it named.
                 return None
             value = self._checked_value(builder, node, local.value.ty)
             if _reaches_a_place(local.value.ty) \
@@ -24773,6 +24806,24 @@ class Checker:
                 return UndefConst(ERROR)
             if not self._moved(local, ref.span, self._move_named(ref.name)):
                 return UndefConst(ERROR)
+        if local is not None and not local.placed \
+                and isinstance(self._held_by(local), PtrType):
+            # A reference held in a register is lent the way a place is: read
+            # while a copy of it that may write is out, it is refused; and a
+            # read that copies a `&mut` -- anything but `r⌖` -- lends it, for the
+            # statement or for as long as what the copy is kept in lives.  So a
+            # second name for it is counted, as `&mut` of a place is.
+            if self._lent_out(ref.name, ref.span, False):
+                return UndefConst(ERROR)
+            held = self._held_by(local)
+            if held.mutable and held.pointee is not ARENA \
+                    and id(ref) not in self._read_through_ids:
+                # As writable as the copy: a `&` wanted is a shared reborrow,
+                # beside which the name may still be read.  An arena is
+                # everything made in it's to share, and its own rules say how.
+                wanted = self._aiming_at(expected)
+                self._lend(ref.name, not (isinstance(wanted, PtrType)
+                                          and not wanted.mutable), ref.span)
         if local is not None and local.gone_at is not None:
             # Read all the same, so that what is said about it is the one thing.
             local.read = True

@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4565
+
+※ While a `&mut` copied from `r` lives, `r` may not be used: there would be two
+※ ways to change one place.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let n: mut u8 = 1u8
+    let r: &mut u8 = &mut n
+    let other: &mut u8 = r
+    r⌖ ← 2u8
+    other⌖ ← 3u8
+    0u6

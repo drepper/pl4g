@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4566
+
+※ A `&` copied from a `&mut` was promised the place does not change while it
+※ lives, so the place is not written through the `&mut` meanwhile.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let n: mut u8 = 1u8
+    let r: &mut u8 = &mut n
+    let ro: &u8 = r
+    r⌖ ← 5u8
+    if ro⌖ = 5u8: 0u6 else: 1u6

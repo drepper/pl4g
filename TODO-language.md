@@ -1085,9 +1085,10 @@ Runtime
     say it, `⧖a` relating a parameter to the answer and not a parameter to a parameter.  Done on 2026-10-17, as the user decided:
     one lifetime name on the reference a place holds and on another parameter, the body allowed and each call held to it.
 
-[ ] count a reference copied into a second name.  The aliasing rule (4563) watches every place a reference is *made* and not
+[x] count a reference copied into a second name.  The aliasing rule (4563) watches every place a reference is *made* and not
     the ones that are merely handed on, so `let other: &mut u8 = r` is a second way to the place that nothing reports.  Rust
-    closes it with moves and reborrows, which need an ownership rule this language does not have.
+    closes it with moves and reborrows, which need an ownership rule this language does not have.  Done on 2026-10-17, as the
+    user decided: a `&mut` copied is a reborrow, lent until the copy's scope ends, shared where the copy is a `&`.
 
 [ ] end a reference where it is last used rather than where its scope does.  A reference a name kept lives as long as the name
     (4563), which refuses programs that are plainly fine -- a `&mut` written through and then never mentioned again, followed by

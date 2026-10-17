@@ -813,6 +813,12 @@ into an arm that starts on a later line, a one-line `if` having nowhere of its o
 `else` ends after it, at its column.  Where a variable's
 last use moves its value out -- `_moved` keeps the places in `_moved_from` -- no entry is made: the move was logged, and is the end.
 
+**A `&mut` copied is lent** in `_lower_name`: a local holding a reference, read anywhere but directly under `⌖` -- the names
+`_read_through` collects before a body is lowered -- calls `_lend` on its own name, shared where a `&` is wanted and writable
+otherwise, and checks `_lent_out` first as a place's name is checked.  The lend is the statement's until something keeps it:
+`_kept_by_a_name` promotes it with the reference a name was bound to, as it promotes `&mut x`.  Writing through `r⌖` and
+assigning `r` ask `_lent_out` as writes.
+
 **Two parameters living alike** are the pairs `_kept_pairs` reads off a signature: a parameter whose reference refers to a
 reference carrying a lifetime name, and another whose own reference carries the same.  The body may write the second where the
 first refers (`_said_alike`, asked where 4571 would refuse it), the place reached from the one and the value from the other by

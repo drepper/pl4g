@@ -9974,6 +9974,20 @@ and relate nothing.  Found on the way, and fixed in a commit of its own: a store
 inlined in turn lost its place in the memory chain, so that a read after the call was folded into one before it -- a miscompile
 at every optimizing level, in any program that wrote memory through two levels of small functions.
 
+**A `&mut` copied into a second name is a reborrow**
+
+Asked, the user decided that **copying a `&mut` is a reborrow**: the name copied from is lent to the copy while it lives, and free
+again when its scope ends -- against a move, which would make a reference handed on one that can never be had back, and against
+refusing the copy, which would refuse programs that are right.  It is Rust's implicit reborrow with the end at the scope, as Rust
+had it before non-lexical lifetimes, and it needed no ownership rule of its own: the copy is lent exactly as `&mut x` lends `x`,
+through the same promotion when a name keeps it.
+
+Taken without asking: the reborrow is as writable as the copy, so a `&` copied from a `&mut` shares, beside which the name may be
+read but not written through -- Rust's shared reborrow; a read through `⌖` is no copy; a `&mut arena` is not counted, an arena being
+shared by everything made in it and governed by rules of its own.  Found on the way, and fixed in a commit of its own: a place lent
+to a name in an inner scope stayed lent until the scope around it ended -- the borrow was recorded at one depth and dropped at
+another.
+
 Open questions
 --------------
 

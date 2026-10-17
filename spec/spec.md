@@ -3055,11 +3055,27 @@ same way.  **An element is part of its array**, so lending one lends the array: 
 from another is arithmetic, and a promise that depends on arithmetic is no promise.  **A variable at the top level is not tracked** -- it is reachable from every
 function and no one of them can see what the others do -- so the rule is about names a body binds.
 
-**The rule is about taking a reference, not about copying one.**  A reference is a value like any other, so binding a second
-name to one already in hand -- `let other: &mut u8 = r` -- makes a second way to the place that no `&` was written for and that
-nothing here counts.  What is checked is every place a reference is *made*, which is where a generator would make a mistake; what
-is not checked is a program that hands one it already has to two names.  Rust closes that with moves and reborrows, which need an
-ownership rule this language does not have.
+**A `&mut` copied is a reborrow.**  A reference is a value like any other, so binding a second name to one already in hand --
+`let other: &mut u8 = r` -- would be a second way to the place no `&` was written for.  So copying a `&mut` borrows from the name
+it is copied from, exactly as `&mut x` borrows from `x`: while the copy lives, `r` may not be read (4565) or written (4566), and
+when the copy's scope ends `r` is free again.  Handed to a call, it is lent for the call -- which is why `both(r, r)` is refused --
+and kept by a call's answer for as long as the answer is.  A read through it, `r⌖`, copies nothing and lends nothing.
+
+```
+let r: &mut u8 = &mut n
+if b:
+    let other: &mut u8 = r
+    r⌖ ← 2u8                       ※ refused (4565): lent to other
+r⌖ ← 3u8                           ※ free again
+let ro: &u8 = r                    ※ a shared reborrow:
+r⌖                                 ※   read beside it,
+r⌖ ← 4u8                           ※   not written (4566)
+```
+
+**The reborrow is as writable as the copy**: a `&` copied from a `&mut` shares, so `r` may still be read beside it, and the place
+is not written through `r` while it lives.  A `&mut arena` is not counted, an arena being what everything made in it shares, with
+rules of its own about when it may be given back.  Rust's implicit reborrow is this, `let other: &mut u8 = r` being `&mut *r`;
+the end is the copy's scope, as Rust had it before non-lexical lifetimes.
 
 C++ has no such rule and two references to one object is the ordinary case, which is why `std::vector` invalidating its own
 iterators is a hazard rather than an error.  Swift enforces the same exclusivity for `inout` and does it partly at run time.  ML

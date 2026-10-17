@@ -1,0 +1,43 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A `&mut` copied into a second name is a reborrow.
+※
+※ **The copy borrows from the name it was copied from**, as `&mut x` borrows from
+※ `x`: while it lives the first may not be used, and when its scope ends the first
+※ is free again.  Handed to a call it is lent for the call and no longer; read
+※ through with `⌖` it is not copied at all.  **A `&` copied from it is a shared
+※ reborrow**, beside which the first may still be read.  And a place lent to a
+※ name in an inner scope is free again once that scope ends.
+※
+※ Compare **Rust**'s implicit reborrow, `let other: &mut u8 = r` being
+※ `&mut *r` -- with the end at the scope, as Rust had it before non-lexical
+※ lifetimes.
+
+let std := ⎕import("std")
+
+@[impure]
+fn bump(p: &mut u8):
+    p⌖ ← p⌖ + 1u8
+
+fn read(p: &u8) → u8:
+    p⌖
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let n: mut u8 = 1u8
+    let r: &mut u8 = &mut n
+    bump(r)
+    bump(r)
+    r⌖ ← r⌖ + 1u8
+    if #init.args > 0:
+        let other: &mut u8 = r
+        other⌖ ← other⌖ + 1u8
+    r⌖ ← r⌖ + 1u8
+    let ro: &u8 = r
+    let seen: u8 = read(ro) + r⌖
+    let m: mut u8 = 1u8
+    if #init.args > 0:
+        let inner: &mut u8 = &mut m
+        inner⌖ ← 2u8
+    m ← m + 1u8
+    if seen = 12u8 ∧ m = 3u8: 0u6 else: 1u6
