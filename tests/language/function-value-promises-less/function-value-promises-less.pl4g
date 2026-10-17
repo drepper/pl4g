@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error diag=4213
+※ pl4g-test: expect-diag 4213 LANG_CALL_ARGUMENT_MISMATCH
+
+※ `right` answers with what its second parameter named, and `via` wants one
+※ answering with what its first did: the promise is a different one, and
+※ handing it over would let `via` answer with `y` as though it were `x`.
+
+fn via(f: fn(&⧖x u32, &⧖y u32) → &⧖x u32, a: &⧖a u32, b: &⧖b u32) → &⧖a u32:
+    f(a, b)
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let x: u32 = 1u32
+    let y: u32 = 2u32
+    let right := λ a: &⧖p u32, b: &⧖q u32 → &⧖q u32 { b }
+    let z := via(right, &x, &y)
+    if z⌖ = 1u32: 0u6 else: 1u6

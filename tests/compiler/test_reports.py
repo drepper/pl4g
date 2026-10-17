@@ -227,6 +227,29 @@ def test_a_lifetime_over_two_parameters_names_what_decided_it() -> None:
         "both arguments lasted that long, so the answer does"
 
 
+def test_a_lifetime_through_a_value_is_recorded() -> None:
+    """A call through a value reads how long its answer lives off the value's
+    type, and the log says what that came to: the type names no parameter, so
+    the arguments are told apart by where they stand.  A lambda answering with
+    what a name of the signature around it stands for says that instead."""
+    module, collected = checked("".join((
+        "    let n: u32 = 1u32\n",
+        "    if via(", LAMBDA, " a: &", LIFETIME, "p u32 ", ARROW, " &", LIFETIME,
+        "p u32 { a }, &n) ", NE, " 1u32: 1u6 else: 0u6\n")), around="".join((
+            "fn via(f: fn(&", LIFETIME, "x u32) ", ARROW, " &", LIFETIME,
+            "x u32, a: &", LIFETIME, "a u32) ", ARROW, " u32:\n",
+            "    let g := ", LAMBDA, " [&a] ", ARROW, " &", LIFETIME, "a u32 { a }\n",
+            "    let m: u32 = 2u32\n",
+            "    f(&m)", DEREF, " + g()", DEREF, "\n\n")))
+    assert [d.info.number for d in collected] == []
+    found = {one.subject: one.reason
+             for one in module.reports.of_kind(ReportKind.LIFETIME)}
+    assert "as long as 'm'" in found["f"] and "argument 1 named" in found["f"], \
+        "the argument is told by where it stands, the type naming none"
+    assert "what '\N{WHITE HOURGLASS}a' stands for" in found["g"], \
+        "the lambda's answer lives as long as the name around it says"
+
+
 def test_every_report_says_why() -> None:
     """A log entry with no reason is one nobody can act on."""
     module = compiled("".join((

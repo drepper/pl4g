@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4561
+※ pl4g-test: expect-diag 4561 LANG_BORROW_NOT_FROM_IT
+
+※ The name is on the member it is written on: `⧖a` is the first member's, and
+※ the second member's reference lives as long as `⧖b`, which is not what the
+※ answer promised.
+
+fn second(p: 〈&⧖a u32, &⧖b u32〉) → &⧖a u32:
+    p⟦1⟧
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let x: u32 = 1u32
+    let y: u32 = 2u32
+    if second(〈&x, &y〉)⌖ = 2u32: 0u6 else: 1u6

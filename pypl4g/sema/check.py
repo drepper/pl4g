@@ -11,7 +11,7 @@ import math
 from dataclasses import dataclass, field, fields as fields_of, replace
 from fractions import Fraction
 from contextlib import contextmanager
-from typing import Callable, Final, Iterator, Literal, Mapping, Sequence
+from typing import Callable, Final, Iterable, Iterator, Literal, Mapping, Sequence
 
 from ..diag import ids as D
 from ..diag.ids import DiagID
@@ -69,7 +69,7 @@ from ..ir.types import (ARENA, ARENA_NAME, StrType, ArrayType, BOOL, BoolType, B
                         I64, U16, U32, U64,
                         F64,
                         CoroutineFrame, FloatType, IntType, IterType, MEM,
-                        ProductType, PtrType, RunningType,
+                        Borrowed, ProductType, PtrType, RunningType,
                         ResultType,
                         ListType, SetType, STR, SumType, TupleType, Type,
                         NARROWING, NO_UNIT, OpaqueType, Unit, VecType, VOID,
@@ -1265,7 +1265,8 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
                 and (found.can_ignore or not expected.can_ignore)
                 and found.hands_out == expected.hands_out
                 and found.params == expected.params
-                and found.ret is expected.ret)
+                and found.ret is expected.ret
+                and _borrows_as_much(expected, found))
     if isinstance(expected, RunningType) and isinstance(found, RunningType):
         # A walk kept in the heap is everything one kept in a call's room is,
         # in the same four words, and lasts longer.
@@ -1276,6 +1277,24 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
         return False
     return ((found.lasting or not expected.lasting)
             and (found.mutable or not expected.mutable))
+
+
+def _borrows_as_much(expected: FuncType, found: FuncType) -> bool:
+    """Whether every reference a function of type *found* answers with lives at
+    least as long as *expected* says: as long as what fewer of the parameters
+    named -- or fewer parts of them -- is longer, never shorter."""
+    wanted = expected.borrowed()
+    for leaf, borrowed in found.borrows:
+        said = wanted.get(leaf)
+        if said is None or not set(borrowed.outer) <= set(said.outer):
+            return False
+        for param in borrowed.params:
+            if param not in said.params:
+                return False
+            mine, theirs = borrowed.leaves_of(param), said.leaves_of(param)
+            if theirs is not None and (mine is None or not set(mine) <= set(theirs)):
+                return False
+    return True
 
 
 def _names_a_place(expr: ast.Expr) -> bool:
@@ -1865,7 +1884,11 @@ def _written_as(expr: ast.Expr) -> str:
 
 def _reached_from(value: Value, sources: Sequence[Value],
                   incoming: dict[int, list[object]] | None = None,
-                  visited: set[int] | None = None) -> bool:
+                  visited: set[int] | None = None,
+                  only: Mapping[int, frozenset[int]] | None = None,
+                  outer: Mapping[tuple[str, str], Sequence[Value]] | None = None,
+                  leaf: int | None = None,
+                  stored: frozenset[int] = frozenset()) -> bool:
     """Whether *value* was worked out from one of *sources*.
 
     Walked back the way provenance is walked everywhere else, through the
@@ -1880,14 +1903,32 @@ def _reached_from(value: Value, sources: Sequence[Value],
     and not about what one path through it does; *incoming* is what maps a
     block to the branches that reach it, and *visited* is what keeps a loop
     from being walked twice.
+
+    A source that is a tuple only some of whose members carry the name is in
+    *only*, by identity, with the parts that do: the walk carries which part of
+    a tuple it took out (*leaf*), and reaching such a source any other way is
+    not reaching it.  *outer* is what each lifetime name of a signature around
+    stands for here, which is where a call through a lambda saying it answers
+    with one of those goes on.
+
+    A source in *stored* is where a parameter is kept rather than what it
+    named, so only what is read out of it reaches it: its own address is a
+    place of this call's.
     """
     seen = value
+    loaded = False
     while True:
-        if any(seen is one for one in sources):
-            return True
+        for one in sources:
+            if seen is one:
+                if id(one) in stored and not loaded:
+                    return False
+                allowed = only.get(id(one)) if only is not None else None
+                return allowed is None or (leaf is not None and leaf in allowed)
         if isinstance(seen, LoadInst):
             seen = seen.operands[1]
+            loaded = True
             continue
+        loaded = False
         if isinstance(seen, AddressInst):
             seen = seen.operands[0]
             continue
@@ -1903,7 +1944,7 @@ def _reached_from(value: Value, sources: Sequence[Value],
             return bool(arms) and all(
                 seen.index < len(getattr(arm, "args", ()))
                 and _reached_from(getattr(arm, "args")[seen.index], sources,
-                                  incoming, visited)
+                                  incoming, visited, only, outer, leaf, stored)
                 for arm in arms)
         if isinstance(seen, CallInst):
             # A call that promised its own parameters' lifetime names whatever
@@ -1911,27 +1952,123 @@ def _reached_from(value: Value, sources: Sequence[Value],
             # the two signatures agree with nothing written between them.  Any
             # one of them reaching the source is enough: what came back was one
             # of them, and every one of them is short enough.
-            carried = getattr(seen.callee, "borrows_from", ())
-            given = seen.arguments
-            return any(at < len(given)
-                       and _reached_from(given[at], sources, incoming, visited)
-                       for at in carried)
-        if isinstance(seen, ExtractInst) and isinstance(seen.operands[0], CallInst):
-            # A part of a tuple a call answered, which promised that part the
-            # lifetime of the parameters its name is on.
-            call = seen.operands[0]
-            carried = getattr(call.callee, "leaf_borrows", {}).get(seen.index, ())
-            if carried:
-                given = call.arguments
-                return any(at < len(given)
-                           and _reached_from(given[at], sources, incoming, visited)
-                           for at in carried)
-        if isinstance(seen, (CastInst, ExtractInst)) or (
+            given, table = _call_borrows(seen)
+            borrowed = table.get(leaf if leaf is not None else -1)
+            if borrowed is None:
+                return False
+            return any(_reached_from(part, sources, incoming, visited, only,
+                                     outer, at, stored)
+                       for part, at in _borrowed_parts(given, borrowed)) \
+                or any(one is source
+                       for pair in borrowed.outer
+                       for one in (outer or {}).get(pair, ())
+                       for source in sources)
+        if isinstance(seen, TupleInst) and leaf is not None:
+            if leaf >= len(seen.operands):
+                return False
+            seen, leaf = seen.operands[leaf], None
+            continue
+        if isinstance(seen, ExtractInst):
+            if isinstance(seen.operands[0].ty, TupleType):
+                leaf = seen.index
+            seen = seen.operands[0]
+            continue
+        if isinstance(seen, CastInst) or (
                 isinstance(seen, BinaryInst)
                 and seen.op in (BinOp.ADD, BinOp.SUB)):
             seen = seen.operands[0]
             continue
         return False
+
+
+def _deepest(found: Iterable[_Local | None]) -> _Local | None:
+    """The one of *found* bound furthest in, which goes first."""
+    deepest: _Local | None = None
+    for one in found:
+        if one is not None and (deepest is None or one.depth > deepest.depth):
+            deepest = one
+    return deepest
+
+
+def _incoming_of(func: Function) -> dict[int, list[object]]:
+    """Which branches reach each block of *func*, by the block's identity."""
+    incoming: dict[int, list[object]] = {}
+    for block in func.blocks:
+        last = block.insts[-1] if block.insts else None
+        if isinstance(last, Terminator):
+            for arm in last.successors():
+                incoming.setdefault(id(arm.block), []).append(arm)
+    return incoming
+
+
+def _call_borrows(call: CallInst) -> tuple[Sequence[Value], dict[int, Borrowed]]:
+    """What a call was handed, as the type it calls numbers its parameters, and
+    what each reference in its answer lives as long as.
+
+    A call of a definition reads it off the definition's type; a call through a
+    value reads it off the value's, which is where the code the call goes to was
+    taken out of -- and that call hands what the value brought in over first,
+    which no parameter of the type is.
+    """
+    if call.callee is not None:
+        ty = getattr(call.callee, "ty", None)
+        return call.arguments, ty.borrowed() if isinstance(ty, FuncType) else {}
+    code = call.target
+    if isinstance(code, ExtractInst) and isinstance(code.operands[0].ty, FuncType):
+        return call.arguments[1:], code.operands[0].ty.borrowed()
+    return call.arguments, {}
+
+
+def _borrowed_parts(given: Sequence[Value],
+                    borrowed: Borrowed) -> list[tuple[Value, int | None]]:
+    """What of the arguments *given* the name *borrowed* says is on: each
+    argument for a parameter carrying it, or -- where it is on some parts of a
+    tuple -- those parts, taken out where the tuple was made here and otherwise
+    the tuple with which part was meant."""
+    found: list[tuple[Value, int | None]] = []
+    for param in borrowed.params:
+        if param >= len(given):
+            continue
+        leaves = borrowed.leaves_of(param)
+        if leaves is None:
+            found.append((given[param], None))
+            continue
+        for one in leaves:
+            part = _leaf_of(given[param], one)
+            found.append((part, None) if part is not None else (given[param], one))
+    return found
+
+
+def _leaf_of(value: Value, leaf: int) -> Value | None:
+    """Part *leaf* of the tuple *value*, where it was made here and the part can
+    be named; nothing otherwise."""
+    if isinstance(value, TupleInst) and leaf < len(value.operands):
+        return value.operands[leaf]
+    if isinstance(value, CastInst):
+        return _leaf_of(value.operands[0], leaf)
+    return None
+
+
+def _leaves_named(ref: ast.TypeExpr | None, ty: Type,
+                  names: set[str]) -> tuple[int, ...] | None:
+    """Which parts of a parameter of type *ty*, written *ref*, hold a reference
+    carrying one of *names*: nothing where it is not a tuple written out, the
+    name then being on the whole of it."""
+    if not isinstance(ty, TupleType) or _held_in_memory(ty) \
+            or not isinstance(ref, ast.TupleTypeRef) \
+            or len(ref.members) != len(ty.members):
+        return None
+    found: list[int] = []
+    for written, member, (first, count) in zip(ref.members, ty.members,
+                                               parts_within(ty)):
+        if not names & _lifetimes_of(written):
+            continue
+        deeper = _leaves_named(written, member, names)
+        if deeper is None:
+            found.extend(range(first, first + count))
+        else:
+            found.extend(first + one for one in deeper)
+    return tuple(found)
 
 
 def _points_somewhere(ty: Type, seen: frozenset[int] = frozenset(),
@@ -3593,6 +3730,16 @@ class Checker:
         #: The name a reference is being taken of, while one is: working the
         #: place out reads the name, and that read is the reference itself.
         self._taking_a_reference: str | None = None
+        #: The signatures around what is being lowered, innermost last, each with
+        #: the lifetime names it carries: a lambda's answer, or a function type's
+        #: in the body, may live as long as one of those.
+        self._lifetime_scopes: list[tuple[str, frozenset[str]]] = []
+        #: What each of those names stands for in the body being lowered: the
+        #: parameters carrying it, as they arrived and where they are kept, with
+        #: the part of a tuple it is on and the parameter's name.
+        self._lifetime_sources: dict[tuple[str, str],
+                                     list[tuple[Value, int | None, str,
+                                                bool]]] = {}
         #: Which name bounds how long each value lasts, by the identity of the
         #: value: a place by the name it belongs to, and a lambda by the
         #: shortest-lived name it brought in by reference.  A reference is
@@ -5912,6 +6059,9 @@ class Checker:
         pairs = self._expected_numbers(attrs)
         self._expected_pairs[node.name] = pairs
         expectation = self._begin_expecting(pairs)
+        outer_scopes = self._lifetime_scopes
+        self._lifetime_scopes = [*outer_scopes, self._lifetime_scope(node.params,
+                                                                     node)]
         try:
             params = tuple(self._resolve_type(p.type) for p in node.params)
             for param, ty in zip(node.params, params):
@@ -5922,7 +6072,10 @@ class Checker:
                            else ty for ty in params)
             params = self._as_the_entry_hands_over(node, attrs, params)
             ret = self._return_type(node.ret_type)
-            borrows = self._borrowed_from(node, ret)
+            borrows = self._borrows_written(
+                tuple(p.type for p in node.params), params, node.ret_type, ret,
+                node.ret_type.span if node.ret_type is not None
+                else node.name_span)
             made_in, param_made_in = self._made_in_of(node, params, ret)
             hands_out = _hands_out_of(node)
             if hands_out is not None:
@@ -5930,13 +6083,16 @@ class Checker:
             func_attrs, linkage = self._function_attrs(attrs)
             func = Function(name=whole, hands_out=hands_out,
                             ty=self._module.types.func_type(
-                                params, ret, func_attrs.listable),
+                                params, ret, func_attrs.listable,
+                                borrows=tuple(sorted(borrows.items()))),
                             attrs=func_attrs, linkage=linkage,
                             param_names=tuple(p.name for p in node.params),
                             writes_arrays=_writes_arrays(node, params),
                             defaults=self._defaults_of(node, params),
-                            borrows_from=borrows,
-                            leaf_borrows=self._member_borrows(node, ret),
+                            borrows_from=borrows[-1].params if -1 in borrows else (),
+                            leaf_borrows={leaf: one.params
+                                          for leaf, one in borrows.items()
+                                          if leaf >= 0},
                             keeps=_kept_pairs(node),
                             made_in=made_in, param_made_in=param_made_in,
                             exported=self._is_export(attrs),
@@ -5967,6 +6123,7 @@ class Checker:
             self._owned.append(func)
             self._register_special(func, node)
         finally:
+            self._lifetime_scopes = outer_scopes
             if expectation is not None:
                 self._diags.release(expectation)
         return _Collected(node=node, attrs=attrs, func=func, expectation=expectation)
@@ -6547,86 +6704,112 @@ class Checker:
             # The call may have put the heap's in it.
             local.arenas = local.arenas | {_HEAP}
 
-    def _borrowed_from(self, node: ast.FuncDef, ret: Type) -> tuple[int, ...]:
-        """Which parameters the answer names what was named by, where it says.
+    def _borrows_written(self, params: Sequence[ast.TypeExpr | None],
+                         types: Sequence[Type], ret_ref: ast.TypeExpr | None,
+                         ret: Type, where: Span,
+                         around: bool = False) -> dict[int, Borrowed]:
+        """What each reference in the answer lives as long as, where the
+        signature says: by where it stands among the answer's parts, -1 being an
+        answer that is one reference.
 
         A reference is only worth having while what it names is still there,
         and a caller cannot see into the function to work that out -- so a
         function handing one back says how long that is.  Two ways of saying
         it: `static` in the type, as long as the program, and a lifetime name,
-        as long as whatever else in the signature carries that name.
+        as long as whatever else in the signature carries that name.  Several
+        parameters carrying one name means the shorter of what they named,
+        which is the only promise that holds whichever one the body picked; a
+        name on some members of a tuple is on those and not the others.
 
-        Several parameters carrying one name means the shorter of what they
-        named, which is the only promise that holds whichever one the body
-        picked.
+        A tuple written out as the answer has a slot for each reference in it,
+        and each says how long it lives as an answer of one reference does.  A
+        member holding references any other way -- a record, a tuple inside it
+        -- holds none that does not last as long as the program, or the answer
+        is refused (4531).
+
+        *around* lets a name stand on a signature around this one, which a
+        lambda's may and a function type's written in a body may; a definition's
+        is on its own.
         """
-        where = (node.ret_type.span if node.ret_type is not None
-                 else node.name_span)
-        named = _lifetimes_of(node.ret_type)
+        found: dict[int, Borrowed] = {}
         if not isinstance(ret, PtrType):
-            if isinstance(ret, TupleType) \
-                    and isinstance(node.ret_type, ast.TupleTypeRef):
-                # A tuple written out: each reference in it has a slot of its
-                # own, and is held to what it says there (`_member_borrows`).
-                return ()
+            if isinstance(ret, TupleType) and isinstance(ret_ref, ast.TupleTypeRef):
+                if len(ret_ref.members) != len(ret.members):
+                    return found
+                for at, (ref, member) in enumerate(zip(ret_ref.members,
+                                                       ret.members)):
+                    if not _holds_a_reference(member):
+                        continue
+                    if not isinstance(member, PtrType):
+                        if _holds_a_short_reference(member):
+                            self._diags.emit(D.LANG_REF_ANSWERED, ref.span)
+                        continue
+                    borrowed = self._borrowed_by(params, types, ref, member,
+                                                 ref.span, around)
+                    if borrowed is not None:
+                        found[parts_within(ret)[at][0]] = borrowed
+                return found
             if _holds_a_short_reference(ret):
                 # A reference inside something else that does not last as long
                 # as the program: a record says `static` on its field or holds
                 # it only where it was made, and there is nowhere in the answer
                 # a lifetime name could stand for it.
                 self._diags.emit(D.LANG_REF_ANSWERED, where)
-            return ()
+            return found
+        borrowed = self._borrowed_by(params, types, ret_ref, ret, where, around)
+        if borrowed is not None:
+            found[-1] = borrowed
+        return found
+
+    def _borrowed_by(self, params: Sequence[ast.TypeExpr | None],
+                     types: Sequence[Type], ref: ast.TypeExpr | None,
+                     ret: PtrType, where: Span,
+                     around: bool) -> Borrowed | None:
+        """What the one reference *ret*, written *ref*, lives as long as: the
+        parameters carrying its name, and the parts of them that do -- or a name
+        of a signature around, for a lambda or a function's type (4562, 4567).
+        """
+        # The name on the reference itself and not on one it leads to: what
+        # `& &\N{WHITE HOURGLASS}a u32` names is a place holding such a reference, which says
+        # nothing about how long that place is there.
+        named = {ref.lifetime} if isinstance(ref, ast.RefTypeRef) \
+            and ref.lifetime is not None else set()
         if not named:
             if not ret.lasting:
                 self._diags.emit(D.LANG_BORROW_SAYS_NOTHING, where)
-            return ()
-        carried = tuple(at for at, one in enumerate(node.params)
-                        if named & _lifetimes_of(one.type))
-        if not carried:
+            return None
+        carried = [(at, _leaves_named(param, ty, named))
+                   for at, (param, ty) in enumerate(zip(params, types))
+                   if named & _lifetimes_of(param)]
+        own = set().union(*(_lifetimes_of(params[at]) for at, _ in carried))
+        outer: list[tuple[str, str]] = []
+        for name in sorted(named - own) if around else ():
+            around = next((key for key, names in reversed(self._lifetime_scopes)
+                           if name in names), None)
+            if around is not None:
+                outer.append((around, name))
+        if not carried and not outer:
             # A name nothing else carries says nothing, and what the answer
             # would live for is then undecided -- which is the one thing a
             # caller needs from the signature.
             self._diags.emit(D.LANG_LIFETIME_NOT_DETERMINED, where,
                              name="".join((LIFETIME_GLYPH, sorted(named)[0])))
-        return carried
+            return None
+        return Borrowed(params=tuple(at for at, _ in carried),
+                        leaves=tuple(leaves for _, leaves in carried),
+                        outer=tuple(outer))
 
-    def _member_borrows(self, node: ast.FuncDef,
-                        ret: Type) -> dict[int, tuple[int, ...]]:
-        """For an answer that is a tuple written out, which parameters each
-        reference in it names what was named by -- by where it stands among the
-        tuple's leaves.
+    def _lifetime_scope(self, params: Sequence[ast.Param],
+                        node: ast.Node) -> tuple[str, frozenset[str]]:
+        """The lifetime names the signature *node* carries on its parameters,
+        with what tells them from another signature's."""
+        return (self._lifetime_key(node),
+                frozenset().union(*(_lifetimes_of(one.type) for one in params)))
 
-        Each reference has a slot of its own, so each says how long it lives as
-        an answer of one reference does: `static`, or a lifetime name another
-        parameter carries (4562, 4567).  A member holding references any other
-        way -- a record, a tuple inside it -- holds none that does not last as
-        long as the program, or the answer is refused (4531).
-        """
-        written = node.ret_type
-        if not isinstance(ret, TupleType) or not isinstance(written, ast.TupleTypeRef) \
-                or len(written.members) != len(ret.members):
-            return {}
-        found: dict[int, tuple[int, ...]] = {}
-        for at, (ref, member) in enumerate(zip(written.members, ret.members)):
-            if not _holds_a_reference(member):
-                continue
-            if not isinstance(member, PtrType):
-                if _holds_a_short_reference(member):
-                    self._diags.emit(D.LANG_REF_ANSWERED, ref.span)
-                continue
-            named = _lifetimes_of(ref)
-            if not named:
-                if not member.lasting:
-                    self._diags.emit(D.LANG_BORROW_SAYS_NOTHING, ref.span)
-                continue
-            carried = tuple(one for one, param in enumerate(node.params)
-                            if named & _lifetimes_of(param.type))
-            if not carried:
-                self._diags.emit(D.LANG_LIFETIME_NOT_DETERMINED, ref.span,
-                                 name="".join((LIFETIME_GLYPH, sorted(named)[0])))
-                continue
-            found[parts_within(ret)[at][0]] = carried
-        return found
+    def _lifetime_key(self, node: ast.Node) -> str:
+        """What tells the lifetime names of the signature *node* from every
+        other's: where it is written."""
+        return "".join((self._path.as_posix(), ":", str(node.span.start)))
 
     def _collect_generic(self, node: ast.FuncDef, path: str,
                          attrs: list[BoundAttr],
@@ -7497,11 +7680,19 @@ class Checker:
                                  name=ref.kept_in[0])
                 return ERROR
             said = self._promised(ref.attrs)
+            # A value of it is called with nothing but the type in hand, so the
+            # type says how long a reference it answers with lives, as a
+            # definition does -- on its own parameters, or on the signature
+            # around it.
+            borrows = self._borrows_written(
+                ref.params, params, ref.ret, ret,
+                ref.ret.span if ref.ret is not None else ref.span, around=True)
             return self._module.types.func_type(
                 params, ret, "listable" in said,
                 hands_out=ref.made_in is not None,
                 lasting=ref.kept_in is not None,
-                impure="impure" in said, can_ignore="can_ignore" in said)
+                impure="impure" in said, can_ignore="can_ignore" in said,
+                borrows=tuple(sorted(borrows.items())))
         return self._named_type(ref)
 
     # -- units -----------------------------------------------------------------
@@ -9778,6 +9969,9 @@ class Checker:
                 continue
             self._bind_local(param.name, value, param.span,
                              param.mutable, is_parameter=True, builder=builder)
+        outer_lifetimes = self._enter_lifetimes(
+            self._lifetime_key(node), node.params,
+            func.ty.params[:len(node.params)], arriving)
         assert node.body is not None
         outer_made_in = self._answer_made_in
         outer_made_from, self._made_from = self._made_from, {}
@@ -9795,21 +9989,12 @@ class Checker:
         self._lower_conditions(builder, node, func)
         self._lower_block(builder, node.body, func,
                           as_result=generating is None)
-        if func.borrows_from:
-            # Before the scope goes: a parameter a reference was taken of lives
-            # in the frame, and the name is what still knows where.
-            sources: list[Value] = []
-            for at in func.borrows_from:
-                sources.append(arriving[at])
-                borrowed = self._find_local(node.params[at].name)
-                if borrowed is not None and borrowed.placed:
-                    sources.append(borrowed.value)
-            self._answers_from(func, node, tuple(sources))
-        if func.leaf_borrows:
-            self._members_answered_from(func, node, {
-                leaf: tuple(self._borrowed_sources(node, arriving, carried))
-                for leaf, carried in func.leaf_borrows.items()})
+        # Before the scope goes: a parameter a reference was taken of lives in
+        # the frame, and the name is what still knows where.
+        self._answered_as_said(func, func.ty.borrowed(),
+                               tuple(one.name for one in node.params), arriving)
         self._pop_scope(node.span if not builder.is_terminated else None)
+        self._lifetime_scopes, self._lifetime_sources = outer_lifetimes
         self._addressed = outer_addressed
         self._answering = outer_answer
         self._impure = outer_impure
@@ -11810,7 +11995,8 @@ class Checker:
                 and any(one.ty is not wanted
                         for one, wanted in zip(args, ty.params)):
             return self._walked(builder, ty, make, args, expr, expected)
-        answer = make(args, expr.span)
+        answer = self._lasting_as_given(builder, local.name, (), ty.borrowed(),
+                                        args, make(args, expr.span), expr.span)
         if ty.ret is VOID and expected is not None:
             self._diags.emit(D.LANG_CALL_HAS_NO_VALUE, expr.span, name=local.name)
             return UndefConst(ERROR)
@@ -12087,19 +12273,30 @@ class Checker:
         outer_discard = self._discard_function
         self._discard_function = False
         try:
-            params = tuple(self._resolve_type(one.type) for one in node.params)
-            answer = self._return_type(node.ret_type)
+            outer_scopes = self._lifetime_scopes
+            self._lifetime_scopes = [*outer_scopes,
+                                     self._lifetime_scope(node.params, node)]
+            try:
+                params = tuple(self._resolve_type(one.type) for one in node.params)
+                answer = self._return_type(node.ret_type)
+            finally:
+                self._lifetime_scopes = outer_scopes
             if answer is ERROR or any(one is ERROR for one in params):
                 return None
             attrs, linkage = self._function_attrs(written.attrs)
             made_in, param_made_in = self._made_in_of(node, params, answer)
+            borrows = self._borrows_written(
+                tuple(one.type for one in node.params), params, node.ret_type,
+                answer, node.ret_type.span if node.ret_type is not None
+                else node.name_span)
             hands_out = _hands_out_of(node)
             if hands_out is not None:
                 params = (*params, self._module.types.ptr_type(ARENA, mutable=True))
             func = Function(
                 name=node.name, hands_out=hands_out,
-                ty=self._module.types.func_type(params, answer,
-                                                attrs.listable),
+                ty=self._module.types.func_type(
+                    params, answer, attrs.listable,
+                    borrows=tuple(sorted(borrows.items()))),
                 attrs=attrs, linkage=linkage, exported=False,
                 cconv=attrs.abi if attrs.abi is not None else DEFAULT_CCONV,
                 span=node.span, name_span=node.name_span,
@@ -12107,8 +12304,9 @@ class Checker:
                 param_names=tuple(one.name for one in node.params),
                 writes_arrays=_writes_arrays(node, params),
                 defaults=self._defaults_of(node, params),
-                borrows_from=self._borrowed_from(node, answer),
-                leaf_borrows=self._member_borrows(node, answer),
+                borrows_from=borrows[-1].params if -1 in borrows else (),
+                leaf_borrows={leaf: one.params for leaf, one in borrows.items()
+                              if leaf >= 0},
                 keeps=_kept_pairs(node),
                 made_in=made_in, param_made_in=param_made_in)
             self._module.add_function(
@@ -12601,10 +12799,23 @@ class Checker:
         taken = self._captures_of(expr, name)
         if taken is None:
             return UndefConst(ERROR)
-        params = tuple(self._resolve_type(one.type) for one in expr.params)
-        answer = self._return_type(expr.ret_type)
+        outer_scopes = self._lifetime_scopes
+        self._lifetime_scopes = [*outer_scopes,
+                                 self._lifetime_scope(expr.params, expr)]
+        try:
+            params = tuple(self._resolve_type(one.type) for one in expr.params)
+            answer = self._return_type(expr.ret_type)
+        finally:
+            self._lifetime_scopes = outer_scopes
         if answer is ERROR or any(one is ERROR for one in params):
             return UndefConst(ERROR)
+        # How long a reference it answers with lives, said as a definition says
+        # it -- or as long as what a name of the signature around it stands
+        # for, which it reaches through what it brought in.
+        borrows = self._borrows_written(
+            tuple(one.type for one in expr.params), params, expr.ret_type, answer,
+            expr.ret_type.span if expr.ret_type is not None else expr.span,
+            around=True)
         if _writes_arrays(expr, params):
             # Called through the value it is, nothing would say the array it is
             # handed has to be one that may be written.
@@ -12674,7 +12885,7 @@ class Checker:
                    self._initializing)
         try:
             func = self._function_of_a_lambda(expr, params, answer, held, offsets,
-                                              taken, name)
+                                              taken, name, borrows)
         finally:
             (self._operand_of, self._handing_over, self._assigning,
              self._initializing) = context
@@ -12685,7 +12896,8 @@ class Checker:
         ty = self._module.types.func_type(
             params, answer, walks, hands_out=_hands_out_of(expr) is not None,
             lasting=lasting, impure=func.attrs.impure,
-            can_ignore="can_ignore" in said)
+            can_ignore="can_ignore" in said,
+            borrows=tuple(sorted(borrows.items())))
         # What it carries is an address and says nothing about what is there:
         # one type covers every lambda, and what is at the address is the
         # lambda's own business.
@@ -13118,13 +13330,15 @@ class Checker:
                               answer: Type, held: Sequence[Type],
                               offsets: Sequence[int],
                               taken: Sequence[tuple[ast.Capture, _Local]],
-                              name: str) -> Function | None:
+                              name: str,
+                              borrows: Mapping[int, Borrowed]) -> Function | None:
         """The function a lambda's body becomes, checked and lowered.
 
         It takes one parameter nobody wrote -- where what the lambda brought in
         is -- and then the ones that were written.  The body is checked in a
         scope holding those and nothing else, so a name from around the lambda
-        that was not brought in is not a name here at all.
+        that was not brought in is not a name here at all.  What it answers with
+        is held to *borrows*, what its signature said, as a definition's is.
         """
         hands_out = _hands_out_of(expr)
         hidden = (self._module.types.ptr_type(ARENA, mutable=True),) \
@@ -13185,6 +13399,7 @@ class Checker:
             _read_through(expr.body, self._read_through_ids)
             self._live_for(expr)
             brought: list[tuple[ast.Capture, _Local]] = []
+            inherited: list[tuple[_Local, _Local, bool]] = []
             for at, ((one, local), what) in enumerate(zip(taken, held)):
                 # What is in the environment is what was put there: the value
                 # for a capture by value, and the address of the variable for
@@ -13202,9 +13417,13 @@ class Checker:
                 bound = self._find_local(one.name)
                 if bound is not None:
                     brought.append((one, bound))
+                    inherited.append((local, bound, one.by_reference))
             for one, value in zip(expr.params, arriving[1:]):
                 self._bind_local(one.name, value, one.span, one.mutable,
                                  is_parameter=True, builder=inner)
+            outer_lifetimes = self._enter_lifetimes(
+                self._lifetime_key(expr), expr.params, params, arriving[1:],
+                inherited)
             # What a lambda is handed, and what it brought in, may have been made
             # anywhere: it carries its allocator, and lasts as long as the call.
             for scope in self._scopes:
@@ -13216,6 +13435,10 @@ class Checker:
                         local.arenas = frozenset({id(local)})
                         self._unknown_by_id[id(local)] = local
             self._lower_block(inner, expr.body, func)
+            self._answered_as_said(func, borrows,
+                                   tuple(one.name for one in expr.params),
+                                   arriving[1:])
+            self._lifetime_scopes, self._lifetime_sources = outer_lifetimes
             self._all_of_it_used(brought)
             if not inner.is_terminated:
                 self._all_closed(self._scopes, expr.span)
@@ -13743,8 +13966,10 @@ class Checker:
                 return False
             return isinstance(seen.ty, PtrType) and seen.ty.lasting
 
-    def _answers_from(self, func: Function, node: ast.FuncDef,
-                      sources: tuple[Value, ...]) -> None:
+    def _answers_from(self, func: Function, name: str,
+                      sources: Sequence[Value],
+                      only: Mapping[int, frozenset[int]],
+                      stored: frozenset[int]) -> None:
         """Check that what each `return` hands back really comes from there.
 
         The promise `from v` is only kept if what comes back was worked out
@@ -13752,65 +13977,155 @@ class Checker:
         time, which is not the one the caller was told.  A reference that
         lasts as long as the program keeps any promise, so it passes too.
         """
-        name = ", ".join(node.params[at].name for at in func.borrows_from)
         # Which branches reach each block, so that the walk can go through a
         # block's parameter -- which is what an `if` answering two ways comes
         # to, and what a body of any shape hands back.
-        incoming: dict[int, list[object]] = {}
-        for block in func.blocks:
-            last = block.insts[-1] if block.insts else None
-            if isinstance(last, Terminator):
-                for arm in last.successors():
-                    incoming.setdefault(id(arm.block), []).append(arm)
+        incoming = _incoming_of(func)
+        outer = self._lifetime_outer()
         for block in func.blocks:
             for inst in block.insts:
                 if not isinstance(inst, RetInst) or not inst.operands:
                     continue
                 value = inst.operands[0]
                 if self._lasting(value) \
-                        or _reached_from(value, sources, incoming):
+                        or _reached_from(value, sources, incoming, None, only,
+                                         outer, None, stored):
                     continue
                 self._diags.emit(D.LANG_BORROW_NOT_FROM_IT, inst.span,
                                  name=name)
 
-    def _borrowed_sources(self, node: ast.FuncDef, arriving: Sequence[Value],
-                          carried: Sequence[int]) -> list[Value]:
-        """What the parameters *carried* arrived as, and where a parameter given
-        storage of its own keeps it: what a promised answer may come from."""
-        sources: list[Value] = []
-        for at in carried:
-            sources.append(arriving[at])
-            borrowed = self._find_local(node.params[at].name)
-            if borrowed is not None and borrowed.placed:
-                sources.append(borrowed.value)
-        return sources
+    def _answered_as_said(self, func: Function, table: Mapping[int, Borrowed],
+                          names: Sequence[str],
+                          arriving: Sequence[Value]) -> None:
+        """Check every answer of *func* against what its signature said each
+        reference in it lives as long as (4561)."""
+        if -1 in table:
+            self._answers_from(func, *self._sources_for(table[-1], names, arriving))
+        members = {leaf: self._sources_for(one, names, arriving)
+                   for leaf, one in table.items() if leaf >= 0}
+        if members:
+            self._members_answered_from(func, members)
 
-    def _members_answered_from(self, func: Function, node: ast.FuncDef,
-                               sources: dict[int, tuple[Value, ...]]) -> None:
+    def _sources_for(self, borrowed: Borrowed, names: Sequence[str],
+                     arriving: Sequence[Value]
+                     ) -> tuple[str, list[Value], dict[int, frozenset[int]],
+                                frozenset[int]]:
+        """What a promised answer may come from: what the parameters carrying
+        its name arrived as, and where a parameter given storage of its own
+        keeps it -- with the parts of a tuple the name is on -- and what a name
+        of a signature around stands for here.  With what to call them, and
+        which of them are where a parameter is kept rather than what it named.
+        """
+        sources: list[Value] = []
+        only: dict[int, frozenset[int]] = {}
+        stored: set[int] = set()
+        called: list[str] = []
+        for at in borrowed.params:
+            if at >= len(arriving) or at >= len(names):
+                continue
+            called.append(names[at])
+            values = [arriving[at]]
+            local = self._find_local(names[at])
+            if local is not None and local.placed:
+                values.append(local.value)
+                stored.add(id(local.value))
+            leaves = borrowed.leaves_of(at)
+            for one in values:
+                sources.append(one)
+                if leaves is not None:
+                    only[id(one)] = frozenset(leaves)
+        for pair in borrowed.outer:
+            for value, leaf, name, kept in self._lifetime_sources.get(pair, ()):
+                sources.append(value)
+                if kept:
+                    stored.add(id(value))
+                if name not in called:
+                    called.append(name)
+                if leaf is not None:
+                    only[id(value)] = only.get(id(value), frozenset()) | {leaf}
+        if not called:
+            # A name of the signature around that nothing brought in stands for:
+            # there is nothing here to call it but the name.
+            called = ["".join((LIFETIME_GLYPH, one)) for _, one in borrowed.outer]
+        return ", ".join(called), sources, only, frozenset(stored)
+
+    def _lifetime_outer(self) -> dict[tuple[str, str], list[Value]]:
+        """What each lifetime name in reach stands for here, for a call through
+        a lambda whose answer lives as long as one of them."""
+        return {pair: [entry[0] for entry in entries]
+                for pair, entries in self._lifetime_sources.items()}
+
+    def _enter_lifetimes(self, key: str, params: Sequence[ast.Param],
+                         types: Sequence[Type], arriving: Sequence[Value],
+                         brought: Sequence[tuple[_Local, _Local, bool]] = ()
+                         ) -> tuple[list[tuple[str, frozenset[str]]],
+                                    dict[tuple[str, str],
+                                         list[tuple[Value, int | None, str,
+                                                    bool]]]]:
+        """Make the lifetime names of a signature, *key*, ones a lambda or a
+        function type in the body may say an answer lives as long as, and write
+        down what each stands for: what the parameters carrying it arrived as.
+
+        A lambda's own body reaches what was named around it only through what
+        it brought in -- *brought*, each name outside with the name inside --
+        so a name around stands there for what it brought in of it: where the
+        variable is, for one brought in by reference, which is what reading it
+        reads through.  Answered with what to put back.
+        """
+        saved = (self._lifetime_scopes, self._lifetime_sources)
+        names = frozenset().union(*(_lifetimes_of(one.type) for one in params))
+        self._lifetime_scopes = [*self._lifetime_scopes, (key, names)]
+        found: dict[tuple[str, str], list[tuple[Value, int | None, str, bool]]] = {}
+        for outside, inside, by_reference in brought:
+            for pair, entries in saved[1].items():
+                for value, leaf, _, kept in entries:
+                    if value is outside.value:
+                        found.setdefault(pair, []).append(
+                            (inside.value, leaf, inside.name,
+                             kept or by_reference))
+        for param, ty, value in zip(params, types, arriving):
+            local = self._find_local(param.name)
+            values = [(value, False)]
+            if local is not None and local.placed and local.value is not value:
+                values.append((local.value, True))
+            for name in _lifetimes_of(param.type):
+                leaves = _leaves_named(param.type, ty, {name})
+                entries = found.setdefault((key, name), [])
+                for one, kept in values:
+                    if leaves is None:
+                        entries.append((one, None, param.name, kept))
+                    else:
+                        entries.extend((one, leaf, param.name, kept)
+                                       for leaf in leaves)
+        self._lifetime_sources = found
+        return saved
+
+    def _members_answered_from(
+            self, func: Function,
+            sources: dict[int, tuple[str, list[Value], dict[int, frozenset[int]],
+                                     frozenset[int]]]
+    ) -> None:
         """Check, for an answer that is a tuple, that each reference in it comes
         from the parameters its lifetime name is on -- every `return`, every way
         through it, member by member (4561)."""
-        incoming: dict[int, list[object]] = {}
-        for block in func.blocks:
-            last = block.insts[-1] if block.insts else None
-            if isinstance(last, Terminator):
-                for arm in last.successors():
-                    incoming.setdefault(id(arm.block), []).append(arm)
+        incoming = _incoming_of(func)
+        outer = self._lifetime_outer()
         for block in func.blocks:
             for inst in block.insts:
                 if not isinstance(inst, RetInst) or not inst.operands:
                     continue
-                for leaf, given in sources.items():
+                for leaf, (name, given, only, stored) in sources.items():
                     if self._leaf_reached(inst.operands[0], leaf, given, incoming,
-                                          set()):
+                                          set(), only, outer, stored):
                         continue
                     self._diags.emit(D.LANG_BORROW_NOT_FROM_IT, inst.span,
-                                     name=", ".join(
-                                         node.params[at].name
-                                         for at in func.leaf_borrows[leaf]))
+                                     name=name)
 
-    def _leaf_reached(self, value: Value, leaf: int, sources: tuple[Value, ...],
-                      incoming: dict[int, list[object]], visited: set[int]) -> bool:
+    def _leaf_reached(self, value: Value, leaf: int, sources: Sequence[Value],
+                      incoming: dict[int, list[object]], visited: set[int],
+                      only: Mapping[int, frozenset[int]],
+                      outer: Mapping[tuple[str, str], Sequence[Value]],
+                      stored: frozenset[int]) -> bool:
         """Whether the part at *leaf* of the tuple *value* was worked out from
         one of *sources*, or lasts as long as the program.
 
@@ -13822,7 +14137,9 @@ class Checker:
         match value:
             case TupleInst():
                 part = value.operands[leaf]
-                return self._lasting(part) or _reached_from(part, sources, incoming)
+                return self._lasting(part) \
+                    or _reached_from(part, sources, incoming, None, only, outer,
+                                     None, stored)
             case BlockParam():
                 if id(value) in visited:
                     return True
@@ -13831,44 +14148,56 @@ class Checker:
                 return bool(arms) and all(
                     value.index < len(getattr(arm, "args", ()))
                     and self._leaf_reached(getattr(arm, "args")[value.index], leaf,
-                                           sources, incoming, visited)
+                                           sources, incoming, visited, only, outer,
+                                           stored)
                     for arm in arms)
             case CallInst():
-                carried = getattr(value.callee, "leaf_borrows", {}).get(leaf, ())
-                return any(at < len(value.arguments)
-                           and _reached_from(value.arguments[at], sources, incoming)
-                           for at in carried)
+                return _reached_from(value, sources, incoming, None, only, outer,
+                                     leaf, stored)
             case CastInst():
                 return self._leaf_reached(value.operands[0], leaf, sources,
-                                          incoming, visited)
+                                          incoming, visited, only, outer, stored)
         return False
 
     def _as_long_as_given(self, builder: IRBuilder, func: Function,
                           args: Sequence[Value], answer: Value,
                           span: Span) -> Value:
+        """What a call of *func* answers with lives as long as what it borrowed
+        from (`_lasting_as_given`)."""
+        return self._lasting_as_given(builder, func.name, func.param_names,
+                                      func.ty.borrowed(), args, answer, span)
+
+    def _lasting_as_given(self, builder: IRBuilder, name: str,
+                          param_names: Sequence[str],
+                          table: Mapping[int, Borrowed], args: Sequence[Value],
+                          answer: Value, span: Span) -> Value:
         """What a call answers with lives as long as what it borrowed from.
 
         The function promised no more than its parameters' lifetime, so the
         rest is worked out here, where both ends are in hand: the answer is
         there as long as the program exactly when every argument was, and as
-        long as the shortest-lived of them otherwise.
+        long as the shortest-lived of them otherwise.  A call through a value
+        reads the promise off the value's type, which is all it has.
 
         The answer is written to the log whichever way it comes out.  It is the
         one thing about such a call that neither the signature nor the call site
         says, and where a name stands on several parameters it is not even a
         thing a reader can work out from one of them.
         """
-        if func.leaf_borrows and isinstance(answer.ty, TupleType):
-            return self._members_as_long_as_given(builder, func, args, answer,
-                                                  span)
-        carried = func.borrows_from
-        if not carried or max(carried) >= len(args) \
-                or not isinstance(answer.ty, PtrType):
+        if isinstance(answer.ty, TupleType) and any(leaf >= 0 for leaf in table):
+            return self._members_as_long_as_given(builder, name, param_names,
+                                                  table, args, answer, span)
+        borrowed = table.get(-1)
+        if borrowed is None or not isinstance(answer.ty, PtrType):
             return answer
-        lasting = all(self._lasting(args[at]) for at in carried)
-        self._module.reports.record(ReportKind.LIFETIME, func.name,
-                                    self._how_long(func, args, carried, lasting),
-                                    span)
+        parts = _borrowed_parts(args, borrowed)
+        if not parts and not borrowed.outer:
+            return answer
+        lasting = not borrowed.outer \
+            and all(leaf is None and self._lasting(one) for one, leaf in parts)
+        self._module.reports.record(
+            ReportKind.LIFETIME, name,
+            self._how_long(param_names, borrowed, parts, lasting), span)
         if answer.ty.lasting or not lasting:
             return answer
         return builder.cast(
@@ -13876,10 +14205,12 @@ class Checker:
             self._module.types.ptr_type(answer.ty.pointee, answer.ty.mutable,
                                         lasting=True), span)
 
-    def _members_as_long_as_given(self, builder: IRBuilder, func: Function,
+    def _members_as_long_as_given(self, builder: IRBuilder, name: str,
+                                  param_names: Sequence[str],
+                                  table: Mapping[int, Borrowed],
                                   args: Sequence[Value], answer: Value,
                                   span: Span) -> Value:
-        """`_as_long_as_given` for each reference in an answer that is a tuple.
+        """`_lasting_as_given` for each reference in an answer that is a tuple.
 
         A part whose arguments all last as long as the program lasts as long too,
         and the tuple is put back together with it saying so; each part's answer
@@ -13892,14 +14223,19 @@ class Checker:
                   for at, piece in enumerate(pieces)]
         changed = False
         member_of = {first: at for at, (first, _) in enumerate(parts_within(ty))}
-        for leaf, carried in func.leaf_borrows.items():
-            if max(carried) >= len(args) or not isinstance(pieces[leaf], PtrType):
+        for leaf, borrowed in table.items():
+            if leaf < 0 or leaf >= len(pieces) \
+                    or not isinstance(pieces[leaf], PtrType):
                 continue
-            lasting = all(self._lasting(args[at]) for at in carried)
+            parts = _borrowed_parts(args, borrowed)
+            if not parts and not borrowed.outer:
+                continue
+            lasting = not borrowed.outer \
+                and all(at is None and self._lasting(one) for one, at in parts)
             self._module.reports.record(
-                ReportKind.LIFETIME, func.name, "".join((
+                ReportKind.LIFETIME, name, "".join((
                     "part ", str(member_of.get(leaf, leaf) + 1), " of the answer ",
-                    self._how_long(func, args, carried, lasting))), span)
+                    self._how_long(param_names, borrowed, parts, lasting))), span)
             piece = pieces[leaf]
             if lasting and not piece.lasting:
                 leaves[leaf] = builder.cast(
@@ -13917,50 +14253,68 @@ class Checker:
                                   self._module.types.tuple_type(tuple(members)),
                                   span)
 
-    def _how_long(self, func: Function, args: Sequence[Value],
-                  carried: Sequence[int], lasting: bool) -> str:
+    def _how_long(self, param_names: Sequence[str], borrowed: Borrowed,
+                  parts: Sequence[tuple[Value, int | None]], lasting: bool) -> str:
         """How long the answer of one call lives, in a sentence.
 
         Which of the arguments decided it is the point: a lifetime name written
         on two parameters means the shorter of what the two named, and which one
         that was is a thing about this call and about no other.
         """
-        named = _and_then([func.param_names[at] for at in carried])
-        many = len(carried) > 1
+        many = len(borrowed.params) > 1
+        if all(at < len(param_names) and param_names[at] for at in borrowed.params):
+            named = _and_then([param_names[at] for at in borrowed.params])
+            one, several = "".join(("the argument for ", named)), \
+                "".join(("the arguments for ", named))
+            every = "".join(("every argument for ", named))
+        else:
+            # Called through a value, whose type names no parameter: they are
+            # told apart by where they stand.
+            numbers = [str(at + 1) for at in borrowed.params]
+            named = " and ".join((", ".join(numbers[:-1]), numbers[-1])) \
+                if many else "".join(numbers)
+            one = several = every = "".join(("argument" if not many
+                                             else "arguments", " ", named))
+        if not borrowed.params:
+            return "".join((
+                "answers with a reference that lives as long as what ",
+                _and_then(["".join((LIFETIME_GLYPH, name))
+                           for _, name in borrowed.outer]),
+                " stands for where the lambda was written"))
         if lasting:
             return "".join((
                 "answers with a reference that lasts as long as the program, "
-                "because ", "every argument" if many else "the argument",
-                " for ", named, " does"))
-        found = [one for one in (self._named_place_of(args[at])
-                                 for at in carried) if one is not None]
+                "because ", every if many else one, " does"))
+        found = [place for place in (self._named_place_of(value, leaf)
+                                     for value, leaf in parts) if place is not None]
         if not found:
             return "".join((
                 "answers with a reference that lives as long as this call, "
-                "which is all ", "the arguments" if many else "the argument",
-                " for ", named, " said"))
+                "which is all ", several if many else one, " said"))
         # Every one of the shortest-lived, not the first of them: two names of
         # one scope live equally long, and saying one of the two would read as
         # though the other had been looked at and turned down.
-        deepest = max(one.depth for one in found)
-        shortest = _and_then([one.name for one in found
-                              if one.depth == deepest])
+        deepest = max(place.depth for place in found)
+        shortest = _and_then([place.name for place in found
+                              if place.depth == deepest])
         return "".join((
             "answers with a reference that lives as long as ", shortest, ", ",
-            "the shortest-lived of what the arguments for " if many
-            else "which is what the argument for ",
-            named, " named"))
+            "".join(("the shortest-lived of what ", several)) if many
+            else "".join(("which is what ", one)), " named"))
 
-    def _named_place_of(self, value: Value) -> _Local | None:
+    def _named_place_of(self, value: Value,
+                        leaf: int | None = None) -> _Local | None:
         """The shortest-lived name whose place *value* reaches, where it reaches
-        one.
+        one -- of its part *leaf*, where it is a tuple and one part is meant.
 
         Walked back the way provenance is walked everywhere else, and through
         the parts of something made of several: a tuple holding a reference
         lasts as long as the shortest-lived thing in it, since taking it apart
-        gives that back.  A variable at the top level is nobody's local and
-        answers nothing, which is right -- it is there as long as the program
-        and outlives every name.
+        gives that back.  A call's answer names what the arguments its lifetime
+        name is on named, and the walk goes on there.  A variable at the top
+        level is nobody's local and answers nothing, which is right -- it is
+        there as long as the program and outlives every name, and so is what a
+        parameter arrived naming.
         """
         seen = value
         while True:
@@ -13968,13 +14322,22 @@ class Checker:
             if found is not None:
                 return found
             if isinstance(seen, TupleInst):
-                deepest: _Local | None = None
-                for one in seen.operands:
-                    part = self._named_place_of(one)
-                    if part is not None and (deepest is None
-                                             or part.depth > deepest.depth):
-                        deepest = part
-                return deepest
+                if leaf is not None and leaf < len(seen.operands):
+                    seen, leaf = seen.operands[leaf], None
+                    continue
+                return _deepest(self._named_place_of(one) for one in seen.operands)
+            if isinstance(seen, CallInst):
+                given, table = _call_borrows(seen)
+                borrowed = [table[leaf]] if leaf is not None and leaf in table \
+                    else [table[-1]] if leaf is None and -1 in table \
+                    else list(table.values()) if leaf is None else []
+                return _deepest(self._named_place_of(part, at)
+                                for one in borrowed
+                                for part, at in _borrowed_parts(given, one))
+            if isinstance(seen, ExtractInst) and isinstance(seen.operands[0].ty,
+                                                            TupleType):
+                seen, leaf = seen.operands[0], seen.index
+                continue
             if isinstance(seen, (CastInst, ExtractInst)) or (
                     isinstance(seen, BinaryInst)
                     and seen.op in (BinOp.ADD, BinOp.SUB)):

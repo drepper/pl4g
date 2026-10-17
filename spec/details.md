@@ -852,13 +852,17 @@ is reported in -- what is being initialized, assigned, handed over -- is kept ac
 through a value is an effect only where its type says `impure`, and `_answer_is_taken` asks the type's `can_ignore`.
 
 **A reference in a product or a tuple answered with** is asked about in two places.  `_holds_a_short_reference` says whether a type
-holds one that does not last as long as the program, which is what `_borrowed_from` refuses in any answer (4531) and
+holds one that does not last as long as the program, which is what `_borrows_written` refuses in any answer (4531) and
 `_collect_global` at the top level (4532).  A tuple written out in the answer is asked member by member instead
-(`_member_borrows`), each reference's lifetime name giving the parameters it was borrowed from, kept on the function as
+(`_borrows_written` again), each reference's lifetime name giving the parameters it was borrowed from, kept on the function as
 `leaf_borrows`, by where the part stands among the tuple's leaves.  `_members_answered_from` walks each `return` back to where the
 tuple was made -- through a block's parameter, a cast, and a call that promised the same of that part -- and from there as a single
 reference is walked; `_reached_from` goes through a part taken out of a call's tuple in the same way.  At a call,
-`_members_as_long_as_given` makes a part lasting where every argument for it lasts.  An arena check had counted a reference inside
+`_members_as_long_as_given` makes a part lasting where every argument for it lasts.  The walk carries which leaf of a tuple it
+took out (`leaf`), through an extract and into a call or a tuple made here, and a source whose name is on some of its leaves only
+is in `only`, so `p⟦1⟧` does not reach a parameter whose name is on `p⟦0⟧`.  `_named_place_of` goes through a call the same way:
+what a call answers names the shortest-lived of what the arguments carrying its name named (`_borrowed_parts`), which is what
+4570 asks of a name bound further out.  An arena check had counted a reference inside
 a tuple as something pointing into an arena; references have lifetimes of their own inside something else too, which
 `_points_somewhere(references=False)` says.
 
@@ -2344,11 +2348,13 @@ a lifetime has to be said.
 is what keeps two instances of a generic apart.  Nothing below the front end sees it: a bitcast is the only instruction either
 direction produces, and it selects to nothing.
 
-**A lifetime name never reaches the IR.**  `ast.RefTypeRef.lifetime` holds it, `_lifetimes_of` walks a type reference over its
-fields to collect every name written anywhere in it, and `_borrowed_from` turns the names on the return type into the tuple of
-parameter positions carrying them.  That tuple is the whole of what the rest of the compiler sees, so the provenance walk, the
-call site and the report log say nothing about names at all.  `PtrType` gains nothing either: inside the body a `&u32 ⧖x`
-parameter is an ordinary `&u32`.
+**A lifetime name never reaches the IR as a name.**  `ast.RefTypeRef.lifetime` holds it, `_lifetimes_of` walks a type reference
+over its fields to collect every name written anywhere in it, and `_borrows_written` turns the name on each reference of the
+return type -- the outermost one's, a reference it leads to saying nothing about the place it is -- into a `Borrowed`: the
+positions of the parameters carrying it, for each the leaves of a tuple parameter the name is on (`_leaves_named`, nothing
+where it is on the whole), and for a lambda or a function type the names of a signature around it, each paired with what tells
+that signature from another (`_lifetime_key`, where it is written).  That is the whole of what the rest of the compiler sees.
+`PtrType` gains nothing: inside the body a `&u32 ⧖x` parameter is an ordinary `&u32`.
 
 **A block's parameter is where the walk has to branch.**  A body that answers differently in two arms hands back what the join
 came to, which is a block parameter and not either arm's value.  `_answers_from` builds the map from a block to the branches that
@@ -2357,10 +2363,24 @@ promise being about what the function does and not about what one path through i
 yes, which is what stops a loop going round for ever and is right: what reaches itself round a loop is whatever it was on the way
 in, and that is the branch the walk is already looking at.
 
-**Which parameters are carried is on the definition, not in the type.**  `Function.borrows_from` holds their positions, worked
-out once by `_borrowed_from` while the signature is collected.  It is deliberately not in `FuncType`: two functions differing
-only in which parameters carry the name have the same signature as far as an indirect call is concerned, and an indirect call is
-where the promise stops being checkable anyway.
+**Which parameters are carried is in the type.**  `FuncType.borrows` holds a `Borrowed` for each reference in the answer, by
+where it stands among the answer's parts (-1 for an answer that is one reference), worked out once by `_borrows_written` while
+the signature is collected -- for a definition, a lambda and a written function type alike -- and part of the interning key and
+of the mangled name.  `Function.borrows_from` and `leaf_borrows` keep the positions alone, which is what the definition's own
+checks read.  A call through a value has nothing but the value's type, so that is where it reads the promise: `_call_borrows`
+answers, for any call, the arguments as the type numbers them -- leaving out what a lambda brought in, which a call through a
+value hands over first -- and the table, read off the callee's type or off the value the code was taken out of.  A value stands
+where a type is wanted when its answer comes from no more than the type says (`_borrows_as_much`): fewer parameters, fewer parts
+of them, fewer names from around.  A lambda's own names and those of the signatures around it are in `_lifetime_scopes`, pushed
+while a signature is resolved and while a body is lowered; what each stands for in the body being lowered is in
+`_lifetime_sources` (`_enter_lifetimes`): the parameters carrying it as they arrived and where they are kept, and in a lambda
+what it brought in of them.  `_reached_from` takes those as `outer`, so a call through a lambda whose answer lives as long as a
+name around is reached from what that name stands for.
+
+**Where a parameter is kept is not what it named.**  A parameter a reference is taken of is given storage, which is a source too
+-- reading the parameter is reading that storage -- but only through a load: the walk carries whether its last step was one, and
+a source in `stored` reached any other way is the storage's own address, a place of this call's (4561).  A capture by reference
+is the same inside a lambda: what it brought in is where the variable is.
 
 **Provenance is one walk, used three ways.**  `_reached_from` follows a value back through the instructions that keep a reference
 pointing into the same place -- `LoadInst` to its address, `AddressInst` to its variable, `CastInst`, `ExtractInst` and an `ADD`

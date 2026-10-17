@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4562
+※ pl4g-test: expect-diag 4562 LANG_BORROW_SAYS_NOTHING
+
+※ A lambda answering with a reference says how long it lives, as a function
+※ does: nothing written is no default, the two answers meaning different things
+※ to whoever calls it.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let x: u32 = 1u32
+    let same := λ a: &u32 → &u32 { a }
+    if same(&x)⌖ = 1u32: 0u6 else: 1u6

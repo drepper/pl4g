@@ -1,0 +1,52 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A lambda answering with a reference says how long it lives**, as a function
+※ does: `static`, or a lifetime name on its own parameters -- or on a parameter of
+※ the function or lambda it is written in, which it reaches through what it
+※ brought in by reference.  `pick`'s lambda answers with what `v` names, and so
+※ lives as long as `⧖a` there says; the one inside `outer`'s lambda does the same
+※ with the parameter of the lambda around it.
+※
+※ **A function's type says it too**, so a call through a value knows what the
+※ answer lives as long as without seeing the function: `via` hands its two
+※ references to `f`, whose type says the answer is the first's, and so may
+※ answer with it as its own `⧖a`.  A function promising more stands where one
+※ promising less is wanted -- `left` answers from its first parameter only, and
+※ is handed where either may be the answer -- and never the other way round.
+※
+※ Compare: **Rust**, whose closures answer references with lifetimes taken from
+※ around them in the same way, and whose `for<'a> fn(&'a u32) -> &'a u32` is a
+※ function pointer type naming them; **C++**, whose lambdas and `std::function`
+※ say nothing and leave a dangling reference for nobody to notice.
+
+let total: u32 = 40u32
+
+fn pick(v: &⧖a u32) → &⧖a u32:
+    let g := λ [&v] → &⧖a u32 { v }
+    g()
+
+fn outer(n: u32) → u32:
+    let h := λ w: &⧖b u32 → u32:
+        let k := λ [&w] → &⧖b u32 { w }
+        k()⌖
+    h(&n)
+
+fn via(f: fn(&⧖x u32, &⧖y u32) → &⧖x u32, a: &⧖a u32, b: &⧖b u32) → &⧖a u32:
+    f(a, b)
+
+fn either(f: fn(&⧖x u32, &⧖x u32) → &⧖x u32) → u32:
+    let n: u32 = 1u32
+    let m: u32 = 2u32
+    f(&n, &m)⌖
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let x: u32 = 1u32
+    let y: u32 = 2u32
+    let left := λ a: &⧖p u32, b: &⧖q u32 → &⧖p u32 { a }
+    let big := λ a: &⧖p u32, b: &⧖p u32 → &⧖p u32 { if a⌖ > b⌖: a else: b }
+    let kept: &static u32 = via(left, &total, &y)
+    let s := via(left, &x, &y)⌖ + pick(&x)⌖ + kept⌖ + either(big) + either(left)
+    if s = 45u32 ∧ outer(3u32) = 3u32: 0u6 else: 1u6

@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4567
+※ pl4g-test: expect-diag 4567 LANG_LIFETIME_NOT_DETERMINED
+
+※ A lambda's lifetime name stands on its own parameters or on those of a
+※ signature around it.  `⧖zz` is on neither, so what the answer would live for
+※ is undecided -- and this one answers with its own local, which nothing could
+※ make right.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let g := λ → &⧖zz u32:
+        let n: u32 = 3u32
+        &n
+    if g()⌖ = 3u32: 0u6 else: 1u6

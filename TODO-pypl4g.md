@@ -696,3 +696,9 @@ Optimizations
     imports `std` a program with a macro pays for `std` there: the `macro-*` samples went from about 8 ms of work to about 51 at
     e825472, where every other sample new to `std` went up by some 14.  Forty-odd functions are lowered and `_mentioned` is asked
     twelve thousand times, which is what lowering by names written was meant to avoid.
+
+[ ] report an argument of the wrong type as that when the call is an operand of a comparison.  `if twice(1u8, 2u32) = w` says
+    "the operands of '=' are of different types, 'u32' and 'u8'", naming the argument as though it were the comparison's operand,
+    where the call standing alone says "argument 1 of 'twice' is …"; a function value handed where its type differs comes out as
+    "'=' is defined on integers, not on 'fn(…)'".  Whatever lowers a comparison's operands for the other one's type takes the
+    argument's mismatch for its own.

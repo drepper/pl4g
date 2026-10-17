@@ -1,0 +1,30 @@
+※ pl4g-test: compile=error diag=4570,4570
+※ pl4g-test: expect-diag 4570 LANG_REF_OUTLIVES_PLACE
+
+※ What a call answers with names what the arguments carrying its lifetime name
+※ named, so a name bound further out may not be given it where one of those is
+※ a place made further in -- through a definition, and through a value whose
+※ type says the same.  After the `if`, `r` and `s` would name `m`, which is
+※ gone.
+
+fn first(v: &⧖a u32) → &⧖a u32:
+    v
+
+fn through(f: fn(&⧖x u32) → &⧖x u32, b: bool) → u32:
+    let n: u32 = 3u32
+    let s: mut &u32 = f(&n)
+    if b:
+        let m: u32 = 4u32
+        s ← f(&m)
+    s⌖
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let n: u32 = 3u32
+    let r: mut &u32 = first(&n)
+    if #init.args > 5:
+        let m: u32 = 4u32
+        r ← first(&m)
+    if r⌖ + through(first, #init.args > 5) = 6u32: 0u6 else: 1u6

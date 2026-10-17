@@ -10029,6 +10029,30 @@ on arithmetic.  Each index is one step of the path, so an array of several dimen
 on the way and closed with it: reading an element a `&mut` was out to was not refused; it is now (4565), and only for that
 element or one that cannot be told from it.
 
+**A lifetime name stands on a tuple member, on a signature around a lambda, and in a function's type**
+
+The user asked for the entry in TODO-language.md -- a lifetime name standing on something other than a parameter of the call.
+Looking found it larger than the entry said: a lambda answering with a reference was not checked at all (one could answer with
+its own local, and a name nothing carried passed); a call through a value said nothing about how long its answer lived; and a
+call's answer, through a definition or a value, was not followed by the rule that a name bound further out may not be given a
+place made further in (4570), so `r ← first(&m)` with `m` in an inner block was accepted.  Three questions were put:
+
+- **A lambda's name stands on its own parameters or on those of the signature around it** -- which it reaches through what it
+  brought in by reference -- with `static` or a name required as for a function (4562, 4567) and the body held to it (4561);
+  against only its own parameters, and against refusing a lambda that answers with a reference not lasting.  Rust's closures take
+  a lifetime from around them the same way; C++ says nothing.
+- **A name on some members of a tuple parameter is on those members**: provenance follows the part, and a caller works the
+  lifetime out from that member alone -- Rust's rule for `(&'a T, &'b T)` -- against keeping the whole parameter.
+- **Names in a function's type**, `fn(&⧖x u32, &⧖y u32) → &⧖x u32`, a value standing where its answer comes from no more than the
+  type says -- Rust's `for<'a> fn(&'a u32) -> &'a u32` -- against an answer living as long as the shortest argument, and against
+  leaving function values for later.
+
+Taken without asking, as soundness rather than choice: an answer's name is the one on its outermost reference, `& &⧖a u32`
+saying nothing of how long the place holding the reference is there (4562); and the storage a parameter is kept in reaches what
+the parameter named only through a load, so `&v` is not what `v` named (4561).  Both were holes before this.  Found on the way: the
+tree-sitter grammar refused a statement after a `let` whose lambda's body is indented, as it had for the other lines ending in a
+block before they were written out; the lambda is now one of those.
+
 Open questions
 --------------
 

@@ -1,0 +1,26 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A lifetime name written on some members of a tuple parameter is on those
+※ members and not the others.  `first` says its answer lives as long as what
+※ the first member named, so a call handing it `〈&total, &y〉` -- the first a
+※ variable at the top level, the second a local -- answers with a reference
+※ that lasts as long as the program, and may be kept in a `static` name.  What
+※ the second member named says nothing about it.
+※
+※ Compare: **Rust**, whose `fn first<'a, 'b>(p: (&'a u32, &'b u32)) -> &'a u32`
+※ is the same promise with the names declared at the head; **C** and **C++**,
+※ which make none.
+
+let total: u32 = 40u32
+
+fn first(p: 〈&⧖a u32, &⧖b u32〉) → &⧖a u32:
+    p⟦0⟧
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let y: u32 = 2u32
+    let kept: &static u32 = first(〈&total, &y〉)
+    let near: &u32 = first(〈&y, &total〉)
+    if kept⌖ = 40u32 ∧ near⌖ = 2u32: 0u6 else: 1u6

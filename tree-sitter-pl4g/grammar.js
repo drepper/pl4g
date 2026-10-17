@@ -53,6 +53,10 @@ module.exports = grammar({
   // condition is that name and whose body begins there.  The compiler's parser
   // asks the same question by looking one token further.
   conflicts: $ => [
+    // A lambda whose body is indented and the line it ends: whether the line
+    // ends there is what follows the block, and the generalized parse carries
+    // both until that is seen.
+    [$._block, $._layout_lambda],
     // An attribute list at the top level is the start of a definition or about
     // the file, and which is what follows it: the generalized parse carries both.
     [$.attribute_list],
@@ -577,7 +581,9 @@ module.exports = grammar({
     _block_expression: $ => prec(1, choice($.match_expression,
                                            $.if_expression,
                                            $.while_statement,
-                                           $.foreach_statement)),
+                                           $.foreach_statement,
+                                           alias($._layout_lambda,
+                                                 $.lambda_expression))),
 
     // The three statements a block expression can end, written as rules of
     // their own so that aliasing one keeps the shape it would have had: an
@@ -976,6 +982,18 @@ module.exports = grammar({
       // The lower dynamic precedence is for the one place the list could
       // belong to either: written as a whole statement, it is the statement's.
       optional($.attribute_list),
+      $._lambda_head, field('body', $._block),
+    ))),
+
+    // A lambda whose body is indented ends its line with that block, as a
+    // `match` does, so a statement giving it to a name is one of the lines
+    // that end with a block.
+    _layout_lambda: $ => prec.dynamic(-1, prec.right(seq(
+      optional($.attribute_list),
+      $._lambda_head, field('body', $.layout_block),
+    ))),
+
+    _lambda_head: $ => seq(
       '\u03bb',
       sepBy(',', field('parameter', $.lambda_parameter)),
       optional(field('captures', $.capture_list)),
@@ -984,8 +1002,7 @@ module.exports = grammar({
       optional(seq($._return_arrow, field('return_type', $.type),
                    // `in pool`: an arena of the body's own, handed out
                    optional(seq('in', field('made_in', $.identifier))))),
-      field('body', $._block),
-    ))),
+    ),
 
     lambda_parameter: $ => seq(
       field('name', $.identifier), ':', optional($.mutable),

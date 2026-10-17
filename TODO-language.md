@@ -1106,9 +1106,16 @@ Runtime
     exactly this, and what it needs here is a way of saying that two indices differ.  Done on 2026-10-17 for indices known
     while compiling; one worked out while running still lends the array.
 
-[ ] let a lifetime name stand on something that is not a parameter of this call -- a field of a parameter, or a parameter of an
+[x] let a lifetime name stand on something that is not a parameter of this call -- a field of a parameter, or a parameter of an
     enclosing lambda.  A name is looked for in the parameters' types (4567) and provenance is checked against those (4561); both
-    would follow a longer path, and what stops it today is that nothing needs it yet.
+    would follow a longer path, and what stops it today is that nothing needs it yet.  Done on 2026-10-17: a name on a member of
+    a tuple is that member's, a lambda's may be one of the signature around it, and a function's type carries them.
+
+[ ] hand a function a lambda whose answer lives as long as a name of the caller's.  A parameter's function type may say its answer
+    lives as long as another parameter of the same signature (`g: fn() → &⧖a u32` beside `v: &⧖a u32`), and inside the body that
+    is right; but nothing can be handed for it except a function whose answer lasts, a lambda's own name around being one of the
+    caller's signature and not the callee's.  What a call would have to show is that what the lambda's answer lives as long as
+    lasts at least as long as what was handed for `v`.
 
 [ ] let a reference name an array, a list or a string.  A reference names a place holding one value (4536); those are already
     several values or already a place, and what a reference to one would mean -- the place the value is, or the place the elements

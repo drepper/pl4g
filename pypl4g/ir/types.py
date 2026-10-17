@@ -492,6 +492,54 @@ class IterType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class Borrowed:
+    """What a reference in a function's answer lives as long as: what the
+    parameters carrying its lifetime name named.
+
+    A parameter that is a tuple may carry the name on some of its members and
+    not others, and then the answer lives as long as what those named; a lambda
+    may carry a name of the signature it is written in, which says the answer
+    lives as long as what that signature's parameter named.
+    """
+
+    #: Which parameters carry the name, in order.
+    params: tuple[int, ...] = ()
+    #: For each of those, the parts of it -- leaves, as `parts_of` counts them --
+    #: whose reference carries the name, or nothing where all of it does.
+    leaves: tuple[tuple[int, ...] | None, ...] = ()
+    #: The names of the signature around it that the answer carries, each with
+    #: what tells that signature from every other: a lambda's answer may live as
+    #: long as what the function it is written in was handed.
+    outer: tuple[tuple[str, str], ...] = ()
+
+    def leaves_of(self, param: int) -> tuple[int, ...] | None:
+        """The parts of parameter *param* the name stands on, or nothing where
+        it stands on the whole of it."""
+        for at, one in enumerate(self.params):
+            if one == param:
+                return self.leaves[at] if at < len(self.leaves) else None
+        return None
+
+
+def _marked(ty: Type, marks: dict[int, str], base: int = 0) -> str:
+    """*ty* as a program writes it, with the lifetime name in *marks* on each
+    reference standing at that part -- counted from *base* -- written in."""
+    if isinstance(ty, PtrType):
+        name = marks.get(base)
+        if name is None or ty.lasting:
+            return ty.written()
+        return "".join(("&", "mut " if ty.mutable else "",
+                        "\N{WHITE HOURGLASS}", name, " ", ty.pointee.written()))
+    if isinstance(ty, TupleType) and not held_in_memory(ty):
+        return "".join(("\N{LEFT ANGLE BRACKET}",
+                        ", ".join(_marked(one, marks, base + first)
+                                  for one, (first, _) in zip(ty.members,
+                                                             parts_within(ty))),
+                        "\N{RIGHT ANGLE BRACKET}"))
+    return ty.written()
+
+
+@dataclass(frozen=True, slots=True)
 class FuncType(Type):
     """The type of a function."""
 
@@ -518,6 +566,33 @@ class FuncType(Type):
     impure: bool = False
     #: Whether a caller may let what it answers go nowhere.
     can_ignore: bool = False
+    #: What each reference in the answer lives as long as, by where it stands
+    #: among the answer's parts, -1 being an answer that is one reference.  A
+    #: caller through a value has nothing else to work it out from.
+    borrows: tuple[tuple[int, Borrowed], ...] = ()
+
+    def borrowed(self) -> dict[int, Borrowed]:
+        """`borrows`, as a table."""
+        return dict(self.borrows)
+
+    def _lifetimes(self) -> tuple[list[dict[int, str]], dict[int, str]]:
+        """The lifetime names to write a function of this type with: which part
+        of each parameter, and of the answer, carries which.  Named in order,
+        one name per reference in the answer that lives as long as something
+        handed over; one carried by the signature around it keeps its own."""
+        given: list[dict[int, str]] = [{} for _ in self.params]
+        answered: dict[int, str] = {}
+        for at, (leaf, borrowed) in enumerate(self.borrows):
+            name = borrowed.outer[0][1] if borrowed.outer and not borrowed.params \
+                else chr(ord("a") + at % 26)
+            answered[max(leaf, 0)] = name
+            for param, leaves in zip(borrowed.params,
+                                     borrowed.leaves or (None,) * len(borrowed.params)):
+                if param >= len(given):
+                    continue
+                for one in leaves if leaves is not None else (0,):
+                    given[param].setdefault(one, name)
+        return given, answered
 
     def _said(self, glyphs: bool) -> str:
         """The promises written before `fn`, in the order they are written."""
@@ -540,11 +615,12 @@ class FuncType(Type):
 
     def written(self) -> str:
         """The name of this type as a program writes it."""
-        inner = ", ".join(p.written() for p in self.params)
+        given, answered = self._lifetimes()
+        inner = ", ".join(_marked(p, marks) for p, marks in zip(self.params, given))
         return "".join((self._said(True),
                         "fn(", inner, ")",
                         " in \N{APL FUNCTIONAL SYMBOL QUAD}heap" if self.lasting else "",
-                        " \N{RIGHTWARDS ARROW} ", self.ret.written(),
+                        " \N{RIGHTWARDS ARROW} ", _marked(self.ret, answered),
                         " in its own arena" if self.hands_out else ""))
 
     def mangled(self) -> str:
@@ -557,7 +633,12 @@ class FuncType(Type):
         return "".join((self._said(False),
                         "fn(", inner, ")", " lasting" if self.lasting else "",
                         self.ret.mangled(),
-                        " in" if self.hands_out else ""))
+                        " in" if self.hands_out else "",
+                        "".join("".join((" from", str(leaf), ":",
+                                         ",".join(str(one) for one in borrowed.params),
+                                         "".join(";" + str(one) for one in borrowed.leaves),
+                                         "".join(";" + one for one, _ in borrowed.outer)))
+                                for leaf, borrowed in self.borrows)))
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -1337,13 +1418,15 @@ class TypeContext:
     def func_type(self, params: tuple[Type, ...], ret: Type,
                   listable: bool = False, hands_out: bool = False,
                   lasting: bool = False, impure: bool = False,
-                  can_ignore: bool = False) -> FuncType:
+                  can_ignore: bool = False,
+                  borrows: tuple[tuple[int, Borrowed], ...] = ()) -> FuncType:
         """Return the function type with the given signature."""
-        key = (params, ret, listable, hands_out, lasting, impure, can_ignore)
+        key = (params, ret, listable, hands_out, lasting, impure, can_ignore,
+               borrows)
         found = self._functions.get(key)
         if found is None:
             found = FuncType(params, ret, listable, hands_out, lasting, impure,
-                             can_ignore)
+                             can_ignore, borrows)
             self._functions[key] = found
         return found
 

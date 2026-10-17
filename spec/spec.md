@@ -2945,6 +2945,36 @@ Compare **Rust**, whose struct holding only `&'static` references needs no lifet
 lifetime per reference, as here; and whose `struct View<'a>` -- a lifetime as a parameter of the type -- is what this does not
 have, being the several lifetimes at once that the lifetime decision did not build.
 
+**A lifetime name on a tuple parameter is on the members it is written on.**  `fn first(p: 〈&⧖a u32, &⧖b u32〉) → &⧖a u32`
+answers with what the first member named and nothing else -- `p⟦1⟧` there is refused (4561) -- and a call works out the answer's
+lifetime from that member of its argument alone, so `first(〈&total, &y〉)` lasts as long as the program however short-lived `y` is.
+**The name is the one on the reference itself**, not on one it leads to: `→ & &⧖a u32` names a place holding such a reference and
+says nothing of how long that place is there (4562), and where it does say, `&v` is where the parameter `v` is kept in this call
+and not what `v` named (4561).
+
+**A lambda answering with a reference says how long it lives**, as a function does: `static`, or a lifetime name (4562).  The name
+stands on the lambda's own parameters, or on a parameter of the function or lambda it is written in -- a name of that signature,
+which the lambda reaches through what it brought in by reference:
+
+```
+fn pick(v: &⧖a u32) → &⧖a u32:
+    let g := λ [&v] → &⧖a u32 { v }   ※ as long as what v named
+    g()
+```
+
+A name on neither is refused (4567), and the body is held to the name the way a function's is (4561): `λ [&n] → &⧖a u32 { &n }`
+for a local `n` is refused, `n` lasting no longer than the call around it.  **A function's type says it too** --
+`fn(&⧖x u32, &⧖y u32) → &⧖x u32` -- since a call through a value has nothing else to work the answer's lifetime out from, and one
+answering with a reference that says neither is refused (4562).  A function or a lambda stands where such a type is wanted when
+its answer comes from no more than the type says: one answering from its first parameter only goes where either may be the
+answer, and not the other way round (4213).  A name in a type that none of its own parameters carries is one of the signature
+around it, as a lambda's is.  Rust's closures take a lifetime from around them in the same way, and `for<'a> fn(&'a u32) -> &'a
+u32` is Rust's function pointer type naming one; C++'s lambdas and `std::function` say nothing.
+
+**A call's answer names what the arguments carrying its name named**, so a name bound further out may not be given it where one
+of those is a place made further in (4570) -- `r ← first(&m)` with `m` in an inner block -- through a definition and through a
+value alike.
+
 Rust softens all of this with elision, which lets the common case go unwritten; nothing here does, because a missing lifetime
 there is still a lifetime being inferred and here the two answers mean different things to a caller.  C++ has no rule at all and
 a dangling reference is a program nobody notices is wrong; Go and Java move what escapes to the heap instead, which needs a

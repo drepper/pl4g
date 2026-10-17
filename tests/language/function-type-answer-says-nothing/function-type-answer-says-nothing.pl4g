@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4562
+※ pl4g-test: expect-diag 4562 LANG_BORROW_SAYS_NOTHING
+
+※ A function's type answering with a reference says how long it lives: a call
+※ through a value has nothing else to work it out from.
+
+fn apply(f: fn(&u32) → &u32, a: &⧖a u32) → u32:
+    f(a)⌖
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    0u6
