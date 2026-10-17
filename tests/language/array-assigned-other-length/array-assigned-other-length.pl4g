@@ -1,0 +1,17 @@
+※ pl4g-test: compile=ok run=native,qemu exit=82 diag=none
+
+※ Where the length of either side is known only while running, the two are
+※ compared before anything is copied, and a difference stops the program as an
+※ index outside its array does: `into` is handed three elements for two.
+
+@[impure]
+fn into(v: mut u8⟦⟧, w: u8⟦⟧):
+    v ← w
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let a: mut u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+    into(a⟦0…2⟧, a⟦1…4⟧)
+    0u6

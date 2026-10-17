@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4566
+※ pl4g-test: expect-diag 4566 LANG_BORROW_NAME_WRITTEN
+
+※ Giving an array to `a` writes every element of it, and a `&mut` to one of
+※ them is out.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let a: mut u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    let k: u8 = 4u8
+    let b: u8⟦3⟧ = ⟦k, 5u8, 6u8⟧
+    let r: &mut u8 = &mut a⟦0⟧
+    a ← b
+    r⌖ ← 7u8
+    0u6

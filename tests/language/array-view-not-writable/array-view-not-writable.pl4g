@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4708
+※ pl4g-test: expect-diag 4708 LANG_ARRAY_VIEW_NOT_WRITABLE
+
+※ An array whose type does not say its shape owns nothing, so a name of one
+※ that is `mut` writes the elements it was given -- and `r`'s may not be
+※ written.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let k: u8 = 1u8
+    let r: u8⟦3⟧ = ⟦k, 2u8, 3u8⟧
+    let v: mut u8⟦⟧ = r⟦0…2⟧
+    v⟦0⟧ ← 9u8
+    if r⟦0⟧ = 9u8: 0u6 else: 1u6

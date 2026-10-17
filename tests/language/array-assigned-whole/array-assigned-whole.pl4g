@@ -1,0 +1,50 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **Giving an array to an array copies its elements.**  A name of an array whose
+※ type says its shape owns its elements: `a ← r` puts `r`'s into `a`'s, a row
+※ given to, `m⟦0⟧ ← r`, is that row's elements written, and a name bound to an
+※ array that already is somewhere has a copy of its own -- so writing one is
+※ never writing the other.  A name of an array that does not say its shape
+※ names someone's elements, and `v ← w` writes those, as `v⟦i⟧ ← x` does: the
+※ two runs may overlap, and the copy is made as though everything was read
+※ first.  A variable at the top level is copied into where it is in the image.
+※
+※ Compare: **Go**, **Rust**'s `[T; N]`, **C++**'s `std::array` and **Fortran**'s
+※ `a = b`, which copy as this does; **C**, whose arrays cannot be assigned at
+※ all; **Python**, **Java** and **JavaScript**, where a name of an array is a
+※ second name for the same one.
+
+let image: mut u8⟦3⟧ = ⟦0u8, 0u8, 0u8⟧
+
+@[impure]
+fn into(v: mut u16⟦⟧, w: u16⟦⟧):
+    v ← w
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let k: u8 = 7u8
+    let r: u8⟦3⟧ = ⟦k, 8u8, 9u8⟧
+    let a: mut u8⟦3⟧ = ⟦0u8, 0u8, 0u8⟧
+    a ← r
+    a⟦0⟧ ← 5u8
+    let b: mut u8⟦3⟧ = r
+    b⟦1⟧ ← 1u8
+    if r⟦0⟧ ≠ 7u8 ∨ r⟦1⟧ ≠ 8u8 ∨ a⟦0⟧ ≠ 5u8 ∨ a⟦2⟧ ≠ 9u8 ∨ b⟦1⟧ ≠ 1u8:
+        return 1u6
+    let m: mut u8⟦2, 3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
+    let kept: u8⟦3⟧ = m⟦1⟧
+    m⟦0⟧ ← r
+    m⟦1⟧ ← m⟦0⟧
+    if m⟦1, 2⟧ ≠ 9u8 ∨ m⟦0, 0⟧ ≠ 7u8 ∨ kept⟦0⟧ ≠ 4u8:
+        return 2u6
+    let run: mut u16⟦5⟧ = ⟦1u16, 2u16, 3u16, 4u16, 5u16⟧
+    into(run⟦0…4⟧, run⟦1…5⟧)
+    if run⟦0⟧ ≠ 2u16 ∨ run⟦3⟧ ≠ 5u16:
+        return 3u6
+    into(run⟦1…5⟧, run⟦0…4⟧)
+    if run⟦1⟧ ≠ 2u16 ∨ run⟦4⟧ ≠ 5u16:
+        return 4u6
+    image ← r
+    if image⟦1⟧ ≠ 8u8: 5u6 else: 0u6

@@ -4410,6 +4410,19 @@ come from.
 parameters; `_where_made` refuses handing them anything `_may_write` says no to, and only those parameters are asked where their
 elements are kept (4625) -- a body that cannot replace an element cannot give one back.
 
+**An array given to an array is copied** by `_copy_elements`, asked from three places: `_array_assigned` for a local
+(`_lower_assignment` sends every name holding an array there, before the placed and the unplaced paths), the variable at the top
+level's path, and `_lower_element_assign` where fewer indices than dimensions name a row (`_row_at`).  It holds the element types
+and ranks to each other, refuses elements `_not_copied_because` names (4710) and lengths both known that differ (4709), puts a
+`check` on each dimension either side knows only while running, and asks `_read_only` and `_made_here` as a write of an element
+does.  `_move_elements` copies: a count known while compiling of numbers or truth values is one vector load and one store, as
+`_copied` does for a join, which reads every element before writing any; otherwise a loop an element at a time
+(`_element_by_element`, the memory token a parameter of its header as `strings._copy` has it), run from the end where the
+destination is the later address, which is `memmove`'s rule.  A `let` goes through `_owned_array`: a value written as a place --
+a name, an element, a row, a field, what is read through a reference, or an `if` or a `match` that may answer one -- of a type
+that says its shape is copied into a frame of its own unless neither the name nor what it names may be written; of a type that
+does not, it stays what it was, and a `mut` name of it is refused unless `_may_write` says yes (4708).
+
 
 A generic function checked where it is written
 ----------------------------------------------

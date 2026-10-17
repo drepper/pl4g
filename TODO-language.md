@@ -389,9 +389,15 @@ removed or decided otherwise, which its last paragraph says.
     question the entry above asks about a row.  **Decided** on 2026-10-17: it stays refused.  A tuple is a value, and a new one
     is made by writing it out; a member to be changed belongs in a record.
 
-[ ] assign a whole row, or a whole array.  `m⟦0⟧ ← r` is refused (4457) and would be a copy of as many elements as the row
+[x] assign a whole row, or a whole array.  `m⟦0⟧ ← r` is refused (4457) and would be a copy of as many elements as the row
     holds.  Nothing in the language copies one aggregate into another yet, and the first thing that does should settle it for
-    products and arrays together rather than for arrays alone.
+    products and arrays together rather than for arrays alone.  Done on 2026-10-17: giving an array to an array, a row or a
+    name copies the elements, lengths known only while running checked then.
+
+[ ] copy an array whose elements point somewhere or hold references.  Refused (4710): a copy of text, a list or a lambda is a
+    second holder of the room it points into, which the allocator rules answer for one value (`_stored`) and not yet for a run,
+    and a copy of a reference is held to the lifetime rules one at a time.  A name bound to such an array without `mut`, from
+    one that may be written, is still a second name for its elements rather than a copy.
 
 [x] give a collection or an array a length a program can read.  Done on 2026-09-15: `#` answers how many, as a `u64`, of an
     array (its outermost dimension), a list, a string (its characters), a tuple, a set and a dictionary -- from the type where the

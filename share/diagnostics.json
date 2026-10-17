@@ -9672,6 +9672,82 @@
       "option": null
     },
     {
+      "number": 4708,
+      "name": "LANG_ARRAY_VIEW_NOT_WRITABLE",
+      "severity": "error",
+      "message": "'{name}' may write the elements it names, and these may not be written",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name being bound"
+        }
+      ],
+      "cause": "An array whose type does not say its shape owns nothing: it is where some elements are and how many, so a name of one marked `mut` writes the elements it was given.  Giving it elements named without `mut`, or kept `in ⎕static`, would let them be written all the same -- the rule a `mut` parameter follows (4640), asked of a name.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Arrays / Writing an element",
+        "requirement": "A `mut` name of an array that does not say its shape names elements that may be written."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4709,
+      "name": "LANG_ARRAY_SHAPES_DIFFER",
+      "severity": "error",
+      "message": "an array of shape {found} is copied into one of shape {wanted}",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the shape of what is copied"
+        },
+        {
+          "name": "wanted",
+          "type": "string",
+          "description": "the shape of where it goes"
+        }
+      ],
+      "cause": "Giving an array to an array copies its elements one for one, so the two have the same shape.  Where both are known while compiling a difference is refused here; where either is known only while running, it stops the program as an index outside its array does.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Arrays / Writing an element",
+        "requirement": "An array copied into another has its shape."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4710,
+      "name": "LANG_ARRAY_NOT_COPIED",
+      "severity": "error",
+      "message": "an array of '{type}' is not copied: its elements {why}",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the element type"
+        },
+        {
+          "name": "why",
+          "type": "string",
+          "description": "what keeps an element from being copied"
+        }
+      ],
+      "cause": "Copying an array copies its elements' bytes, which is a copy only of an element that is all of its value.  One pointing into room something else keeps -- text, a list, a lambda -- or holding a reference would be a second holder of that room or that place, which is the question the allocator and the lifetime rules answer for one value at a time and do not yet answer for a run of them.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Arrays / Writing an element",
+        "requirement": "An array is copied only where its elements are all of their value."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4800,
       "name": "LANG_SUM_ONE_PART",
       "severity": "error",

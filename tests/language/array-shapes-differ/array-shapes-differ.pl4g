@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4709
+※ pl4g-test: expect-diag 4709 LANG_ARRAY_SHAPES_DIFFER
+
+※ Both lengths are written down, so the copy that could only fail is refused
+※ while compiling.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let a: mut u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    let m: mut u8⟦2, 4⟧ = ⟦⟦1u8, 2u8, 3u8, 4u8⟧, ⟦5u8, 6u8, 7u8, 8u8⟧⟧
+    m⟦0⟧ ← a
+    if m⟦0, 0⟧ = 1u8: 0u6 else: 1u6

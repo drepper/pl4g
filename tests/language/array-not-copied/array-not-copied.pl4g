@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4710
+※ pl4g-test: expect-diag 4710 LANG_ARRAY_NOT_COPIED
+
+※ An array is copied by copying its elements' bytes, which is a copy only of an
+※ element that is all of its value.  Text points into room something else
+※ keeps, and a second holder of that room is the question the allocator rules
+※ answer one value at a time.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let a: mut str⟦2⟧ = ⟦"a", "b"⟧
+    let b: mut str⟦2⟧ = ⟦"c", "d"⟧
+    a ← b
+    if #a⟦0⟧ = 1: 0u6 else: 1u6

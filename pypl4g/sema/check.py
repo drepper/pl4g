@@ -1981,6 +1981,25 @@ def _reached_from(value: Value, sources: Sequence[Value],
         return False
 
 
+def _not_copied_because(element: Type) -> str | None:
+    """Why an array of *element* is not copied by copying its bytes, if it is
+    not: an element pointing into room something else keeps would be a second
+    holder of it, and one holding a reference a second way to a place."""
+    if owned.points(element) or _holds_a_lambda(element):
+        return "point into room something else keeps"
+    if _holds_a_reference(element):
+        return "hold references"
+    return None
+
+
+def _shape_of_type(ty: ArrayType) -> str:
+    """The shape of *ty* as a program writes it, a length known only while
+    running left empty."""
+    return "".join(("\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}",
+                    ",".join("" if one is None else str(one) for one in ty.shape),
+                    "\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}"))
+
+
 def _deepest(found: Iterable[_Local | None]) -> _Local | None:
     """The one of *found* bound furthest in, which goes first."""
     deepest: _Local | None = None
@@ -11631,15 +11650,19 @@ class Checker:
         if mask is not None:
             self._assign_picked(builder, stmt, base, ty, mask)
             return
-        if len(stmt.indices) != ty.rank:
-            # Every index, because what is assigned is one element.  Assigning a
-            # whole row would be copying one array into another, which nothing
-            # in the language does yet and which is not what `←` means anywhere
-            # else: it binds a name or writes one place.
-            self._diags.emit(D.LANG_ARRAY_WRONG_RANK, stmt.span,
-                             given=len(stmt.indices), wanted=ty.rank)
-            return
         start, lengths = self._shape_of(builder, base, ty, stmt.span)
+        if len(stmt.indices) < ty.rank:
+            # Fewer indices than dimensions name a row, and what is given to a
+            # row is copied into its elements, as what is given to an array is.
+            offset = self._offset_of(builder, stmt.indices, ty, lengths, stmt.span)
+            if offset is None:
+                return
+            row = self._row_at(builder, start, ty, lengths, offset,
+                               len(stmt.indices), stmt.span)
+            row_ty = self._value_type_of(row)
+            assert isinstance(row_ty, ArrayType)
+            self._array_into(builder, stmt.value, row, row_ty, stmt.span)
+            return
         if not self._made_here(start):
             self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
         offset = self._offset_of(builder, stmt.indices, ty, lengths, stmt.span)
@@ -17053,10 +17076,51 @@ class Checker:
             self._bind_local(node.name, UndefConst(ERROR), node.name_span,
                              node.mutable, value_span=node.span)
             return
+        value = self._owned_array(builder, node, value)
         self._kept_by_a_name(found, node.name_span)
         self._name_value(value, node.name, node.name_span)
         self._bind_local(node.name, value, node.name_span, node.mutable,
                          value_span=node.span, builder=builder)
+
+    def _owned_array(self, builder: IRBuilder, node: ast.VarDef,
+                     value: Value) -> Value:
+        """What a name bound to an array stands for: room of its own holding a
+        copy, where its type says the shape and the elements could otherwise
+        change under it or through it.
+
+        A name of an array whose type says its shape owns its elements, so one
+        given an array that already is somewhere -- a name, a row, a field --
+        has its own copy, and writing either is not writing the other.  Two
+        names neither of which may be written, of elements nothing may write,
+        are the one exception, the copy being one nobody could tell from what
+        it copies.  A name of one that does not say its shape names someone's
+        elements: one that is `mut` writes them, so they have to be elements
+        that may be written (4708), the rule a `mut` parameter follows.
+        """
+        ty = self._value_type_of(value)
+        if not isinstance(ty, ArrayType) or not _names_a_place(node.value) \
+                and not isinstance(node.value, (ast.If, ast.Match)):
+            return value
+        writable = self._may_write(node.value)
+        if not ty.fixed:
+            if node.mutable and not writable:
+                self._diags.emit(D.LANG_ARRAY_VIEW_NOT_WRITABLE, node.value.span,
+                                 name=node.name)
+                return UndefConst(ERROR)
+            return value
+        if not node.mutable and not writable:
+            return value
+        if _not_copied_because(ty.element) is not None:
+            if node.mutable:
+                self._diags.emit(D.LANG_ARRAY_NOT_COPIED, node.value.span,
+                                 type=ty.element.written(),
+                                 why=_not_copied_because(ty.element))
+                return UndefConst(ERROR)
+            return value
+        room = builder.cast(CastKind.BITCAST, builder.frame(ty, node.span), ty,
+                            node.span)
+        self._copy_elements(builder, room, ty, value, ty, node.span)
+        return room
 
     def _bind_iterator(self, builder: IRBuilder, node: ast.VarDef,
                        walked: object, declared: IterType | None) -> None:
@@ -19279,7 +19343,8 @@ class Checker:
         if node.more:
             self._bind_apart(builder, node, value)
             return
-        bound = self._as_declared(value, declared)
+        bound = self._owned_array(builder, node,
+                                  self._as_declared(value, declared))
         self._kept_by_a_name(declared, node.name_span)
         self._name_value(bound, node.name, node.name_span)
         self._bind_local(node.name, bound, node.name_span, node.mutable,
@@ -19304,6 +19369,7 @@ class Checker:
         if node.more:
             self._bind_apart(builder, node, value)
             return
+        value = self._owned_array(builder, node, value)
         self._kept_by_a_name(self._value_type_of(value), node.name_span)
         self._name_value(value, node.name, node.name_span)
         self._bind_local(node.name, value, node.name_span, node.mutable,
@@ -19383,6 +19449,8 @@ class Checker:
                                                   name=node.name), node.span):
             return None
         local = self._find_local(node.name)
+        if local is not None and isinstance(self._held_by(local), ArrayType):
+            return self._array_assigned(builder, node, local, wants_value)
         if local is not None and local.placed:
             # A name with storage of its own is written the way a variable at
             # the top level is.  What `mut` asks about is still the name: it
@@ -19469,6 +19537,13 @@ class Checker:
                              found=target.value_type.written())
             return None
         self._an_effect(D.LANG_PURE_CHANGES_A_VARIABLE, node.span, name=node.name)
+        if isinstance(target.value_type, ArrayType):
+            # Its elements are in the image, and what is given is copied there.
+            self._array_into(builder, node.value,
+                             self._read_global(builder, target, node.span),
+                             target.value_type, node.span)
+            return self._read_global(builder, target, node.span) if wants_value \
+                else None
         value = self._checked_value(builder, node, target.value_type)
         if isinstance(target.value_type, SumType):
             # Bytes in a place: the new value's are copied into the variable's.
@@ -19478,6 +19553,37 @@ class Checker:
             builder.store(target, value, node.span)
         return self._read_global(builder, target, node.span) if wants_value \
             else None
+
+    def _array_assigned(self, builder: IRBuilder, node: ast.AssignStmt,
+                        local: _Local, wants_value: bool) -> Value | None:
+        """Lower `a ← v` for a name holding an array: what `v` holds is copied
+        into the elements `a` names, and `a` goes on naming them.
+
+        A name of an array that says its shape owns its elements, so this is
+        the copy a value given to it is; one that does not names someone's, and
+        writes them, as a `mut` parameter does.
+        """
+        if not self._check_mutable(node, local.mutable, local.span):
+            return None
+        if self._lent_out(node.name, node.span, True):
+            return None
+        local.read = True
+        held = self._held_by(local)
+        assert isinstance(held, ArrayType)
+        current = builder.load(local.value, node.span) if local.placed \
+            else local.value
+        if not self._array_into(builder, node.value, current, held, node.span):
+            return None
+        local.written = True
+        return current if wants_value else None
+
+    def _array_into(self, builder: IRBuilder, written: ast.Expr, into: Value,
+                    ty: ArrayType, span: Span) -> bool:
+        """Copy what *written* comes to into the array *into*, of type *ty*."""
+        value = self._lower_expr(builder, written, ty if isinstance(
+            written, ast.ArrayLit) else None)
+        return self._copy_elements(builder, into, ty, value,
+                                   self._value_type_of(value), span)
 
     def _check_mutable(self, node: ast.AssignStmt, mutable: bool, where: Span) -> bool:
         """Report an assignment to something whose definition did not allow it."""
@@ -23300,6 +23406,135 @@ class Checker:
             self._copy_bytes(builder, where, value, size_of(held, _LAYOUT), span)
             return
         builder.store(where, value, span)
+
+    def _copy_elements(self, builder: IRBuilder, into: Value, into_ty: ArrayType,
+                       from_: Value, from_ty: Type, span: Span) -> bool:
+        """Copy the elements of the array *from_* into those of *into*, one for
+        one, where the two have one shape.
+
+        Giving an array to an array is a copy of what it holds: a name of one
+        that says its shape owns its elements, and one that does not names
+        someone's, so either way what changes is the elements and not what the
+        name stands for.  Where both lengths along a dimension are known while
+        compiling they are held to each other here (4709); where either is
+        known only while running, a difference stops the program as an index
+        outside its array does.
+        """
+        if from_ty is ERROR:
+            return False
+        if not isinstance(from_ty, ArrayType) or from_ty.element is not into_ty.element \
+                or from_ty.rank != into_ty.rank:
+            self._report_mismatch(span, from_ty, into_ty)
+            return False
+        why = _not_copied_because(into_ty.element)
+        if why is not None:
+            self._diags.emit(D.LANG_ARRAY_NOT_COPIED, span,
+                             type=into_ty.element.written(), why=why)
+            return False
+        if any(one is not None and other is not None and one != other
+               for one, other in zip(from_ty.shape, into_ty.shape)):
+            self._diags.emit(D.LANG_ARRAY_SHAPES_DIFFER, span,
+                             found=_shape_of_type(from_ty),
+                             wanted=_shape_of_type(into_ty))
+            return False
+        start, lengths = self._shape_of(builder, into, into_ty, span)
+        if self._read_only(start):
+            self._diags.emit(D.LANG_STATIC_CHANGES, span,
+                             name="the array written")
+            return False
+        if not self._made_here(start):
+            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, span)
+        source, given = self._shape_of(builder, from_, from_ty, span)
+        count: Value | None = None
+        known = 1
+        for at, (one, other) in enumerate(zip(given, lengths)):
+            if from_ty.shape[at] is None or into_ty.shape[at] is None:
+                builder.check(builder.compare(CmpPred.EQ, one, other, span),
+                              "arrays of different shapes", statuses.OUT_OF_RANGE,
+                              span)
+            along = into_ty.shape[at] if into_ty.shape[at] is not None \
+                else from_ty.shape[at]
+            if along is not None and known is not None:
+                known *= along
+            else:
+                known = None
+            count = other if count is None \
+                else builder.binary(BinOp.WRAP_MUL, count, other, span)
+        assert count is not None
+        self._move_elements(builder, start, source, into_ty.element, count, known,
+                            span)
+        return True
+
+    def _move_elements(self, builder: IRBuilder, into: Value, from_: Value,
+                       element: Type, count: Value, known: int | None,
+                       span: Span) -> None:
+        """Copy *count* elements of *element* from *from_* to *into*, which may
+        overlap -- `v⟦0…3⟧ ← v⟦1…4⟧` -- as `memmove` may.
+
+        As many as are known while compiling are read as one value and then
+        written, which every target cuts up as it can and which reads all of
+        them before it writes any.  Otherwise one at a time, from the end where
+        the copy goes to later addresses than it comes from, so that nothing is
+        written before it is read.
+        """
+        if known == 0:
+            return
+        if known is not None and isinstance(element, (IntType, FloatType, BoolType)):
+            held = self._module.types.vec_type(element, known)
+            pointer = self._module.types.ptr_type(held, mutable=True)
+            builder.store(builder.cast(CastKind.BITCAST, into, pointer, span),
+                          builder.load(builder.cast(CastKind.BITCAST, from_,
+                                                    pointer, span), span),
+                          span)
+            return
+        later = builder.compare(CmpPred.UGT,
+                                builder.cast(CastKind.BITCAST, into, U64, span),
+                                builder.cast(CastKind.BITCAST, from_, U64, span),
+                                span)
+        backward = builder.new_block("copy.back")
+        forward = builder.new_block("copy.ahead")
+        done = builder.new_block("copied.all")
+        before = builder.memory()
+        builder.condbr(later, backward, forward, span=span)
+        for block, downward in ((backward, True), (forward, False)):
+            builder.position_at(block)
+            builder.set_memory(before)
+            self._element_by_element(builder, into, from_, element, count,
+                                     downward, span)
+            builder.br(done, (builder.memory(),), span)
+        builder.position_at(done)
+        builder.set_memory(done.add_param(MEM, "mem"))
+
+    def _element_by_element(self, builder: IRBuilder, into: Value, from_: Value,
+                            element: Type, count: Value, downward: bool,
+                            span: Span) -> None:
+        """A loop copying *count* elements, from the last if *downward*."""
+        header = builder.new_block("copy.element")
+        body = builder.new_block("copying.element")
+        after = builder.new_block("copied.elements")
+        builder.br(header, (builder.int_const(U64, 0), builder.memory()), span)
+        builder.position_at(header)
+        turn = header.add_param(U64, "turn")
+        token = header.add_param(MEM, "mem")
+        builder.set_memory(token)
+        builder.condbr(builder.compare(CmpPred.ULT, turn, count, span), body,
+                       after, span=span)
+        builder.position_at(body)
+        at = turn if not downward else builder.binary(
+            BinOp.WRAP_SUB,
+            builder.binary(BinOp.WRAP_SUB, count, builder.int_const(U64, 1), span),
+            turn, span)
+        self._copy_bytes(builder,
+                         self._element_place(builder, into, element, at, span),
+                         self._element_place(builder, from_, element, at, span),
+                         size_of(element, _LAYOUT), span)
+        builder.br(header, (builder.binary(BinOp.WRAP_ADD, turn,
+                                           builder.int_const(U64, 1), span),
+                            builder.memory()), span)
+        builder.position_at(after)
+        # What holds after the loop is what the header carried: the body is not
+        # on every way here.
+        builder.set_memory(token)
 
     def _copy_bytes(self, builder: IRBuilder, into: Value, from_: Value,
                     size: int, span: Span) -> None:

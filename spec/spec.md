@@ -3468,8 +3468,8 @@ dimension** -- `m⟦0,5⟧` of a two-by-three is outside, though it would be wit
 
 **Fewer indices names a row**: everything the dimensions left over reach.  `m⟦1⟧` of a `T⟦2,3⟧` is a `T⟦3⟧`, and row-major is what
 makes it cheap -- a row is a run of elements, so naming one is arithmetic on the place and no copy at all.  Where the array says
-its shape the row says its own, and where it does not the row carries the counts that are left over.  An assignment still wants
-every index (4457): what it writes is one element, and copying a whole row is not what `←` means anywhere else.
+its shape the row says its own, and where it does not the row carries the counts that are left over.  A row may be given to as an
+array may (below): `m⟦0⟧ ← r` copies `r`'s elements into the row's.
 
 ##### Fixed and dynamic
 
@@ -3749,6 +3749,28 @@ an array parameter says the body writes the caller's elements.  A caller hands s
 
 Compare Rust's `&[T]` and `&mut [T]`, C++'s `const T*` and `T*`, and D's `const(T)[]`: the same split, said on the parameter.  Before
 this an array not marked `mut` could be written all the same, which a table in a read-only part of the image cannot be.
+
+##### Giving an array to an array
+
+**Giving an array to an array copies its elements**, one for one.  A name of an array whose type says its shape owns its
+elements: `a ← r` puts `r`'s elements into `a`'s, `m⟦0⟧ ← r` into the row's, and `let b: mut u8⟦3⟧ = r` gives `b` room of its own
+holding a copy -- so writing one is never writing the other.  Two names neither of which may be written are the one place nothing
+is copied, since nobody could tell.  A name of an array whose type does not say its shape owns nothing: it names someone's
+elements, so `v ← w` writes those, as `v⟦i⟧ ← x` does, and a `mut` one is bound only to elements that may be written (4708), the
+rule a `mut` parameter follows.  The two runs may overlap -- `v⟦0…3⟧ ← v⟦1…4⟧` -- and the copy is as though every element was
+read before any was written.  A variable at the top level is copied into where it is in the image.
+
+**The two have one shape.**  Where both are known while compiling a difference is refused (4709); where either is known only
+while running, the two are compared before anything is copied and a difference stops the program as an index outside its array
+does.  **An array is copied only where its elements are all of their value** (4710): text, a list, a lambda point into room
+something else keeps, and a reference is a way to a place, and a second holder of either is a question the allocator and the
+lifetime rules answer for one value at a time and do not yet answer for a run of them.
+
+Compare: **Go**, **Rust**'s `[T; N]`, **C++**'s `std::array` and **Fortran**'s `a = b`, which copy as this does, Fortran and Go
+holding the two to one shape; **Rust**'s `copy_from_slice`, which stops the program on a difference as this does where the
+lengths are known only while running; **C**, whose arrays are not assigned at all; **Python**, **Java** and **JavaScript**, where
+a name of an array is a second name for the one array.  **APL**'s and **BQN**'s arrays are values, and an assignment there is
+always of a value.
 
 ##### Where the elements are
 

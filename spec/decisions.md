@@ -10063,6 +10063,22 @@ value, which writing that out already says; a value whose parts change one at a 
 are refused the same way; Rust's `t.0 = x` and Swift's are allowed, their tuples being places in memory.  Nothing in the compiler
 changes.
 
+**An array given to an array is copied; a row may be given to**
+
+The user asked for the entry in TODO-language.md and, asked, chose **copying the elements**: an array is a value, so `a ← r`,
+`m⟦0⟧ ← r` and `let b: mut u8⟦3⟧ = r` copy -- Go, Rust's `[T; N]`, C++'s `std::array`, Fortran, APL -- against binding a second
+name to the same elements, as Python, Java and JavaScript do, with a `mut` name of elements not marked `mut` refused.  And
+**lengths known only while running are checked then**, a difference stopping the program as an index outside its array does --
+Rust's `copy_from_slice`, Fortran's conformance -- against allowing only lengths known while compiling, and against copying the
+shorter, as Go's `copy` does.
+
+Looking found the question was already answered the wrong way: `a ← r` and `let b: mut u8⟦3⟧ = r` made a second name for `r`'s
+elements, so writing through it wrote `r`, which was not `mut`.  That is gone with the copy.  Taken without asking, as what the
+choice comes to where an array does not say its shape: a name of one stays a view, as `T⟦⟧` already was -- its elements are not
+known while compiling, so there is no room to copy them into -- so `v ← w` writes the elements it names, and a `mut` one is bound
+only to elements that may be written (4708).  A copy of elements that point into room something else keeps, or hold references,
+is refused (4710) and left in TODO-language.md.
+
 Open questions
 --------------
 
