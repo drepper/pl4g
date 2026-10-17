@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4203
+
+※ A lambda whose body changes something is of an `@[impure]` function type, and a
+※ plain function type promises a pure one.
+
+let std := ⎕import("std")
+
+let counted: mut u8 = 0u8
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let loud: fn(u8) → u8 = λ a: u8 → u8 { counted ← counted + 1u8; a }
+    loud(1u8)
+    0u6

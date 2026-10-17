@@ -5454,8 +5454,8 @@ it is written rather than left to whatever reads the image.  The call follows th
 sides agree without either knowing how the other compiles a call of its own.
 
 **Such a function is impure by being external**, so `@[impure]` need not be written and a pure function that calls one is refused
-(4480).  Nothing here can see what it does, so it is taken to do everything -- the rule a call through a value already follows,
-asked of a call to a body that is not in this compilation.  Believing one pure would let a call nobody read be dropped, and the
+(4480).  Nothing here can see what it does, so it is taken to do everything -- what a call through a value of an `@[impure]`
+function type is taken to do, asked of a call to a body that is not in this compilation.  Believing one pure would let a call nobody read be dropped, and the
 I/O would go with it.
 
 **`@[abi]` on a record says it is laid out the way one compiled by something else is**: the fields are never reordered, and
@@ -5896,11 +5896,40 @@ carry would be one the caller never heard.  That is the argument a reference alr
 reach the thing, and the caller cannot be left to guess.  A function definition needs none of this -- a call names it, so the
 definition is in view -- which is why `@[listable] fn twice(...)` is written with no such word in any type.
 
-**Only what a caller reads off the type may be written before a lambda** (3204).  `inline`, `impure`, `abi` and the rest are
-about a body, and a body is not what a name holds; `listable` is the one thing so far that a caller acts on.
+**Only what a caller reads off the type may be written before a lambda or a function type** (3204).  `inline`, `abi` and the rest
+are about a body, and a body is not what a name holds.  Three things are about a caller:
+
+- **`listable`**, that an array handed where an element is wanted is walked;
+- **`impure`**, that a function of the type may change something that outlives the call.  **A function type is pure unless it
+  says so**, as a definition is: `fn(u8) → u8` promises a function that changes nothing, which a pure function may call --
+  where a call through a value had been taken to do anything -- and a value that may change things has a type saying
+  `@[impure] fn(u8) → u8`, which a pure function may not call (4480);
+- **`can_ignore`**, that a caller may let the answer go nowhere.  Without it, what a call through a value answers is taken, as
+  for a call by name (4474).
+
+```
+fn apply(f: fn(u8) → u8, x: u8) → u8:          ※ pure: what it calls is too
+    f(x)
+
+@[impure]
+fn each(f: @[impure] fn(u8) → u8, x: u8) → u8: ※ may be handed anything
+    f(x)
+```
+
+**A lambda's purity is worked out from its body**, and is what its type says: one that writes a variable at the top level,
+writes what it did not make, calls something impure or leaves an arena holding room is of an `@[impure]` type, and one that does
+none of it is not.  So `@[impure]` is not written before a lambda (3204), there being nothing for it to add; `can_ignore` is
+written, a lambda's answer being the point of calling it unless it says otherwise.  A named function's value says what its
+definition says.
+
+Compare **Haskell**, whose function types say their effects (`a -> IO b`) and are pure otherwise; **D**, whose `pure` on a
+function pointer type is the promise made the other way round, a type that says nothing being taken to do anything; **Rust**,
+which works out from a closure's body whether it is `Fn`, `FnMut` or `FnOnce`, as purity is worked out here; and **C++**, whose
+`noexcept` is part of a function's type for the same reason, a promise a caller relies on travelling with the value.
 
 **A listable function stands where a plain one is wanted**, dropping the walk, by the rule every other promise follows: it
-promises what the plain one does and adds to it.  One way only, and the two are the same three words in the same three
+promises what the plain one does and adds to it.  So does a pure one where an `@[impure]` one is wanted, and one whose answer may be
+dropped where the answer has to be taken -- never the other way round (4203).  One way only, and the two are the same three words in the same three
 registers, so nothing is emitted for it.
 
 Compare: **APL**, **BQN** and **UIUA**, where every primitive walks and there is nothing to write at all; **Julia**, whose

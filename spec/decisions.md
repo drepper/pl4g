@@ -9944,6 +9944,22 @@ generator's resume too, so that one rule says where the first argument of any in
 convention, `@[cdecl]`, keeps its shim.  Found on the way: a call through a value answering through the caller's room was never
 supported, with a shim or without; it is in TODO-pypl4g.md.
 
+**A function type is pure unless it says `@[impure]`; a lambda's purity is worked out; `can_ignore` is carried**
+
+Asked, the user decided that **a function type promises a pure function unless it says `@[impure]`**, as a definition does --
+against keeping "may do anything" as the default and writing `@[pure]` for the promise, which D does and which would have changed
+no program; that **a lambda's purity is worked out from its body**, as Rust works out `Fn`, against writing it on the lambda as on
+a definition; and that **a function type carries `@[can_ignore]` as well**.  So a pure function may call a value of a plain
+function type, an impure lambda or function stands only where `@[impure] fn` is wanted, and a call through a value whose type does
+not say `can_ignore` has its answer taken.  Two existing tests handed an impure function and an impure lambda to a plain function
+type and say `@[impure]` now; that is the change the default makes to a program.
+
+Taken without asking: what counts as impure in a lambda's body is what counts in a definition's -- everything `_an_effect` hears
+of, and an arena left holding room -- so the two cannot drift; `@[impure]` written before a lambda is refused (3204) rather than
+taken as a promise to be checked, since the type already says what the body does; a pure value stands where an impure one is
+wanted and one whose answer may be dropped where it may not, never the other way round.  Found on the way: a call of a name whose
+definition was refused said it was not a function as well, which it no longer does.
+
 Open questions
 --------------
 

@@ -511,11 +511,29 @@ class FuncType(Type):
     #: program -- kept in `⎕heap`, or nothing at all -- so that a value of it
     #: may go anywhere: `fn(u8) in ⎕heap → u8`.
     lasting: bool = False
+    #: Whether a function of this type may change something that outlives the
+    #: call.  A function type promises a pure one unless it says so, as a
+    #: definition is pure unless it says so -- and a pure function may call
+    #: through a value whose type makes the promise.
+    impure: bool = False
+    #: Whether a caller may let what it answers go nowhere.
+    can_ignore: bool = False
+
+    def _said(self, glyphs: bool) -> str:
+        """The promises written before `fn`, in the order they are written."""
+        words = [one for one, held in (("listable", self.listable),
+                                       ("impure", self.impure),
+                                       ("can_ignore", self.can_ignore)) if held]
+        if not words:
+            return ""
+        if glyphs:
+            return "".join(("@[", ", ".join(words), "] "))
+        return "".join(" ".join(words) + " ")
 
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
         inner = ", ".join(p.render() for p in self.params)
-        return "".join(("listable " if self.listable else "",
+        return "".join((self._said(False),
                         "fn(", inner, ")", " lasting" if self.lasting else "",
                         " \N{RIGHTWARDS ARROW} ", self.ret.render(),
                         " in arena" if self.hands_out else ""))
@@ -523,7 +541,7 @@ class FuncType(Type):
     def written(self) -> str:
         """The name of this type as a program writes it."""
         inner = ", ".join(p.written() for p in self.params)
-        return "".join(("@[listable] " if self.listable else "",
+        return "".join((self._said(True),
                         "fn(", inner, ")",
                         " in \N{APL FUNCTIONAL SYMBOL QUAD}heap" if self.lasting else "",
                         " \N{RIGHTWARDS ARROW} ", self.ret.written(),
@@ -536,7 +554,7 @@ class FuncType(Type):
         in parentheses, then the result.
         """
         inner = ",".join(p.mangled() for p in self.params)
-        return "".join(("listable " if self.listable else "",
+        return "".join((self._said(False),
                         "fn(", inner, ")", " lasting" if self.lasting else "",
                         self.ret.mangled(),
                         " in" if self.hands_out else ""))
@@ -1318,12 +1336,14 @@ class TypeContext:
 
     def func_type(self, params: tuple[Type, ...], ret: Type,
                   listable: bool = False, hands_out: bool = False,
-                  lasting: bool = False) -> FuncType:
+                  lasting: bool = False, impure: bool = False,
+                  can_ignore: bool = False) -> FuncType:
         """Return the function type with the given signature."""
-        key = (params, ret, listable, hands_out, lasting)
+        key = (params, ret, listable, hands_out, lasting, impure, can_ignore)
         found = self._functions.get(key)
         if found is None:
-            found = FuncType(params, ret, listable, hands_out, lasting)
+            found = FuncType(params, ret, listable, hands_out, lasting, impure,
+                             can_ignore)
             self._functions[key] = found
         return found
 

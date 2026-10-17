@@ -1235,8 +1235,12 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
         # not does, and the walk is the caller's business: a name that does not
         # ask for it simply does not do it.
         # And one whose environment lasts does everything one that may not does.
+        # A pure one does everything one that may change things does, and one
+        # whose answer may be dropped stands where the answer has to be taken.
         return ((found.listable or not expected.listable)
                 and (found.lasting or not expected.lasting)
+                and (not found.impure or expected.impure)
+                and (found.can_ignore or not expected.can_ignore)
                 and found.hands_out == expected.hands_out
                 and found.params == expected.params
                 and found.ret is expected.ret)
@@ -3340,6 +3344,11 @@ class Checker:
         #: outlive the call.  Where it did not, the places that would make such
         #: a change report one instead.
         self._impure: bool = False
+        #: Where a lambda being lowered notes that its body changes something
+        #: that outlives the call, rather than that being reported: a lambda says
+        #: nothing of its purity, and what its body does is what its type says.
+        #: Nothing where no lambda's body is being lowered.
+        self._observing: list[bool] | None = None
         #: Whether what is being checked may touch a device.  A function handed one
         #: may, which is what makes `@[impure]` mean "changes something global".
         self._may_do_io: bool = False
@@ -7416,10 +7425,12 @@ class Checker:
                 self._diags.emit(D.LANG_KEPT_IN_NOT_HEAP, ref.kept_in[1],
                                  name=ref.kept_in[0])
                 return ERROR
+            said = self._promised(ref.attrs)
             return self._module.types.func_type(
-                params, ret, self._walks_what_it_is_given(ref.attrs),
+                params, ret, "listable" in said,
                 hands_out=ref.made_in is not None,
-                lasting=ref.kept_in is not None)
+                lasting=ref.kept_in is not None,
+                impure="impure" in said, can_ignore="can_ignore" in said)
         return self._named_type(ref)
 
     # -- units -----------------------------------------------------------------
@@ -9331,6 +9342,17 @@ class Checker:
         off with `defer`, which has run by the time this is asked.
         """
         if self._impure:
+            return
+        if self._observing is not None:
+            # A lambda leaving an arena holding room is one that changes
+            # something that outlives it, which its type then says.
+            given = set().union(*self._emptied) if self._emptied else set()
+            if any(not local.is_parameter and not local.handed_out
+                   and self._is_arena(local) and self._held_by(local) is ARENA
+                   and id(local) not in given
+                   for scope in self._scopes[opened_at:]
+                   for local in scope.values()):
+                self._observing[0] = True
             return
         node, func = self._demanding
         name = func.name if func is not None else ""
@@ -11663,7 +11685,10 @@ class Checker:
             return UndefConst(ERROR)
         if any(one.ty is ERROR for one in args):
             return UndefConst(ERROR)
-        self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=local.name)
+        if ty.impure:
+            # What its type promises is what is known of it: a pure one may be
+            # called from a pure function, as a pure definition may.
+            self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=local.name)
         # Both halves are read once, before any call is made: a walk makes one
         # call per element and they all go to the same code with the same
         # environment.
@@ -12415,6 +12440,13 @@ class Checker:
             return UndefConst(ERROR)
         return answer
 
+    def _promised(self, attrs: Sequence[ast.Attribute]) -> set[str]:
+        """What is written before a function type or a lambda, of the three things
+        a caller reads off a type: `listable`, `impure` and `can_ignore`.
+        Anything else written there is reported as an attribute that does not
+        apply."""
+        return {one.name for one in self._bind_attributes(attrs, AttrTarget.CALLABLE)}
+
     def _walks_what_it_is_given(self,
                                 attrs: Sequence[ast.Attribute]) -> bool:
         """Whether what is written before a lambda or a function type says
@@ -12474,7 +12506,15 @@ class Checker:
             # handed has to be one that may be written.
             self._diags.emit(D.LANG_WRITES_ARRAYS_AS_A_VALUE, expr.span, name=name)
             return UndefConst(ERROR)
-        walks = self._walks_what_it_is_given(expr.attrs)
+        said = self._promised(expr.attrs)
+        walks = "listable" in said
+        if "impure" in said:
+            # What a lambda's body does is what its type says: there is nothing
+            # for the word to add, and saying it would be saying the body is
+            # something it may not be.
+            self._diags.emit(D.LANG_ATTR_NOT_APPLICABLE, expr.span, name="impure",
+                             target="a lambda, whose purity is worked out from "
+                             "its body")
         arena: tuple[Value, frozenset[int]] | None = None
         lasting = False
         if expr.kept_in is not None:
@@ -12496,9 +12536,6 @@ class Checker:
             # is asked for, it is what is given.
             wanted = self._aiming_at(expected)
             lasting = isinstance(wanted, FuncType) and wanted.lasting
-        ty = self._module.types.func_type(
-            params, answer, walks, hands_out=_hands_out_of(expr) is not None,
-            lasting=lasting)
         if walks and not params:
             # Named the way the report log names it, that being the one name
             # this function has and the one a reader can look up.
@@ -12527,10 +12564,24 @@ class Checker:
                 return UndefConst(ERROR)
         place, offsets, allocator, kept = self._environment(
             builder, taken, held, expr.span, stays, arena)
-        func = self._function_of_a_lambda(expr, params, answer, held, offsets,
-                                          taken, name)
+        # What the lambda is being given to, which a mismatch below names: the
+        # body's own statements say other things while it is lowered.
+        context = (self._operand_of, self._handing_over, self._assigning,
+                   self._initializing)
+        try:
+            func = self._function_of_a_lambda(expr, params, answer, held, offsets,
+                                              taken, name)
+        finally:
+            (self._operand_of, self._handing_over, self._assigning,
+             self._initializing) = context
         if func is None:
             return UndefConst(ERROR)
+        # Made once the body is: whether it changes anything is what lowering it
+        # found.
+        ty = self._module.types.func_type(
+            params, answer, walks, hands_out=_hands_out_of(expr) is not None,
+            lasting=lasting, impure=func.attrs.impure,
+            can_ignore="can_ignore" in said)
         # What it carries is an address and says nothing about what is there:
         # one type covers every lambda, and what is at the address is the
         # lambda's own business.
@@ -12701,11 +12752,13 @@ class Checker:
         # It brought nothing in, so it carries no environment and no allocator,
         # and lasts as long as the program -- which its type says where that
         # is what is wanted.
+        # And says what its definition says that a caller reads off a type:
+        # whether it may change things, and whether its answer may be dropped.
         wanted = self._aiming_at(expected)
-        ty = func.ty
-        if isinstance(wanted, FuncType) and wanted.lasting:
-            ty = self._module.types.func_type(ty.params, ty.ret, ty.listable,
-                                              ty.hands_out, lasting=True)
+        ty = self._module.types.func_type(
+            func.ty.params, func.ty.ret, func.ty.listable, func.ty.hands_out,
+            lasting=isinstance(wanted, FuncType) and wanted.lasting,
+            impure=func.attrs.impure, can_ignore=func.attrs.can_ignore)
         made = builder.make_tuple(
             (builder.code_address(shim, ref.span),
              builder.cast(CastKind.BITCAST, builder.int_const(U64, 0),
@@ -13012,7 +13065,10 @@ class Checker:
         outer_borrows, self._borrows = self._borrows, []
         self._outside = self._outside + self._scopes
         self._scopes, self._addressed = [], set()
-        self._answering, self._impure = answer, True
+        # Pure, but observed: whatever the body changes is noted rather than
+        # reported, and the lambda's type says what was noted.
+        outer_observing, self._observing = self._observing, [False]
+        self._answering, self._impure = answer, False
         self._carried, self._loops = set(), []
         self._push_scope()
         if hands_out is not None:
@@ -13078,6 +13134,8 @@ class Checker:
              self._thin_to, self._answer_arms, self._yield_answer,
              self._hands_out, self._hands_out_local, self._receiving) = outer
             self._borrows = outer_borrows
+            observed, self._observing = self._observing, outer_observing
+        func.attrs = replace(func.attrs, impure=bool(observed and observed[0]))
         return func
 
     def _all_of_it_used(self,
@@ -18379,7 +18437,17 @@ class Checker:
         is what standing as a statement already says.
         """
         func = self._callee_named(expr.callee)
-        if func is None or func.ty.ret is VOID or func.attrs.can_ignore:
+        if func is None:
+            # Through a value: what its type says is what there is to go by.
+            local = self._find_local(expr.callee.name) \
+                if isinstance(expr.callee, ast.NameRef) else None
+            held = self._held_by(local) if local is not None else None
+            if isinstance(held, FuncType) and held.ret is not VOID \
+                    and not held.can_ignore:
+                self._diags.emit(D.LANG_CALL_ANSWER_DROPPED, expr.span,
+                                 name=expr.callee.name)
+            return
+        if func.ty.ret is VOID or func.attrs.can_ignore:
             return
         self._diags.emit(D.LANG_CALL_ANSWER_DROPPED, expr.span, name=func.name)
 
@@ -24412,9 +24480,13 @@ class Checker:
                                    found.doc or None)
                     self._only_at_build(found, expr.span)
                     return found
-                if found is None and self._find_local(expr.name) is None:
+                local = self._find_local(expr.name)
+                if found is None and local is None:
                     self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, expr.span,
                                      name=expr.name)
+                    return None
+                if local is not None and self._held_by(local) is ERROR:
+                    # Its definition was reported, and is why it holds nothing.
                     return None
                 self._diags.emit(D.LANG_CALL_NOT_A_FUNCTION, expr.span,
                                  name=expr.name)
@@ -24874,6 +24946,9 @@ class Checker:
         what has to change is one attribute on the *caller's* line.
         """
         if self._impure:
+            return
+        if self._observing is not None:
+            self._observing[0] = True
             return
         held = self._demanding[0] if self._demanding is not None else None
         name = getattr(held, "name", "")

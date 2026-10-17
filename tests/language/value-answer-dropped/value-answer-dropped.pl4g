@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4474
+
+※ What a call through a value answers is taken unless its type says
+※ `@[can_ignore]`, as for a call by name.
+
+let std := ⎕import("std")
+
+@[impure]
+fn drops(f: fn(u8) → u8):
+    f(1u8)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

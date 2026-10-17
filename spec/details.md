@@ -813,6 +813,15 @@ into an arm that starts on a later line, a one-line `if` having nowhere of its o
 `else` ends after it, at its column.  Where a variable's
 last use moves its value out -- `_moved` keeps the places in `_moved_from` -- no entry is made: the move was logged, and is the end.
 
+**What a function type promises a caller** is three fields of `FuncType`: `listable`, `impure` and `can_ignore`, read off what is
+written before `fn` or a lambda by `_promised`, and held to one-way subtyping in `_promises_as_much`.  A named function's value takes the
+last two from its definition's attributes in `_function_as_a_value`, its own `func.ty` staying as it was.  A lambda's body is
+lowered pure with `_observing` set: `_an_effect`, through which everything that changes what outlives a call comes, notes the
+change there instead of reporting it, and so does `_all_given_back` for an arena left holding room; what was noted becomes the
+lambda function's `impure` and its type's, which is therefore made after the body rather than before it.  The context a mismatch
+is reported in -- what is being initialized, assigned, handed over -- is kept across lowering the body, which sets its own.  A call
+through a value is an effect only where its type says `impure`, and `_answer_is_taken` asks the type's `can_ignore`.
+
 **A reference in a product or a tuple answered with** is asked about in two places.  `_holds_a_short_reference` says whether a type
 holds one that does not last as long as the program, which is what `_borrowed_from` refuses in any answer (4531) and
 `_collect_global` at the top level (4532).  A tuple written out in the answer is asked member by member instead

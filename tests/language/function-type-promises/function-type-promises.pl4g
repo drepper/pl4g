@@ -1,0 +1,60 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ What a function type promises a caller, besides `listable`.
+※
+※ **A function type is pure unless it says `@[impure]`**, as a definition is
+※ pure unless it says so: `apply` is pure and calls what it is handed, which a
+※ plain `fn` type promises changes nothing.  A value that may change things has
+※ a type saying `@[impure]`, and a pure one stands where that is wanted.
+※
+※ **A lambda's purity is worked out from its body** and is what its type says:
+※ `plus` changes nothing and `loud` writes a variable at the top level.
+※
+※ **`@[can_ignore]` says a caller may drop the answer**, as on a definition; a
+※ value saying it stands where a plain one is wanted, where the answer must
+※ then be taken.
+
+let std := ⎕import("std")
+
+let counted: mut u8 = 0u8
+
+fn doubled(x: u8) → u8:
+    x + x
+
+@[impure]
+fn noted(x: u8) → u8:
+    counted ← counted + x
+    x
+
+@[can_ignore]
+fn tried(x: u8) → u8:
+    x
+
+※ pure: it may call a value whose type promises a pure function
+fn apply(f: fn(u8) → u8, x: u8) → u8:
+    f(x)
+
+@[impure]
+fn each(f: @[impure] fn(u8) → u8, x: u8) → u8:
+    f(x)
+
+@[impure]
+fn quietly(f: @[can_ignore] fn(u8) → u8):
+    f(1u8)
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let n: u8 = 3u8
+    let plus: fn(u8) → u8 = λ a: u8 [n] → u8 { a + n }
+    let loud: @[impure] fn(u8) → u8 = λ a: u8 → u8 { counted ← counted + 1u8; a }
+    quietly(tried)
+    quietly(@[can_ignore] λ a: u8 → u8 { a })
+    let plain: fn(u8) → u8 = tried
+    if apply(doubled, 2u8) ≠ 4u8 ∨ apply(plus, 2u8) ≠ 5u8:
+        1u6
+    elif each(noted, 4u8) ≠ 4u8 ∨ each(doubled, 2u8) ≠ 4u8 ∨ each(loud, 1u8) ≠ 1u8:
+        2u6
+    elif counted ≠ 5u8 ∨ plain(7u8) ≠ 7u8:
+        3u6
+    else:
+        0u6

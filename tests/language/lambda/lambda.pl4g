@@ -65,7 +65,7 @@ fn main(init: std.Init) → u6:
     ※ the variable itself, so what it holds later is what it reads
     let seen: fn(u8) → u8 = λ a: u8 [&n] → u8 { a + n }
     ※ answering with nothing, which is written by leaving the arrow off
-    let bump: fn(u8) = λ a: u8:
+    let bump: @[impure] fn(u8) = λ a: u8:
         counted ← counted + a
     ※ a name brought in to be written and never read, which is using it
     let put: fn(u8) = λ a: u8 [&n]:

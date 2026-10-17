@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4480
+
+※ A pure function may call a value whose type promises a pure function, and not
+※ one whose type says `@[impure]`.
+
+let std := ⎕import("std")
+
+fn calls(f: @[impure] fn(u8) → u8) → u8:
+    f(1u8)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

@@ -1074,9 +1074,10 @@ Runtime
     tag costs a branch at every indirect call to save a call at some of them.  Done on 2026-10-17, neither of those: asked, the
     user chose the static-chain register -- r11, x15, t2 -- which a named function never reads, so the value points at it.
 
-[ ] say more about a lambda than `listable`.  Everything else a function writes is about its body, and a body is not what a name
+[x] say more about a lambda than `listable`.  Everything else a function writes is about its body, and a body is not what a name
     holds -- but `can_ignore` is about a caller, and `impure` would let a pure function call one that is not.  Both want the type
-    to carry them, which is the same machinery `listable` just gained.
+    to carry them, which is the same machinery `listable` just gained.  Done on 2026-10-17, as the user decided: a function type
+    is pure unless it says `@[impure]`, a lambda's purity is worked out from its body, and `@[can_ignore]` is carried too.
 
 [ ] say that two parameters live as long as each other, so that `fn keep(slot: &mut &mut u32, r: &mut u32)` writing
     `slot⌖ ← r` can be allowed.  It is refused outright today (4571), which is sound and costs the programs that

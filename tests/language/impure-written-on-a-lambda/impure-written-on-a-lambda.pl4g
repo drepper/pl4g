@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=3204
+
+※ A lambda's purity is worked out from its body, so `@[impure]` is not written
+※ before one: there is nothing for it to add.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let f: @[impure] fn(u8) → u8 = @[impure] λ a: u8 → u8 { a }
+    0u6
