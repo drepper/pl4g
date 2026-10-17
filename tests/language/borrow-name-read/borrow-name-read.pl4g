@@ -15,7 +15,10 @@ fn main(init: std.Init) → u6:
     let n: mut u8 = 1u8
     let r: &mut u8 = &mut n
     r⌖ ← 2u8
-    if n ≠ 2u8:
+    ※ read while `r` is still to be used below: the borrow is out
+    let seen: u8 = n
+    r⌖ ← seen
+    if seen ≠ 2u8:
         1u6
     else:
         0u6

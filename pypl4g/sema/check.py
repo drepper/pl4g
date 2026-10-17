@@ -93,6 +93,7 @@ from .notes import (FUNCTION, MODULE, PARAMETER, TYPE, VARIABLE, Note,
                     Notes)
 from ..source.manager import SourceManager
 from .lastuse import LastUses, end_of, line_after
+from .liveness import Liveness
 from .attributes import (AttrSpec, AttrTarget, BoundAttr, SPECIAL_OF_TEST_KIND,
                          TARGET_NAMES, lookup)
 
@@ -231,6 +232,10 @@ class _Borrow:
     #: nothing for the whole of it.  Two fields are two places, so references to
     #: two may both be out; a field and the record holding it are not.
     path: tuple[str, ...] = ()
+    #: The binding of the name that keeps it, where one does, and that name: it
+    #: is out while that name is live and not once the name's last use is past.
+    keeper: int | None = None
+    keeper_name: str = ""
 
 
 def _overlap(one: tuple[str, ...], other: tuple[str, ...]) -> bool:
@@ -3393,6 +3398,17 @@ class Checker:
         #: The names read through with `⌖`, by identity: a read of a `&mut` that
         #: is not one of them is a copy of it, and lends it (`_lower_name`).
         self._read_through_ids: set[int] = set()
+        #: What `Liveness` said of every statement of the functions lowered so far,
+        #: by the statement's identity, and which functions it has been asked of.
+        self._live_in: dict[int, frozenset[int]] = {}
+        self._live_ends: dict[int, frozenset[int]] = {}
+        self._live_done: set[int] = set()
+        #: What is live at the statement being lowered: a borrow whose keeper is
+        #: not among it is no longer out.  Nothing where nothing was worked out.
+        self._current_live: frozenset[int] | None = None
+        #: Which `borrow-ended` entries were written, so that a body lowered
+        #: twice writes each once.
+        self._borrow_ends_told: set[tuple[int, int, str]] = set()
         #: Whether what is being checked may touch a device.  A function handed one
         #: may, which is what makes `@[impure]` mean "changes something global".
         self._may_do_io: bool = False
@@ -9708,6 +9724,7 @@ class Checker:
         if node.body is not None:
             _addressed_in(node.body, self._addressed)
             _read_through(node.body, self._read_through_ids)
+            self._live_for(node)
         # Every parameter gets its register before any of them is given storage:
         # a block's parameters are what it is entered with, and the storage is
         # written by instructions that follow them.
@@ -9829,6 +9846,7 @@ class Checker:
         wanted of, in which case its last statement has to have one.
         """
         self._deferred.append([])
+        outer_live = self._current_live
         # To the end of its last statement: a block's own span runs on to the
         # next statement.
         self._block_spans.append(Span(block.span.start,
@@ -9844,11 +9862,19 @@ class Checker:
                 if builder.is_terminated:
                     self._diags.emit(D.LANG_STMT_UNREACHABLE, stmt.span)
                     return None
+                # What is live here is what a borrow kept by a name needs to be
+                # out: the name's last use is where it ends.
+                live = self._live_in.get(id(stmt))
+                if live is not None:
+                    self._borrows_ended_at(stmt)
+                    self._current_live = live
                 if is_last and produces:
                     answer = self._lower_yielding(builder, stmt, func, wanted)
                 else:
                     self._lower_attributed_stmt(builder, stmt, func,
                                                 as_result and is_last)
+                if live is not None:
+                    self._current_live = live
                 self._statement_ended()
             if produces and answer is None and not builder.is_terminated:
                 self._diags.emit(D.LANG_MATCH_ARM_HAS_NO_VALUE, block.span)
@@ -9870,6 +9896,7 @@ class Checker:
             self._unrun_deferred(func, frame)
             self._deferred.pop()
             self._block_spans.pop()
+            self._current_live = outer_live
             self._last_emptied = self._emptied.pop()
 
     def _lower_yielding(self, builder: IRBuilder, stmt: ast.Stmt, func: Function,
@@ -12129,6 +12156,7 @@ class Checker:
             assert node.body is not None
             _addressed_in(node.body, self._addressed)
             _read_through(node.body, self._read_through_ids)
+            self._live_for(node)
             self._unscanned = node.body
             arriving = [block.add_param(one, param.name)
                         for one, param in zip(func.ty.params, node.params)]
@@ -13130,6 +13158,7 @@ class Checker:
         try:
             _addressed_in(expr.body, self._addressed)
             _read_through(expr.body, self._read_through_ids)
+            self._live_for(expr)
             brought: list[tuple[ast.Capture, _Local]] = []
             for at, ((one, local), what) in enumerate(zip(taken, held)):
                 # What is in the environment is what was put there: the value
@@ -13335,10 +13364,64 @@ class Checker:
         for one in self._borrows:
             if one.depth == _UNTIL_THE_STATEMENT_ENDS:
                 one.depth = depth
+                one.keeper = keeper.start
                 lender = self._find_local(one.name)
                 if lender is not None:
                     self._lends.setdefault(keeper.start, set()).add(
                         lender.span.start)
+
+    def _keeper_named(self, keeper: Span) -> str:
+        """The name bound where *keeper* is, for what the log says of it."""
+        for scope in reversed(self._scopes):
+            for local in scope.values():
+                if local.span.start == keeper.start:
+                    return local.name
+        return ""
+
+    def _still_out(self, borrow: _Borrow) -> bool:
+        """Whether *borrow* is out at the statement being lowered: one a name
+        keeps is out while the name is live -- until its last use on this way
+        through, and not until its scope ends."""
+        return borrow.keeper is None or self._current_live is None \
+            or borrow.keeper in self._current_live
+
+    def _borrows_ended_at(self, stmt: ast.Stmt) -> None:
+        """Write to the log where a borrow kept by a name ends: as *stmt* begins,
+        on a way through that reached it with the name live and finds it no
+        longer used -- which is where `_still_out` stops counting the borrow, both
+        reading the same liveness."""
+        ending = self._live_ends.get(id(stmt))
+        if not ending:
+            return
+        for one in self._borrows:
+            if one.keeper is None or one.keeper not in ending:
+                continue
+            key = (id(stmt), one.keeper, one.name)
+            if key in self._borrow_ends_told:
+                continue
+            self._borrow_ends_told.add(key)
+            keeper = one.keeper_name or self._keeper_named(
+                Span(one.keeper, one.keeper)) or "?"
+            self._module.reports.record(
+                ReportKind.BORROW_ENDED, one.name, "".join((
+                    "lent to '", keeper, "' until here: '", keeper, "' is not used "
+                    "again on this way through, so '", one.name,
+                    "' may be lent again from here")),
+                Span(stmt.span.start, stmt.span.start))
+
+    def _live_for(self, node: ast.FuncDef | ast.Lambda) -> None:
+        """Work out, once, which names each statement of *node* has still to
+        use."""
+        if id(node) in self._live_done:
+            return
+        self._live_done.add(id(node))
+        found = Liveness()
+        if isinstance(node, ast.Lambda):
+            found.lambda_(node)
+        else:
+            found.function(node)
+        self._live_in.update(found.live_in)
+        self._live_ends.update(found.ends)
 
     def _borrowed_name(self, expr: ast.Expr) -> tuple[str, tuple[str, ...]] | None:
         """Which local's place `&expr` reaches, where it reaches one, and which
@@ -13384,7 +13467,7 @@ class Checker:
             return
         for one in self._borrows:
             if one.name != name or not (one.mutable or mutable) \
-                    or not _overlap(one.path, path):
+                    or not _overlap(one.path, path) or not self._still_out(one):
                 continue
             self._diags.emit(D.LANG_BORROW_ALIASED, span, name=name) \
                 .note(D.LANG_BORROW_LENT_HERE, one.span, name=name)
@@ -13403,7 +13486,7 @@ class Checker:
         """
         for one in self._borrows:
             if one.name != name or not (writing or one.mutable) \
-                    or not _overlap(one.path, path):
+                    or not _overlap(one.path, path) or not self._still_out(one):
                 continue
             self._diags.emit(D.LANG_BORROW_NAME_WRITTEN if writing
                              else D.LANG_BORROW_NAME_READ, span, name=name) \

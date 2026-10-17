@@ -813,6 +813,16 @@ into an arm that starts on a later line, a one-line `if` having nowhere of its o
 `else` ends after it, at its column.  Where a variable's
 last use moves its value out -- `_moved` keeps the places in `_moved_from` -- no entry is made: the move was logged, and is the end.
 
+**A borrow a name keeps ends at the name's last use.**  `sema/liveness.py` works out, backwards over each function's tree and once,
+which bindings are live as each statement begins (`live_in`): an `if` and a `match` join their arms, a loop goes to a fixed point,
+`break`, `continue` and `return` leave with what is live where they go, a deferred statement's uses are live until its block is
+left and what a `foreach` walks for the whole loop.  `_Borrow.keeper` is the binding of the name that keeps it, set where
+`_kept_by_a_name` promotes it; `_lower_block` keeps the `live_in` of the statement being lowered in `_current_live`, and
+`_still_out` counts a kept borrow only while its keeper is in it.  Then a forward walk over the same answers, carrying per way
+through which names are live and joining a choice's arms, notes the statement each stops being live at (`ends`) -- which is
+where `_still_out` stops counting it -- and `_borrows_ended_at` writes a `borrow-ended` entry there.  The log is the checker's
+range because both read the one `live_in`.
+
 **A `&mut` copied is lent** in `_lower_name`: a local holding a reference, read anywhere but directly under `⌖` -- the names
 `_read_through` collects before a body is lowered -- calls `_lend` on its own name, shared where a `&` is wanted and writable
 otherwise, and checks `_lent_out` first as a place's name is checked.  The lend is the statement's until something keeps it:

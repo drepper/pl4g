@@ -9988,6 +9988,21 @@ shared by everything made in it and governed by rules of its own.  Found on the 
 to a name in an inner scope stayed lent until the scope around it ended -- the borrow was recorded at one depth and dropped at
 another.
 
+**A borrow a name keeps ends at the name's last use; the log says where, way by way**
+
+The user asked for the entry in TODO-language.md -- Rust's non-lexical lifetimes, the design the entry names -- and that **the
+report log show the exact range the compiler assumed**.  So a liveness analysis is worked out once per function, a borrow is
+counted only while the name keeping it is live, and a forward walk over the same answers notes where, on each way through, the
+name stops being live: the `borrow-ended` entry stands there, which is exactly where the checker stops counting the borrow, since
+both read the same answer and nothing is worked out twice.
+
+Taken without asking: the analysis is by statement, the question the borrow rules ask being one of a statement -- so a borrow
+ends after the statement holding the last use, not within it; a loop keeps what a later turn uses for the whole loop; a deferred
+statement keeps what it uses until its block is left; a name given a new value is not live before it, though a borrow it kept is
+still released only by that liveness, the separate entry about rebinding being left for itself.  An existing test that read the
+name of a place after the reference to it was done with was refused under the lexical rule and is not now; it reads the place
+before the reference's last use instead, to keep testing what it was written to test.
+
 Open questions
 --------------
 

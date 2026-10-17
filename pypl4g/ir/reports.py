@@ -125,6 +125,10 @@ class ReportKind(StrEnum):
     #: of its block -- or where a name holding a reference to it ends.  Each
     #: is on the line after the one the scope ends on.
     SCOPE_ENDED = "scope-ended"
+    #: Where a place stopped being lent to the name that kept a reference to
+    #: it: after that name's last use on a way through, which is where the
+    #: borrow rules stop counting it -- the range the compiler assumed.
+    BORROW_ENDED = "borrow-ended"
     #: A variable whose type the program did not write in full -- `let x :=`,
     #: `let x: mut =`, `⟦⟧` alone, a shape stated in part, a name a loop or a
     #: taking apart binds -- and the type it was given.  A reader asking "what

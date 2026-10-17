@@ -1090,10 +1090,11 @@ Runtime
     closes it with moves and reborrows, which need an ownership rule this language does not have.  Done on 2026-10-17, as the
     user decided: a `&mut` copied is a reborrow, lent until the copy's scope ends, shared where the copy is a `&`.
 
-[ ] end a reference where it is last used rather than where its scope does.  A reference a name kept lives as long as the name
+[x] end a reference where it is last used rather than where its scope does.  A reference a name kept lives as long as the name
     (4563), which refuses programs that are plainly fine -- a `&mut` written through and then never mentioned again, followed by
     a second one.  Rust's non-lexical lifetimes are the design to compare against, and what it costs is a liveness analysis where
-    today there is a list.
+    today there is a list.  Done on 2026-10-17: `sema/liveness.py`, a borrow counted while its keeper is live, and each end
+    written to the report log (`borrow-ended`) where the checker stopped counting it.
 
 [ ] release a reference when the name that kept it is bound to something else.  `moving ← &mut m` makes a second row and leaves
     the first, so what `moving` used to name stays lent for the rest of the scope.  Nothing is wrong with the programs that

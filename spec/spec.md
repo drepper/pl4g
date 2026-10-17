@@ -3034,7 +3034,9 @@ reference says the same thing and says it once -- and while any reference is out
 exactly the change whoever holds it was promised would not happen.  A `&` lends nothing away that a read would disturb, so a name
 lent that way stays readable.
 
-**A reference lives until the name that kept it does, and no longer.**  One nothing bound -- handed straight to a call -- is gone
+**A reference lives until the last use of the name that kept it, and no longer** -- on each way through: after the statement that
+uses the name last, or where an arm that never uses it begins, or after a loop that does.  What is used on a later turn of a loop
+is used on this one, so a reference a loop needs lasts the whole loop.  One nothing bound -- handed straight to a call -- is gone
 when the call is, if what the call answers cannot hold a reference; otherwise when the statement is.  So the same place may be lent
 again on the next line, and again in the same expression:
 
@@ -3044,10 +3046,21 @@ bump(&mut p) + bump(&mut p)    ※ and twice more, one after the other
 (⍕a in pool) ⧺ (⍕b in pool)    ※ an arena lent to two calls in turn
 ```
 
-That is the lexical rule, and it is Rust's before non-lexical lifetimes, with the one refinement that an argument's borrow ends
-with the call where the answer has nowhere to keep it.  Rust now ends a borrow at its last use, which reads more
-programs at the price of a liveness analysis to say where a reference stops existing; here a generator that wants the place back
-opens a scope or writes the statement, and the rule can be read off the source with nothing computed.  **Two fields are two
+```
+let a: &mut u8 = &mut n
+a⌖ ← 2u8                       ※ a's last use: n is free from here
+let b: &mut u8 = &mut n        ※ so this is not a second one out
+if c:
+    b⌖ ← 3u8                   ※ b out until here on this way
+else:
+    n ← 0u8                    ※ b never used on this one: free
+```
+
+That is Rust's non-lexical lifetimes, with the refinement that an argument's borrow ends with the call where the answer has
+nowhere to keep it.  What it costs is a liveness analysis, worked out over the body once; what it buys is that a program which
+is plainly right -- a reference written through and not mentioned again, followed by a second -- is not refused.  **Where each
+borrow ended is in the report log** (`borrow-ended`), above the statement where the place may be lent again, on every way through
+that ends it: that is the range the compiler assumed, read off the same analysis the rule is.  **Two fields are two
 places**: a `&mut` to one and a reference to another may be out at once -- `copy(&mut init.io.input, &mut init.io.output)` -- and a
 third field may be read or written beside them; a field and the record holding it, or a record holding it in turn, are one place
 (4563).  Which field is written down, so nothing is computed to tell them apart; Rust's borrow checker splits a borrow by field the

@@ -1,0 +1,39 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A reference a name keeps is out until the name's last use, not until its scope
+※ ends.
+※
+※ So a `&mut` written through and not mentioned again leaves its place free for
+※ the next one; one used in a single arm of an `if` leaves the place free in the
+※ other; one used in a loop keeps it until the loop is done, a later turn being
+※ able to come back to it; and a `&mut` copied out of another lends that one only
+※ until the copy's last use.  The report log says where each borrow ended, way by
+※ way: where the checker stopped counting it.
+※
+※ Compare **Rust**'s non-lexical lifetimes (RFC 2094), which this is.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let n: mut u8 = 1u8
+    let a: &mut u8 = &mut n
+    a⌖ ← 2u8
+    let b: &mut u8 = &mut n
+    b⌖ ← b⌖ + 1u8
+    n ← n + 1u8
+    let c: &mut u8 = &mut n
+    if #init.args > 0:
+        c⌖ ← c⌖ + 1u8
+    else:
+        n ← 0u8
+    n ← n + 1u8
+    let d: &mut u8 = &mut n
+    foreach i := 0u8…3u8:
+        d⌖ ← d⌖ + i
+    n ← n + 1u8
+    let r: &mut u8 = &mut n
+    let other: &mut u8 = r
+    other⌖ ← other⌖ + 1u8
+    r⌖ ← r⌖ + 1u8
+    if n = 12u8: 0u6 else: 1u6
