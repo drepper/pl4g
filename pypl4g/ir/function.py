@@ -259,6 +259,11 @@ class Function:
     #: part names was named by.  Keyed by where the part stands among the
     #: tuple's leaves, which is how a part is taken out of one.
     leaf_borrows: dict[int, tuple[int, ...]] = field(default_factory=dict)
+    #: Pairs of parameters, `(slot, kept)`, where what `slot` refers to holds a
+    #: reference carrying the lifetime name that `kept`'s own reference carries:
+    #: the two live as long as each other, so the body may put the one in the
+    #: other and each call is held to it.
+    keeps: tuple[tuple[int, int], ...] = ()
     #: Which arena parameters the answer was made in, where `→ T in a, b` said so,
     #: and nothing where the signature said nothing -- in which case a caller takes
     #: the answer to be made in any arena it handed over.

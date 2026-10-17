@@ -1975,6 +1975,30 @@ def _empties_named(node: object, into: set[str]) -> None:
 _CALLING: Final = (ast.Call, ast.Fresh, ast.Allocated, ast.Binary, ast.Unary)
 
 
+def _held_lifetime(ref: object) -> str | None:
+    """The lifetime name on the reference a parameter's reference refers to --
+    `⧖a` in `&mut &mut ⧖a u32` -- or nothing."""
+    if isinstance(ref, ast.RefTypeRef) and isinstance(ref.pointee, ast.RefTypeRef):
+        return ref.pointee.lifetime
+    return None
+
+
+def _kept_pairs(node: ast.FuncDef) -> tuple[tuple[int, int], ...]:
+    """Every `(slot, kept)` pair of a signature: the place `slot` refers to holds a
+    reference carrying the name that `kept`'s own reference carries, so the two
+    live as long as each other."""
+    found: list[tuple[int, int]] = []
+    for at, param in enumerate(node.params):
+        held = _held_lifetime(param.type)
+        if held is None:
+            continue
+        for other, given in enumerate(node.params):
+            if other != at and isinstance(given.type, ast.RefTypeRef) \
+                    and given.type.lifetime == held:
+                found.append((at, other))
+    return tuple(found)
+
+
 def _holds_a_short_reference(ty: Type,
                              seen: frozenset[int] = frozenset()) -> bool:
     """Whether a value of *ty* holds, anywhere inside it, a reference that does
@@ -5867,6 +5891,7 @@ class Checker:
                             defaults=self._defaults_of(node, params),
                             borrows_from=borrows,
                             leaf_borrows=self._member_borrows(node, ret),
+                            keeps=_kept_pairs(node),
                             made_in=made_in, param_made_in=param_made_in,
                             exported=self._is_export(attrs),
                             cconv=(func_attrs.abi if func_attrs.abi is not None
@@ -12009,6 +12034,7 @@ class Checker:
                 defaults=self._defaults_of(node, params),
                 borrows_from=self._borrowed_from(node, answer),
                 leaf_borrows=self._member_borrows(node, answer),
+                keeps=_kept_pairs(node),
                 made_in=made_in, param_made_in=param_made_in)
             self._module.add_function(
                 func, key=self._key("".join((node.name, "\N{TOP LEFT CORNER}",
@@ -12429,6 +12455,7 @@ class Checker:
             made.append(place)
         args = made
         self._what_it_changes(func, expr.span)
+        self._kept_alike(func, args, expr.span)
         answer = builder.call(func, list(args), func.ty.ret, expr.span)
         answer = self._as_long_as_given(builder, func, args, answer, expr.span)
         self._where_made(expr, func)
@@ -13208,8 +13235,10 @@ class Checker:
                 # it, and neither end can see it: the body does not know how
                 # long the place lasts and the caller does not know what the
                 # body did with it.  What lasts as long as the program outlives
-                # any caller and may go there.
-                if not self._lasting(value):
+                # any caller and may go there -- and so does what the signature
+                # says lives as long as the place, each call being held to it.
+                if not self._lasting(value) \
+                        and not self._said_alike(target, value):
                     self._diags.emit(
                         D.LANG_REF_WRITTEN_INTO_A_PLACE_FROM_OUTSIDE,
                         stmt.span)
@@ -13689,6 +13718,52 @@ class Checker:
                 seen = seen.operands[0]
                 continue
             return None
+
+    def _parameter_sources(self, at: int) -> list[Value]:
+        """What parameter *at* of the function being lowered arrived as, and where
+        it is kept if it was given storage of its own."""
+        node = self._demanding[0] if self._demanding is not None else None
+        if not isinstance(node, ast.FuncDef) or at >= len(node.params):
+            return []
+        name = node.params[at].name
+        found = [self._at_entry[name]] if name in self._at_entry else []
+        local = self._find_local(name)
+        if local is not None and local.placed:
+            found.append(local.value)
+        return found
+
+    def _said_alike(self, place: Value, value: Value) -> bool:
+        """Whether the signature says *value* lives as long as the reference the
+        place it is written into holds: the place reached from a parameter whose
+        held reference carries a lifetime name, the value from one whose own
+        reference carries the same.  Each call is held to it (`_kept_alike`)."""
+        node = self._demanding[0] if self._demanding is not None else None
+        if not isinstance(node, ast.FuncDef):
+            return False
+        return any(_reached_from(place, self._parameter_sources(slot))
+                   and _reached_from(value, self._parameter_sources(kept))
+                   for slot, kept in _kept_pairs(node))
+
+    def _kept_alike(self, func: Function, args: Sequence[Value],
+                    span: Span) -> None:
+        """Hold a call to what its signature says lives as long as what.
+
+        For each `(slot, kept)` pair the callee may put what was handed for `kept`
+        in the place handed for `slot` refers to, so the one has to last as long as
+        that place -- the rule `s ← &mut x` follows (4570).  A place this call did
+        not make is one only a signature saying the same, or a reference lasting as
+        long as the program, may be handed for (4571).
+        """
+        for slot, kept in func.keeps:
+            if max(slot, kept) >= len(args):
+                continue
+            place, value = args[slot], args[kept]
+            named = self._named_place_of(place)
+            if named is not None:
+                self._outlives_it(value, named.depth, named.name, span)
+            elif not self._lasting(value) and not self._said_alike(place, value):
+                self._diags.emit(D.LANG_REF_WRITTEN_INTO_A_PLACE_FROM_OUTSIDE,
+                                 span)
 
     def _outlives_it(self, value: Value, depth: int, where: str,
                      span: Span) -> bool:
@@ -22217,6 +22292,7 @@ class Checker:
                 lambda given, span: builder.call(func, tuple(given),
                                                  func.ty.ret, span),
                 args, expr, expected)
+        self._kept_alike(func, args, expr.span)
         answer = builder.call(func, args, func.ty.ret, expr.span)
         answer = self._as_long_as_given(builder, func, args, answer, expr.span)
         self._where_made(expr, func)

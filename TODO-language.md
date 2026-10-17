@@ -1079,10 +1079,11 @@ Runtime
     to carry them, which is the same machinery `listable` just gained.  Done on 2026-10-17, as the user decided: a function type
     is pure unless it says `@[impure]`, a lambda's purity is worked out from its body, and `@[can_ignore]` is carried too.
 
-[ ] say that two parameters live as long as each other, so that `fn keep(slot: &mut &mut u32, r: &mut u32)` writing
+[x] say that two parameters live as long as each other, so that `fn keep(slot: &mut &mut u32, r: &mut u32)` writing
     `slot⌖ ← r` can be allowed.  It is refused outright today (4571), which is sound and costs the programs that
     would have been right.  Rust writes it as `'a` on both, and the call is then what is refused; the lifetime names here cannot
-    say it, `⧖a` relating a parameter to the answer and not a parameter to a parameter.
+    say it, `⧖a` relating a parameter to the answer and not a parameter to a parameter.  Done on 2026-10-17, as the user decided:
+    one lifetime name on the reference a place holds and on another parameter, the body allowed and each call held to it.
 
 [ ] count a reference copied into a second name.  The aliasing rule (4563) watches every place a reference is *made* and not
     the ones that are merely handed on, so `let other: &mut u8 = r` is a second way to the place that nothing reports.  Rust

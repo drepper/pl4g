@@ -1,0 +1,35 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ Two parameters that live as long as each other.
+※
+※ **A lifetime name on the reference a place holds, and on another parameter,
+※ says the two live as long as each other**: `slot: &mut &mut ⧖a u32` and
+※ `r: &mut ⧖a u32`.  The body may then put `r` where `slot` refers to, which it
+※ may not otherwise -- how long that place lasts is the caller's to know -- and
+※ each call is held to it instead: what is handed for `r` has to last as long as
+※ the place handed for `slot`, as `s ← &mut x` has to.  A function that hands
+※ two such parameters on says it the same way, and is held to it the same way.
+※
+※ Compare **Rust**, whose `fn keep<'a>(slot: &mut &'a mut u32, r: &'a mut u32)`
+※ this is, the lifetime declared by being used rather than at the head.
+
+let std := ⎕import("std")
+
+@[impure]
+fn keep(slot: &mut &mut ⧖a u32, r: &mut ⧖a u32):
+    slot⌖ ← r
+
+@[impure]
+fn forward(slot: &mut &mut ⧖b u32, r: &mut ⧖b u32):
+    keep(slot, r)
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let first: mut u32 = 1u32
+    let second: mut u32 = 5u32
+    let third: mut u32 = 9u32
+    let s: mut &mut u32 = &mut first
+    keep(&mut s, &mut second)
+    let seen: u32 = s⌖
+    forward(&mut s, &mut third)
+    if seen = 5u32 ∧ s⌖ = 9u32: 0u6 else: 1u6

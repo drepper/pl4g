@@ -813,6 +813,12 @@ into an arm that starts on a later line, a one-line `if` having nowhere of its o
 `else` ends after it, at its column.  Where a variable's
 last use moves its value out -- `_moved` keeps the places in `_moved_from` -- no entry is made: the move was logged, and is the end.
 
+**Two parameters living alike** are the pairs `_kept_pairs` reads off a signature: a parameter whose reference refers to a
+reference carrying a lifetime name, and another whose own reference carries the same.  The body may write the second where the
+first refers (`_said_alike`, asked where 4571 would refuse it), the place reached from the one and the value from the other by
+the provenance walk; `Function.keeps` carries the pairs to every call, where `_kept_alike` holds what is handed for the second to
+the place handed for the first by `_outlives_it` -- or, where the caller did not make that place, by `_said_alike` of its own.
+
 **What a function type promises a caller** is three fields of `FuncType`: `listable`, `impure` and `can_ignore`, read off what is
 written before `fn` or a lambda by `_promised`, and held to one-way subtyping in `_promises_as_much`.  A named function's value takes the
 last two from its definition's attributes in `_function_as_a_value`, its own `func.ty` staying as it was.  A lambda's body is

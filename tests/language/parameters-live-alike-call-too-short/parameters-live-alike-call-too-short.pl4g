@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error diag=4570
+
+※ A call is held to what the signature says: `inner` is gone before `s`, so it
+※ may not be handed where `keep` puts it into `s`.
+
+let std := ⎕import("std")
+
+@[impure]
+fn keep(slot: &mut &mut ⧖a u32, r: &mut ⧖a u32):
+    slot⌖ ← r
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let first: mut u32 = 1u32
+    let s: mut &mut u32 = &mut first
+    if #init.args > 0:
+        let inner: mut u32 = 2u32
+        keep(&mut s, &mut inner)
+    0u6

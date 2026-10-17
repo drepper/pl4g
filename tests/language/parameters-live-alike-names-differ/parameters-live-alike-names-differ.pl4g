@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4571
+
+※ Two names are two lifetimes: nothing says `r` lives as long as what `slot`
+※ refers to, so it may not be put there.
+
+let std := ⎕import("std")
+
+@[impure]
+fn crossed(slot: &mut &mut ⧖a u32, r: &mut ⧖b u32):
+    slot⌖ ← r
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

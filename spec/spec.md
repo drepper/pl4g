@@ -2998,10 +2998,22 @@ fn keep(slot: &mut &mut u32, r: &mut u32):
     slot⌖ ← r                        ※ refused (4571)
 ```
 
-Rust writes the rule instead of refusing it -- `fn keep<'a>(slot: &mut &'a mut u32, r: &'a mut u32)` says the two live as long as
-each other, and the *call* is then what is refused.  Saying that needs a signature able to relate two parameters, which `⧖a`
-cannot yet do: it relates a parameter to the answer.  Until it can, the write is refused where it is written, which costs the
-programs that would have been right and keeps out the ones that would not.
+**Unless the signature says the two live as long as each other**, with one lifetime name on the reference the place holds and on
+the reference written into it -- and the *call* is then what is checked:
+
+```
+@[impure]
+fn keep(slot: &mut &mut ⧖a u32, r: &mut ⧖a u32):
+    slot⌖ ← r                        ※ allowed: the two live alike
+
+keep(&mut s, &mut x)                 ※ x has to last as long as s (4570)
+```
+
+That is the meaning a lifetime name already has -- "as long as whatever else in this signature carries it" -- carried from the
+answer to a place a parameter refers to.  What is handed for `r` has to last as long as the place handed for `slot`, by the rule
+`s ← &mut x` follows; a place the caller did not make itself is one only its own signature, saying the same of its own two
+parameters, or a reference lasting as long as the program may be handed for (4571).  Rust writes it `fn keep<'a>(slot: &mut &'a
+mut u32, r: &'a mut u32)`, the lifetime declared at the head; here it is declared by being used, as a type parameter is.
 
 Rust asks the same question and answers it the same way.  C and Odin do not ask it, and a pointer to a block-scoped variable
 outliving its block is the oldest mistake there is.

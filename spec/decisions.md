@@ -9960,6 +9960,20 @@ taken as a promise to be checked, since the type already says what the body does
 wanted and one whose answer may be dropped where it may not, never the other way round.  Found on the way: a call of a name whose
 definition was refused said it was not a function as well, which it no longer does.
 
+**Two parameters live as long as each other where one lifetime name stands on both**
+
+Asked, the user decided that **a lifetime name on the reference a place holds and on another parameter says the two live as long
+as each other** -- `fn keep(slot: &mut &mut ⧖a u32, r: &mut ⧖a u32)`, Rust's `'a` on both -- against a clause of its own beside
+the signature.  The body may then write `slot⌖ ← r`, and each call is held to it: what is handed for `r` has to last as long as
+the place handed for `slot` (4570), and a place the caller did not make only where its own signature says the same of its own
+parameters (4571).
+
+Taken without asking: the pair is read from where the names stand -- a name on the reference behind a parameter's reference, and
+the same name on another parameter's own -- so nothing else in a signature changes meaning; two different names are two lifetimes
+and relate nothing.  Found on the way, and fixed in a commit of its own: a store made in a body inlined into a function that was
+inlined in turn lost its place in the memory chain, so that a read after the call was folded into one before it -- a miscompile
+at every optimizing level, in any program that wrote memory through two levels of small functions.
+
 Open questions
 --------------
 
