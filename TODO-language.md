@@ -412,11 +412,20 @@ removed or decided otherwise, which its last paragraph says.
 [ ] take a run going the other way.  A step is at least one (4453): `a⟦9…0…⁻1⟧`, NumPy's `a[::-1]`, would be a view whose stride
     is negative, which every copy and walk would have to take into account -- the order `_move_elements` copies in among them.
 
-[ ] leave out the copy of a view where it is known to be one run.  Every program doing I/O carries `std`'s copy of a view that is
+[x] leave out the copy of a view where it is known to be one run.  Every program doing I/O carries `std`'s copy of a view that is
     not one run -- the question, `__pl4g_one_run`, the allocator, the giving back: some 2 KB and up to half again the time to
     compile the smallest of them -- because nothing folds it away where the view is a run while compiling: neither a branch on a
     constant after `@[inline]`, nor `(p + 1) - p`, nor a stride read out of a tuple made in the caller.  An optimizer that
-    did, with the entry points written as small wrappers that are inlined, would leave a run's way through as it was.
+    did, with the entry points written as small wrappers that are inlined, would leave a run's way through as it was.  Done on
+    2026-10-17 for the code: a stride every caller hands alike is written in (`knownargs`), addresses fold, and a branch settled
+    late is taken out; a program handing `std` runs carries none of the copy, and its image is within a few hundred bytes of what
+    it was.  What is left is in the entry below.
+
+[ ] compile `std`'s copy of a view that is not one run only where it is reached.  Its code is lowered and optimized for every program
+    doing I/O before it folds away, which leaves the smallest of them a third slower to compile than before views carried strides --
+    semantic analysis lowering more of `std`, every pass working on more until the branches settle.  Building `__pl4g_one_run`'s body
+    only for a program still naming it after optimization, and `std`'s view paths as functions of their own that are lowered only
+    where called, would leave that work to the programs that have such a view.
 
 [ ] walk a view of a table without dividing.  A view of more than one dimension walked a place at a time -- copied, given to `¨`
     -- has the index along each dimension worked out by dividing the counts out (`_flat_offset`), where nested loops would add a

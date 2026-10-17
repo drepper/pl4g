@@ -67,7 +67,7 @@ def writing(module: Module) -> Module:
     place = module.types.ptr_type(U64, mutable=True)
     started = Function(
         "pl4g_io_submit",
-        module.types.func_type((place, I32, I32, U64, U64), I64),
+        module.types.func_type((place, I32, I32, U64, U64, U64), I64),
         FuncAttrs(external="pl4g_io_submit", impure=True),
         cconv=SYSTEM_CCONV)
     module.add_function(started)
@@ -91,7 +91,9 @@ def writing(module: Module) -> Module:
          module.int_const(I32, STANDARD_ERROR),
          block.append(CastInst(CastKind.BITCAST,
                                block.append(AddressInst(text)), U64)),
-         module.int_const(U64, len(MESSAGE))),
+         module.int_const(U64, len(MESSAGE)),
+         # nothing to keep: the message is the program's own
+         module.int_const(U64, 0)),
         I64))
     answer = block.append(CallInst(
         waited, (block.append(AddressInst(ring)), slot), I64))

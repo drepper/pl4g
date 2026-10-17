@@ -172,7 +172,10 @@ class ConstantFolding:
             whole = inst.operands[0]
             if isinstance(whole, TupleInst) and inst.index < len(whole.operands):
                 part = whole.operands[inst.index]
-                if part.ty is inst.ty:
+                # Equal and not necessarily the same object: what a part is
+                # read as is worked out from the whole's type, and two ways of
+                # working out one type need not meet in one instance of it.
+                if part.ty == inst.ty:
                     return part
             return None
         if not isinstance(inst, BinaryInst):
@@ -184,6 +187,9 @@ class ConstantFolding:
         same = _unchanged(inst)
         if same is not None:
             return same
+        apart = _apart(inst)
+        if apart is not None and isinstance(inst.ty, IntType):
+            return module.int_const(inst.ty, _wrapped(apart, inst.ty))
         if inst.op in _DIVISIONS and isinstance(rhs, IntConst) and rhs.value == 0:
             # Nothing to fold and nothing to report from here: the program
             # stops when it runs, and saying so is the checker's business.
@@ -229,9 +235,18 @@ class ConstantFolding:
             # value that is not a number is not equal to itself.
             return module.bool_const(BOOL, inst.pred in _REFLEXIVE)
         numbers = [_as_number(operand) for operand in inst.operands]
-        if any(number is None for number in numbers):
-            return None
         asking = _COMPARISONS.get(inst.pred)
+        if any(number is None for number in numbers):
+            # Two places at known distances from one: an element against the
+            # first of its array, a copy against what it might have been.
+            one, other = _place_and_offset(lhs), _place_and_offset(rhs)
+            if asking is None or one is None or other is None \
+                    or not _same_place(one[0], other[0]) \
+                    or inst.pred not in (CmpPred.EQ, CmpPred.NE):
+                return None
+            return module.bool_const(BOOL, asking(one[1], other[1]))
+        if asking is None:
+            return None
         if asking is None:
             return None
         return module.bool_const(BOOL, asking(numbers[0], numbers[1]))
@@ -312,6 +327,54 @@ def _unchanged(inst: BinaryInst) -> Value | None:
         if isinstance(lhs, IntConst) and lhs.value == every and rhs.ty is inst.ty:
             return rhs
     return None
+
+
+def _place_and_offset(value: Value) -> tuple[Value, int] | None:
+    """Where *value* points, as a place and a number of bytes past it, where
+    that can be read off what worked it out: bitcasts -- the same bits as
+    another pointer, or as a word -- and constants added on."""
+    seen = value
+    offset = 0
+    while True:
+        if isinstance(seen, CastInst) and seen.kind is CastKind.BITCAST \
+                and isinstance(seen.operands[0].ty, PtrType):
+            seen = seen.operands[0]
+            continue
+        if isinstance(seen, BinaryInst) and seen.op in (BinOp.ADD, BinOp.WRAP_ADD) \
+                and isinstance(seen.ty, PtrType) \
+                and isinstance(seen.operands[1], IntConst):
+            offset += seen.operands[1].value
+            seen = seen.operands[0]
+            continue
+        break
+    if not isinstance(seen.ty, PtrType):
+        return None
+    return seen, offset
+
+
+def _apart(inst: BinaryInst) -> int | None:
+    """How far apart two addresses taken as words are, where both are one
+    place and constants added on: the second element's address less the
+    first's is the stride, which is how a view is asked whether it is a run."""
+    if inst.op not in (BinOp.SUB, BinOp.WRAP_SUB):
+        return None
+    lhs, rhs = inst.operands
+    if not (isinstance(lhs, CastInst) and isinstance(rhs, CastInst)):
+        return None
+    one, other = _place_and_offset(lhs), _place_and_offset(rhs)
+    if one is None or other is None or not _same_place(one[0], other[0]):
+        return None
+    return one[1] - other[1]
+
+
+def _same_place(one: Value, other: Value) -> bool:
+    """Whether two pointers are one: the same value, or the same part taken out
+    of the same value twice -- where the first element of an array is, asked
+    once by each of two things that wanted it."""
+    if one is other:
+        return True
+    return isinstance(one, ExtractInst) and isinstance(other, ExtractInst) \
+        and one.index == other.index and one.operands[0] is other.operands[0]
 
 
 def _as_number(value: Value) -> int | None:

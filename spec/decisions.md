@@ -10107,6 +10107,19 @@ The argument record the runtime fills (`pl4g_args`) carries the stride of one.  
 Found on the way: a note about the end of the last scope in a system module stood one place past the module's text and was
 logged as the program's.
 
+**The optimizer works across calls and through addresses**
+
+The user asked to improve the optimizer, after the copy of a view had been found in every program doing I/O for want of folding.
+Taken without asking, all of it internal to the compiler: a pass (`knownargs`) writing into a function the constant every caller
+hands one of its parameters, or a part of one -- a view's stride -- where every caller is in view, which is the whole program's
+gift to a compiler of the whole program; folding the difference and the equality of two addresses that are one place and constants
+added on; folding a part taken out of a tuple by the part's type being equal rather than the same object; folding and simplifying
+again, with that pass, after `facts`, until none of the three changes anything; and dropping a declaration nothing calls, so that the
+allocator goes with the last call naming it.  `std.write` hands the ring the copy it made with a flag on `pl4g_io_submit` rather than
+answering a result it then takes apart, which is what let its way through for a run fold to what it was.  Measured against the
+commit before views carried strides: a program doing no I/O compiles to a smaller image than it did, one doing I/O to one a few
+hundred bytes larger, and the smallest of those still takes about a third longer to compile, which is left in TODO-language.md.
+
 Open questions
 --------------
 

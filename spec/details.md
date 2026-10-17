@@ -4032,6 +4032,24 @@ the parameter already holds what the way in supplied.  Nothing has to be proved
 about dominance, either -- the value replacing the parameter is computed before
 every branch that arrives, so it is computed before the block.
 
+**It runs twice**, the second time inside `settle` with `constfold` and `knownargs`, the three taken in turn until none changes
+anything (at most `SETTLE_ROUNDS`): `facts` and the second folding settle conditions after the first `simplifycfg` has run, a branch
+settled then leaves a block whose parameter is a tuple a caller made, and that tuple's parts fold in turn.  An extract of a tuple
+folds where the part's type *equals* the extract's -- `parts_of` makes pointer types without interning them, so the same type is
+not always the same object.
+
+**What every caller hands alike is written in** (`knownargs`).  A function that is internal, defined, no root (`DropUnreached`'s),
+named nowhere but as the callee of a direct call, has every caller in view: where every call hands a parameter the same integer or
+truth value -- or the same one at a part of it, an argument made where it is called as a tuple of parts -- reads of it, and extracts
+of that part, read the constant instead.  A caller's own parameter counts where what is known of it is known, which is worked out
+over every such function until nothing new is learned (`ROUNDS`).  It is what makes a view's stride one inside `std` wherever every
+call hands it a run, so `⎕one_run`'s question folds and the copy, `__pl4g_one_run` and the allocator go.  **Addresses fold too**
+(`constfold`): a pointer read back as a place and a number of bytes past it (`_place_and_offset`, through bitcasts and constants
+added on), the difference of two such words with one place under them is the number, and two compared for equality are settled --
+one place being the same value, or the same part extracted twice from one value (`_same_place`).  And **a declaration nothing calls
+is no root** of `dropunreached`, being somebody else's definition: the allocator is emitted for a program whose code still names it
+(`wanted_by`), and one whose copies folded away no longer does.
+
 **The blocks are never reordered.**  The order they are laid out in is the order
 the backend walks, and a value has to be computed in a block standing before the
 one that reads it; merging removes a block and moves nothing, so that stays true
@@ -4437,8 +4455,9 @@ length in the answer, so the dimensions a view's type states are ones it kept wh
 array whose type says its shape is a place and nothing else, and has to be.  `_lower_one_run` compares the strides with a run's
 and branches: the view itself, or `_room_for` in the arena `in` named (`_takes_room` lets it) copied into by the loop.  The
 runtime's `pl4g_args` writes the stride of one beside the place and the count.  What `std` copies for the kernel is given back by
-the ring: `kept_at` and `kept_len` per slot, set by `pl4g_io_keep` (through `io.Pending.keep`) and given back by `reap` when the
-slot's answer is taken in -- or at once, where the request was done without a ring and is answered already -- and
+the ring: `kept_at` and `kept_len` per slot, set by `pl4g_io_submit` where its last argument says the bytes are such a copy (through
+`io.Writer.start_kept`) and given back by `reap` when the slot's answer is taken in -- or at once, where the request was done
+without a ring, or no slot could be had -- and
 `pl4g_io_give_back` (`io.give_back`) for a function that has waited for its answer itself.
 
 

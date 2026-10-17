@@ -29,10 +29,7 @@ type Ring =
     kept_at : u64⟦8⟧ ; kept_len : u64⟦8⟧
 
 @[external("pl4g_io_submit"), io]
-fn io_submit(r: &mut Ring, which: i32, fd: i32, at: u64, len: u64) → i64
-
-@[external("pl4g_io_keep"), io]
-fn io_keep(r: &mut Ring, slot: i64, at: u64, len: u64)
+fn io_submit(r: &mut Ring, which: i32, fd: i32, at: u64, len: u64, keep: u64) → i64
 
 @[external("pl4g_io_give_back"), io]
 fn io_give_back(at: u64, len: u64)
@@ -101,7 +98,7 @@ fn ReadWriter.close(rw: ReadWriter):
 @[export]
 fn Reader.start(r: &mut Reader, at: u64, len: u64) → Pending ? i32:
     ※ 0 is reading, as the runtime numbers the directions
-    started(io_submit(⎕at(r⌖.ring, ⌜&mut Ring⌝), 0i32, r⌖.fd, at, len), r⌖.ring)
+    started(io_submit(⎕at(r⌖.ring, ⌜&mut Ring⌝), 0i32, r⌖.fd, at, len, 0u64), r⌖.ring)
 
 ※※ Start writing the `len` bytes at `at`, answering the request.
 ※※
@@ -109,7 +106,14 @@ fn Reader.start(r: &mut Reader, at: u64, len: u64) → Pending ? i32:
 @[export]
 fn Writer.start(w: &mut Writer, at: u64, len: u64) → Pending ? i32:
     ※ 1 is writing
-    started(io_submit(⎕at(w⌖.ring, ⌜&mut Ring⌝), 1i32, w⌖.fd, at, len), w⌖.ring)
+    started(io_submit(⎕at(w⌖.ring, ⌜&mut Ring⌝), 1i32, w⌖.fd, at, len, 0u64), w⌖.ring)
+
+※※ Start writing `len` bytes from `at`, which are a copy in the heap's room: kept
+※※ until the kernel has answered, and given back then.
+@[export]
+fn Writer.start_kept(w: &mut Writer, at: u64, len: u64) → Pending ? i32:
+    ※ 1 is writing
+    started(io_submit(⎕at(w⌖.ring, ⌜&mut Ring⌝), 1i32, w⌖.fd, at, len, 1u64), w⌖.ring)
 
 ※※ Start writing the `count` runs of bytes the kernel's `iovec`s at `at` say,
 ※※ as one request.
@@ -118,18 +122,13 @@ fn Writer.start(w: &mut Writer, at: u64, len: u64) → Pending ? i32:
 @[export]
 fn Writer.start_several(w: &mut Writer, at: u64, count: u64) → Pending ? i32:
     ※ 2 is several runs written as one request
-    started(io_submit(⎕at(w⌖.ring, ⌜&mut Ring⌝), 2i32, w⌖.fd, at, count), w⌖.ring)
+    started(io_submit(⎕at(w⌖.ring, ⌜&mut Ring⌝), 2i32, w⌖.fd, at, count, 0u64),
+            w⌖.ring)
 
 ※※ The request a slot holds, or `EAGAIN` where none could be had: every slot is
 ※※ holding an answer nobody has read, and what would make it work is reading one.
 fn started(slot: i64, ring: u64) → Pending ? i32:
     if slot < 0i64: ⊥ 11i32 else: Pending(.slot ← slot, .ring ← ring)
-
-※※ Keep the heap's room at `at`, `len` bytes, until the request is answered, and
-※※ give it back then: where its bytes were copied for the kernel to read.
-@[export, impure]
-fn Pending.keep(p: Pending, at: u64, len: u64):
-    io_keep(⎕at(p.ring, ⌜&mut Ring⌝), p.slot, at, len)
 
 ※※ Give back the heap's room at `at`, `len` bytes: a copy `⎕one_run` made.
 @[export, impure]

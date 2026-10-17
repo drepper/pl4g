@@ -172,14 +172,10 @@ fn drain(s: &mut fs.State):
 fn write(to: &mut io.Writer, what: u8⟦⟧) → io.Pending ? i32:
     let run: u8⟦⟧ = ⎕one_run(what)
     let at: u64 = if #run = 0: 0u64 else: ⎕address(&run⟦0⟧)
-    match io.Writer.start(to, at, ⎕drop(#run)):
-        io.Pending(started):
-            if #run ≠ 0 and at ≠ ⎕address(&what⟦0⟧):
-                io.Pending.keep(started, at, ⎕drop(#run))
-            started
-        ⊥(e):
-            given_back(run, what)
-            ⊥ e
+    if #run ≠ 0 and ⎕address(&run⟦0⟧) ≠ ⎕address(&what⟦0⟧):
+        io.Writer.start_kept(to, at, ⎕drop(#run))
+    else:
+        io.Writer.start(to, at, ⎕drop(#run))
 
 ※※ Give back `run` where `⎕one_run(of)` made a copy rather than answering `of`.
 @[impure]

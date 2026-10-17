@@ -526,18 +526,30 @@ struct run pl4g_env(const u64 *stack)
  *
  * A slot is taken either way -- with a ring and without one -- so the handle a
  * program holds is the same thing whichever it got, and reading it is one
- * question with one answer. */
-i64 pl4g_io_submit(struct pl4g_ring *r, i32 which, i32 fd, u64 at, u64 len)
+ * question with one answer.
+ *
+ * Where `keep` says so, the `len` bytes at `at` are a copy in the heap's room
+ * -- a view that was not one run, made one for the kernel to read -- which the
+ * slot keeps until the kernel has answered, and which is given back then: now,
+ * where there is nothing to wait for. */
+i64 pl4g_io_submit(struct pl4g_ring *r, i32 which, i32 fd, u64 at, u64 len,
+                   u64 keep)
 {
   /* `which` indexes a table and comes from the language, so it is checked here:
    * this is the one door from a program into an array of function numbers, and
    * a program cannot be the thing that keeps it shut. */
-  if (which < 0 || which >= (i32) (sizeof ways / sizeof ways[0]))
+  if (which < 0 || which >= (i32) (sizeof ways / sizeof ways[0])) {
+    if (keep)
+      pl4g_heap_free((void *) at, len);
     return -EINVAL;
+  }
   int ready = started(r);
   long slot = a_slot(r);
-  if (slot < 0)
+  if (slot < 0) {
+    if (keep)
+      pl4g_heap_free((void *) at, len);
     return NO_SLOT;
+  }
   if (!ready || len == 0) {
     /* No ring, or nothing to do: the work is done here and the answer put
      * where an answer goes.  A slot is taken for it all the same, so that what
@@ -547,30 +559,21 @@ i64 pl4g_io_submit(struct pl4g_ring *r, i32 which, i32 fd, u64 at, u64 len)
     r->answer[slot] = len == 0 ? 0
         : sys(ways[which].nr, fd, (i64) at, (i64) len, 0, 0, 0);
     r->held[slot] = ANSWERED;
+    if (keep)
+      pl4g_heap_free((void *) at, len);
     return slot;
   }
   /* At the file's own position, which is what -1 asks the ring for: a nought
    * there is the absolute offset nought, which a pipe ignores and a file does
    * not -- every read would start at the top and every write overwrite it. */
   submit(r, slot, (unsigned char) ways[which].op, fd, at, len, (u64) -1);
+  if (keep) {
+    r->kept_at[slot] = at;
+    r->kept_len[slot] = len;
+  }
   return slot;
 }
 
-/* Keep the heap's room at `at`, `len` bytes, until the request in `slot` is
- * answered, and give it back then -- now, where it already is, as a request done
- * without a ring is.  What `std.write` hands the kernel where it had to copy a
- * view into one run: the copy is read by the kernel after the call returns. */
-void pl4g_io_keep(struct pl4g_ring *r, i64 slot, u64 at, u64 len)
-{
-  if (slot < 0 || slot >= ENTRIES) {
-    pl4g_heap_free((void *) at, len);
-    return;
-  }
-  r->kept_at[slot] = at;
-  r->kept_len[slot] = len;
-  if (r->held[slot] != SUBMITTED)
-    give_back(r, (long) slot);
-}
 
 /* Give back the heap's room at `at`, `len` bytes, that a view was copied into
  * for a request the caller has already seen answered -- what `std.read` and

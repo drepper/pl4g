@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Protocol, Sequence
+from typing import Final, Protocol, Sequence
 
 from ..ir.module import Module
 from ..ir.verify import verify
@@ -45,6 +45,35 @@ class PassTiming:
     name: str
     seconds: float
     changed: bool
+
+
+#: How many times folding and simplifying are taken in turn at most.  Each round
+#: is a level of a chain of branches settled by what the one before settled, and
+#: chains that long are not written.
+SETTLE_ROUNDS: Final = 8
+
+
+@dataclass(slots=True)
+class Settle:
+    """Folding and simplifying the graph in turn, and writing into a function
+    what its callers hand it alike, until none of them changes anything: each
+    opens work for the others."""
+
+    folding: Pass
+    simplifying: Pass
+    knowing: Pass
+    name: str = "settle"
+
+    def run(self, module: Module) -> bool:
+        """Run the three until all are done; report whether anything changed."""
+        changed = False
+        for _ in range(SETTLE_ROUNDS):
+            round_ = (self.folding.run(module) | self.simplifying.run(module)
+                      | self.knowing.run(module))
+            changed |= round_
+            if not round_:
+                break
+        return changed
 
 
 @dataclass(slots=True)
@@ -119,6 +148,12 @@ def pipeline_for(level: int) -> Sequence[str]:
     # the index once the one is gone -- and before the second, which then sees
     # a length compared with itself.  What a branch settled is used after that,
     # once the values it compares are the ones the checks compare.
+    # What `facts` settles is folded and simplified again, and the two of them
+    # until neither finds anything: a branch settled leaves a block with one
+    # way in, whose parameter is then what that way carries -- a tuple made in
+    # a caller inlined, whose parts then fold, settling the next branch.  With
+    # them goes writing into a function what every caller hands it alike, which
+    # a fold in a caller can be what makes alike.
     # A generator's body is split at its stops as soon as its calls have the
     # shape they keep, and before anything else looks at it: nothing below
     # this pass knows what a stop is, and every pass after it sees ordinary
@@ -128,7 +163,8 @@ def pipeline_for(level: int) -> Sequence[str]:
             "leanvalues",
             "constfold", "samevalues", "purecalls",
             "simplifycfg",
-            "constfold", "facts", "dce", "dropunreached", "splitedges")
+            "constfold", "facts", "settle", "dce", "dropunreached",
+            "splitedges")
 
 
 def build_manager(level: int) -> PassManager:
@@ -146,6 +182,7 @@ def build_manager(level: int) -> PassManager:
     from .passes.samevalues import SameValues
     from .passes.simplifycfg import SimplifyCFG
     from .passes.splitedges import SplitEdges
+    from .passes.knownargs import KnownArguments
     from .passes.tailcalls import TailCalls
 
     available: dict[str, Pass] = {
@@ -161,6 +198,7 @@ def build_manager(level: int) -> PassManager:
         "largeanswers": LargeAnswers(),
         "leanvalues": LeanValues(),
         "simplifycfg": SimplifyCFG(),
+        "settle": Settle(ConstantFolding(), SimplifyCFG(), KnownArguments()),
         "splitedges": SplitEdges(),
         "tailcalls": TailCalls(),
     }

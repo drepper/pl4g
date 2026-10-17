@@ -74,7 +74,7 @@ class DropUnreached:
                      if id(func) in reachable}
         changed = len(functions) != len(module.functions)
         for key, func in module.functions.items():
-            if key not in functions:
+            if key not in functions and not func.is_declaration:
                 # The name the source wrote, not what the module files it
                 # under: the key tells two files' definitions apart and is
                 # nothing a reader of the log should have to know about.
@@ -129,8 +129,12 @@ class DropUnreached:
         roots.extend(module.test_plan if module.test_plan
                      else [one for one in module.tests
                            if one.attrs.special is SpecialKind.TEST_ALWAYS])
+        # A definition the image offers outside is a root; a declaration is
+        # somebody else's definition, which is wanted only where something here
+        # calls it -- the allocator above all, which the back end supplies for a
+        # program whose code still names it and for no other.
         roots.extend(func for func in module.functions.values()
-                     if func.linkage is Linkage.VISIBLE)
+                     if func.linkage is Linkage.VISIBLE and not func.is_declaration)
         return roots
 
     def _reachable(self, module: Module) -> set[int]:
