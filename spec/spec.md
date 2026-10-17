@@ -2672,7 +2672,7 @@ that wanted one.
 
 **The lifted type is what the answer is**, not what is pointed at, so the words on the definition and the words in the brackets are
 the same words.  `⎕at` answers a reference (4585); `⎕span` answers an array whose length is not in its type (4586), which is already a
-place and a count and so represents nothing new -- how many there are is the argument, and a type that also said would be a second
+place and a count -- its elements one run -- and so represents nothing new -- how many there are is the argument, and a type that also said would be a second
 statement of one thing.  How many is a whole number (4587).
 
 **What may be given as the address** is a machine word -- which is what a request to the kernel answers with, signed or unsigned --
@@ -3479,9 +3479,12 @@ written down, or a constant expression, `u8⟦2 × 3⟧` or `u8⟦square(2)⟧`:
 something the compiler works out rather than something the program does.  A constant named at the top level is one wherever it is
 written, `u8⟦ROWS⟧` in a signature above `let ROWS: u64 = 3` included: the section on constant expressions says how.
 
-**`T⟦⟧` does not**, and is where the elements are together with how many there are.  It owns nothing: the elements are an array's,
-or part of one.  For an array of more than one dimension it carries one count per dimension, so `T⟦,⟧` is a table of no stated
-shape and takes three words.
+**`T⟦⟧` does not**, and is where the elements are together with how many there are and how far apart.  It owns nothing: the
+elements are an array's, or some of one's -- a run of them, a column, a block, every other one.  It carries one count and one
+*stride* per dimension, the stride being how many elements apart two neighbours along that dimension are: one along the last and a
+row along the one before, for elements that are one run, and whatever a view of some of them makes it.  So `u8⟦⟧` takes three
+words and `T⟦,⟧`, a table of no stated shape, five.  NumPy's arrays, Fortran's assumed-shape arrays and Julia's views carry the
+same; Go's and Rust's slices carry no stride and are always runs.
 
 **Every dimension says how many, or none does.**  Half of each would be a value whose parts depend on which half is which,
 which is a second kind of array for a case nothing has asked for.
@@ -3733,11 +3736,29 @@ and where, and the program stops.
 
 `a⟦i…j⟧` is the elements from `i` up to but not including `j`, which is a `T⟦⟧`.  It is the same half-open convention a range has
 everywhere else, so the count is the difference between the ends -- and either end may be the length: `a⟦#a…#a⟧` is the empty run
-after the last element, which is what the arguments after a program's own name are when it was given none.  A step there is refused (4453): what a slice is, is a place and
-a count, and every other element is not something a place and a count can say.
+after the last element, which is what the arguments after a program's own name are when it was given none.  **A third end is a
+step**: `a⟦0…10…2⟧` is every other element, a view whose stride is twice the array's.  A step is at least one -- refused while
+compiling where it is written down (4453), and stopping the program where it is worked out -- a run that goes the other way being
+something a view does not say yet.
 
-**Only a vector is sliced** (4459), for the same reason.  A row of a table is a run of elements and a column is not: its elements
-are a row apart, which is a stride.  Until a slice can carry a stride there is nothing for a run out of a table to be.
+**A table is sliced along any of its dimensions.**  Each index is a number, which picks one place and leaves its dimension out, or
+a run, which keeps the dimension with as many places as the run has; a dimension no index was written for is kept whole.  So of a
+`T⟦3,4⟧`, `m⟦1…3⟧` is two rows, `m⟦0…3, 1⟧` the second column, `m⟦1…3, 2…4⟧` a block, and `m⟦0, 0…4…2⟧` every other element of the
+first row.  What comes out is a view of those elements and not a copy: where the first is, how many along each dimension it kept,
+and how far apart -- a row apart for a column.  A dimension a run was taken along has no stated length in the view's type; one kept
+whole keeps what the array said.  **A view is any other `T⟦⟧`**: walked, indexed, sliced again, handed to a function, given to
+(`m⟦0…3, 0⟧ ← m⟦0…3, 3⟧` copies one column into another) and copied out of.
+
+**`⎕one_run(v)` is the elements of `v` as one run**: `v` itself where they are one already, and a copy of them otherwise -- in the
+arena `in` names, or in `⎕heap`.  Something that reads elements as a run, the kernel above all, is handed one, and `std`'s `read`,
+`write`, `write_sync`, `print` and `println` ask for one, so a column goes out as the bytes it holds and a read into one fills it.
+What `write` copies is in `⎕heap` and is not given back, the request outliving the call; the others copy into an arena of the call's
+own.
+
+Compare: **NumPy**, whose `m[0:3, 1]` and `m[0, 0:4:2]` are views with strides as these are and whose `ascontiguousarray` is
+`⎕one_run`; **Fortran**'s array sections, `m(1:3, 2)` and `a(1:10:2)`, and its copy-in of a section that is not contiguous;
+**Julia**'s `view`; **Go** and **Rust**, whose slices are runs and take a column only by copying it; **C**, where a column is a
+pointer and a stride the program keeps itself.
 
 ##### Writing an element
 

@@ -10079,6 +10079,30 @@ known while compiling, so there is no room to copy them into -- so `v ← w` wri
 only to elements that may be written (4708).  A copy of elements that point into room something else keeps, or hold references,
 is refused (4710) and left in TODO-language.md.
 
+**A table is sliced, and a `T⟦⟧` carries a stride per dimension**
+
+The user asked for the entry in TODO-language.md and chose, of contiguous runs only, strided views and copying what is not a run,
+**strided views of any shape** -- NumPy, Fortran's sections, Julia's views -- with the run kept fast; and, asked how, **one kind,
+strides always**: every `T⟦⟧` carries a stride beside each count, so any slice is a `T⟦⟧` and every function takes any view,
+against two kinds -- `T⟦⟧` as it was beside a strided type of its own, Fortran's `contiguous` and Julia's `Array` against
+`SubArray`.  So a vector is three words and a table five.  The run stays fast where it is known: an array whose type says its shape
+is one run and its strides are constants, a vector's element is one multiplication whatever its stride, and only a view of more
+dimensions than one walked a place at a time divides its counts out.  Asked what a view that is not a run does where one is
+wanted -- the kernel, handed where the first byte is and how many -- the user chose **copying in `std`**, against refusing in
+`std` and against stopping the program; that wants the elements as a run, which nothing a program could write gave, so
+**`⎕one_run(v)`** answers `v` where it is one and a copy otherwise, in the arena `in` names or `⎕heap`.  `read`, `write_sync`,
+`print` and `println` copy into an arena of their own; `write` into `⎕heap`, not given back, the request outliving the call; `read`
+takes a `mut u8⟦⟧` and is `impure`, writing what came into the elements it was handed.  And asked about steps, now that a view
+carries one, the user chose **positive steps**: `a⟦0…10…2⟧`, NumPy's `a[0:10:2]` and Fortran's `a(1:10:2)`, against negative ones
+too and against none.
+
+Taken without asking: an index in a slice may be a number or a run in any position, a dimension nothing was written for kept whole;
+a dimension a run was taken along has no stated length, so a view states only the dimensions it kept whole, which are still one run
+-- what keeps an array whose type says its shape one run whatever it was taken out of.  Assigning to a slice copies into the view.
+The argument record the runtime fills (`pl4g_args`) carries the stride of one.  4459, which refused a slice of a table, is gone.
+Found on the way: a note about the end of the last scope in a system module stood one place past the module's text and was
+logged as the program's.
+
 Open questions
 --------------
 

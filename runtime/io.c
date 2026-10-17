@@ -385,6 +385,14 @@ struct run {
   u64 len;
 };
 
+/* What a `T⟦⟧` of one dimension is: where the first element is, how many
+ * there are, and how many elements apart neighbours are -- one, for a run. */
+struct view {
+  struct counted *at;
+  u64 len;
+  u64 stride;
+};
+
 static u64 how_long(const unsigned char *s)
 {
   u64 n = 0;
@@ -406,10 +414,11 @@ static u64 how_long(const unsigned char *s)
  * program does, which is exactly how long what a program was started with is
  * worth having.  Where the system will not give it, the answer is no arguments
  * at all rather than some of them. */
-void pl4g_args(const u64 *stack, struct run *out)
+void pl4g_args(const u64 *stack, struct view *out)
 {
   out->at = 0;
   out->len = 0;
+  out->stride = 1;
   if (stack == 0)
     return;
   u64 count = stack[0];

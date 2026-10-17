@@ -4423,6 +4423,21 @@ a name, an element, a row, a field, what is read through a reference, or an `if`
 that says its shape is copied into a frame of its own unless neither the name nor what it names may be written; of a type that
 does not, it stays what it was, and a `mut` name of it is refused unless `_may_write` says yes (4708).
 
+**A `T⟦⟧` is where its first element is, a count per dimension and a stride per dimension**, in that order (`parts_of`), the
+stride counted in elements.  `_strides_of` answers them for any array -- constants an array whose type says its shape makes one run
+of, the parts beside the counts otherwise -- and `_view` and `_dense_view` make one, the second working the strides of a run out
+of the counts.  `_offset_of` is each index times its stride, summed, and `_row_at` keeps the strides of the dimensions it leaves;
+`_flat_offset` is the *n*-th place of the first few dimensions in the order a run has them -- one multiplication for an array whose
+type says its shape and for a vector, and for a view of more dimensions the index along each first, the counts divided out -- which
+is what the walks (`_over_an_array`, `_over_a_pick`, `¨`) and the copy (`_element_by_element`) ask.  What makes a view rather than
+reading one: `_lower_slice`, an index a number or a run (`_run_along`, ends checked and a step at least one, the count rounded up)
+in each position and a dimension nothing was written for kept whole; `_as_wanted` and `_spread`'s conversion, which carry the
+strides of what they convert; and a pick, `⎕span` and `⎕bytes`, which are runs.  A dimension a run was taken along has no stated
+length in the answer, so the dimensions a view's type states are ones it kept whole, still one run: a row `_row_at` answers as an
+array whose type says its shape is a place and nothing else, and has to be.  `_lower_one_run` compares the strides with a run's
+and branches: the view itself, or `_room_for` in the arena `in` named (`_takes_room` lets it) copied into by the loop.  The
+runtime's `pl4g_args` writes the stride of one beside the place and the count.
+
 
 A generic function checked where it is written
 ----------------------------------------------

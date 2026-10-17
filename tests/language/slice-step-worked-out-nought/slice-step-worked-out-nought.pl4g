@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok run=native,qemu exit=82 diag=none
+
+※ A step worked out while running is checked then: nought stops the program as
+※ an index outside its array does.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let k: u8 = 1u8
+    let a: u8⟦4⟧ = ⟦k, 2u8, 3u8, 4u8⟧
+    let step: u64 = ⎕drop(#init.args) - 1u64
+    let every: u8⟦⟧ = a⟦0…4…step⟧
+    if #every = 0: 0u6 else: 1u6

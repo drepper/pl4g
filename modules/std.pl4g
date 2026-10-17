@@ -163,10 +163,15 @@ fn drain(s: &mut fs.State):
 ※ for it, which is `flush` or the drain a program does before it ends.  So
 ※ several writes may be in flight at once, and a program that wants to know one
 ※ of them happened says so.
+※
+※ The kernel reads a run of bytes, and is told about the request only later, so
+※ a view that is not one -- a column, every other byte -- is copied first into
+※ `⎕heap`, where it lasts until then; that copy is not given back.
 @[export]
 fn write(to: &mut io.Writer, what: u8⟦⟧) → io.Pending ? i32:
-    let at: u64 = if #what = 0: 0u64 else: ⎕address(&what⟦0⟧)
-    io.Writer.start(to, at, ⎕drop(#what))
+    let run: u8⟦⟧ = ⎕one_run(what)
+    let at: u64 = if #run = 0: 0u64 else: ⎕address(&run⟦0⟧)
+    io.Writer.start(to, at, ⎕drop(#run))
 
 ※※ Wait for a request and answer how many bytes went, or what the kernel said.
 @[export]
@@ -180,10 +185,14 @@ fn flush(of: io.Pending) → u64 ¤size ? i32:
 ※※ Write `what` to `to` and wait for it, answering how many bytes went.
 ※
 ※ `write` and `flush` in one, which is what a program that has nothing else to
-※ do while it waits should say.
+※ do while it waits should say.  A view that is not one run is copied into room
+※ of this call's own, given back once the kernel has it.
 @[export]
 fn write_sync(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
-    flush(write(to, what)?)
+    let scratch: mut arena = ⎕arena
+    defer ⎕empty(scratch)
+    let run: u8⟦⟧ = ⎕one_run(what) in scratch
+    flush(write(to, run)?)
 
 ※※ What an answer says: how many bytes went, or what the kernel refused with --
 ※※ what `flush` answers for the same request.
@@ -252,11 +261,19 @@ fn run(s: &mut fs.State) → u64:
 ※※ \raises the number the kernel gave
 ※
 ※ There is no form of this that does not wait: what a read is for is the bytes,
-※ and a program that has not waited does not have them.
-@[export]
-fn read(from: &mut io.Reader, into: u8⟦⟧) → u64 ¤size ? i32:
-    let at: u64 = if #into = 0: 0u64 else: ⎕address(&into⟦0⟧)
-    flush(io.Reader.start(from, at, ⎕drop(#into))?)
+※ and a program that has not waited does not have them.  The kernel writes a run
+※ of bytes, so a view that is not one is read into a copy of this call's own and
+※ what came is copied into it.
+@[export, impure]
+fn read(from: &mut io.Reader, into: mut u8⟦⟧) → u64 ¤size ? i32:
+    let scratch: mut arena = ⎕arena
+    defer ⎕empty(scratch)
+    let run: u8⟦⟧ = ⎕one_run(into) in scratch
+    let at: u64 = if #run = 0: 0u64 else: ⎕address(&run⟦0⟧)
+    let got: u64 ¤size = flush(io.Reader.start(from, at, ⎕drop(#run))?)?
+    if #into ≠ 0 ∧ at ≠ ⎕address(&into⟦0⟧):
+        into ← run
+    got
 
 ※※ Walk what `from` holds a line at a time.
 ※※
@@ -347,7 +364,11 @@ fn Io.print(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
     if total = 0u64:
         ⎕unit(0u64, ⌜size⌝)
     else:
-        Io.all_of(to, ⎕address(&what⟦0⟧), total)
+        ※ the kernel reads a run of bytes: a view that is not one is copied
+        let scratch: mut arena = ⎕arena
+        defer ⎕empty(scratch)
+        let run: u8⟦⟧ = ⎕one_run(what) in scratch
+        Io.all_of(to, ⎕address(&run⟦0⟧), total)
 
 ※※ The same, with a newline after it, written as one request.
 ※※
@@ -370,7 +391,11 @@ fn Io.println(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
     if text = 0u64:
         Io.all_of(to, after, 1u64)
     else:
-        let before: u64 = ⎕address(&what⟦0⟧)
+        ※ the kernel reads runs of bytes: a view that is not one is copied
+        let scratch: mut arena = ⎕arena
+        defer ⎕empty(scratch)
+        let run: u8⟦⟧ = ⎕one_run(what) in scratch
+        let before: u64 = ⎕address(&run⟦0⟧)
         ※ The kernel's `iovec` twice over: where the bytes are and how many.
         let parts: mut u64⟦4⟧ = ⟦before, text, after, 1u64⟧
         let went: u64 = ⎕drop(flush(io.Writer.start_several(to, ⎕address(&parts⟦0⟧), 2u64)?)?)

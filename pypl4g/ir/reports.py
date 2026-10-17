@@ -221,8 +221,10 @@ class ReportLog:
         return entry
 
     def in_system(self, span: Span) -> bool:
-        """Whether *span* begins in a file marked `@[system]`."""
-        return span.is_valid and any(a <= span.start < b
+        """Whether *span* begins in a file marked `@[system]` -- its end
+        included, which is where a note about the end of its last scope stands,
+        and which no other file's locations reach."""
+        return span.is_valid and any(a <= span.start <= b
                                      for a, b in self.system_files)
 
     def said(self, severity: str, name: str, message: str, number: int,

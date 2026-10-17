@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4453
+※ pl4g-test: expect-diag 4453 LANG_ARRAY_SLICE_HAS_A_STEP
+
+※ A step says how many places apart the elements of a run are, and nought is
+※ one place over and over: a step is at least one.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let k: u8 = 1u8
+    let a: u8⟦4⟧ = ⟦k, 2u8, 3u8, 4u8⟧
+    let every: u8⟦⟧ = a⟦0…4…0⟧
+    if #every = 0: 0u6 else: 1u6

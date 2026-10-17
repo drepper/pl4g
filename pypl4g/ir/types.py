@@ -1630,7 +1630,13 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
         # register.  Where each of them went is the checker's to remember.
         return tuple(one for _, held in ty.fields for one in parts_of(held))
     if isinstance(ty, ArrayType) and not ty.fixed:
-        return (_pointer_to(ty.element), *(U64 for _ in ty.shape))
+        # Where the first element is, how many there are along each dimension,
+        # and how many elements apart two neighbours along each are: one apart
+        # along the last and a row apart along the one before, for elements
+        # that are one run, and anything for a view of some of them -- a
+        # column, a block, every other one.
+        return (_pointer_to(ty.element), *(U64 for _ in ty.shape),
+                *(U64 for _ in ty.shape))
     if isinstance(ty, ListType):
         # Where the elements are, how many there are, and the allocator they came
         # from: a list carries what gives it back, so that nothing that holds one

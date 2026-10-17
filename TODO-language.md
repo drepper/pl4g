@@ -403,16 +403,29 @@ removed or decided otherwise, which its last paragraph says.
     array (its outermost dimension), a list, a string (its characters), a tuple, a set and a dictionary -- from the type where the
     type says it and from the word carried beside the elements where it does not.  `⍴` answers an array's whole shape.
 
-[ ] slice a table.  Refused (4459).  A row is a run and a column is not: its elements are a row apart.  A slice that could say so
+[x] slice a table.  Refused (4459).  A row is a run and a column is not: its elements are a row apart.  A slice that could say so
     would carry a stride beside the place and the count, which is what NumPy does and what turns a slice into a view of any shape.
-    Worth doing with the entry about arrays that grow, since both change what a `T⟦⟧` carries.
+    Worth doing with the entry about arrays that grow, since both change what a `T⟦⟧` carries.  Done on 2026-10-17: a `T⟦⟧`
+    carries a stride per dimension, a table is sliced along any of its dimensions, a slice takes a positive step, and
+    `⎕one_run` is the elements as a run where one is wanted.
+
+[ ] take a run going the other way.  A step is at least one (4453): `a⟦9…0…⁻1⟧`, NumPy's `a[::-1]`, would be a view whose stride
+    is negative, which every copy and walk would have to take into account -- the order `_move_elements` copies in among them.
+
+[ ] give back what `std.write` copies.  A view that is not one run is copied into `⎕heap` by `⎕one_run` before the kernel is told
+    about the request, and since the request outlives the call nothing gives the copy back.  The pending request would have to
+    carry it, and `flush` give it back.
+
+[ ] walk a view of a table without dividing.  A view of more than one dimension walked a place at a time -- copied, given to `¨`
+    -- has the index along each dimension worked out by dividing the counts out (`_flat_offset`), where nested loops would add a
+    stride per turn.  A run and a vector are a multiplication either way.
 
 [x] let a dimension be told and another not.  Done on 2026-09-15, with picking by a mask, which was what asked: rows picked out
     of a table are however many, each as wide as the table, and that is a `T⟦,4⟧`.  `u6⟦2,⟧` works the same way.  A value of
     such a type carries a count for every dimension, the stated ones included, so it is one shape of value however much of the
     shape the type says; 4456, which refused it, is gone.
 
-[ ] an array that can grow.  A `T⟦⟧` is a place and a count and owns nothing, so there is nothing to grow: appending
+[ ] an array that can grow.  A `T⟦⟧` is a place, a count and a stride and owns nothing, so there is nothing to grow: appending
     wants a third thing beside them -- how much room there is -- and an arena to ask for more from, which is what Go's slice header
     carries and what this one deliberately does not while no operation appends.  What it needs first is the operation: there is no
     syntax for appending to anything, and inventing one for arrays alone would be inventing it twice.

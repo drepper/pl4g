@@ -40,11 +40,12 @@ def test_an_array_is_its_elements_and_nothing_else(element: object, length: int,
     assert size_of(TYPES.array_type(element, (length,)), LAYOUT) == size  # type: ignore[arg-type]
 
 
-def test_an_array_of_no_stated_shape_is_a_place_and_a_count_per_dimension() -> None:
-    """Which says nothing about where the elements are, only how many."""
-    assert size_of(TYPES.array_type(U8, (None,)), LAYOUT) == 16
-    assert size_of(TYPES.array_type(U8, (None, None)), LAYOUT) == 24
-    assert size_of(TYPES.array_type(U8, (None, None, None)), LAYOUT) == 32
+def test_an_array_of_no_stated_shape_is_a_place_a_count_and_a_stride_per_dimension() -> None:
+    """Which says nothing about where the elements are, only how many and how
+    far apart: a view of a column or a block is some of them, not a run."""
+    assert size_of(TYPES.array_type(U8, (None,)), LAYOUT) == 24
+    assert size_of(TYPES.array_type(U8, (None, None)), LAYOUT) == 40
+    assert size_of(TYPES.array_type(U8, (None, None, None)), LAYOUT) == 56
 
 
 @pytest.mark.parametrize(("shape", "count"), [

@@ -1,0 +1,54 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A table is sliced along any of its dimensions.**  Each index is a number,
+※ which picks one place and leaves the dimension out, or a run, which keeps it
+※ with as many places as the run has; a dimension nothing was written for is
+※ kept whole.  So `m⟦1…3⟧` is two rows, `m⟦0…3, 1⟧` a column, `m⟦1…3, 2…4⟧` a
+※ block, and `m⟦0, 0…4…2⟧` every other element of a row -- a third end being a
+※ step.  What comes out is a view of the elements it was taken from: where the
+※ first is, how many along each dimension, and how far apart -- a row apart for
+※ a column, twice as far for every other one.  A view is walked, indexed, sliced
+※ again, handed to a function taking any `T⟦⟧`, and given to and copied out of
+※ like any array.
+※
+※ Compare: **NumPy**, whose `m[0:3, 1]` and `m[0, 0:4:2]` are views with strides
+※ in the same way; **Fortran**'s array sections `m(1:3, 2)`, and **Julia**'s
+※ `view`; **Go** and **Rust**, whose slices are runs and take a column only by
+※ copying it; **C**, where a column is a pointer and a stride the program keeps.
+
+fn sum(v: u16⟦⟧) → u16:
+    let total: mut u16 = 0u16
+    foreach x := v:
+        total ← total + x
+    total
+
+fn all(b: u16⟦,⟧) → u16:
+    let total: mut u16 = 0u16
+    foreach row := b:
+        total ← total + sum(row)
+    total
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let k: u16 = 1u16
+    let m: mut u16⟦3, 4⟧ = ⟦⟦k, 2u16, 3u16, 4u16⟧, ⟦5u16, 6u16, 7u16, 8u16⟧,
+                            ⟦9u16, 10u16, 11u16, 12u16⟧⟧
+    let column: u16⟦⟧ = m⟦0…3, 1⟧
+    if sum(column) ≠ 18u16 ∨ #column ≠ 3:
+        return 1u6
+    let rows: u16⟦,4⟧ = m⟦1…3⟧
+    if rows⟦1, 3⟧ ≠ 12u16 ∨ #rows ≠ 2:
+        return 2u6
+    let block: u16⟦,⟧ = m⟦1…3, 1…4…2⟧
+    let shape := ⍴block
+    if all(block) ≠ 36u16 ∨ shape⟦0⟧ ≠ 2 ∨ shape⟦1⟧ ≠ 2:
+        return 3u6
+    let every: u16⟦⟧ = m⟦0, 0…4…2⟧
+    if sum(every) ≠ 4u16 ∨ sum(block⟦0…2, 1⟧) ≠ 20u16:
+        return 4u6
+    let copy: mut u16⟦2, 2⟧ = ⟦⟦0u16, 0u16⟧, ⟦0u16, 0u16⟧⟧
+    copy ← block
+    m⟦0…3, 0⟧ ← m⟦0…3, 3⟧
+    if copy⟦1, 1⟧ ≠ 12u16 ∨ copy⟦0, 0⟧ ≠ 6u16 ∨ m⟦2, 0⟧ ≠ 12u16: 5u6 else: 0u6

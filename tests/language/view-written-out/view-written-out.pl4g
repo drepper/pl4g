@@ -1,0 +1,51 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **`⎕one_run(v)` is the elements of `v` as one run**: `v` itself where they
+※ are one already, and a copy of them otherwise, made in the arena `in` names or
+※ in `⎕heap`.  The kernel reads and writes runs of bytes, so `std` hands it one:
+※ a column of a table written with `print`, `println`, `write_sync` or `write`
+※ goes out as the bytes it holds, and `read` into a column fills the column.
+※ Written into a pipe here and read back, every other byte of a table's.
+※
+※ Compare: **NumPy**'s `ascontiguousarray`, which answers the array itself where
+※ it already is one; **Fortran**, which copies a section that is not contiguous
+※ in and out of a call that wants one.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
+    if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
+        return 1u6
+    let out: mut std.io.Writer = std.io.Writer(.fd ← ends⟦1⟧, .ring ← init.io.error.ring)
+    defer std.io.Writer.close(out)
+    let back: mut std.io.Reader = std.io.Reader(.fd ← ends⟦0⟧, .ring ← init.io.error.ring)
+    defer std.io.Reader.close(back)
+    let x: u8 = 120u8
+    let table: u8⟦3, 2⟧ = ⟦⟦97u8, x⟧, ⟦98u8, x⟧, ⟦99u8, x⟧⟧
+    let column: u8⟦⟧ = table⟦0…3, 0⟧
+    if ⎕drop(std.Io.print(&mut out, column) ?? 0) ≠ 3u64:
+        return 2u6
+    if ⎕drop(std.Io.println(&mut out, column) ?? 0) ≠ 4u64:
+        return 3u6
+    if ⎕drop(std.write_sync(&mut out, table⟦0…3…2, 0⟧) ?? 0) ≠ 2u64:
+        return 4u6
+    let none: std.io.Pending = std.io.Pending(.slot ← 0i64 - 1i64, .ring ← 0u64)
+    if ⎕drop(std.flush(std.write(&mut out, column) ?? none) ?? 0) ≠ 3u64:
+        return 5u6
+    let into: mut u8⟦12, 2⟧ = ⟦⟦0u8, 0u8⟧, ⟦0u8, 0u8⟧, ⟦0u8, 0u8⟧, ⟦0u8, 0u8⟧,
+                               ⟦0u8, 0u8⟧, ⟦0u8, 0u8⟧, ⟦0u8, 0u8⟧, ⟦0u8, 0u8⟧,
+                               ⟦0u8, 0u8⟧, ⟦0u8, 0u8⟧, ⟦0u8, 0u8⟧, ⟦0u8, 0u8⟧⟧
+    let got: u64 ¤size = std.read(&mut back, into⟦0…12, 1⟧) ?? 0
+    if ⎕drop(got) ≠ 12u64:
+        return 6u6
+    if into⟦3, 1⟧ ≠ 97u8 ∨ into⟦6, 1⟧ ≠ 10u8 ∨ into⟦8, 1⟧ ≠ 99u8 ∨ into⟦11, 1⟧ ≠ 99u8:
+        return 7u6
+    let scratch: mut arena = ⎕arena
+    defer ⎕empty(scratch)
+    let run: u8⟦⟧ = ⎕one_run(column) in scratch
+    let row: u8⟦⟧ = table⟦1⟧
+    if ⎕address(&run⟦0⟧) = ⎕address(&column⟦0⟧) ∨ run⟦2⟧ ≠ 99u8:
+        return 8u6
+    if ⎕address(&⎕one_run(row)⟦0⟧) ≠ ⎕address(&row⟦0⟧) ∨ into⟦0, 0⟧ ≠ 0u8: 9u6 else: 0u6

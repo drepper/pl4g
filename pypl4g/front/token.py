@@ -306,6 +306,12 @@ TYPENAME_NAME: Final[str] = "".join((BUILTIN_GLYPH, "typename"))
 #: have to be checked.
 STR_OF_NAME: Final[str] = "".join((BUILTIN_GLYPH, "str"))
 
+#: The elements of an array as one run: the array itself where they already are,
+#: and a copy of them otherwise.  The compiler's name because a view's strides
+#: are nothing a program can read, and something handing elements on to what
+#: reads a run -- the kernel, writing them out -- has to have them as one.
+ONE_RUN_NAME: Final[str] = "".join((BUILTIN_GLYPH, "one_run"))
+
 #: Everything an arena holds, given back at once.  The one granularity the
 #: allocator has: nothing is given back on its own, so this is what makes an arena
 #: a pool -- room is taken from it for as long as it is wanted and the whole of it

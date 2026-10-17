@@ -137,9 +137,10 @@ def size_of(ty: Type, layout: DataLayout) -> int:
             assert count is not None
             return count * stride_of(ty.element, layout)
         case ArrayType():
-            # Where the elements are and one count per dimension, which is what
-            # an array whose type does not say its shape has to carry with it.
-            return (1 + ty.rank) * layout.pointer_size
+            # Where the elements are, one count per dimension, and how far
+            # apart neighbours along each dimension are, which is what an array
+            # whose type does not say its shape has to carry with it.
+            return (1 + 2 * ty.rank) * layout.pointer_size
         case ListType() | StrType():
             # Where the elements are, how many there are, and the allocator.
             return 3 * layout.pointer_size

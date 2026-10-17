@@ -244,6 +244,7 @@ GROUPS: tuple[Group, ...] = (
            "error-name": "std's error names read off the enumeration on first use",
            "lambda-answers-a-reference": "lambdas and function types saying how long an answer lives",
            "array-assigned-whole": "arrays, rows and runs given to, copied element by element",
+           "table-sliced": "rows, columns, blocks and steps of a table, as views",
            "divides": "dividing without a remainder, both forms and over an array",
            "failure-written-out": "failures written out, carrying a value and not",
            "named-arguments": "defaults, arguments named at the call, and one across a module",

@@ -27,7 +27,7 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            AT_NAME, SPAN_NAME,
                            ADDRESS_NAME, BYTES_NAME,
                            IS_RECORD_NAME, FIELDS_NAME, TYPENAME_NAME,
-                           STR_OF_NAME, EMPTY_NAME,
+                           STR_OF_NAME, EMPTY_NAME, ONE_RUN_NAME,
                            WIDEN_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH, EACH_GLYPH, ITER_GLYPH,
                            RESUME_NAME, START_NAME,
@@ -1981,6 +1981,12 @@ def _reached_from(value: Value, sources: Sequence[Value],
         return False
 
 
+#: How an array's elements are laid out: where the first is, how many there are
+#: along each dimension, how many elements apart neighbours along each are, and
+#: whether that is known to be one run.
+_Laid = tuple[Value, Sequence[Value], Sequence[Value], bool]
+
+
 def _not_copied_because(element: Type) -> str | None:
     """Why an array of *element* is not copied by copying its bytes, if it is
     not: an element pointing into room something else keeps would be a second
@@ -2450,6 +2456,9 @@ def _takes_room(expr: ast.Expr) -> bool:
     lambda says where what it brings in is kept after its capture list.
     """
     if isinstance(expr, (ast.SetLit, ast.DictLit, ast.ListLit, ast.ArrayLit)):
+        return True
+    if isinstance(expr, ast.Call) and isinstance(expr.callee, ast.NameRef) \
+            and expr.callee.name == ONE_RUN_NAME:
         return True
     return isinstance(expr, ast.Binary) and expr.op is ast.BinaryOp.CONCAT
 
@@ -10795,6 +10804,86 @@ class Checker:
                 [builder.extract(base, at + 1, U64, span)
                  for at in range(ty.rank)])
 
+    def _strides_of(self, builder: IRBuilder, base: Value, ty: ArrayType,
+                    span: Span) -> list[Value]:
+        """How many elements apart two neighbours along each dimension are.
+
+        A type that says its shape is one run, so they are what the shape makes
+        them -- one along the last dimension, a row along the one before -- and
+        known while compiling.  One that does not carries them beside the
+        counts: a view of a column, a block or every other element is a place
+        the run of them does not describe.
+        """
+        if ty.fixed:
+            found: list[Value] = []
+            along = 1
+            for one in reversed(ty.shape):
+                assert one is not None
+                found.append(builder.int_const(U64, along))
+                along *= one
+            return found[::-1]
+        return [builder.extract(base, 1 + ty.rank + at, U64, span)
+                for at in range(ty.rank)]
+
+    def _dense_strides(self, builder: IRBuilder, lengths: Sequence[Value],
+                       span: Span) -> list[Value]:
+        """The strides of elements that are one run, with *lengths* along each
+        dimension: one along the last, and each before it the run after it."""
+        found: list[Value] = []
+        along: Value = builder.int_const(U64, 1)
+        for one in reversed(lengths):
+            found.append(along)
+            along = builder.binary(BinOp.WRAP_MUL, along, one, span)
+        return found[::-1]
+
+    def _view(self, builder: IRBuilder, place: Value, lengths: Sequence[Value],
+              strides: Sequence[Value], ty: ArrayType, span: Span) -> Value:
+        """An array whose type does not say its shape: where its first element
+        is, how many there are along each dimension, and how far apart."""
+        return builder.make_tuple((place, *lengths, *strides), ty, span)
+
+    def _dense_view(self, builder: IRBuilder, place: Value,
+                    lengths: Sequence[Value], ty: ArrayType, span: Span) -> Value:
+        """A view of elements that are one run, as a run just made is."""
+        return self._view(builder, place, lengths,
+                          self._dense_strides(builder, lengths, span), ty, span)
+
+    def _flat_place(self, builder: IRBuilder, base: Value, ty: ArrayType,
+                    flat: Value, span: Span, upto: int | None = None) -> Value:
+        """Where the *flat*-th of the first *upto* dimensions' places is,
+        counted in the order the elements of one run would be -- the place an
+        element starts where *upto* is every dimension, and a row's otherwise.
+
+        Where the elements are one run that is one multiplication, and so it is
+        for a vector whatever its stride.  A view of more dimensions than one is
+        told the index along each first, the count after it divided out.
+        """
+        upto = ty.rank if upto is None else upto
+        start, lengths = self._shape_of(builder, base, ty, span)
+        strides = self._strides_of(builder, base, ty, span)
+        return self._element_place(
+            builder, start, ty.element,
+            self._flat_offset(builder, lengths, strides, flat, upto, ty.fixed,
+                              span), span)
+
+    def _flat_offset(self, builder: IRBuilder, lengths: Sequence[Value],
+                     strides: Sequence[Value], flat: Value, upto: int,
+                     one_run: bool, span: Span) -> Value:
+        """How far from the first element the *flat*-th place of the first
+        *upto* dimensions is, in elements (`_flat_place`)."""
+        if one_run or upto == 1:
+            return builder.binary(BinOp.WRAP_MUL, flat, strides[upto - 1], span)
+        offset: Value = builder.int_const(U64, 0)
+        left = flat
+        for at in reversed(range(upto)):
+            index = left if at == 0 else builder.binary(BinOp.UREM, left,
+                                                         lengths[at], span)
+            offset = builder.binary(BinOp.WRAP_ADD, offset, builder.binary(
+                BinOp.WRAP_MUL, index, strides[at], span), span)
+            if at:
+                left = builder.binary(BinOp.UDIV, left, lengths[at], span)
+        return offset
+
     def _checked_index(self, builder: IRBuilder, written: ast.Expr,
                        along: int | None, length: Value,
                        span: Span, one_past: bool = False) -> Value | None:
@@ -10853,17 +10942,17 @@ class Checker:
 
     def _offset_of(self, builder: IRBuilder, written: Sequence[ast.Expr],
                    ty: ArrayType, lengths: Sequence[Value],
-                   span: Span) -> Value | None:
-        """How far into the run of elements one place is, counted in elements.
+                   strides: Sequence[Value], span: Span) -> Value | None:
+        """How far from the first element one place is, counted in elements.
 
-        Row-major: each index is added on after what is already there has been
-        multiplied by the dimension it is stepping through.  For a vector that
-        is the index itself, which is what it should be.
+        Each index times how far apart neighbours along its dimension are, all
+        added up.  For elements that are one run the strides are what row-major
+        makes them and this is the familiar sum; for a view of some of them they
+        are whatever the view says.
 
         Fewer indices than there are dimensions names a *row* -- everything the
-        dimensions left over reach -- and the place it begins is that many rows
-        in, so what the indices come to is multiplied by how many elements a row
-        holds.
+        dimensions left over reach -- and the place it begins is where the
+        indices given come to.
         """
         if len(written) > ty.rank:
             self._diags.emit(D.LANG_ARRAY_WRONG_RANK, span, given=len(written),
@@ -10875,12 +10964,11 @@ class Checker:
                                         lengths[at], span)
             if index is None:
                 return None
-            offset = index if offset is None else builder.binary(
-                BinOp.WRAP_ADD,
-                builder.binary(BinOp.WRAP_MUL, offset, lengths[at], span),
-                index, span)
+            step = builder.binary(BinOp.WRAP_MUL, index, strides[at], span)
+            offset = step if offset is None else builder.binary(
+                BinOp.WRAP_ADD, offset, step, span)
         assert offset is not None
-        return self._by_row(builder, offset, lengths[len(written):], span)
+        return offset
 
     def _by_row(self, builder: IRBuilder, offset: Value,
                 left: Sequence[Value], span: Span) -> Value:
@@ -10894,8 +10982,8 @@ class Checker:
         return self._module.types.array_type(ty.element, ty.shape[taken:])
 
     def _row_at(self, builder: IRBuilder, start: Value, ty: ArrayType,
-                lengths: Sequence[Value], offset: Value, taken: int,
-                span: Span) -> Value:
+                lengths: Sequence[Value], strides: Sequence[Value],
+                offset: Value, taken: int, span: Span) -> Value:
         """The row an array has at a place, where not every index was given.
 
         Row-major is what makes this cheap: a row is a run of elements, so
@@ -10906,8 +10994,11 @@ class Checker:
         place = self._element_place(builder, start, ty.element, offset, span)
         row = self._row_type(ty, taken)
         if row.fixed:
+            # Only ever the dimensions a view's type says, which are the ones it
+            # left as they were and so still one run.
             return builder.cast(CastKind.BITCAST, place, row, span)
-        return builder.make_tuple((place, *lengths[taken:]), row, span)
+        return self._view(builder, place, lengths[taken:], strides[taken:], row,
+                          span)
 
     def _lower_element(self, builder: IRBuilder, expr: ast.Element,
                        expected: Type | None) -> Value:
@@ -10990,12 +11081,14 @@ class Checker:
                 return UndefConst(VOID)
             return self._lower_picked(builder, expr, base, ty, mask, expected)
         start, lengths = self._shape_of(builder, base, ty, expr.span)
-        offset = self._offset_of(builder, expr.indices, ty, lengths, expr.span)
+        strides = self._strides_of(builder, base, ty, expr.span)
+        offset = self._offset_of(builder, expr.indices, ty, lengths, strides,
+                                 expr.span)
         if offset is None:
             return UndefConst(ERROR)
         if len(expr.indices) < ty.rank:
             # Fewer indices than dimensions names a row rather than an element.
-            row = self._row_at(builder, start, ty, lengths, offset,
+            row = self._row_at(builder, start, ty, lengths, strides, offset,
                                len(expr.indices), expr.span)
             found_ty = self._value_type_of(row)
             if not self._accepts(expected, found_ty):
@@ -11104,11 +11197,12 @@ class Checker:
             count = builder.binary(
                 BinOp.WRAP_ADD, count,
                 builder.cast(CastKind.ZEXT, picked, U64, expr.span), expr.span)
-        made = builder.make_tuple(
-            (builder.cast(CastKind.BITCAST, place,
-                          self._module.types.ptr_type(ty.element, mutable=True),
-                          expr.span),
-             count, *(builder.int_const(U64, along) for along in kept)),
+        made = self._dense_view(
+            builder,
+            builder.cast(CastKind.BITCAST, place,
+                         self._module.types.ptr_type(ty.element, mutable=True),
+                         expr.span),
+            (count, *(builder.int_const(U64, along) for along in kept)),
             answer, expr.span)
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
@@ -11566,56 +11660,126 @@ class Checker:
 
     def _lower_slice(self, builder: IRBuilder, expr: ast.Element, base: Value,
                      ty: ArrayType, expected: Type | None) -> Value:
-        """Lower `a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{HORIZONTAL ELLIPSIS}j\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`: the elements from one place up to another.
+        """Lower `a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{HORIZONTAL ELLIPSIS}j\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, and `m\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{HORIZONTAL ELLIPSIS}j, k\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`: some of the elements, as a view.
 
-        What comes out is an array whose type does not say its shape, which is
-        where the elements are and how many there are -- and the elements are
-        the ones it was taken from, not a copy of them.
-
-        Only a vector is sliced.  A run taken out of a table is not a run of
-        elements at all: the second row of a three-by-four is four elements
-        together, and the second *column* is four elements a row apart, which
-        is a stride and not something a place and a count can say.
+        Each index is a number, which picks one place along its dimension and
+        leaves the dimension out, or a run -- two ends, and a step where three
+        were written -- which keeps the dimension with as many places as the
+        run has.  A dimension no index was written for is kept whole.  What
+        comes out is an array whose type does not say the lengths of the
+        dimensions a run was taken along, and the elements are the ones it was
+        taken from, not a copy of them: where they are, how many along each
+        dimension, and how far apart, which for a column is a row and for every
+        other element twice what it was.
         """
         span = expr.span
-        if ty.rank != 1:
-            self._diags.emit(D.LANG_ARRAY_SLICE_OF_A_TABLE, span,
-                             found=ty.written())
-            return UndefConst(ERROR)
-        written = expr.indices[0]
-        assert isinstance(written, ast.Range)
-        if written.step is not None:
-            self._diags.emit(D.LANG_ARRAY_SLICE_HAS_A_STEP, written.step.span)
+        if len(expr.indices) > ty.rank:
+            self._diags.emit(D.LANG_ARRAY_WRONG_RANK, span,
+                             given=len(expr.indices), wanted=ty.rank)
             return UndefConst(ERROR)
         start, lengths = self._shape_of(builder, base, ty, span)
-        first = self._checked_index(builder, written.start, ty.shape[0],
-                                    lengths[0], span, one_past=True)
+        strides = self._strides_of(builder, base, ty, span)
+        offset: Value = builder.int_const(U64, 0)
+        kept_lengths: list[Value] = []
+        kept_strides: list[Value] = []
+        shape: list[int | None] = []
+        for at, written in enumerate(expr.indices):
+            if not isinstance(written, ast.Range):
+                index = self._checked_index(builder, written, ty.shape[at],
+                                            lengths[at], span)
+                if index is None:
+                    return UndefConst(ERROR)
+                offset = builder.binary(BinOp.WRAP_ADD, offset, builder.binary(
+                    BinOp.WRAP_MUL, index, strides[at], span), span)
+                continue
+            run = self._run_along(builder, written, ty.shape[at], lengths[at], span)
+            if run is None:
+                return UndefConst(ERROR)
+            first, count, step = run
+            offset = builder.binary(BinOp.WRAP_ADD, offset, builder.binary(
+                BinOp.WRAP_MUL, first, strides[at], span), span)
+            kept_lengths.append(count)
+            kept_strides.append(builder.binary(BinOp.WRAP_MUL, strides[at], step,
+                                               span))
+            shape.append(None)
+        for at in range(len(expr.indices), ty.rank):
+            kept_lengths.append(lengths[at])
+            kept_strides.append(strides[at])
+            shape.append(ty.shape[at])
+        answer = self._module.types.array_type(ty.element, tuple(shape))
+        made = self._view(builder,
+                          self._element_place(builder, start, ty.element, offset,
+                                              span),
+                          kept_lengths, kept_strides, answer, span)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(span, answer, expected)
+        return made
+
+    def _run_along(self, builder: IRBuilder, written: ast.Range,
+                   along: int | None, length: Value,
+                   span: Span) -> tuple[Value, Value, Value] | None:
+        """Where a run along one dimension starts, how many places it has, and
+        how many apart they are: `i\N{HORIZONTAL ELLIPSIS}j` from *i* up to and not including *j*, and
+        `i\N{HORIZONTAL ELLIPSIS}j\N{HORIZONTAL ELLIPSIS}s` every *s*-th of those.
+
+        Both ends are checked against the length -- the end may be the length
+        itself, one past the last place -- and the end against the start; a step
+        is at least one, which is refused while compiling where it is written
+        down (4453) and stops the program where it is worked out.
+        """
+        first = self._checked_index(builder, written.start, along, length, span,
+                                    one_past=True)
         if first is None:
-            return UndefConst(ERROR)
+            return None
         # The end may be the length itself, which is one past the last element
         # and so not an index; it is checked against the length and not below it.
         last = self._on_its_own(builder, written.stop)
         reaching = self._value_type_of(last)
         if reaching is ERROR:
-            return UndefConst(ERROR)
+            return None
         if not isinstance(reaching, IntType):
             self._diags.emit(D.LANG_ARRAY_INDEX_NOT_A_NUMBER, written.stop.span,
                              found=reaching.written())
-            return UndefConst(ERROR)
+            return None
         end = self._as_count(builder, last, reaching, span)
-        builder.check(builder.compare(CmpPred.ULE, end, lengths[0], span),
+        builder.check(builder.compare(CmpPred.ULE, end, length, span),
                       "a slice reaching past the end of its array",
                       statuses.OUT_OF_RANGE, span)
         builder.check(builder.compare(CmpPred.ULE, first, end, span),
                       "a slice that ends before it begins",
                       statuses.OUT_OF_RANGE, span)
-        answer = self._module.types.array_type(ty.element, (None,))
-        made = builder.make_tuple(
-            (self._element_place(builder, start, ty.element, first, span),
-             builder.binary(BinOp.WRAP_SUB, end, first, span)), answer, span)
-        if not self._accepts(expected, answer):
-            self._report_mismatch(span, answer, expected)
-        return made
+        between = builder.binary(BinOp.WRAP_SUB, end, first, span)
+        if written.step is None:
+            return first, between, builder.int_const(U64, 1)
+        if isinstance(written.step, ast.IntLit) and written.step.value < 1:
+            self._diags.emit(D.LANG_ARRAY_SLICE_HAS_A_STEP, written.step.span)
+            return None
+        told = self._on_its_own(builder, written.step)
+        stepping = self._value_type_of(told)
+        if stepping is ERROR:
+            return None
+        if not isinstance(stepping, IntType):
+            self._diags.emit(D.LANG_ARRAY_INDEX_NOT_A_NUMBER, written.step.span,
+                             found=stepping.written())
+            return None
+        step = self._as_count(builder, told, stepping, span)
+        if not isinstance(written.step, ast.IntLit):
+            builder.check(builder.compare(CmpPred.NE, step,
+                                          builder.int_const(U64, 0), span),
+                          "a slice whose step is not at least one",
+                          statuses.OUT_OF_RANGE, span)
+            if stepping.signed:
+                builder.check(builder.compare(CmpPred.SGT, told,
+                                              builder.int_const(stepping, 0), span),
+                              "a slice whose step is not at least one",
+                              statuses.OUT_OF_RANGE, span)
+        # As many as there are of first, first + step, ... below the end: the
+        # places between, divided by the step and rounded up.
+        count = builder.binary(BinOp.UDIV, builder.binary(
+            BinOp.WRAP_ADD, between,
+            builder.binary(BinOp.WRAP_SUB, step, builder.int_const(U64, 1), span),
+            span), step, span)
+        return first, count, step
 
     def _lower_element_assign(self, builder: IRBuilder,
                               stmt: ast.ElementAssign) -> None:
@@ -11646,18 +11810,30 @@ class Checker:
             # walking it by reference -- and whoever holds it was promised
             # nothing else changes the place.
             return
+        if any(isinstance(one, ast.Range) for one in stmt.indices):
+            # A run, a column, a block: the view of those elements, and what is
+            # given copied into them as into any array.
+            view = self._lower_slice(builder, ast.Element(
+                span=stmt.span, base=stmt.base, indices=stmt.indices), base, ty,
+                None)
+            held = self._value_type_of(view)
+            if isinstance(held, ArrayType):
+                self._array_into(builder, stmt.value, view, held, stmt.span)
+            return
         mask = self._mask_written(builder, stmt)
         if mask is not None:
             self._assign_picked(builder, stmt, base, ty, mask)
             return
         start, lengths = self._shape_of(builder, base, ty, stmt.span)
+        strides = self._strides_of(builder, base, ty, stmt.span)
         if len(stmt.indices) < ty.rank:
             # Fewer indices than dimensions name a row, and what is given to a
             # row is copied into its elements, as what is given to an array is.
-            offset = self._offset_of(builder, stmt.indices, ty, lengths, stmt.span)
+            offset = self._offset_of(builder, stmt.indices, ty, lengths, strides,
+                                     stmt.span)
             if offset is None:
                 return
-            row = self._row_at(builder, start, ty, lengths, offset,
+            row = self._row_at(builder, start, ty, lengths, strides, offset,
                                len(stmt.indices), stmt.span)
             row_ty = self._value_type_of(row)
             assert isinstance(row_ty, ArrayType)
@@ -11665,7 +11841,8 @@ class Checker:
             return
         if not self._made_here(start):
             self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
-        offset = self._offset_of(builder, stmt.indices, ty, lengths, stmt.span)
+        offset = self._offset_of(builder, stmt.indices, ty, lengths, strides,
+                                 stmt.span)
         if offset is None:
             return
         value = self._lower_into(builder, stmt.value, ty.element, stmt.span)
@@ -12696,7 +12873,9 @@ class Checker:
         if isinstance(found, ArrayType) and isinstance(wanted, ArrayType) \
                 and _lets_go_of(found, wanted):
             start, lengths = self._shape_of(builder, value, found, span)
-            return builder.make_tuple((start, *lengths), wanted, span)
+            return self._view(builder, start, lengths,
+                              self._strides_of(builder, value, found, span),
+                              wanted, span)
         self._report_mismatch(span, found, wanted)
         return UndefConst(ERROR)
 
@@ -14531,7 +14710,9 @@ class Checker:
                              given=len(expr.indices), wanted=ty.rank)
             return None
         start, lengths = self._shape_of(builder, base, ty, expr.span)
-        offset = self._offset_of(builder, expr.indices, ty, lengths, expr.span)
+        strides = self._strides_of(builder, base, ty, expr.span)
+        offset = self._offset_of(builder, expr.indices, ty, lengths, strides,
+                                 expr.span)
         if offset is None:
             return None
         place = self._element_place(builder, start, ty.element, offset, expr.span)
@@ -16700,17 +16881,20 @@ class Checker:
         out once here and read from where they were left.
         """
         start, lengths = self._shape_of(builder, value, ty, span)
+        strides = self._strides_of(builder, value, ty, span)
         element = ty.element if ty.rank == 1 else self._row_type(ty, 1)
 
         def place(b: IRBuilder, s: tuple[Value, ...]) -> Value:
-            return self._element_place(b, start, ty.element, s[0], span)
+            return self._element_place(
+                b, start, ty.element,
+                b.binary(BinOp.WRAP_MUL, s[0], strides[0], span), span)
 
         def take(b: IRBuilder, s: tuple[Value, ...]) -> Value:
-            offset = self._by_row(b, s[0], lengths[1:], span)
+            offset = b.binary(BinOp.WRAP_MUL, s[0], strides[0], span)
             if ty.rank == 1:
                 return b.load(
                     self._element_place(b, start, ty.element, offset, span), span)
-            return self._row_at(b, start, ty, lengths, offset, 1, span)
+            return self._row_at(b, start, ty, lengths, strides, offset, 1, span)
 
         return _Iteration(
             element=element, start=(builder.int_const(U64, 0),),
@@ -16742,15 +16926,17 @@ class Checker:
         span = written.span
         if callable(mask):
             start, lengths = self._shape_of(builder, base, ty, span)
+            strides = self._strides_of(builder, base, ty, span)
             element = ty.element if ty.rank == 1 else self._row_type(ty, 1)
             asked = mask
 
             def taken(b: IRBuilder, s: tuple[Value, ...]) -> Value:
-                offset = self._by_row(b, s[0], lengths[1:], span)
+                offset = b.binary(BinOp.WRAP_MUL, s[0], strides[0], span)
                 if ty.rank == 1:
                     return b.load(self._element_place(b, start, ty.element,
                                                       offset, span), span)
-                return self._row_at(b, start, ty, lengths, offset, 1, span)
+                return self._row_at(b, start, ty, lengths, strides, offset, 1,
+                                    span)
 
             return _Iteration(
                 element=element, start=(builder.int_const(U64, 0),),
@@ -16759,8 +16945,9 @@ class Checker:
                 step=lambda b, s: (b.binary(BinOp.WRAP_ADD, s[0],
                                             b.int_const(U64, 1), span),),
                 wanted=lambda b, s: asked(b, s[0]),
-                place=(lambda b, s: self._element_place(b, start, ty.element,
-                                                        s[0], span))
+                place=(lambda b, s: self._element_place(
+                    b, start, ty.element,
+                    b.binary(BinOp.WRAP_MUL, s[0], strides[0], span), span))
                 if ty.rank == 1 else None)
         held = self._value_type_of(mask)
         assert isinstance(held, ArrayType)
@@ -16782,13 +16969,16 @@ class Checker:
         places = self._by_row(builder, builder.int_const(U64, 1),
                               lengths[:depth], span)
         element = ty.element if depth == ty.rank else self._row_type(ty, depth)
+        strides = self._strides_of(builder, base, ty, span)
 
         def take(b: IRBuilder, s: tuple[Value, ...]) -> Value:
-            offset = self._by_row(b, s[0], lengths[depth:], span)
+            offset = self._flat_offset(b, lengths, strides, s[0], depth,
+                                       ty.fixed, span)
             if depth == ty.rank:
                 return b.load(
                     self._element_place(b, start, ty.element, offset, span), span)
-            return self._row_at(b, start, ty, lengths, offset, depth, span)
+            return self._row_at(b, start, ty, lengths, strides, offset, depth,
+                                span)
 
         return _Iteration(
             element=element, start=(builder.int_const(U64, 0),),
@@ -16797,7 +16987,7 @@ class Checker:
             step=lambda b, s: (b.binary(BinOp.WRAP_ADD, s[0],
                                         b.int_const(U64, 1), span),),
             wanted=lambda b, s: b.load(
-                self._element_place(b, marks, BOOL, s[0], span), span))
+                self._flat_place(b, mask, held, s[0], span), span))
 
     def _pick_per_place(self, builder: IRBuilder, expr: ast.Element,
                         base: Value, ty: ArrayType) -> bool:
@@ -16938,7 +17128,8 @@ class Checker:
                     "a mask whose shape is not the array's",
                     statuses.OUT_OF_RANGE, span)
             start, _ = self._shape_of(builder, value, held, span)
-            reads.append((name, start, held))
+            reads.append((name, start, held,
+                          self._strides_of(builder, value, held, span)[0]))
         written = expr.indices[0]
 
         def at_place(b: IRBuilder, place: Value) -> Value:
@@ -16947,8 +17138,10 @@ class Checker:
             try:
                 for name, value in fixed:
                     self._bind_hidden(b, name, value, span)
-                for name, start, held in reads:
-                    self._bind_element(b, name, start, held.element, place, span)
+                for name, start, held, apart in reads:
+                    self._bind_element(b, name, start, held.element,
+                                       b.binary(BinOp.WRAP_MUL, place, apart,
+                                                span), span)
                 picked = self._lower_expr(b, one, BOOL)
             finally:
                 self._pop_scope()
@@ -22718,6 +22911,8 @@ class Checker:
                 return self._lower_bytes(builder, expr, expected)
             if given == STR_OF_NAME:
                 return self._lower_str_of(builder, expr, expected)
+            if given == ONE_RUN_NAME:
+                return self._lower_one_run(builder, expr, expected)
             if given == EMPTY_NAME:
                 return self._lower_empty(builder, expr, expected)
             if given == FIELDS_NAME:
@@ -23438,6 +23633,7 @@ class Checker:
                              wanted=_shape_of_type(into_ty))
             return False
         start, lengths = self._shape_of(builder, into, into_ty, span)
+        strides = self._strides_of(builder, into, into_ty, span)
         if self._read_only(start):
             self._diags.emit(D.LANG_STATIC_CHANGES, span,
                              name="the array written")
@@ -23445,6 +23641,7 @@ class Checker:
         if not self._made_here(start):
             self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, span)
         source, given = self._shape_of(builder, from_, from_ty, span)
+        apart = self._strides_of(builder, from_, from_ty, span)
         count: Value | None = None
         known = 1
         for at, (one, other) in enumerate(zip(given, lengths)):
@@ -23461,25 +23658,32 @@ class Checker:
             count = other if count is None \
                 else builder.binary(BinOp.WRAP_MUL, count, other, span)
         assert count is not None
-        self._move_elements(builder, start, source, into_ty.element, count, known,
-                            span)
+        self._move_elements(builder, (start, lengths, strides, into_ty.fixed),
+                            (source, given, apart, from_ty.fixed),
+                            into_ty.element, count, known, span)
         return True
 
-    def _move_elements(self, builder: IRBuilder, into: Value, from_: Value,
-                       element: Type, count: Value, known: int | None,
-                       span: Span) -> None:
-        """Copy *count* elements of *element* from *from_* to *into*, which may
-        overlap -- `v⟦0…3⟧ ← v⟦1…4⟧` -- as `memmove` may.
+    def _move_elements(self, builder: IRBuilder, into_shape: _Laid,
+                       from_shape: _Laid, element: Type, count: Value,
+                       known: int | None, span: Span) -> None:
+        """Copy *count* elements of *element* from one array to another, laid
+        out as each says -- where the first is, how many along each dimension
+        and how far apart, and whether that is one run -- which may overlap,
+        `v⟦0…3⟧ ← v⟦1…4⟧`, as `memmove`'s may.
 
-        As many as are known while compiling are read as one value and then
-        written, which every target cuts up as it can and which reads all of
-        them before it writes any.  Otherwise one at a time, from the end where
-        the copy goes to later addresses than it comes from, so that nothing is
+        Two runs whose length is known while compiling are read as one value
+        and then written, which every target cuts up as it can and which reads
+        all of them before it writes any.  Otherwise one at a time, in the order
+        the elements of a run would be, from the end where the copy goes to
+        later addresses than it comes from: for two views a step apart in the
+        same direction, which is what overlapping ones are, nothing is then
         written before it is read.
         """
+        into, from_ = into_shape[0], from_shape[0]
         if known == 0:
             return
-        if known is not None and isinstance(element, (IntType, FloatType, BoolType)):
+        if known is not None and into_shape[3] and from_shape[3] \
+                and isinstance(element, (IntType, FloatType, BoolType)):
             held = self._module.types.vec_type(element, known)
             pointer = self._module.types.ptr_type(held, mutable=True)
             builder.store(builder.cast(CastKind.BITCAST, into, pointer, span),
@@ -23499,15 +23703,15 @@ class Checker:
         for block, downward in ((backward, True), (forward, False)):
             builder.position_at(block)
             builder.set_memory(before)
-            self._element_by_element(builder, into, from_, element, count,
-                                     downward, span)
+            self._element_by_element(builder, into_shape, from_shape, element,
+                                     count, downward, span)
             builder.br(done, (builder.memory(),), span)
         builder.position_at(done)
         builder.set_memory(done.add_param(MEM, "mem"))
 
-    def _element_by_element(self, builder: IRBuilder, into: Value, from_: Value,
-                            element: Type, count: Value, downward: bool,
-                            span: Span) -> None:
+    def _element_by_element(self, builder: IRBuilder, into_shape: _Laid,
+                            from_shape: _Laid, element: Type, count: Value,
+                            downward: bool, span: Span) -> None:
         """A loop copying *count* elements, from the last if *downward*."""
         header = builder.new_block("copy.element")
         body = builder.new_block("copying.element")
@@ -23524,10 +23728,13 @@ class Checker:
             BinOp.WRAP_SUB,
             builder.binary(BinOp.WRAP_SUB, count, builder.int_const(U64, 1), span),
             turn, span)
-        self._copy_bytes(builder,
-                         self._element_place(builder, into, element, at, span),
-                         self._element_place(builder, from_, element, at, span),
-                         size_of(element, _LAYOUT), span)
+        places = [self._element_place(
+            builder, start, element,
+            self._flat_offset(builder, lengths, strides, at, len(lengths), one_run,
+                              span), span)
+            for start, lengths, strides, one_run in (into_shape, from_shape)]
+        self._copy_bytes(builder, places[0], places[1], size_of(element, _LAYOUT),
+                         span)
         builder.br(header, (builder.binary(BinOp.WRAP_ADD, turn,
                                            builder.int_const(U64, 1), span),
                             builder.memory()), span)
@@ -23683,8 +23890,8 @@ class Checker:
             self._diags.emit(D.LANG_SPAN_NOT_A_COUNT, expr.args[1].span,
                              found=counting.written())
             return UndefConst(ERROR)
-        made = builder.make_tuple(
-            (place, self._as_count(builder, count, counting, expr.span)),
+        made = self._dense_view(
+            builder, place, (self._as_count(builder, count, counting, expr.span),),
             answer, expr.span)
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
@@ -23722,9 +23929,9 @@ class Checker:
         # Where the bytes are and how many: the allocator is the string's, and an
         # array of bytes is a view of them that gives nothing back.
         parts = parts_of(STR)[:2]
-        made = builder.make_tuple(
-            tuple(builder.extract(given, at, one, expr.span)
-                  for at, one in enumerate(parts)), answer, expr.span)
+        made = self._dense_view(
+            builder, builder.extract(given, 0, parts[0], expr.span),
+            (builder.extract(given, 1, parts[1], expr.span),), answer, expr.span)
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
@@ -23869,6 +24076,72 @@ class Checker:
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
         return builder.make_tuple(tuple(leaves), answer, expr.span)
+
+    def _lower_one_run(self, builder: IRBuilder, expr: ast.Call,
+                       expected: Type | None) -> Value:
+        """Lower `⎕one_run(v)`: the elements of *v* as one run.
+
+        A view may be a column, a block or every other element, and something
+        that reads its elements as one run -- the kernel, handed where the first
+        is and how many -- would read the wrong ones.  So this answers *v*
+        itself where its elements are one run already, and a copy of them
+        otherwise, made in the arena `in` names or in `⎕heap` -- which is the
+        one place the answer may be anything but *v*, and the one cost.  An
+        array whose type says its shape is always one run.
+        """
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=ONE_RUN_NAME, expected=1, found=len(expr.args))
+            return UndefConst(ERROR)
+        value = self._lower_expr(builder, expr.args[0], None)
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(ty, ArrayType):
+            self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, expr.args[0].span,
+                             found=ty.written())
+            return UndefConst(ERROR)
+        if not self._accepts(expected, ty):
+            self._report_mismatch(expr.span, ty, expected)
+            return UndefConst(ERROR)
+        self._made_from[id(expr)] = (expr, self._out_of_arenas
+                                     | self._arenas_in(expr.args[0]))
+        if ty.fixed:
+            return value
+        why = _not_copied_because(ty.element)
+        if why is not None:
+            self._diags.emit(D.LANG_ARRAY_NOT_COPIED, expr.args[0].span,
+                             type=ty.element.written(), why=why)
+            return UndefConst(ERROR)
+        span = expr.span
+        start, lengths = self._shape_of(builder, value, ty, span)
+        strides = self._strides_of(builder, value, ty, span)
+        dense = self._dense_strides(builder, lengths, span)
+        apart: Value = builder.bool_const(True)
+        for one, wanted in zip(strides, dense):
+            apart = builder.binary(BinOp.AND, apart,
+                                   builder.compare(CmpPred.EQ, one, wanted, span),
+                                   span)
+        kept = builder.new_block("one_run.already")
+        copying = builder.new_block("one_run.copy")
+        done = builder.new_block("one_run")
+        before = builder.memory()
+        builder.condbr(apart, kept, copying, span=span)
+        builder.position_at(kept)
+        builder.br(done, (value, before), span)
+        builder.position_at(copying)
+        builder.set_memory(before)
+        count = self._by_row(builder, builder.int_const(U64, 1), lengths, span)
+        room = self._room_for(builder, ty.element, count, span)
+        self._element_by_element(builder, (room, lengths, dense, True),
+                                 (start, lengths, strides, False), ty.element,
+                                 count, False, span)
+        builder.br(done, (self._view(builder, room, lengths, dense, ty, span),
+                          builder.memory()), span)
+        builder.position_at(done)
+        answer = done.add_param(ty, "run")
+        builder.set_memory(done.add_param(MEM, "mem"))
+        return answer
 
     def _lower_str_of(self, builder: IRBuilder, expr: ast.Call,
                       expected: Type | None) -> Value:
@@ -24940,16 +25213,14 @@ class Checker:
         if ty is wanted or not isinstance(ty, ArrayType):
             return value
         start, lengths = self._shape_of(builder, value, ty, span)
-        step = 1
-        for along in ty.shape[1:]:
-            assert along is not None
-            step *= along
-        offset = builder.int_const(U64, index * step)
+        strides = self._strides_of(builder, value, ty, span)
+        offset = builder.binary(BinOp.WRAP_MUL, builder.int_const(U64, index),
+                                strides[0], span)
         if ty.rank == 1:
             return builder.load(
                 self._element_place(builder, start, ty.element, offset, span),
                 span)
-        return self._row_at(builder, start, ty, lengths, offset, 1, span)
+        return self._row_at(builder, start, ty, lengths, strides, offset, 1, span)
 
     # -- each: `¨` ---------------------------------------------------------------
 
@@ -25001,14 +25272,16 @@ class Checker:
 
     def _walk_at(self, builder: IRBuilder, ty: ArrayType, levels: int,
                     at: Value, start: Value, lengths: Sequence[Value],
-                    span: Span) -> Value:
+                    strides: Sequence[Value], span: Span) -> Value:
         """What a walk *levels* deep is at, *at* places in: an element, or a row."""
-        offset = self._by_row(builder, at, lengths[levels:], span)
+        offset = self._flat_offset(builder, lengths, strides, at, levels,
+                                   ty.fixed, span)
         if levels == ty.rank:
             return builder.load(
                 self._element_place(builder, start, ty.element, offset, span),
                 span)
-        return self._row_at(builder, start, ty, lengths, offset, levels, span)
+        return self._row_at(builder, start, ty, lengths, strides, offset, levels,
+                            span)
 
     def _lower_each(self, builder: IRBuilder, expr: ast.Expr,
                     expected: Type | None) -> Value:
@@ -25109,7 +25382,8 @@ class Checker:
                 feature="walking with '\N{DIAERESIS}' an array with nothing in it, "
                 "which leaves nothing to say what the answer holds")
             return UndefConst(ERROR)
-        shapes = [self._shape_of(builder, value, ty, span)
+        shapes = [(*self._shape_of(builder, value, ty, span),
+                   self._strides_of(builder, value, ty, span))
                   for _, value, ty, _, span in sources]
         wanted = expected.element if isinstance(expected, ArrayType) \
             and expected.rank == len(walked) else None
@@ -25121,17 +25395,20 @@ class Checker:
             try:
                 for name, value in fixed:
                     self._bind_hidden(builder, name, value, expr.span)
-                for (name, _, ty, levels, span), (start, lengths) in \
+                for (name, _, ty, levels, span), (start, lengths, strides) in \
                         zip(sources, shapes):
                     if levels == ty.rank:
-                        self._bind_element(builder, name, start, ty.element,
-                                           builder.int_const(U64, at), span)
+                        self._bind_element(
+                            builder, name, start, ty.element,
+                            self._flat_offset(builder, lengths, strides,
+                                              builder.int_const(U64, at), levels,
+                                              ty.fixed, span), span)
                     else:
                         self._bind_hidden(
                             builder, name,
                             self._walk_at(builder, ty, levels,
                                           builder.int_const(U64, at), start,
-                                          lengths, span), span)
+                                          lengths, strides, span), span)
                 one = self._lower_expr(builder, template, wanted)
             finally:
                 self._pop_scope()
@@ -25400,8 +25677,10 @@ class Checker:
                                                  offset, spread.span),
                              spread.span)
                 if ty.rank == 1
-                else self._row_at(builder, start, ty, lengths, offset, 1,
-                                  spread.span))
+                else self._row_at(builder, start, ty, lengths,
+                                  self._strides_of(builder, value, ty,
+                                                   spread.span),
+                                  offset, 1, spread.span))
         return taken
 
     def _only_at_build(self, func: Function, span: Span) -> None:
@@ -25787,7 +26066,9 @@ class Checker:
             return value
         if isinstance(found, ArrayType) and _lets_go_of(found, expected):
             start, lengths = self._shape_of(builder, value, found, span)
-            return builder.make_tuple((start, *lengths), expected, span)
+            return self._view(builder, start, lengths,
+                              self._strides_of(builder, value, found, span),
+                              expected, span)
         self._report_mismatch(span, found, expected)
         return UndefConst(ERROR)
 
