@@ -1,0 +1,29 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A store made by a function inlined into one that is inlined in turn.
+※
+※ `set` is inlined into `fwd` first, callees going first, and `fwd` into `main`
+※ after it.  What follows the call to `set` in `fwd` takes no token of its own --
+※ every way out of the copy hands on one -- so the token in force there, and at
+※ `fwd`'s `ret`, is the one a block above it ended on.  Finding it means looking
+※ up the dominator tree, not only in the block: the store of 9 was otherwise
+※ hung off the start of the chain, and the read of `x` after it folded into the
+※ read before.
+
+let std := ⎕import("std")
+
+@[impure]
+fn set(p: &mut u32, v: u32):
+    p⌖ ← v
+
+@[impure]
+fn fwd(p: &mut u32, v: u32):
+    set(p, v)
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let x: mut u32 = 1u32
+    set(&mut x, 5u32)
+    let a: u32 = x
+    fwd(&mut x, 9u32)
+    if a = 5u32 ∧ x = 9u32: 0u6 else: 1u6

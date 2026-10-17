@@ -51,7 +51,7 @@ from ...ir.reports import ReportKind
 from ...ir.rewrite import stands_for
 from ...ir.types import MEM, VOID
 from ...ir.value import BlockParam, Value
-from ..flow import dominators
+from ..flow import Dominators, dominators
 
 #: What a function may come to where it is generated -- `cost_of_body`, in
 #: machine instructions -- and still be copied where it is called.  A handful:
@@ -182,6 +182,9 @@ class Inlining:
         # over so that the entry block's are where the arguments arrive.
         blocks: dict[int, BasicBlock] = {}
         values: dict[int, Value] = {}
+        # Who dominates whom in the callee, for the token a `ret` stands at: a
+        # block that says nothing of the chain is on the one its dominator was.
+        tree = dominators(callee)
         for original in callee.blocks:
             made = caller.add_block("".join(("inlined.", original.label)))
             blocks[id(original)] = made
@@ -202,7 +205,7 @@ class Inlining:
                 if isinstance(one, RetInst):
                     # What it answered with is carried to what follows the call,
                     # and the token this way through the body ended at.
-                    ended = _last_token(original, original.insts.index(one))
+                    ended = _last_token(original, original.insts.index(one), tree)
                     made.append(BrInst(
                         BlockTarget(after,
                                     (ended if ended is not None else token,)
@@ -296,17 +299,31 @@ def _mapped(value: Value, values: dict[int, Value]) -> Value:
     return values.get(id(value), value)
 
 
-def _last_token(block: BasicBlock, at: int) -> Value | None:
-    """The token in force just before instruction *at* of *block*, as far as the
-    block says: the nearest memory-valued instruction above, or the parameter it
-    took one in.  Nothing where the token comes from the function's start."""
-    for earlier in reversed(block.insts[:at]):
-        if earlier.ty is MEM:
-            return earlier
-    for param in block.params:
-        if param.ty is MEM:
-            return param
-    return None
+def _last_token(block: BasicBlock, at: int,
+                tree: Dominators | None = None) -> Value | None:
+    """The token in force just before instruction *at* of *block*: the nearest
+    memory-valued instruction above, or the parameter it took one in -- or,
+    where the block says neither, the token its immediate dominator ends on,
+    and so up the tree.  A block that takes no token is reached only on that
+    one chain: a write on any way into it would have needed a parameter where
+    the ways met.  Nothing where the token comes from the function's start.
+
+    The tree is what a body that had a call inlined into it already needs: the
+    block holding its `ret` is what followed that call, and the token it is on
+    is the one the inlined body ended at, written in a block above it.
+    """
+    current, end = block, at
+    while True:
+        for earlier in reversed(current.insts[:end]):
+            if earlier.ty is MEM:
+                return earlier
+        for param in current.params:
+            if param.ty is MEM:
+                return param
+        above = tree.idom.get(id(current)) if tree is not None else None
+        if above is None:
+            return None
+        current, end = above, len(above.insts)
 
 
 def _resume_chain(func: Function, after: BasicBlock, token: Value,
@@ -339,12 +356,12 @@ def _token_before(func: Function, block: BasicBlock, at: int) -> Value:
     instruction above, or the parameter the block took it in, or the start of a
     chain put where every chain starts.
     """
-    for earlier in reversed(block.insts[:at]):
-        if earlier.ty is MEM:
-            return earlier
-    for param in block.params:
-        if param.ty is MEM:
-            return param
+    # Up the dominator tree where the block says nothing, as `_last_token` goes:
+    # a block that takes no token is on the chain of the one above it, which is
+    # what a block standing after an inlined body is.
+    found = _last_token(block, at, dominators(func))
+    if found is not None:
+        return found
     entry = func.blocks[0]
     if entry.insts and isinstance(entry.insts[0], MemStartInst):
         return entry.insts[0]
