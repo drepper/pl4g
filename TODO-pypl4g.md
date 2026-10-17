@@ -101,6 +101,12 @@ removed or decided otherwise, which its last paragraph says.
     array's is.  Answering with one goes through the caller's room, by the convention an answer of more values than the registers
     hold already took: `ReturnStyle.in_registers` says no for anything held in memory, and the rewrite copies the bytes in.
 
+[ ] call through a value something that answers through the caller's room.  `let b: fn(u64) → Big = big; b(7u64)` is refused
+    (8501, "a call answering with 'Big', which wants more registers than the convention answers in"): `largeanswers` rewrites
+    calls to functions it knows, and a call through a value has no function to know.  It wants the same rewrite keyed by the
+    value's type, the function and the lambda pointed at both answering through the room last.  Found on 2026-10-17; the same
+    with or without a shim.
+
 [x] hold a record or a tuple in memory, so that one may hold a sum.  Refused today (9902): both travel as the values they are
     made of, so one holding a sum would carry the address of the room the sum was made in, which dangles the moment it is answered
     with.  An array in a record has the same hazard and is not refused -- the one such record in the language is `@[abi]` and is

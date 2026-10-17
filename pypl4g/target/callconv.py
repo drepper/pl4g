@@ -44,6 +44,13 @@ class CallConvDesc:
     #: Bytes below the stack pointer a leaf function may use without adjusting it.
     red_zone: int = 0
     variadic: bool = False
+    #: Where a call through a value passes what the code it calls was made
+    #: with -- a lambda's environment -- and where a function called that way
+    #: finds it: a register no argument uses and a call destroys, so that a
+    #: function with no such thing never reads it.  The static chain of GCC's
+    #: nested functions and LLVM's `nest`.  Nothing for a convention nothing
+    #: calls through a value.
+    chain_reg: PhysReg | None = None
 
     def orders(self, integers: str, floats: str) -> dict[str, tuple[RegUnit, ...]]:
         """The allocation orders by the name of the class each belongs to.
@@ -94,8 +101,8 @@ class TooManyArguments(Exception):
     """
 
 
-def argument_places(cconv: CallConvDesc,
-                    types: Sequence[Type]) -> list[list[PhysReg]]:
+def argument_places(cconv: CallConvDesc, types: Sequence[Type],
+                    chained: bool = False) -> list[list[PhysReg]]:
     """Which registers each argument is passed in, in order.
 
     A register is taken from the list its *kind* comes out of, so a
@@ -106,8 +113,18 @@ def argument_places(cconv: CallConvDesc,
     A value of several parts takes one register per part: a result its answer
     and the truth value beside it, a tuple its members.  That is what the ABIs
     already do with a two-word aggregate.
+
+    *chained* says the first is passed in the convention's chain register
+    rather than as an argument, the rest taking the places they would have had
+    without it: a function called through a value finds its environment there,
+    and one that has none leaves it unread.
     """
-    return _places(cconv.int_arg_regs, cconv.float_arg_regs, types)
+    if not chained or not types:
+        return _places(cconv.int_arg_regs, cconv.float_arg_regs, types)
+    assert cconv.chain_reg is not None, "a chained call in a convention with no chain"
+    assert len(leaves_of(types[0])) == 1, "an environment is one word"
+    return [[cconv.chain_reg],
+            *_places(cconv.int_arg_regs, cconv.float_arg_regs, types[1:])]
 
 
 def result_places(cconv: CallConvDesc, ty: Type) -> list[PhysReg]:

@@ -2625,16 +2625,19 @@ Indirect calls
 and an indirect one passes a closure over the two halves it read out of the value.  Both halves are read once, before any call is
 made: a walk makes one call per element and they all go to the same code with the same environment.
 
-**A named function becomes a value through a shim.**  Everything called through a name of function type is called with the
-environment first, and a definition has no such parameter -- so `_function_as_a_value` points the pair at `⎕through<name>`, which
-takes the environment, drops it, and hands the rest on.  One per function and not one per mention, kept in `_shims` by identity,
-and recorded in the report log beside the lambdas: it is code the program did not write.  The other two words are nothing, which
-is what `_environment` already hands a lambda that brought nothing in.
+**A named function becomes a value as it is.**  Every call through a value -- a lambda's, a walk's turn, a generator's resume --
+passes its first argument, the environment or the description, in the convention's chain register, and every function called that
+way is `chained`: its first parameter arrives there and the rest where they would without it.  `argument_places(chained=True)`
+says so for both ends, a call being chained where it goes through a value or to a chained function.  The register is one no
+argument uses and a call destroys -- r11 on x86-64, the language's own convention passing an argument in r10, which is the
+system's static chain; x15 on AArch64, the backend leaving x18 alone; t2 on RISC-V, as GCC has it -- so a function of the
+program, which has no environment, never reads it, and `_function_as_a_value` points the pair at the function itself.  A
+function of another convention still goes through `⎕through<name>`, kept in `_shims`: a call through a value follows the
+language's convention and such a function does not.
 
-The cost is one call.  Rust avoids it by telling the two apart in the type system, `fn` for the bare address and `Fn` for the
-pair; C avoids it by having nothing to carry, which is why a C callback needs a `void *` written out beside it; C++'s
-`std::function` pays exactly what is paid here.  A second representation, tagged so that a call could tell a bare address from a
-pair, would cost a branch at every indirect call to save one call at some of them.
+Compare GCC's nested functions and LLVM's `nest`, the same register for the same reason; Rust tells the two apart in the type
+system, `fn` for the bare address and `Fn` for the pair, and C has nothing to carry, which is why a C callback needs a `void *`
+written out beside it.  A tag in the value would have cost a branch at every indirect call to save one call at some of them.
 
 **A function's own type says whether it walks.**  `_collect_function` and `_make_instance` build it with `func_attrs.listable`,
 so `func.ty.listable` is the one place it is written down and a named function handed over carries it.  The symbol does not

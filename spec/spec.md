@@ -5875,7 +5875,10 @@ let plain: fn(u8) → u8 = twice   ※ which drops it
 
 So a function and a lambda are two ways of writing one kind of value, and either stands where the other does.  What such a value
 holds is three words, where the code is, where what was brought in is and its allocator; a function brings nothing in, so the
-last two are nothing.  **A generic function is not one** (4569): it is compiled once per set of types and which sets
+last two are nothing.  **Calling through one costs what calling the function by name does**: what was brought in is passed in a
+register of its own, which no argument uses and a function of the program never reads, so the code a function's value points at
+is the function itself.  Only a function of another convention -- `@[cdecl]` -- has something standing between, a call through a
+value following the language's own.  **A generic function is not one** (4569): it is compiled once per set of types and which sets
 those are is what the calls ask for, so named where a value is wanted there is no call to ask and no type for the name to have.
 
 **A lambda says it the same way**, written before the thing it describes -- and there the word is part of the *type*:

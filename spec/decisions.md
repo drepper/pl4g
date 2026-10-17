@@ -9930,6 +9930,20 @@ short-lived reference is short-lived for this question.  Found on the way: a tup
 signature with nothing checking its parts afterwards, and was stopped only by an arena check that counted references inside it as
 pointing into an arena, which references outside a tuple are not taken to do.
 
+**A call through a value passes the environment in a chain register, so a named function needs no shim**
+
+The user asked for the entry in TODO-language.md and, offered four ways, chose **the environment in a register of its own** --
+GCC's static chain for nested functions, LLVM's `nest` -- against moving it to the last argument, a tag tested at every indirect
+call, and two kinds of function type as Rust and C++ have.  A named function never reads the register, so a value points at it
+directly.
+
+Taken without asking: the register is r11 on x86-64 rather than the system's r10, which the language's own convention passes an
+argument in; x15 on AArch64 rather than GCC's x18, which this backend leaves alone for a platform to claim; and t2 on RISC-V, as
+GCC has it -- each caller-saved and never an argument.  Every call through a value uses it, not only a lambda's: a walk's turn and a
+generator's resume too, so that one rule says where the first argument of any indirect call goes.  A function of another
+convention, `@[cdecl]`, keeps its shim.  Found on the way: a call through a value answering through the caller's room was never
+supported, with a shim or without; it is in TODO-pypl4g.md.
+
 Open questions
 --------------
 

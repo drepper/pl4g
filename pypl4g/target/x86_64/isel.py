@@ -1340,7 +1340,8 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
     # no call to make it necessary.
     entry = func.blocks[0] if func.blocks else None
     try:
-        arriving = (argument_places(cconv, [p.ty for p in entry.params])
+        arriving = (argument_places(cconv, [p.ty for p in entry.params],
+                                    chained=func.attrs.chained)
                     if entry is not None else [])
     except TooManyArguments as many:
         raise UnsupportedOperation(
@@ -2082,7 +2083,9 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                                           else callee.cconv)
                     try:
                         going = argument_places(
-                            theirs, [a.ty for a in given])
+                            theirs, [a.ty for a in given],
+                            chained=through is not None or bool(getattr(
+                                getattr(callee, "attrs", None), "chained", False)))
                     except TooManyArguments as many:
                         raise UnsupportedOperation(
                             "a call with more arguments than the convention passes "

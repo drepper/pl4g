@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A function of the system's convention handed over as a value: a call through a
+※ value follows the language's own, so something stands between the two -- the
+※ one function that still has a shim.
+
+let std := ⎕import("std")
+
+@[cdecl]
+fn tripled(x: u64) → u64:
+    x × 3u64
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let f: fn(u64) → u64 = tripled
+    if f(2u64) = 6u64: 0u6 else: 1u6

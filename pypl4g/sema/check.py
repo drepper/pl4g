@@ -5959,6 +5959,7 @@ class Checker:
             ty=self._module.types.func_type((_ENVIRONMENT, _ENVIRONMENT,
                                              _ENVIRONMENT), U8),
             attrs=replace(func_attrs, impure=True, inline=InlineHint.NEVER,
+                          chained=True,
                           extra={**func_attrs.extra, "coroutine": frame}),
             linkage=Linkage.INTERNAL, param_names=("frame", "out", "args"),
             span=node.span, name_span=node.name_span, source_path=path,
@@ -12689,7 +12690,12 @@ class Checker:
             # receives it by name.  A lambda may hand one out; its type says so.
             self._diags.emit(D.LANG_HANDED_OUT_UNBOUND, ref.span, name=func.name)
             return UndefConst(ERROR)
-        shim = self._shim_for(func, ref.span)
+        # A call through a value passes the environment in the chain register,
+        # which a function of the language's own convention never reads: the
+        # value points at the function itself.  One of another convention is
+        # called the way the system calls, so something has to stand between.
+        shim = func if func.cconv == DEFAULT_CCONV and not func.attrs.chained \
+            else self._shim_for(func, ref.span)
         if shim is None:
             return UndefConst(ERROR)
         # It brought nothing in, so it carries no environment and no allocator,
@@ -12731,7 +12737,7 @@ class Checker:
             name=name,
             ty=self._module.types.func_type((_ENVIRONMENT, *func.ty.params),
                                             func.ty.ret),
-            attrs=FuncAttrs(impure=True), linkage=Linkage.INTERNAL,
+            attrs=FuncAttrs(impure=True, chained=True), linkage=Linkage.INTERNAL,
             span=func.span, name_span=func.name_span,
             source_path=self._path.as_posix(),
             param_names=("", *func.param_names))
@@ -12970,7 +12976,7 @@ class Checker:
             name=name,
             ty=self._module.types.func_type((_ENVIRONMENT, *params, *hidden),
                                             answer),
-            attrs=FuncAttrs(impure=True), linkage=Linkage.INTERNAL,
+            attrs=FuncAttrs(impure=True, chained=True), linkage=Linkage.INTERNAL,
             span=expr.span, name_span=expr.span, source_path=self._path.as_posix(),
             param_names=("", *(one.name for one in expr.params)),
             hands_out=hands_out,
@@ -17267,7 +17273,7 @@ class Checker:
             name=name,
             ty=self._module.types.func_type((_ENVIRONMENT, slot, _ENVIRONMENT),
                                             BOOL),
-            attrs=FuncAttrs(impure=True), linkage=Linkage.INTERNAL,
+            attrs=FuncAttrs(impure=True, chained=True), linkage=Linkage.INTERNAL,
             span=span, name_span=span, source_path=self._path.as_posix(),
             param_names=("", "", ""))
         self._module.add_function(func, key=self._key(name))
@@ -17593,7 +17599,7 @@ class Checker:
             name=name,
             ty=self._module.types.func_type((_ENVIRONMENT, slot, _ENVIRONMENT),
                                             BOOL),
-            attrs=FuncAttrs(impure=True), linkage=Linkage.INTERNAL,
+            attrs=FuncAttrs(impure=True, chained=True), linkage=Linkage.INTERNAL,
             span=span, name_span=span, source_path=self._path.as_posix(),
             param_names=("", "", ""))
         self._module.add_function(func, key=self._key(name))

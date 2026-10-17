@@ -1068,10 +1068,11 @@ Runtime
     the answer, which is what a function handing one of its arguments back needs.  What it cannot yet say is that one parameter
     outlives another, which is the thing Rust's `'a: 'b` is for and the thing a type holding a reference would want.
 
-[ ] call a named function handed over as a value without going through a shim.  Such a value is two addresses and a definition
+[x] call a named function handed over as a value without going through a shim.  Such a value is two addresses and a definition
     takes no environment, so what the pair points at is code that drops the environment and hands the rest on -- one call more
     than the program wrote.  Rust's answer is to tell the two apart in the type system; the answer here would be a tag, and a
-    tag costs a branch at every indirect call to save a call at some of them.
+    tag costs a branch at every indirect call to save a call at some of them.  Done on 2026-10-17, neither of those: asked, the
+    user chose the static-chain register -- r11, x15, t2 -- which a named function never reads, so the value points at it.
 
 [ ] say more about a lambda than `listable`.  Everything else a function writes is about its body, and a body is not what a name
     holds -- but `can_ignore` is about a caller, and `impure` would let a pure function call one that is not.  Both want the type

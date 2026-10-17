@@ -59,6 +59,9 @@ CC_PL4G: Final[CallConvDesc] = CallConvDesc(
     stack_align=16,
     allocation_order=_ALLOCATION_ORDER,
     red_zone=128,
+    # Not r10, the static chain of the system's convention: this one passes an
+    # argument there.  r11 is the one caller-saved register no argument uses.
+    chain_reg=reg("r11"),
 )
 
 CC_SYSV: Final[CallConvDesc] = CallConvDesc(

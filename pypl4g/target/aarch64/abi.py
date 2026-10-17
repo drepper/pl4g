@@ -45,6 +45,10 @@ CC_PL4G: Final[CallConvDesc] = CallConvDesc(
     # may use, unlike the one on x86-64.
     allocation_order=_ALLOCATION_ORDER,
     red_zone=0,
+    # Not x18, GCC's: this backend leaves x18 alone, a platform being free to
+    # claim it.  x15 is a temporary no argument uses, and x16 and x17 are the
+    # linker's.
+    chain_reg=reg("x15")
 )
 
 CC_AAPCS64: Final[CallConvDesc] = CallConvDesc(

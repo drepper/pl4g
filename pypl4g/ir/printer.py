@@ -160,6 +160,9 @@ def render_function(func: Function, out: list[str]) -> None:
         # impure, and the difference is what lets a caller reading none of the
         # place it handed over drop the call.
         head.append(" answer-in-storage")
+    if func.attrs.chained:
+        # Where its first parameter arrives, which a caller has to agree with.
+        head.append(" chained")
     if func.is_declaration:
         out.append("".join(head))
         return

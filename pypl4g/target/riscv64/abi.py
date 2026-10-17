@@ -50,6 +50,8 @@ CC_PL4G: Final[CallConvDesc] = CallConvDesc(
     # use, as on AArch64 and unlike x86-64.
     allocation_order=_ALLOCATION_ORDER,
     red_zone=0,
+    # t2, as GCC has it: a temporary no argument uses.
+    chain_reg=reg("t2")
 )
 
 CC_LP64: Final[CallConvDesc] = CallConvDesc(

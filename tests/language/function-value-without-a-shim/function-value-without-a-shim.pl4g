@@ -1,0 +1,47 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A named function handed over as a value is called directly.
+※
+※ **A call through a value passes the environment in a register of its own** --
+※ r11 on x86-64, x15 on AArch64, t2 on RISC-V, none of them ever an argument --
+※ and the arguments where a call to the function by name would put them.  A
+※ lambda finds its environment there; a function of the program has none and
+※ never reads the register.  So what the value points at is the function itself,
+※ with no shim in between, whatever arguments it takes: several, floating-point,
+※ and a lambda handed to the same parameter beside it.
+※
+※ Compare **GCC**'s nested functions and **LLVM**'s `nest`, which pass the
+※ enclosing frame in a static-chain register for the same reason.
+
+let std := ⎕import("std")
+
+fn double(x: u64) → u64:
+    x × 2u64
+
+fn sum(a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64) → u64:
+    a + b + c + d + e + f + g
+
+fn half(x: f64) → f64:
+    x ÷ 2.0f64 ?? 0.0f64
+
+@[impure]
+fn apply(f: fn(u64) → u64, x: u64) → u64:
+    f(x)
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let n: u64 = 10u64
+    let d: fn(u64) → u64 = double
+    let s: fn(u64, u64, u64, u64, u64, u64, u64) → u64 = sum
+    let h: fn(f64) → f64 = half
+    let total: u64 = apply(double, 1u64) + apply(λ x: u64 [n] → u64 { x + n }, 1u64)
+    if d(4u64) ≠ 8u64 ∨ apply(double, 5u64) ≠ 10u64:
+        1u6
+    elif s(1u64, 2u64, 3u64, 4u64, 5u64, 6u64, 7u64) ≠ 28u64:
+        2u6
+    elif h(3.0f64) < 1.4f64 ∨ h(3.0f64) > 1.6f64:
+        3u6
+    elif total ≠ 13u64:
+        5u6
+    else:
+        0u6

@@ -109,6 +109,13 @@ class FuncAttrs:
     #: Saying which of the two it is, rather than calling it impure, is what
     #: lets the sweep tell them apart.
     answer_in_storage: bool = False
+    #: Whether the first parameter arrives in the convention's chain register
+    #: rather than as an argument: what every function called through a value
+    #: has -- a lambda's environment, a walk's description -- and what every call
+    #: through a value passes there.  A named function called through one has
+    #: no such parameter and never reads the register, which is what lets a
+    #: value point at it directly.
+    chained: bool = False
     #: Whether an array handed where one element is wanted is walked, the
     #: function being called for each and the answers making an array of the
     #: same shape.  A property of the function, since what it means to hand it
