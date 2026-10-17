@@ -16,6 +16,15 @@ about how much of the compiler gets imported.
 The best of several runs is recorded rather than the mean: the best is the one
 least disturbed by whatever else the machine was doing, and the question here is
 how long the work takes, not how busy the machine was.
+
+**Against the commit before.**  A machine does not run at one speed from one
+stretch of minutes to the next, so two columns measured apart differ by more than
+the compilers do -- by ten per cent, on this one, between runs of the same commit.
+So the commit before in the table is checked out beside this one and measured
+with it, sample by sample, the two taking turns at going first: whatever the
+machine does, it does to both.  What is kept of that is the ratio, per sample,
+which is what says whether this commit made the compiler faster or slower; the
+column of milliseconds is kept as well, for what it is worth on its own.
 """
 
 from __future__ import annotations
@@ -340,32 +349,54 @@ def work_of(stderr: str) -> float:
     return total
 
 
-def measure(name: str, triple: str, output: Path) -> tuple[float, float] | None:
-    """The best work and process times of compiling *name*, in milliseconds."""
-    source = sample_path(name)
-    if not source.exists():
-        return None
+def run_once(source: Path, triple: str, output: Path,
+             compiler: Path) -> tuple[float, float] | None:
+    """The work and process times of one compilation of *source*, in
+    milliseconds, by the compiler in the tree at *compiler*."""
     command = [sys.executable, "-m", "pypl4g", "--time-report", "-o", str(output),
                "".join(("--target=", triple)), str(source)]
-    best_work: float | None = None
-    best_process: float | None = None
-    for _ in range(RUNS):
-        start = time.perf_counter()
-        proc = subprocess.run(command, capture_output=True, text=True, cwd=ROOT)
-        elapsed = (time.perf_counter() - start) * 1000
-        if proc.returncode != 0:
-            return None
-        work = work_of(proc.stderr)
-        best_work = work if best_work is None else min(best_work, work)
-        best_process = elapsed if best_process is None else min(best_process, elapsed)
-    assert best_work is not None and best_process is not None
-    return best_work, best_process
+    start = time.perf_counter()
+    proc = subprocess.run(command, capture_output=True, text=True, cwd=compiler)
+    elapsed = (time.perf_counter() - start) * 1000
+    if proc.returncode != 0:
+        return None
+    return work_of(proc.stderr), elapsed
+
+
+def measure(name: str, triple: str, output: Path,
+            before: Path | None = None
+            ) -> tuple[tuple[float, float] | None, tuple[float, float] | None]:
+    """The best work and process times of compiling *name*, in milliseconds, by
+    this tree's compiler -- and, where *before* names another tree, by that one's
+    too, the two taking turns so that whatever the machine does it does to both.
+    Both compile this tree's copy of the sample, so the input is the same."""
+    source = sample_path(name)
+    if not source.exists():
+        return None, None
+    trees = [ROOT] if before is None else [ROOT, before]
+    best: dict[Path, list[float] | None] = {tree: [] for tree in trees}
+    for turn in range(RUNS):
+        for tree in (trees if turn % 2 == 0 else trees[::-1]):
+            if best[tree] is None:
+                continue
+            found = run_once(source, triple, output, tree)
+            if found is None:
+                best[tree] = None
+                continue
+            held = best[tree]
+            assert held is not None
+            best[tree] = [found[0], found[1]] if not held \
+                else [min(held[0], found[0]), min(held[1], found[1])]
+    here = best[ROOT]
+    there = best.get(before) if before is not None else None
+    return ((here[0], here[1]) if here else None,
+            (there[0], there[1]) if there else None)
 
 
 def load() -> dict[str, object]:
     """The figures recorded so far."""
     if not DATA.exists():
-        return {"samples": {}, "commits": [], "times": {}}
+        return {"samples": {}, "commits": [], "times": {}, "steps": {}}
     return json.loads(DATA.read_text(encoding="utf-8"))
 
 
@@ -436,6 +467,47 @@ def _process_table(heads: list[str], samples: dict[str, str],
     return lines
 
 
+def _steps_table(heads: list[str],
+                 steps: dict[str, dict[str, object]]) -> list[str]:
+    """Each commit against the one before it, measured together.
+
+    The median of the per-sample ratios, the middle half of them, and the sample
+    that moved furthest either way: a change that costs time shows as a median
+    above one, and one that costs it only somewhere shows in the last column.
+    """
+    rows: list[str] = []
+    for head in heads:
+        step = steps.get(head)
+        if not step:
+            continue
+        ratios: dict[str, float] = step["ratios"]  # type: ignore[assignment]
+        if not ratios:
+            continue
+        ordered = sorted(ratios.values())
+        middle = ordered[len(ordered) // 2] if len(ordered) % 2 else \
+            (ordered[len(ordered) // 2 - 1] + ordered[len(ordered) // 2]) / 2
+        low, high = ordered[len(ordered) // 4], ordered[(3 * len(ordered)) // 4]
+        furthest = max(ratios, key=lambda name: abs(ratios[name] - 1.0))
+        rows.append("".join((
+            "| `", head, "` | `", str(step["against"]), "` | ",
+            format(middle, ".3f"), " | ", format(low, ".3f"), " – ",
+            format(high, ".3f"), " | `", furthest, "` ",
+            format(ratios[furthest], ".3f"), " | ", str(len(ordered)), " |")))
+    if not rows:
+        return []
+    return ["Against the commit before", "-------------------------", "",
+            "Each commit measured together with the one before it in these tables,",
+            "the two taking turns sample by sample, so that how fast the machine",
+            "happened to be at the time cancels out.  The work of this commit over",
+            "the work of that one: below one is faster.  These are the numbers to",
+            "read for whether a commit cost time; the tables above, each column",
+            "measured on its own, drift with the machine by more than that.",
+            "",
+            "| commit | against | median | middle half | furthest | samples |",
+            "|---|---|---|---|---|---|",
+            *rows, ""]
+
+
 def render(data: dict[str, object]) -> str:
     """The tables, as Markdown."""
     commits = list(data["commits"])  # type: ignore[arg-type]
@@ -484,6 +556,7 @@ def render(data: dict[str, object]) -> str:
               "worth showing here, and every figure is in the JSON beside this file.",
               ""]
     lines += _process_table(heads, samples, times)
+    lines += _steps_table(heads, data.get("steps", {}))  # type: ignore[arg-type]
     lines.append("What each row is:")
     lines.append("")
     for entry in commits:
@@ -506,6 +579,9 @@ def main() -> int:
                         help="the triple to compile for")
     parser.add_argument("--dry-run", action="store_true",
                         help="measure and print, without recording")
+    parser.add_argument("--alone", action="store_true",
+                        help="measure this commit only, not together with the one "
+                             "before it in the table")
     args = parser.parse_args()
 
     data = load()
@@ -515,19 +591,42 @@ def main() -> int:
             samples.setdefault(name, why)
 
     head = commit()
+    earlier = [c["hash"] for c in data["commits"]  # type: ignore[union-attr]
+               if c["hash"] != head]  # type: ignore[index]
+    against = None if args.alone or not earlier else earlier[-1].rstrip("+")
     measured: dict[str, list[float]] = {}
+    ratios: dict[str, float] = {}
     import tempfile
     with tempfile.TemporaryDirectory() as directory:
         output = Path(directory) / "out"
-        for name in samples:
-            found = measure(name, args.target, output)
-            if found is None:
-                print("".join(("       -        -  ", name)), file=sys.stderr)
-                continue
-            measured[name] = [found[0], found[1]]
-            print("".join((format(found[0], "8.2f"), " ms work  ",
-                           format(found[1], "6.0f"), " ms total  ", name)),
-                  file=sys.stderr)
+        before: Path | None = None
+        if against is not None:
+            before = Path(directory) / "before"
+            made = subprocess.run(["git", "-C", str(ROOT), "worktree", "add", "--detach",
+                                   str(before), against], capture_output=True, text=True)
+            if made.returncode != 0:
+                print("".join(("cannot check out ", against, " to measure against: ",
+                               made.stderr.strip())), file=sys.stderr)
+                before, against = None, None
+        try:
+            for name in samples:
+                found, theirs = measure(name, args.target, output, before)
+                if found is None:
+                    print("".join(("       -        -  ", name)), file=sys.stderr)
+                    continue
+                measured[name] = [found[0], found[1]]
+                ratio = ""
+                if theirs is not None and theirs[0] > 0:
+                    ratios[name] = found[0] / theirs[0]
+                    ratio = "".join(("  ", format(ratios[name], "6.3f"),
+                                     " of ", against or ""))
+                print("".join((format(found[0], "8.2f"), " ms work  ",
+                               format(found[1], "6.0f"), " ms total", ratio, "  ",
+                               name)), file=sys.stderr)
+        finally:
+            if before is not None:
+                subprocess.run(["git", "-C", str(ROOT), "worktree", "remove", "--force",
+                                str(before)], capture_output=True, text=True)
 
     if args.dry_run:
         return 0
@@ -537,6 +636,9 @@ def main() -> int:
     commits[:] = [c for c in commits if c["hash"] != head]
     commits.append({"hash": head, "subject": subject()})
     times[head] = measured
+    steps: dict[str, object] = data.setdefault("steps", {})  # type: ignore[assignment]
+    if against is not None and ratios:
+        steps[head] = {"against": against, "ratios": ratios}
     DATA.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
                     encoding="utf-8")
     TABLE.write_text(render(data), encoding="utf-8")
