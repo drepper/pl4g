@@ -3387,7 +3387,9 @@ type.
 
 **A member is read, not assigned to** (4462).  A tuple is a value and not a place: its members are registers, not room in memory
 that something else could be pointing at.  Assigning to one would mean binding the name to a tuple made of the others and the new
-value, which is what writing that out does.
+value, which is what writing that out does.  That is a rule and not a gap: `←` on a member is not a second way of saying it, a
+tuple whose members change one at a time being what a record is for.  Python's and Haskell's tuples refuse the same; Rust's
+`t.0 = x` and Swift's allow it, their tuples being places.
 
 Taking a tuple apart with names is still the way to have all of it at once, and is what a generated program will mostly write:
 `t⟦0⟧` is for where one member is wanted and the others are not.

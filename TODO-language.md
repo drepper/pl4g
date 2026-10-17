@@ -383,10 +383,11 @@ removed or decided otherwise, which its last paragraph says.
     be defined in terms of one below it; one that reaches itself is refused (4666).  Folding constant expressions had briefly
     accepted only the names written above, which is the order-dependence this entry warned of.
 
-[ ] assign to one member of a tuple.  Refused (4462), because a tuple is registers and not a place.  What it would mean is binding
+[x] assign to one member of a tuple.  Refused (4462), because a tuple is registers and not a place.  What it would mean is binding
     the name to a tuple made of the other members and the new value, which the language can already be told to do by writing that
     out; whether `←` should be a second way of saying it is a question about assignment rather than about tuples, and the same
-    question the entry above asks about a row.
+    question the entry above asks about a row.  **Decided** on 2026-10-17: it stays refused.  A tuple is a value, and a new one
+    is made by writing it out; a member to be changed belongs in a record.
 
 [ ] assign a whole row, or a whole array.  `m⟦0⟧ ← r` is refused (4457) and would be a copy of as many elements as the row
     holds.  Nothing in the language copies one aggregate into another yet, and the first thing that does should settle it for

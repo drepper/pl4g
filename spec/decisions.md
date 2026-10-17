@@ -10053,6 +10053,16 @@ the parameter named only through a load, so `&v` is not what `v` named (4561).  
 tree-sitter grammar refused a statement after a `let` whose lambda's body is indented, as it had for the other lines ending in a
 block before they were written out; the lambda is now one of those.
 
+## 2026-10-17T19:30+02:00 — language
+
+**A member of a tuple is not assigned to**
+
+The user decided the entry in TODO-language.md asking whether `t⟦0⟧ ← x` should be allowed: it stays refused (4462).  A tuple is
+a value and not a place, so assigning to a member could only mean binding the name to a new tuple made of the others and the new
+value, which writing that out already says; a value whose parts change one at a time is a record.  Python's and Haskell's tuples
+are refused the same way; Rust's `t.0 = x` and Swift's are allowed, their tuples being places in memory.  Nothing in the compiler
+changes.
+
 Open questions
 --------------
 
