@@ -3752,8 +3752,10 @@ whole keeps what the array said.  **A view is any other `T⟦⟧`**: walked, ind
 **`⎕one_run(v)` is the elements of `v` as one run**: `v` itself where they are one already, and a copy of them otherwise -- in the
 arena `in` names, or in `⎕heap`.  Something that reads elements as a run, the kernel above all, is handed one, and `std`'s `read`,
 `write`, `write_sync`, `print` and `println` ask for one, so a column goes out as the bytes it holds and a read into one fills it.
-What `write` copies is in `⎕heap` and is not given back, the request outliving the call; the others copy into an arena of the call's
-own.
+**The copy is given back when the kernel has answered**: `write` hands the request what it copied, and the ring gives it back as the
+answer comes in -- the kernel reading it after the call has returned -- while `read`, `print` and `println`, which wait for their
+answers, give it back once they have them, `read` after copying what came into the view.  `read` writes the elements it is handed,
+so it takes a `mut u8⟦⟧` and is `impure`.
 
 Compare: **NumPy**, whose `m[0:3, 1]` and `m[0, 0:4:2]` are views with strides as these are and whose `ascontiguousarray` is
 `⎕one_run`; **Fortran**'s array sections, `m(1:3, 2)` and `a(1:10:2)`, and its copy-in of a section that is not contiguous;

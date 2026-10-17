@@ -25,10 +25,17 @@ type Ring =
     sq_head : u64 ; sq_tail : u64 ; sq_mask : u64 ; sq_array : u64 ;
     sqes : u64 ;
     cq_head : u64 ; cq_tail : u64 ; cq_mask : u64 ; cqes : u64 ;
-    held : u64⟦8⟧ ; answer : i64⟦8⟧
+    held : u64⟦8⟧ ; answer : i64⟦8⟧ ;
+    kept_at : u64⟦8⟧ ; kept_len : u64⟦8⟧
 
 @[external("pl4g_io_submit"), io]
 fn io_submit(r: &mut Ring, which: i32, fd: i32, at: u64, len: u64) → i64
+
+@[external("pl4g_io_keep"), io]
+fn io_keep(r: &mut Ring, slot: i64, at: u64, len: u64)
+
+@[external("pl4g_io_give_back"), io]
+fn io_give_back(at: u64, len: u64)
 
 @[external("pl4g_io_wait"), io]
 fn io_wait(r: &mut Ring, slot: i64) → i64
@@ -117,6 +124,17 @@ fn Writer.start_several(w: &mut Writer, at: u64, count: u64) → Pending ? i32:
 ※※ holding an answer nobody has read, and what would make it work is reading one.
 fn started(slot: i64, ring: u64) → Pending ? i32:
     if slot < 0i64: ⊥ 11i32 else: Pending(.slot ← slot, .ring ← ring)
+
+※※ Keep the heap's room at `at`, `len` bytes, until the request is answered, and
+※※ give it back then: where its bytes were copied for the kernel to read.
+@[export, impure]
+fn Pending.keep(p: Pending, at: u64, len: u64):
+    io_keep(⎕at(p.ring, ⌜&mut Ring⌝), p.slot, at, len)
+
+※※ Give back the heap's room at `at`, `len` bytes: a copy `⎕one_run` made.
+@[export, impure]
+fn give_back(at: u64, len: u64):
+    io_give_back(at, len)
 
 ※※ Wait for a request and answer what the kernel said: how many bytes went, or
 ※※ a negative number.

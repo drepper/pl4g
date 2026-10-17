@@ -43,7 +43,7 @@ WRITING = 1
 
 #: How many machine words the runtime's ring is, which the runtime itself says.
 #: Room of the right size, zeroed, is what it asks for and all it asks for.
-RING_WORDS = 27
+RING_WORDS = 43
 
 
 def writing(module: Module) -> Module:

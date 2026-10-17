@@ -10090,9 +10090,13 @@ is one run and its strides are constants, a vector's element is one multiplicati
 dimensions than one walked a place at a time divides its counts out.  Asked what a view that is not a run does where one is
 wanted -- the kernel, handed where the first byte is and how many -- the user chose **copying in `std`**, against refusing in
 `std` and against stopping the program; that wants the elements as a run, which nothing a program could write gave, so
-**`⎕one_run(v)`** answers `v` where it is one and a copy otherwise, in the arena `in` names or `⎕heap`.  `read`, `write_sync`,
-`print` and `println` copy into an arena of their own; `write` into `⎕heap`, not given back, the request outliving the call; `read`
-takes a `mut u8⟦⟧` and is `impure`, writing what came into the elements it was handed.  And asked about steps, now that a view
+**`⎕one_run(v)`** answers `v` where it is one and a copy otherwise, in the arena `in` names or `⎕heap`.  Measured, the copy cost
+every program doing I/O something whichever way it was kept -- the optimizer folds neither the question nor the branch where a view
+is known to be a run -- and asked how to keep it (an arena per call, a piece at a time through the frame, `⎕heap` never given back,
+or refusing after all), the user chose **`⎕heap`, given back when the ring's answer for the request arrives**.  So the ring keeps,
+per slot, what a request copied (`pl4g_io_keep`) and gives it back as it reaps the answer, or at once for a request done without a
+ring; `read`, `print` and `println`, which wait for their answers, give theirs back when they have them (`pl4g_io_give_back`),
+`read` after copying what came into the view.  `read` takes a `mut u8⟦⟧` and is `impure`, writing the elements it was handed.  And asked about steps, now that a view
 carries one, the user chose **positive steps**: `a⟦0…10…2⟧`, NumPy's `a[0:10:2]` and Fortran's `a(1:10:2)`, against negative ones
 too and against none.
 

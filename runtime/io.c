@@ -150,7 +150,11 @@ struct cqe {
  * `answer` what the kernel said about it once it has said anything.  A slot is
  * taken when a request is submitted and given back when what the kernel said
  * has been read out of it, so what is outstanding is exactly the slots that are
- * taken and not yet answered. */
+ * taken and not yet answered.
+ *
+ * `kept_at` and `kept_len` are room of the heap's a request's bytes were copied
+ * into -- a view that was not one run, made into one -- which the kernel reads
+ * until it answers and which is given back the moment it has. */
 struct pl4g_ring {
   u64 state;                    /* 0 untried, 1 ready, 2 no ring here */
   u64 fd;
@@ -158,7 +162,11 @@ struct pl4g_ring {
   u64 cq_head, cq_tail, cq_mask, cqes;
   u64 held[ENTRIES];            /* 0 free, 1 submitted, 2 answered */
   i64 answer[ENTRIES];
+  u64 kept_at[ENTRIES];
+  u64 kept_len[ENTRIES];
 };
+
+void pl4g_heap_free(void *at, u64 size);
 
 #define FREE 0
 #define SUBMITTED 1
@@ -186,7 +194,7 @@ const u64 pl4g_io_shape[] = {
   FIELD(sq_head), FIELD(sq_tail), FIELD(sq_mask), FIELD(sq_array),
   FIELD(sqes),
   FIELD(cq_head), FIELD(cq_tail), FIELD(cq_mask), FIELD(cqes),
-  FIELD(held), FIELD(answer),
+  FIELD(held), FIELD(answer), FIELD(kept_at), FIELD(kept_len),
 };
 
 #define UNTRIED 0
@@ -284,8 +292,19 @@ static int started(struct pl4g_ring *r)
   return 1;
 }
 
+/* Give back what the request in `slot` kept until the kernel had answered it. */
+static void give_back(struct pl4g_ring *r, long slot)
+{
+  if (r->kept_at[slot] != 0) {
+    pl4g_heap_free((void *) r->kept_at[slot], r->kept_len[slot]);
+    r->kept_at[slot] = 0;
+    r->kept_len[slot] = 0;
+  }
+}
+
 /* Take in every answer the kernel has put in the completion ring.  Answers how
- * many were taken, which is what says whether waiting again would help. */
+ * many were taken, which is what says whether waiting again would help.  What a
+ * request kept for the kernel to read is given back with its answer. */
 static int reap(struct pl4g_ring *r)
 {
   u32 head = load_plain(r->cq_head);
@@ -298,6 +317,7 @@ static int reap(struct pl4g_ring *r)
     if (who < ENTRIES) {
       r->answer[who] = c->res;
       r->held[who] = ANSWERED;
+      give_back(r, (long) who);
     }
     head += 1;
     taken += 1;
@@ -534,6 +554,30 @@ i64 pl4g_io_submit(struct pl4g_ring *r, i32 which, i32 fd, u64 at, u64 len)
    * not -- every read would start at the top and every write overwrite it. */
   submit(r, slot, (unsigned char) ways[which].op, fd, at, len, (u64) -1);
   return slot;
+}
+
+/* Keep the heap's room at `at`, `len` bytes, until the request in `slot` is
+ * answered, and give it back then -- now, where it already is, as a request done
+ * without a ring is.  What `std.write` hands the kernel where it had to copy a
+ * view into one run: the copy is read by the kernel after the call returns. */
+void pl4g_io_keep(struct pl4g_ring *r, i64 slot, u64 at, u64 len)
+{
+  if (slot < 0 || slot >= ENTRIES) {
+    pl4g_heap_free((void *) at, len);
+    return;
+  }
+  r->kept_at[slot] = at;
+  r->kept_len[slot] = len;
+  if (r->held[slot] != SUBMITTED)
+    give_back(r, (long) slot);
+}
+
+/* Give back the heap's room at `at`, `len` bytes, that a view was copied into
+ * for a request the caller has already seen answered -- what `std.read` and
+ * `std.Io.print` do with theirs once the kernel has it all. */
+void pl4g_io_give_back(u64 at, u64 len)
+{
+  pl4g_heap_free((void *) at, len);
 }
 
 /* Wait for the request in `slot` and answer what the kernel said about it.

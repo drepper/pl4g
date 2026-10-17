@@ -1,0 +1,34 @@
+※ pl4g-test: compile=ok opt=1 run=native exit=0 diag=none
+
+※ What `std` copies a view into for the kernel is given back once the kernel has
+※ answered: by `print` when it has written all of it, and by `write` when the
+※ answer to the request comes in -- the copy being what the kernel reads after
+※ the call has returned.  Every other byte of a 1 KiB array is 512 bytes copied
+※ each time, written 1,280,000 times here: 640 MiB if nothing were given back,
+※ which the limits a test program runs under do not have.
+
+let std := ⎕import("std")
+
+@[impure]
+fn many(dir: &std.fs.Dir, what: u8⟦⟧) → u6:
+    match std.fs.Dir.open(dir, "/dev/null", ⌜std.io.Writer⌝):
+        std.io.Writer(w):
+            let out: mut std.io.Writer = w
+            defer std.io.Writer.close(out)
+            let none: std.io.Pending = std.io.Pending(.slot ← 0i64 - 1i64, .ring ← 0u64)
+            let turn: mut u64 = 0u64
+            while turn < 640000u64:
+                if ⎕drop(std.Io.print(&mut out, what) ?? 0) ≠ 512u64:
+                    return 1u6
+                if ⎕drop(std.flush(std.write(&mut out, what) ?? none) ?? 0) ≠ 512u64:
+                    return 2u6
+                turn ← turn + 1u64
+            0u6
+        ⊥:
+            3u6
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let bytes: mut u8⟦1024⟧ = 1024 ⍴ 0u8
+    bytes⟦1⟧ ← 1u8
+    many(std.fs.cwd(), bytes⟦0…1024…2⟧)

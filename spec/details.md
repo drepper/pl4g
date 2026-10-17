@@ -4436,7 +4436,10 @@ strides of what they convert; and a pick, `⎕span` and `⎕bytes`, which are ru
 length in the answer, so the dimensions a view's type states are ones it kept whole, still one run: a row `_row_at` answers as an
 array whose type says its shape is a place and nothing else, and has to be.  `_lower_one_run` compares the strides with a run's
 and branches: the view itself, or `_room_for` in the arena `in` named (`_takes_room` lets it) copied into by the loop.  The
-runtime's `pl4g_args` writes the stride of one beside the place and the count.
+runtime's `pl4g_args` writes the stride of one beside the place and the count.  What `std` copies for the kernel is given back by
+the ring: `kept_at` and `kept_len` per slot, set by `pl4g_io_keep` (through `io.Pending.keep`) and given back by `reap` when the
+slot's answer is taken in -- or at once, where the request was done without a ring and is answered already -- and
+`pl4g_io_give_back` (`io.give_back`) for a function that has waited for its answer itself.
 
 
 A generic function checked where it is written

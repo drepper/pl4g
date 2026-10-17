@@ -24131,17 +24131,51 @@ class Checker:
         builder.br(done, (value, before), span)
         builder.position_at(copying)
         builder.set_memory(before)
-        count = self._by_row(builder, builder.int_const(U64, 1), lengths, span)
-        room = self._room_for(builder, ty.element, count, span)
-        self._element_by_element(builder, (room, lengths, dense, True),
-                                 (start, lengths, strides, False), ty.element,
-                                 count, False, span)
-        builder.br(done, (self._view(builder, room, lengths, dense, ty, span),
-                          builder.memory()), span)
+        # The copy is the uncommon way through and a loop, so it is one function
+        # for every view of this type rather than written out at each; the
+        # question is asked here, where a view whose strides are known -- one
+        # made in this call, or handed in by a caller this was written into --
+        # answers it while compiling and the copy is never reached.
+        copied = builder.call(self._one_run_function(ty),
+                              (self._out_of(builder, span), value), ty, span)
+        builder.br(done, (copied, builder.memory()), span)
         builder.position_at(done)
         answer = done.add_param(ty, "run")
         builder.set_memory(done.add_param(MEM, "mem"))
         return answer
+
+    def _one_run_function(self, ty: ArrayType) -> Function:
+        """``__pl4g_one_run.T(arena, v)``: the elements of the view *v* copied
+        into room from *arena* as one run, and that run.  Built once for a type,
+        and never written out where it is called."""
+        arena = self._module.types.ptr_type(ARENA, mutable=True)
+        func, fresh = tables.generated(
+            self._module, ".".join(("__pl4g_one_run", ty.mangled())), (arena, ty),
+            ty)
+        if not fresh:
+            return func
+        func.attrs = replace(func.attrs, inline=InlineHint.NEVER)
+        block = func.add_block()
+        builder = IRBuilder(self._module, func)
+        builder.position_at(block)
+        where = block.add_param(arena, "arena")
+        value = block.add_param(ty, "v")
+        start, lengths = self._shape_of(builder, value, ty, INVALID_SPAN)
+        strides = self._strides_of(builder, value, ty, INVALID_SPAN)
+        dense = self._dense_strides(builder, lengths, INVALID_SPAN)
+        count = self._by_row(builder, builder.int_const(U64, 1), lengths,
+                             INVALID_SPAN)
+        room = builder.cast(
+            CastKind.BITCAST,
+            tables.allocate(builder, where, builder.binary(
+                BinOp.WRAP_MUL, count,
+                builder.int_const(U64, stride_of(ty.element, _LAYOUT)))),
+            self._module.types.ptr_type(ty.element, mutable=True))
+        self._element_by_element(builder, (room, lengths, dense, True),
+                                 (start, lengths, strides, False), ty.element,
+                                 count, False, INVALID_SPAN)
+        builder.ret(self._view(builder, room, lengths, dense, ty, INVALID_SPAN))
+        return func
 
     def _lower_str_of(self, builder: IRBuilder, expr: ast.Call,
                       expected: Type | None) -> Value:
@@ -26232,7 +26266,11 @@ class Checker:
                 seen = seen.operands[0]
                 continue
             if isinstance(seen, ExtractInst):
-                seen = seen.operands[0]
+                made = seen.operands[0]
+                # A part of a view made here is what was put in it.
+                seen = made.operands[seen.index] \
+                    if isinstance(made, TupleInst) and seen.index < len(made.operands) \
+                    else made
                 continue
             return False
 

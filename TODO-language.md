@@ -412,9 +412,11 @@ removed or decided otherwise, which its last paragraph says.
 [ ] take a run going the other way.  A step is at least one (4453): `a⟦9…0…⁻1⟧`, NumPy's `a[::-1]`, would be a view whose stride
     is negative, which every copy and walk would have to take into account -- the order `_move_elements` copies in among them.
 
-[ ] give back what `std.write` copies.  A view that is not one run is copied into `⎕heap` by `⎕one_run` before the kernel is told
-    about the request, and since the request outlives the call nothing gives the copy back.  The pending request would have to
-    carry it, and `flush` give it back.
+[ ] leave out the copy of a view where it is known to be one run.  Every program doing I/O carries `std`'s copy of a view that is
+    not one run -- the question, `__pl4g_one_run`, the allocator, the giving back: some 2 KB and up to half again the time to
+    compile the smallest of them -- because nothing folds it away where the view is a run while compiling: neither a branch on a
+    constant after `@[inline]`, nor `(p + 1) - p`, nor a stride read out of a tuple made in the caller.  An optimizer that
+    did, with the entry points written as small wrappers that are inlined, would leave a run's way through as it was.
 
 [ ] walk a view of a table without dividing.  A view of more than one dimension walked a place at a time -- copied, given to `¨`
     -- has the index along each dimension worked out by dividing the counts out (`_flat_offset`), where nested loops would add a
