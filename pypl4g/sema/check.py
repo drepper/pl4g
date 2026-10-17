@@ -10729,6 +10729,12 @@ class Checker:
             self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, expr.base.span,
                              found=ty.written())
             return UndefConst(ERROR)
+        held = self._borrowed_name(expr)
+        if held is not None and held[0] != self._taking_a_reference \
+                and self._lent_out(held[0], expr.span, False, held[1]):
+            # An element of an array a `&mut` into is out -- the same element, or
+            # one nothing here can tell from it.
+            return UndefConst(ERROR)
         if any(isinstance(one, ast.Range) for one in expr.indices):
             return self._lower_slice(builder, expr, base, ty, expected)
         if self._pick_in is expr and len(expr.indices) == 1 \
@@ -11429,7 +11435,8 @@ class Checker:
             # An element is written only through a name that says it may be:
             # `mut`, as a field is.
             return
-        lent = self._borrowed_name(stmt.base)
+        lent = self._borrowed_name(ast.Element(span=stmt.span, base=stmt.base,
+                                               indices=stmt.indices))
         if lent is not None and self._lent_out(lent[0], stmt.span, True, lent[1]):
             # A reference to one of its elements is out -- `&a⟦i⟧`, or a loop
             # walking it by reference -- and whoever holds it was promised
@@ -13546,11 +13553,13 @@ class Checker:
         A field is a place of its own, so lending one lends that field and what
         is inside it, and a reference to another field may be out beside it --
         `&mut init.io.input` and `&mut init.io.output` together, as Rust's
-        borrows of two fields are.  An element is part of the array, so lending
-        one lends the whole array: two elements are two places, but nothing here
-        tells one index from another and a promise that depends on arithmetic is
-        no promise.  A reference reached through another reference belongs to
-        whoever owns that one, and there is nothing here to hold to it.
+        borrows of two fields are.  So is an element whose indices are known
+        while compiling: `v⟦0⟧` and `v⟦1⟧` are two places, each index one step
+        of the path, so that a row and an element in it are still one.  An
+        element whose index is worked out while running is the whole array --
+        telling two of those apart would be a promise depending on arithmetic.
+        A reference reached through another reference belongs to whoever owns
+        that one, and there is nothing here to hold to it.
         """
         seen = expr
         fields: list[str] = []
@@ -13564,12 +13573,36 @@ class Checker:
                     fields.append(seen.name)
                     seen = seen.base
                 case ast.Element():
-                    # The whole array, whichever element: what was below it
-                    # is part of that.
-                    fields.clear()
+                    at = [self._index_known(one) for one in seen.indices]
+                    if any(one is None for one in at):
+                        # The whole array, whichever element: what was below it
+                        # is part of that.
+                        fields.clear()
+                    else:
+                        # Reversed with the rest below, so in the order written.
+                        fields.extend("".join(("\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}",
+                                               str(one),
+                                               "\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}"))
+                                      for one in reversed(at))
                     seen = seen.base
                 case _:
                     return None
+
+    def _index_known(self, expr: ast.Expr) -> int | None:
+        """The index *expr* comes to while compiling, where it is a whole number
+        known then, asked quietly: what is wrong with it is said where it is
+        lowered, once."""
+        if isinstance(expr, ast.Range):
+            return None
+        kept = self._diags
+        self._diags = DiagEngine(lambda _: None, kept.control, kept.catalog)
+        try:
+            found = self._constant(expr)
+        finally:
+            self._diags = kept
+        if found is None or found is _REFUSED or found.failed:
+            return None
+        return found.value
 
     def _lend(self, name: str | None, mutable: bool, span: Span,
               path: tuple[str, ...] = ()) -> None:

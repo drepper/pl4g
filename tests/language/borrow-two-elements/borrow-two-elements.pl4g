@@ -1,0 +1,33 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ Two elements whose indices are known while compiling are two places, as two
+※ fields are: a `&mut` to `v⟦0⟧` and one to `v⟦2⟧` may be out at once, and
+※ `v⟦1⟧` may be read and written while they are.  An array of more dimensions
+※ is told apart the same way, `m⟦0, 1⟧` from `m⟦1, 0⟧` and from `m⟦0, 0⟧`.
+※
+※ Compare: **Rust**, which tells two fields apart but never two elements --
+※ `&mut v[0]` and `&mut v[2]` are refused and `split_at_mut` is the way out;
+※ **C**, **C++**, **Zig** and **Odin**, which have no such rule at all.
+
+@[impure]
+fn two(p: &mut u8, q: &mut u8) → u8:
+    p⌖ ← 1u8
+    q⌖ ← 2u8
+    p⌖ + q⌖
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let v: mut u8⟦3⟧ = ⟦5u8, 6u8, 7u8⟧
+    let n := two(&mut v⟦0⟧, &mut v⟦2⟧)
+    let a: &mut u8 = &mut v⟦0⟧
+    let b := v⟦1⟧
+    v⟦1⟧ ← 9u8
+    a⌖ ← a⌖ + b
+    let m: mut u8⟦2, 2⟧ = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧⟧
+    let r: &mut u8 = &mut m⟦1, 0⟧
+    let e: &mut u8 = &mut m⟦0, 1⟧
+    m⟦0, 0⟧ ← 8u8
+    e⌖ ← e⌖ + r⌖
+    if n = 3u8 ∧ v⟦0⟧ = 7u8 ∧ v⟦1⟧ = 9u8 ∧ m⟦0, 1⟧ = 5u8 ∧ m⟦0, 0⟧ = 8u8: 0u6 else: 1u6

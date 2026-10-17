@@ -3073,8 +3073,11 @@ where the checker stopped counting the borrow -- the range the compiler assumed,
 places**: a `&mut` to one and a reference to another may be out at once -- `copy(&mut init.io.input, &mut init.io.output)` -- and a
 third field may be read or written beside them; a field and the record holding it, or a record holding it in turn, are one place
 (4563).  Which field is written down, so nothing is computed to tell them apart; Rust's borrow checker splits a borrow by field the
-same way.  **An element is part of its array**, so lending one lends the array: two elements are two places, but telling one index
-from another is arithmetic, and a promise that depends on arithmetic is no promise.  **A variable at the top level is not tracked** -- it is reachable from every
+same way.  **Two elements are two places where their indices are
+known while compiling**: `&mut v⟦0⟧` and `&mut v⟦2⟧` may be out at once and `v⟦1⟧` read or written beside them, while `v⟦1⟧` and
+`v⟦3 - 2⟧` are one place (4563), and an element lent may not be read (4565).  An element whose index is worked out while running
+is the whole array: telling it from another is arithmetic, and a promise that depends on arithmetic is no promise.  Rust tells no
+two elements apart and offers `split_at_mut`.  **A variable at the top level is not tracked** -- it is reachable from every
 function and no one of them can see what the others do -- so the rule is about names a body binds.
 
 **A `&mut` copied is a reborrow.**  A reference is a value like any other, so binding a second name to one already in hand --

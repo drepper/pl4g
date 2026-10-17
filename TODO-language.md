@@ -1101,9 +1101,10 @@ Runtime
     result; what is refused is a place that could have been lent again.  Done on 2026-10-17: a borrow is kept by a value of
     the name, which another value does not keep, each end logged with its cause.
 
-[ ] tell two elements of one array apart when lending them.  An element is part of the array, so lending one lends the array
+[x] tell two elements of one array apart when lending them.  An element is part of the array, so lending one lends the array
     (4563); `&mut v⟦0⟧` and `&mut v⟦1⟧` are two places and are refused as one.  Rust offers `split_at_mut` for
-    exactly this, and what it needs here is a way of saying that two indices differ.
+    exactly this, and what it needs here is a way of saying that two indices differ.  Done on 2026-10-17 for indices known
+    while compiling; one worked out while running still lends the array.
 
 [ ] let a lifetime name stand on something that is not a parameter of this call -- a field of a parameter, or a parameter of an
     enclosing lambda.  A name is looked for in the parameters' types (4567) and provenance is checked against those (4561); both

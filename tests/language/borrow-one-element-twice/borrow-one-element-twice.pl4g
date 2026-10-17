@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4563
+※ pl4g-test: expect-diag 4563 LANG_BORROW_ALIASED
+
+※ The same element twice is one place, however the index is written: `1` and
+※ `3 - 2` are both known while compiling and come to the same.
+
+@[impure]
+fn two(p: &mut u8, q: &mut u8) → u8:
+    p⌖ + q⌖
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let v: mut u8⟦3⟧ = ⟦5u8, 6u8, 7u8⟧
+    if two(&mut v⟦1⟧, &mut v⟦3 - 2⟧) = 0u8: 0u6 else: 1u6

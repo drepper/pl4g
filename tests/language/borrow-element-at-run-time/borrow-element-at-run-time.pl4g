@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4563
+※ pl4g-test: expect-diag 4563 LANG_BORROW_ALIASED
+
+※ An index worked out while running may be any element, so lending through it
+※ lends the whole array, and a `&mut` to another element beside it is refused.
+
+@[impure]
+fn two(p: &mut u8, q: &mut u8) → u8:
+    p⌖ + q⌖
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let v: mut u8⟦3⟧ = ⟦5u8, 6u8, 7u8⟧
+    let i := #init.args
+    if two(&mut v⟦0⟧, &mut v⟦i⟧) = 0u8: 0u6 else: 1u6

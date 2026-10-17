@@ -2,8 +2,7 @@
 
 ※ Two fields of a record are two places, so a `&mut` to each may be out at
 ※ once -- `&mut init.io.input` and `&mut init.io.output` handed to one call --
-※ and a third field may be read while they are.  An element is not told from
-※ another and lends the whole array.
+※ and a third field may be read while they are.
 ※
 ※ Compare: **Rust**, whose borrow checker splits a borrow by field the same way
 ※ for a local or a parameter and not through a method call; **C** and **C++**,

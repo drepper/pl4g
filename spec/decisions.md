@@ -10018,6 +10018,17 @@ way and fixed with it: a borrow kept by a name given a value in a block inside t
 block ended -- recorded at the depth being lowered rather than the name's -- so a place could be written while a name that still
 pointed at it was to be used.
 
+**Two elements of one array are two places where their indices are known while compiling**
+
+The user asked for the entry in TODO-language.md and chose, of four ways, **constant indices, checked**: where both indices fold
+while compiling and differ, the elements are two places, as two fields are, and the same index twice -- however written -- is
+one; an index worked out while running lends the whole array, as before.  Against keeping the rule and offering a split (Rust's
+`split_at_mut`, which tells no two elements apart), against trusting the program where it says two indices differ (C's
+`restrict`, Zig and Odin, which check nothing), and against working out ranges of run-time indices, which is a promise resting
+on arithmetic.  Each index is one step of the path, so an array of several dimensions is told apart element by element.  Found
+on the way and closed with it: reading an element a `&mut` was out to was not refused; it is now (4565), and only for that
+element or one that cannot be told from it.
+
 Open questions
 --------------
 

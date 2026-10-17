@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4565
+※ pl4g-test: expect-diag 4565 LANG_BORROW_NAME_READ
+
+※ An element a `&mut` is out to may not be read past it, any more than a field
+※ may: the value read could be changed under the reader.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let v: mut u8⟦3⟧ = ⟦5u8, 6u8, 7u8⟧
+    let a: &mut u8 = &mut v⟦1⟧
+    let x := v⟦1⟧
+    a⌖ ← x
+    0u6

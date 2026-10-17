@@ -4564,10 +4564,13 @@ assembly dump is laid out, the sections are laid out and every conditional branc
 ±4 KiB reach becomes the opposite branch over eight bytes and `jal zero, target` with a `riscv_jal` fixup; repeated until a round
 grows nothing.
 
-**A borrow of a field** (`_Borrow.path`).  `_borrowed_name` answers the name and the fields down to the part `&` reaches, an element
-cutting the path back to the array; `_lend` and `_lent_out` refuse only where the two paths overlap -- one is the other or begins
-it (`_overlap`).  `_record_at` and `_field_of` carry the fields being read down to the name (`below`), so reading one field while
-another is lent is not reading the name.
+**A borrow of a field** (`_Borrow.path`).  `_borrowed_name` answers the name and the fields down to the part `&` reaches; an element
+whose indices `_index_known` folds -- `_constant` asked with a diagnostics engine that says nothing, the index being lowered and
+complained about later, once -- adds one step `⟦i⟧` per index, and any other element cuts the path back to the array.  `_lend` and
+`_lent_out` refuse only where the two paths overlap -- one is the other or begins it (`_overlap`).  `_record_at` and `_field_of`
+carry the fields being read down to the name (`below`), so reading one field while another is lent is not reading the name;
+`_lower_element` checks the element's own path, so reading `v⟦1⟧` while `&mut v⟦1⟧` is out is refused (4565) and reading `v⟦0⟧` is
+not, and an element written is checked with its path in the same way.
 
 **`⎕fields` of a type.**  `_fields_of_a_type` reads a lifted argument: an enumeration gives `_members_of`, a tuple of
 `〈str, E〉` pairs built from `enum_const` and the names' text; a record type is taken by `_written_out` before anything lowers it
