@@ -702,3 +702,8 @@ Optimizations
     where the call standing alone says "argument 1 of 'twice' is …"; a function value handed where its type differs comes out as
     "'=' is defined on integers, not on 'fn(…)'".  Whatever lowers a comparison's operands for the other one's type takes the
     argument's mismatch for its own.
+
+[ ] lower a module's function only where a name could stand for it.  `_mentioned` takes every bare name below a definition, so a
+    local of a function's name -- `let run` in `std` beside `std.run`, `let done` beside `std.done` -- lowers that function for
+    every program reaching the definition, the whole of `std.run` once.  Leaving out the names a definition binds itself has to
+    respect where each binding begins: a name read before a `let` of it is still the function.

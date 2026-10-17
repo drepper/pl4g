@@ -170,18 +170,18 @@ fn drain(s: &mut fs.State):
 ※ kernel's answer comes in.
 @[export]
 fn write(to: &mut io.Writer, what: u8⟦⟧) → io.Pending ? i32:
-    let run: u8⟦⟧ = ⎕one_run(what)
-    let at: u64 = if #run = 0: 0u64 else: ⎕address(&run⟦0⟧)
-    if #run ≠ 0 and ⎕address(&run⟦0⟧) ≠ ⎕address(&what⟦0⟧):
-        io.Writer.start_kept(to, at, ⎕drop(#run))
+    let laid: u8⟦⟧ = ⎕one_run(what)
+    let at: u64 = if #laid = 0: 0u64 else: ⎕address(&laid⟦0⟧)
+    if #laid ≠ 0 and ⎕address(&laid⟦0⟧) ≠ ⎕address(&what⟦0⟧):
+        io.Writer.start_kept(to, at, ⎕drop(#laid))
     else:
-        io.Writer.start(to, at, ⎕drop(#run))
+        io.Writer.start(to, at, ⎕drop(#laid))
 
-※※ Give back `run` where `⎕one_run(of)` made a copy rather than answering `of`.
+※※ Give back `laid` where `⎕one_run(of)` made a copy rather than answering `of`.
 @[impure]
-fn given_back(run: u8⟦⟧, of: u8⟦⟧):
-    if #run ≠ 0 and ⎕address(&run⟦0⟧) ≠ ⎕address(&of⟦0⟧):
-        io.give_back(⎕address(&run⟦0⟧), ⎕drop(#run))
+fn given_back(laid: u8⟦⟧, of: u8⟦⟧):
+    if #laid ≠ 0 and ⎕address(&laid⟦0⟧) ≠ ⎕address(&of⟦0⟧):
+        io.give_back(⎕address(&laid⟦0⟧), ⎕drop(#laid))
 
 ※※ Wait for a request and answer how many bytes went, or what the kernel said.
 @[export]
@@ -272,12 +272,12 @@ fn run(s: &mut fs.State) → u64:
 ※ came into the view, and gives the copy back.
 @[export, impure]
 fn read(from: &mut io.Reader, into: mut u8⟦⟧) → u64 ¤size ? i32:
-    let run: u8⟦⟧ = ⎕one_run(into)
-    defer given_back(run, into)
-    let at: u64 = if #run = 0: 0u64 else: ⎕address(&run⟦0⟧)
-    let got: u64 ¤size = flush(io.Reader.start(from, at, ⎕drop(#run))?)?
-    if #run ≠ 0 and at ≠ ⎕address(&into⟦0⟧):
-        into ← run
+    let laid: u8⟦⟧ = ⎕one_run(into)
+    defer given_back(laid, into)
+    let at: u64 = if #laid = 0: 0u64 else: ⎕address(&laid⟦0⟧)
+    let got: u64 ¤size = flush(io.Reader.start(from, at, ⎕drop(#laid))?)?
+    if #laid ≠ 0 and ⎕address(&laid⟦0⟧) ≠ ⎕address(&into⟦0⟧):
+        into ← laid
     got
 
 ※※ Walk what `from` holds a line at a time.
@@ -347,15 +347,15 @@ fn read_lines(from: &mut io.Reader) ⇉ u8⟦⟧ ? i32:
 ※ line printed.  So this is the loop `write_sync` does not do, and it is here
 ※ rather than in each caller because both of the two want it.
 fn Io.all_of(to: &mut io.Writer, at: u64, total: u64) → u64 ¤size ? i32:
-    let done: mut u64 = 0u64
-    while done < total:
-        let went: u64 = ⎕drop(flush(io.Writer.start(to, at + done, total - done)?)?)
+    let sent: mut u64 = 0u64
+    while sent < total:
+        let went: u64 = ⎕drop(flush(io.Writer.start(to, at + sent, total - sent)?)?)
         if went = 0u64:
             ※ No progress and no refusal: nothing more will happen, and saying so
             ※ beats asking for ever.  `EIO` is what the kernel would have said.
             return ⊥ 5i32
-        done ← done + went
-    ⎕unit(done, ⌜size⌝)
+        sent ← sent + went
+    ⎕unit(sent, ⌜size⌝)
 
 ※※ Write every byte of `what` to `to`, answering how many went.
 ※※
@@ -371,9 +371,9 @@ fn Io.print(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
     else:
         ※ the kernel reads a run of bytes: a view that is not one is copied, and
         ※ the copy given back once the kernel has it all
-        let run: u8⟦⟧ = ⎕one_run(what)
-        defer given_back(run, what)
-        Io.all_of(to, ⎕address(&run⟦0⟧), total)
+        let laid: u8⟦⟧ = ⎕one_run(what)
+        defer given_back(laid, what)
+        Io.all_of(to, ⎕address(&laid⟦0⟧), total)
 
 ※※ The same, with a newline after it, written as one request.
 ※※
@@ -398,9 +398,9 @@ fn Io.println(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
     else:
         ※ the kernel reads runs of bytes: a view that is not one is copied, and
         ※ the copy given back once the kernel has it all
-        let run: u8⟦⟧ = ⎕one_run(what)
-        defer given_back(run, what)
-        let before: u64 = ⎕address(&run⟦0⟧)
+        let laid: u8⟦⟧ = ⎕one_run(what)
+        defer given_back(laid, what)
+        let before: u64 = ⎕address(&laid⟦0⟧)
         ※ The kernel's `iovec` twice over: where the bytes are and how many.
         let parts: mut u64⟦4⟧ = ⟦before, text, after, 1u64⟧
         let went: u64 = ⎕drop(flush(io.Writer.start_several(to, ⎕address(&parts⟦0⟧), 2u64)?)?)

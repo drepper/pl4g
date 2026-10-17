@@ -426,6 +426,11 @@ removed or decided otherwise, which its last paragraph says.
     semantic analysis lowering more of `std`, every pass working on more until the branches settle.  Building `__pl4g_one_run`'s body
     only for a program still naming it after optimization, and `std`'s view paths as functions of their own that are lowered only
     where called, would leave that work to the programs that have such a view.
+    **Measured (2026-10-18):** most of it was not the copy.  A local `run` in `std` named `std.run`, which lowering-by-name then
+    lowered for every program doing I/O, the scheduler and all; renamed, the semantic analysis is back where it was.  Building the
+    helper's body lazily would save about 1.5 ms of optimizing, and needs it built before `largeanswers` has settled how it answers,
+    so it is not done.  What is left, a fifth to two fifths on the smallest programs doing I/O, is every pass working on `std`'s
+    view paths before they fold, and verifying the module after each pass that changed it.
 
 [ ] walk a view of a table without dividing.  A view of more than one dimension walked a place at a time -- copied, given to `¨`
     -- has the index along each dimension worked out by dividing the counts out (`_flat_offset`), where nested loops would add a
