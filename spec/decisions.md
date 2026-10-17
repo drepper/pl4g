@@ -10003,6 +10003,21 @@ still released only by that liveness, the separate entry about rebinding being l
 name of a place after the reference to it was done with was refused under the lexical rule and is not now; it reads the place
 before the reference's last use instead, to keep testing what it was written to test.
 
+**A borrow is kept by one value of a name; every end of one is logged with its cause**
+
+The user asked for the entry in TODO-language.md and that **everything be logged carefully**.  A borrow is kept by the value a `let`
+or an assignment gave the name, and counted while that value may still be what the name holds and the name is still to be used --
+reaching definitions beside the liveness, from one forward walk.  So giving the name another value releases what the old one kept,
+on the way through that does it and no other.  Every way a kept borrow stops counting is logged with why: not used again, given
+another value, given one made from the old -- logged as carried on, not ended -- leaving by `return`, `break` or `continue`, and the
+end of the name's scope.
+
+Taken without asking, the two being needed for the rule to be sound rather than choices: a value made from the old one keeps what
+the old one kept, and a `&mut` copied from a name keeps what that name's value keeps, past the name's own last use.  Found on the
+way and fixed with it: a borrow kept by a name given a value in a block inside the name's own scope was dropped when that inner
+block ended -- recorded at the depth being lowered rather than the name's -- so a place could be written while a name that still
+pointed at it was to be used.
+
 Open questions
 --------------
 

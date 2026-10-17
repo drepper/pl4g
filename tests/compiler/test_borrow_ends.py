@@ -40,6 +40,44 @@ def test_every_borrow_ends_where_its_keeper_is_last_used(compile_source, tmp_pat
         (15, "n", "c"),    # where the `else` begins, which never uses `c`
         (16, "n", "c"),    # and after the `if`, on the way through `then`
         (20, "n", "d"),    # after the loop, not inside it
+        (24, "n", "other"),  # what `other` reaches through `r`, kept by it too
         (24, "r", "other"),
         (25, "n", "r"),
     ], _ended(compile_source, tmp_path)
+
+
+def _said(compile_source, tmp_path, name: str) -> list[tuple[int, str, str]]:  # noqa: ANN001
+    """Every `borrow-ended` entry of the language test *name*: the line counted from
+    where `std` is imported, the place lent, and why it ended."""
+    path = Path(__file__).resolve().parent.parent / "language" / name / "".join((name, ".pl4g"))
+    text = path.read_text(encoding="utf-8")
+    log = tmp_path / "report.json"
+    proc, _ = compile_source(text, "".join(("--report-log=", str(log))))
+    assert proc.returncode == 0, describe(proc)
+    first = text.splitlines().index("let std := ⎕import(\"std\")")
+    return sorted((one["where"]["line"] - first, one["subject"],
+                   one["reason"].split(": ", 1)[1])
+                  for one in json.loads(log.read_text(encoding="utf-8"))["reports"]
+                  if one["kind"] == "borrow-ended")
+
+
+def test_a_name_given_another_value_releases_what_it_kept(compile_source, tmp_path) -> None:  # noqa: ANN001
+    said = _said(compile_source, tmp_path, "reference-released-when-rebound")
+    lines = [(line, place) for line, place, _ in said]
+    assert lines == [(9, "n"), (13, "m"), (18, "m"), (18, "n"), (23, "m"), (25, "m")], said
+    assert said[0][2].startswith("'moving' is given another value here"), said
+    assert said[1][2].startswith("'moving' is given another value here"), said
+    assert said[2][2].startswith("'moving' is not used again"), said
+    assert said[4][2].startswith("'inner' is not used again"), said   # where `continue` goes
+    assert said[5][2].startswith("the scope of 'inner' ends here"), said
+
+
+def test_every_cause_is_said(compile_source, tmp_path) -> None:  # noqa: ANN001
+    said = _said(compile_source, tmp_path, "borrow-ended-causes")
+    why = {(line, place): reason.split(",")[0] for line, place, reason in said}
+    assert why[(11, "k")].startswith("the statement above gives 'r' another value made "
+                                     "from the one it held"), said
+    assert why[(14, "k")] == "'r' is not used again on this way through", said
+    assert why[(16, "n")] == "the function returns here", said
+    assert why[(17, "k")] == "'r' is not used again on this way through", said
+    assert why[(18, "n")] == "the scope of 'held' ends here", said

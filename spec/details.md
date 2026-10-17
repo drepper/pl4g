@@ -818,9 +818,16 @@ which bindings are live as each statement begins (`live_in`): an `if` and a `mat
 `break`, `continue` and `return` leave with what is live where they go, a deferred statement's uses are live until its block is
 left and what a `foreach` walks for the whole loop.  `_Borrow.keeper` is the binding of the name that keeps it, set where
 `_kept_by_a_name` promotes it; `_lower_block` keeps the `live_in` of the statement being lowered in `_current_live`, and
-`_still_out` counts a kept borrow only while its keeper is in it.  Then a forward walk over the same answers, carrying per way
+`_still_out` counts a kept borrow only while its keeper is in it -- the keeper being a *value*, the binding and the statement that
+gave it (`_current_stmt`), which the forward walk tells reaching from not: `reach_in` says which values reach a statement, a loop
+taken to a fixed point, and a borrow counts only while its value reaches and its name is live.  `_kept_by_a_name` records a borrow
+at the depth of its keeper's scope, not the one being lowered -- a value given in a block inside the name's own lives as long as
+the name -- and a borrow of a name holding a reference carries what that name's value keeps over to the new keeper, dropping the
+borrow of a name from its own new value.  Then a forward walk over the same answers, carrying per way
 through which names are live and joining a choice's arms, notes the statement each stops being live at (`ends`) -- which is
-where `_still_out` stops counting it -- and `_borrows_ended_at` writes a `borrow-ended` entry there.  The log is the checker's
+where `_still_out` stops counting it -- and `_borrows_ended_at` writes a `borrow-ended` entry there; `ends_after`, `leave_ends`
+and `exit_ends` are the values given another value within a statement, left by a `return`, `break` or `continue`, and still
+counted where their block ends, which `_borrows_ended_after` and `_borrows_ended_with` log with the cause.  The log is the checker's
 range because both read the one `live_in`.
 
 **A `&mut` copied is lent** in `_lower_name`: a local holding a reference, read anywhere but directly under `⌖` -- the names

@@ -1,0 +1,31 @@
+※ pl4g-test: compile=error diag=4566
+
+※ After the `if`, `moving` may name `n` -- the `then` arm gave it `&mut n` -- so
+※ `n` is lent until `moving`'s last use, whichever way was taken.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let n: mut u8 = 1u8
+    let m: mut u8 = 1u8
+    let moving: mut &mut u8 = &mut n
+    moving⌖ ← 2u8
+    moving ← &mut m
+    n ← n + 1u8
+    moving⌖ ← 5u8
+    if #init.args > 0:
+        moving ← &mut n
+        moving⌖ ← moving⌖ + 1u8
+    else:
+        n ← n + 1u8
+    n ← n + 1u8
+    moving⌖ ← moving⌖ + 1u8
+    if #init.args > 9:
+        return 1u6
+    foreach §turns i := 0u8…2u8:
+        let inner: &mut u8 = &mut m
+        if i = 1u8:
+            continue §turns
+        inner⌖ ← inner⌖ + 1u8
+    if n = 5u8 ∧ m = 6u8: 0u6 else: 1u6

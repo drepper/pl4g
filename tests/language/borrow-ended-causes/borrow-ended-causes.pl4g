@@ -1,0 +1,27 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ Every way a borrow kept by a name ends, which the report log says: the name's
+※ last use, its being given another value made from the one it held (which keeps
+※ what that kept), a `return`, and its scope's end.
+
+let std := ⎕import("std")
+
+fn same(p: &mut ⧖a u8) → &mut ⧖a u8:
+    p
+
+@[impure]
+fn count(n: mut u8) → u8:
+    let k: mut u8 = n
+    let r: mut &mut u8 = &mut k
+    r ← same(r)
+    r⌖ ← r⌖ + 1u8
+    let held: &mut u8 = &mut n
+    if r⌖ > 9u8:
+        held⌖ ← 0u8
+        return held⌖
+    held⌖ ← held⌖ + r⌖
+    held⌖
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    if count(2u8) = 5u8: 0u6 else: 1u6

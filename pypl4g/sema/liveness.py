@@ -20,17 +20,31 @@ dead before it: what it held before is not what anything after reads.
 A name is the binding it resolves to -- where it is bound, which is how the
 checker names a variable too -- so a name shadowed is two names.
 
-Three answers for each statement, by its identity:
+Then forward, over the same answers, the *values* a name holds: a value is the
+binding and the statement that gave it -- its `let`, an assignment, a turn of a
+loop, `0` for a parameter -- and a value *reaches* a statement where some way
+there gives the name that value last.  A reference a name keeps is kept by one
+value of it, so it is out while that value reaches and the name is live: given
+another value, the name keeps the new value's references and not the old one's,
+which is why the old ones end there -- on that way through and no other.
 
-- `live_in`, what is live as it begins;
-- `live_out`, what is live once it is done;
-- `ends`, the names that stop being live as this statement begins, on some way
-  through that reaches it with them live -- the statement is the first one after
-  their last use there.  Worked forward over the same answers, joining what the
-  arms of a choice come to, so that a name used only in one arm ends where each
-  other arm begins and, past an `if` with no `else`, after it.  That is where the
-  checker stops counting a borrow the name keeps, since it asks `live_in` of the
-  statement, and so where the report log says the borrow ended.
+The answers, by the identity of a statement, a block, or a way out:
+
+- `live_in` and `live_out`, the bindings live as a statement begins and once it
+  is done;
+- `reach_in`, the values that reach a statement;
+- `ends`, the values that stop counting as a statement begins, each with why:
+  `"unused"` where the name is not used again on that way, `"given"` where the
+  statement gives the name another value;
+- `ends_after`, the values a statement gives another value to after using them
+  in it, which stop counting once it is done;
+- `leave_ends`, those that stop counting where a `return`, `break` or `continue`
+  leaves -- every one, or what the loop's turn bound;
+- `exit_ends`, those bound in a block that are still counted where it ends.
+
+Every one of them is where the checker stops counting a borrow the value keeps,
+since it asks `live_in` and `reach_in` of the statement, and so where the report
+log says the borrow ended.
 """
 
 from __future__ import annotations
@@ -40,6 +54,11 @@ from dataclasses import dataclass, field, fields as fields_of
 from ..front import ast
 from ..front.token import WILDCARD_NAME
 from ..source.location import Span
+
+
+#: A value a name holds: the binding, and the identity of the statement that gave
+#: it -- `0` for a parameter, which the call gave.
+type Value = tuple[int, int]
 
 
 @dataclass(slots=True)
@@ -57,7 +76,17 @@ class Liveness:
 
     live_in: dict[int, frozenset[int]] = field(default_factory=dict)
     live_out: dict[int, frozenset[int]] = field(default_factory=dict)
-    ends: dict[int, frozenset[int]] = field(default_factory=dict)
+    reach_in: dict[int, frozenset[Value]] = field(default_factory=dict)
+    ends: dict[int, dict[Value, str]] = field(default_factory=dict)
+    ends_after: dict[int, frozenset[Value]] = field(default_factory=dict)
+    leave_ends: dict[int, frozenset[Value]] = field(default_factory=dict)
+    exit_ends: dict[int, frozenset[Value]] = field(default_factory=dict)
+    #: Whether the forward walk writes down what it finds: a loop is walked to
+    #: a fixed point first, and only the last walk is the one that counts.
+    _noting: bool = True
+    #: The bindings each loop being walked forward binds, innermost last, which
+    #: a `break` or a `continue` leaves.
+    _turns: list[set[int]] = field(default_factory=list)
     #: What each name written resolves to, by the name's identity.
     _refs: dict[int, int] = field(default_factory=dict)
     #: What each statement or turn binds, by the node's identity.
@@ -81,7 +110,9 @@ class Liveness:
         self._resolve(node.body, scoped=False)
         self._scopes = []
         self._block(node.body, frozenset())
-        self._forward(node.body, frozenset())
+        given = frozenset((param.span.start, 0) for param in node.params
+                          if param.span.is_valid)
+        self._forward(node.body, given, frozenset())
 
     def lambda_(self, node: ast.Lambda) -> None:
         """And of a lambda's, whose body is a function of its own."""
@@ -91,7 +122,9 @@ class Liveness:
         self._resolve(node.body, scoped=False)
         self._scopes = []
         self._block(node.body, frozenset())
-        self._forward(node.body, frozenset())
+        given = frozenset((param.span.start, 0) for param in node.params
+                          if param.span.is_valid)
+        self._forward(node.body, given, frozenset())
 
     # -- what a name is ----------------------------------------------------------
 
@@ -265,56 +298,134 @@ class Liveness:
         finally:
             self._deferred.pop()
 
-    # -- forwards: where each name stops being live, way by way ------------------
+    # -- forwards: the values a name holds, and where each stops counting --------
 
-    def _forward(self, block: ast.Block, state: frozenset[int]) -> frozenset[int]:
-        """Walk *block* with *state*, the names live on the way into it, and
-        note at each statement which of them stop being live there; answer what
-        is live on the way out of it, less what it bound."""
+    def _forward(self, block: ast.Block, reach: frozenset[Value],
+                 active: frozenset[Value]) -> tuple[frozenset[Value], frozenset[Value]]:
+        """Walk *block* forward from the values reaching it and those counting
+        -- reaching, and their name live -- and answer both on the way out, less
+        what the block bound, which is gone with its scope."""
         bound: set[int] = set()
         for stmt in block.stmts:
-            live = self.live_in.get(id(stmt), frozenset())
-            gone = state - live
-            if gone:
-                self.ends[id(stmt)] = self.ends.get(id(stmt), frozenset()) | gone
-            state = state & live
-            state = self._through(stmt, state)
-            made = self._defs.get(id(stmt), frozenset()) if isinstance(
-                stmt, ast.VarDef) else frozenset()
-            bound |= made
-            state = state | made
-        return state - bound
+            reach, active = self._enter(stmt, reach, active)
+            reach, active = self._through(stmt, reach, active)
+            if isinstance(stmt, ast.VarDef):
+                bound |= self._defs.get(id(stmt), frozenset())
+        if self._noting and bound:
+            kept = frozenset(one for one in active if one[0] in bound)
+            if kept:
+                self.exit_ends[id(block)] = self.exit_ends.get(
+                    id(block), frozenset()) | kept
+        return (frozenset(one for one in reach if one[0] not in bound),
+                frozenset(one for one in active if one[0] not in bound))
 
-    def _through(self, node: object, state: frozenset[int]) -> frozenset[int]:
-        """What is live on the way out of one statement, from what was on the way
-        in -- walking into the blocks inside it, joining the ways of a choice."""
+    def _enter(self, stmt: ast.Stmt, reach: frozenset[Value],
+               active: frozenset[Value]) -> tuple[frozenset[Value], frozenset[Value]]:
+        """What counts as *stmt* begins: what reaches it whose name is live."""
+        live = self.live_in.get(id(stmt), frozenset())
+        now = frozenset(one for one in reach if one[0] in live)
+        if self._noting:
+            self.reach_in[id(stmt)] = self.reach_in.get(id(stmt), frozenset()) | reach
+            gone = active - now
+            if gone:
+                given = self._defs.get(id(stmt), frozenset()) \
+                    if isinstance(stmt, (ast.VarDef, ast.AssignStmt)) else frozenset()
+                found = self.ends.setdefault(id(stmt), {})
+                for one in gone:
+                    found.setdefault(one, "given" if one[0] in given else "unused")
+        return reach, now
+
+    def _gives(self, stmt: ast.Stmt, reach: frozenset[Value],
+               active: frozenset[Value]) -> tuple[frozenset[Value], frozenset[Value]]:
+        """The values once *stmt* has given its names new ones: the old ones no
+        longer reach, and one still counting -- used in the statement itself, as
+        `moving ← f(moving)` does -- stops counting once it is done."""
+        written = self._defs.get(id(stmt), frozenset())
+        if not written:
+            return reach, active
+        old = frozenset(one for one in active if one[0] in written)
+        if old and self._noting and isinstance(stmt, ast.AssignStmt):
+            self.ends_after[id(stmt)] = self.ends_after.get(id(stmt), frozenset()) | old
+        made = frozenset((one, id(stmt)) for one in written)
+        return (frozenset(one for one in reach if one[0] not in written) | made,
+                frozenset(one for one in active if one[0] not in written) | made)
+
+    def _through(self, node: object, reach: frozenset[Value],
+                 active: frozenset[Value]) -> tuple[frozenset[Value], frozenset[Value]]:
+        """The values on the way out of one statement, from those on the way in --
+        walking into the blocks inside it, joining the ways of a choice."""
         match node:
-            case ast.ReturnStmt() | ast.Break() | ast.Continue():
-                if isinstance(node, ast.ReturnStmt) and node.value is not None:
-                    self._through(node.value, state)
-                return frozenset()
-            case ast.VarDef() | ast.AssignStmt() | ast.ExprStmt():
-                return self._through(node.value, state)
+            case ast.ReturnStmt():
+                if node.value is not None:
+                    self._through(node.value, reach, active)
+                if self._noting and active:
+                    self.leave_ends[id(node)] = active
+                return frozenset(), frozenset()
+            case ast.Break() | ast.Continue():
+                if self._noting and self._turns:
+                    left = frozenset(one for one in active if one[0] in self._turns[-1])
+                    if left:
+                        self.leave_ends[id(node)] = left
+                return frozenset(), frozenset()
+            case ast.VarDef() | ast.AssignStmt():
+                reach, active = self._through(node.value, reach, active)
+                return self._gives(node, reach, active)
+            case ast.ExprStmt():
+                return self._through(node.value, reach, active)
             case ast.If():
-                ways: list[frozenset[int]] = []
-                for arm in node.arms:
-                    ways.append(self._forward(arm.body, state))
+                ways: list[tuple[frozenset[Value], frozenset[Value]]] = [
+                    self._forward(arm.body, reach, active) for arm in node.arms]
                 if node.arms[-1].condition is not None:
-                    ways.append(state)
-                return frozenset().union(*ways)
+                    ways.append((reach, active))
+                return (frozenset().union(*(one for one, _ in ways)),
+                        frozenset().union(*(one for _, one in ways)))
             case ast.Match():
-                ways = [self._forward(arm.body, state) for arm in node.arms]
-                return frozenset().union(*ways)
+                ways = []
+                for arm in node.arms:
+                    turn = frozenset((one, id(arm))
+                                     for one in self._defs.get(id(arm), frozenset()))
+                    out, counting = self._forward(arm.body, reach | turn, active | turn)
+                    ways.append((out - turn, counting - turn))
+                return (frozenset().union(*(one for one, _ in ways)),
+                        frozenset().union(*(one for _, one in ways)))
             case ast.While() | ast.ForEach():
-                self._forward(node.body, state)
-                if node.alternative is not None:
-                    self._forward(node.alternative, state)
-                # A loop may run no turns, and what is live through it is live
-                # until it is done: what comes after asks.
-                return state
+                return self._loop_forward(node, reach, active)
             case ast.Scoped():
-                return self._forward(node.body, state)
-        return state
+                return self._forward(node.body, reach, active)
+        return reach, active
+
+    def _loop_forward(self, node: ast.While | ast.ForEach, reach: frozenset[Value],
+                      active: frozenset[Value]
+                      ) -> tuple[frozenset[Value], frozenset[Value]]:
+        """A loop forward: to a fixed point first, since what a turn gives a name
+        reaches the next turn, and then once more writing down what it finds."""
+        turn_names = set(self._defs.get(id(node), frozenset())) \
+            if isinstance(node, ast.ForEach) else set()
+        turn = frozenset((one, id(node)) for one in turn_names)
+        head_reach, head_active = reach, active
+        noting, self._noting = self._noting, False
+        try:
+            while True:
+                self._turns.append(turn_names)
+                try:
+                    out, counting = self._forward(node.body, head_reach | turn,
+                                                  head_active | turn)
+                finally:
+                    self._turns.pop()
+                more = (head_reach | (out - turn), head_active | (counting - turn))
+                if more == (head_reach, head_active):
+                    break
+                head_reach, head_active = more
+        finally:
+            self._noting = noting
+        self._turns.append(turn_names)
+        try:
+            self._forward(node.body, head_reach | turn, head_active | turn)
+        finally:
+            self._turns.pop()
+        if node.alternative is not None:
+            self._forward(node.alternative, head_reach, head_active)
+        return head_reach, head_active
 
     def _leaving(self) -> frozenset[int]:
         """What is live where a `return` goes: what every block it leaves put

@@ -1096,9 +1096,10 @@ Runtime
     today there is a list.  Done on 2026-10-17: `sema/liveness.py`, a borrow counted while its keeper is live, and each end
     written to the report log (`borrow-ended`) where the checker stopped counting it.
 
-[ ] release a reference when the name that kept it is bound to something else.  `moving ← &mut m` makes a second row and leaves
+[x] release a reference when the name that kept it is bound to something else.  `moving ← &mut m` makes a second row and leaves
     the first, so what `moving` used to name stays lent for the rest of the scope.  Nothing is wrong with the programs that
-    result; what is refused is a place that could have been lent again.
+    result; what is refused is a place that could have been lent again.  Done on 2026-10-17: a borrow is kept by a value of
+    the name, which another value does not keep, each end logged with its cause.
 
 [ ] tell two elements of one array apart when lending them.  An element is part of the array, so lending one lends the array
     (4563); `&mut v⟦0⟧` and `&mut v⟦1⟧` are two places and are refused as one.  Rust offers `split_at_mut` for

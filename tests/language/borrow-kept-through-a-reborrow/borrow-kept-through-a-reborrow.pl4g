@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4566
+
+※ `other` is copied from `r`, which names `k`, so it reaches `k` too and keeps it
+※ lent until its own last use -- past `r`'s.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let k: mut u8 = 1u8
+    let r: &mut u8 = &mut k
+    let other: &mut u8 = r
+    k ← 5u8
+    other⌖ ← 2u8
+    0u6

@@ -1,0 +1,37 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A reference a name keeps is released when the name is given another value.
+※
+※ What the name keeps is kept by one value of it: given another, it keeps that
+※ value's references and not the old one's, so the place it named before may be
+※ lent again from there -- on the way through that gives it the new value, and on
+※ no other.  `moving` names `n`, then `m`, then `n` again in one arm of an `if`;
+※ after the `if` it may name either, so both stay lent until its last use.  A
+※ turn's reference ends where the turn does, by `continue` or by running off the
+※ end.  The report log says where each borrow ended, and why.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let n: mut u8 = 1u8
+    let m: mut u8 = 1u8
+    let moving: mut &mut u8 = &mut n
+    moving⌖ ← 2u8
+    moving ← &mut m
+    n ← n + 1u8
+    moving⌖ ← 5u8
+    if #init.args > 0:
+        moving ← &mut n
+        moving⌖ ← moving⌖ + 1u8
+    else:
+        n ← n + 1u8
+    moving⌖ ← moving⌖ + 1u8
+    if #init.args > 9:
+        return 1u6
+    foreach §turns i := 0u8…2u8:
+        let inner: &mut u8 = &mut m
+        if i = 1u8:
+            continue §turns
+        inner⌖ ← inner⌖ + 1u8
+    if n = 5u8 ∧ m = 6u8: 0u6 else: 1u6

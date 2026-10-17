@@ -11,7 +11,7 @@ import math
 from dataclasses import dataclass, field, fields as fields_of, replace
 from fractions import Fraction
 from contextlib import contextmanager
-from typing import Callable, Final, Iterator, Literal, Sequence
+from typing import Callable, Final, Iterator, Literal, Mapping, Sequence
 
 from ..diag import ids as D
 from ..diag.ids import DiagID
@@ -234,7 +234,7 @@ class _Borrow:
     path: tuple[str, ...] = ()
     #: The binding of the name that keeps it, where one does, and that name: it
     #: is out while that name is live and not once the name's last use is past.
-    keeper: int | None = None
+    keeper: tuple[int, int] | None = None
     keeper_name: str = ""
 
 
@@ -3401,7 +3401,15 @@ class Checker:
         #: What `Liveness` said of every statement of the functions lowered so far,
         #: by the statement's identity, and which functions it has been asked of.
         self._live_in: dict[int, frozenset[int]] = {}
-        self._live_ends: dict[int, frozenset[int]] = {}
+        self._live_reach: dict[int, frozenset[tuple[int, int]]] = {}
+        self._live_ends: dict[int, dict[tuple[int, int], str]] = {}
+        self._live_ends_after: dict[int, frozenset[tuple[int, int]]] = {}
+        self._live_leave: dict[int, frozenset[tuple[int, int]]] = {}
+        self._live_exit: dict[int, frozenset[tuple[int, int]]] = {}
+        #: The statement being lowered, whose identity is what a value a name is
+        #: given there is told apart by.
+        self._current_stmt: ast.Stmt | None = None
+        self._current_reach: frozenset[tuple[int, int]] | None = None
         self._live_done: set[int] = set()
         #: What is live at the statement being lowered: a borrow whose keeper is
         #: not among it is no longer out.  Nothing where nothing was worked out.
@@ -9847,6 +9855,7 @@ class Checker:
         """
         self._deferred.append([])
         outer_live = self._current_live
+        outer_reach, outer_stmt = self._current_reach, self._current_stmt
         # To the end of its last statement: a block's own span runs on to the
         # next statement.
         self._block_spans.append(Span(block.span.start,
@@ -9868,13 +9877,18 @@ class Checker:
                 if live is not None:
                     self._borrows_ended_at(stmt)
                     self._current_live = live
+                    self._current_reach = self._live_reach.get(id(stmt))
+                self._current_stmt = stmt
                 if is_last and produces:
                     answer = self._lower_yielding(builder, stmt, func, wanted)
                 else:
                     self._lower_attributed_stmt(builder, stmt, func,
                                                 as_result and is_last)
+                self._current_stmt = stmt
                 if live is not None:
+                    self._borrows_ended_after(stmt)
                     self._current_live = live
+                    self._current_reach = self._live_reach.get(id(stmt))
                 self._statement_ended()
             if produces and answer is None and not builder.is_terminated:
                 self._diags.emit(D.LANG_MATCH_ARM_HAS_NO_VALUE, block.span)
@@ -9888,6 +9902,9 @@ class Checker:
                                                  self._value_type_of(answer))
             # Run off the end: what this block put off is done now, after what
             # it comes to was worked out and before anything after it runs.
+            # Logged whether or not the block runs off its end: a body whose last
+            # statement is its answer is left with what that answer kept.
+            self._borrows_ended_with(block)
             if not builder.is_terminated:
                 self._run_deferred(builder, func, frame)
                 self._all_given_back(opened_at, block.span)
@@ -9897,6 +9914,7 @@ class Checker:
             self._deferred.pop()
             self._block_spans.pop()
             self._current_live = outer_live
+            self._current_reach, self._current_stmt = outer_reach, outer_stmt
             self._last_emptied = self._emptied.pop()
 
     def _lower_yielding(self, builder: IRBuilder, stmt: ast.Stmt, func: Function,
@@ -13360,15 +13378,49 @@ class Checker:
         """
         if ty is None or not _holds_a_reference(ty):
             return
+        # As deep as the scope of the name keeping it, which is not the scope
+        # being lowered where the name is given a value in a block inside its own:
+        # what it keeps lives as long as it does.
         depth = len(self._scopes) - 1
+        for at, scope in enumerate(self._scopes):
+            if any(local.span.start == keeper.start for local in scope.values()):
+                depth = at
+        value = (keeper.start, id(self._current_stmt)
+                 if self._current_stmt is not None else 0)
+        carried: list[_Borrow] = []
+        dropped: list[_Borrow] = []
         for one in self._borrows:
-            if one.depth == _UNTIL_THE_STATEMENT_ENDS:
-                one.depth = depth
-                one.keeper = keeper.start
-                lender = self._find_local(one.name)
-                if lender is not None:
-                    self._lends.setdefault(keeper.start, set()).add(
-                        lender.span.start)
+            if one.depth != _UNTIL_THE_STATEMENT_ENDS:
+                continue
+            one.depth = depth
+            # Kept by the value the name is given here, which another value given
+            # it later does not keep.
+            one.keeper = value
+            lender = self._find_local(one.name)
+            if lender is None:
+                continue
+            self._lends.setdefault(keeper.start, set()).add(lender.span.start)
+            if not isinstance(self._held_by(lender), PtrType):
+                continue
+            # A reborrow of a name holding a reference reaches what that name's
+            # value reaches, so it keeps what that value keeps, as long as it
+            # lives: `other` copied from `r` keeps `r`'s place too, past `r`'s own
+            # last use.
+            for kept in self._borrows:
+                if kept.keeper is not None and kept.keeper[0] == lender.span.start \
+                        and kept.depth != _UNTIL_THE_STATEMENT_ENDS \
+                        and self._still_out(kept):
+                    carried.append(replace(kept, depth=depth, keeper=value,
+                                           keeper_name=""))
+            if lender.span.start == keeper.start:
+                # The name's new value made from its old one, `r ← same(r)`: the
+                # old value is gone, so there is nothing left to lend it from --
+                # what it kept, the new value now keeps.
+                dropped.append(one)
+        if dropped:
+            self._borrows = [one for one in self._borrows
+                             if not any(one is gone for gone in dropped)]
+        self._borrows.extend(carried)
 
     def _keeper_named(self, keeper: Span) -> str:
         """The name bound where *keeper* is, for what the log says of it."""
@@ -13379,35 +13431,95 @@ class Checker:
         return ""
 
     def _still_out(self, borrow: _Borrow) -> bool:
-        """Whether *borrow* is out at the statement being lowered: one a name
-        keeps is out while the name is live -- until its last use on this way
-        through, and not until its scope ends."""
-        return borrow.keeper is None or self._current_live is None \
-            or borrow.keeper in self._current_live
+        """Whether *borrow* is out at the statement being lowered.  One a value
+        of a name keeps is out while that value may still be what the name holds
+        and the name is still to be used: not past the name's last use, and not
+        past where it is given another value."""
+        if borrow.keeper is None or self._current_live is None:
+            return True
+        if borrow.keeper[0] not in self._current_live:
+            return False
+        return self._current_reach is None or borrow.keeper in self._current_reach
 
-    def _borrows_ended_at(self, stmt: ast.Stmt) -> None:
-        """Write to the log where a borrow kept by a name ends: as *stmt* begins,
-        on a way through that reached it with the name live and finds it no
-        longer used -- which is where `_still_out` stops counting the borrow, both
-        reading the same liveness."""
-        ending = self._live_ends.get(id(stmt))
-        if not ending:
-            return
+    #: Why a borrow stopped counting, as the report log says it, by what
+    #: `Liveness` wrote down.
+    _ENDED_BECAUSE: Final = {
+        "unused": "''{keeper}'' is not used again on this way through",
+        "given": "''{keeper}'' is given another value here, and what it held "
+                 "before is not used again",
+        "given-after": "the statement above gives ''{keeper}'' another value, after "
+                       "using the one it held",
+        "carried": "the statement above gives ''{keeper}'' another value made from "
+                   "the one it held, which keeps ''{name}'' lent from here on",
+        "return": "the function returns here",
+        "break": "the loop is left here",
+        "continue": "the turn ends here",
+        "scope": "the scope of ''{keeper}'' ends here",
+    }
+
+    def _borrows_ending(self, values: Mapping[tuple[int, int], str], where: Span,
+                        at: int) -> None:
+        """Write a `borrow-ended` entry for each borrow one of *values* keeps,
+        saying why it ended there, at *where*.  *at* tells apart the places
+        entries are written for, so that a body lowered twice writes each once."""
         for one in self._borrows:
-            if one.keeper is None or one.keeper not in ending:
+            if one.keeper is None or one.keeper not in values:
                 continue
-            key = (id(stmt), one.keeper, one.name)
+            why = values[one.keeper]
+            key = (at, one.keeper, one.name, why)
             if key in self._borrow_ends_told:
                 continue
             self._borrow_ends_told.add(key)
             keeper = one.keeper_name or self._keeper_named(
-                Span(one.keeper, one.keeper)) or "?"
+                Span(one.keeper[0], one.keeper[0])) or "?"
+            if why == "given-after" and any(
+                    other.name == one.name and other.keeper == (one.keeper[0], -at)
+                    for other in self._borrows):
+                # Passed on to the new value rather than ended: said as such,
+                # the place being no freer than it was.
+                why = "carried"
+            told = self._ENDED_BECAUSE[why].replace("''", "'").format(
+                keeper=keeper, name=one.name)
             self._module.reports.record(
                 ReportKind.BORROW_ENDED, one.name, "".join((
-                    "lent to '", keeper, "' until here: '", keeper, "' is not used "
-                    "again on this way through, so '", one.name,
-                    "' may be lent again from here")),
-                Span(stmt.span.start, stmt.span.start))
+                    "lent to '", keeper, "' until here: ", told,
+                    "" if why == "carried" else "".join((
+                        ", so '", one.name, "' may be lent again from here")))),
+                where)
+
+    def _borrows_ended_at(self, stmt: ast.Stmt) -> None:
+        """The borrows that stop counting as *stmt* begins, logged above it --
+        which is where `_still_out` stops counting them, both reading the same
+        answers."""
+        ending = self._live_ends.get(id(stmt))
+        if ending:
+            self._borrows_ending(ending, Span(stmt.span.start, stmt.span.start),
+                                 id(stmt))
+
+    def _borrows_ended_after(self, stmt: ast.Stmt) -> None:
+        """The borrows that stop counting once *stmt* is done: one whose name it
+        gives another value after using it, and those its `return`, `break` or
+        `continue` leaves with."""
+        where = line_after(self._sources, end_of(stmt), stmt.span.start)
+        given = self._live_ends_after.get(id(stmt))
+        if given:
+            self._borrows_ending(dict.fromkeys(given, "given-after"), where,
+                                 -id(stmt))
+        left = self._live_leave.get(id(stmt))
+        if left:
+            why = ("return" if isinstance(stmt, ast.ReturnStmt) else "break"
+                   if isinstance(stmt, ast.Break) else "continue")
+            self._borrows_ending(dict.fromkeys(left, why), where, -id(stmt))
+
+    def _borrows_ended_with(self, block: ast.Block) -> None:
+        """The borrows still counted where *block* ends, kept by names it bound:
+        they end with the names' scope."""
+        held = self._live_exit.get(id(block))
+        if held and block.stmts:
+            self._borrows_ending(
+                dict.fromkeys(held, "scope"),
+                line_after(self._sources, end_of(block), block.stmts[0].span.start),
+                id(block))
 
     def _live_for(self, node: ast.FuncDef | ast.Lambda) -> None:
         """Work out, once, which names each statement of *node* has still to
@@ -13421,7 +13533,11 @@ class Checker:
         else:
             found.function(node)
         self._live_in.update(found.live_in)
+        self._live_reach.update(found.reach_in)
         self._live_ends.update(found.ends)
+        self._live_ends_after.update(found.ends_after)
+        self._live_leave.update(found.leave_ends)
+        self._live_exit.update(found.exit_ends)
 
     def _borrowed_name(self, expr: ast.Expr) -> tuple[str, tuple[str, ...]] | None:
         """Which local's place `&expr` reaches, where it reaches one, and which
@@ -15815,8 +15931,14 @@ class Checker:
             # Lent for the loop: the references live as long as its body does.
             before = len(self._borrows)
             self._lend(lent, writes, walked.span)
+            marked = next(((name, span) for (name, span), mark in zip(names, marks)
+                           if mark and name != WILDCARD_NAME), None)
             for one in self._borrows[before:]:
                 one.depth = len(self._scopes) - 1
+                if marked is not None:
+                    # Kept by the turn's reference, until its last use in the turn.
+                    one.keeper = (marked[1].start, id(stmt))
+                    one.keeper_name = marked[0]
 
     @staticmethod
     def _walked_expr(expr: ast.Expr) -> ast.Expr:

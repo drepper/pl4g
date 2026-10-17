@@ -3058,9 +3058,18 @@ else:
 
 That is Rust's non-lexical lifetimes, with the refinement that an argument's borrow ends with the call where the answer has
 nowhere to keep it.  What it costs is a liveness analysis, worked out over the body once; what it buys is that a program which
-is plainly right -- a reference written through and not mentioned again, followed by a second -- is not refused.  **Where each
-borrow ended is in the report log** (`borrow-ended`), above the statement where the place may be lent again, on every way through
-that ends it: that is the range the compiler assumed, read off the same analysis the rule is.  **Two fields are two
+is plainly right -- a reference written through and not mentioned again, followed by a second -- is not refused.
+
+**What a name keeps is kept by one value of it**, the one a `let` or an assignment gave it: given another, the name keeps the new
+value's references and not the old one's, so `moving ← &mut m` releases what `moving` named before -- on the way through that
+gives it the new value, and no other.  Past an `if` one arm of which gave it a new value, it may hold either, and both stay lent
+until its last use.  A new value made from the old one, `r ← same(r)`, keeps what the old one kept; and so does a `&mut` copied
+from another, `let other: &mut u8 = r`, which reaches what `r` reaches and keeps it lent past `r`'s own last use.
+
+**Where each borrow ended is in the report log** (`borrow-ended`), on every way through that ends it, and why: the name keeping
+it is not used again, is given another value, is given one made from the old (which carries the borrow on, as the entry says),
+or its scope ends, or a `return`, a `break` or a `continue` leaves.  Each entry stands where the place may be lent again, which is
+where the checker stopped counting the borrow -- the range the compiler assumed, read off the same analysis the rule is.  **Two fields are two
 places**: a `&mut` to one and a reference to another may be out at once -- `copy(&mut init.io.input, &mut init.io.output)` -- and a
 third field may be read or written beside them; a field and the record holding it, or a record holding it in turn, are one place
 (4563).  Which field is written down, so nothing is computed to tell them apart; Rust's borrow checker splits a borrow by field the
