@@ -627,7 +627,12 @@ comptime fn after(answer: syntax, started: bool, run: str, piece: syntax,
 ※※ `print` and `println` all do.  What it answers is a join of the pieces between the
 ※※ holes and `⍕` of each argument.
 ※※
-※※ \param template the text, with `{}` where an argument goes
+※※ `{name}` is a hole too, and takes no argument: it is `⍕` of what *name* means
+※※ where the template was written, which is the one name a macro reads at its
+※※ caller.  Only a name -- an expression goes in as an argument to a `{}`.
+※※
+※※ \param template the text, with `{}` where an argument goes and `{name}` where
+※※ what a name means does
 ※※ \param args the arguments, as the one piece several of them are
 ※※ \param where the arena the joins take room from
 ※※ \param skipped how many of the pieces of *args* come before the arguments
@@ -641,10 +646,24 @@ comptime fn formatted(template: syntax, args: syntax,
     let started: mut bool = false
     let run: mut str = ""
     let taken: mut u64 = 0u64
-    ※ What the last character left behind: nothing, an opening brace, or a closing one.
+    ※ What the last character left behind: nothing, an opening brace, a closing one,
+    ※ or a name begun inside braces.
     let after: mut u8 = 0u8
+    let name: mut str = ""
     foreach c: char = said:
-        if after = 1u8:
+        if after = 3u8:
+            if c = '}':
+                ※ A name, which means what it means where the template was written:
+                ※ the one name a macro reads at its caller.
+                let named: syntax = ⎕caller_name(name)
+                answer ← after(answer, started, run,
+                               ⌜⍕$named in $where⌝, where)
+                started ← true
+                run ← ""
+                after ← 0u8
+            else:
+                name ← name ⧺ ⎕str(c)
+        elif after = 1u8:
             after ← 0u8
             if c = '{':
                 ※ Two braces are one brace, which is how a template says a brace.
@@ -659,7 +678,8 @@ comptime fn formatted(template: syntax, args: syntax,
                 run ← ""
                 taken ← taken + 1u64
             else:
-                return ⎕refuse("a hole is written '{}' and this brace holds something else")
+                name ← ⎕str(c)
+                after ← 3u8
         elif after = 2u8:
             after ← 0u8
             if c = '}':
@@ -689,8 +709,8 @@ comptime fn formatted(template: syntax, args: syntax,
 ※※
 ※※ \details A macro and not a function: the template is handed over as it is written,
 ※※ which is what lets the holes in it be counted against the arguments before the
-※※ program runs.  `{}` takes the next argument, `{{` and `}}` are braces that stand for
-※※ themselves, and a template that does not agree with its arguments is refused at the
+※※ program runs.  `{}` takes the next argument, `{name}` is what *name* means where the
+※※ template was written, `{{` and `}}` are braces that stand for themselves, and a template that does not agree with its arguments is refused at the
 ※※ invocation in words of this macro's own.
 ※※
 ※※ What it answers is a join of the pieces between the holes and `⍕` of each argument,

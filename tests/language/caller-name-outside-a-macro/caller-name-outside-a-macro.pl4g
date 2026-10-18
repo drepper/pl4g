@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=7027
+
+※ `⎕caller_name` makes a piece of the program, which only something running while
+※ the compiler does may hold: a function the program calls has no caller's text to
+※ read a name out of.
+
+@[startup]
+fn main() → u6:
+    let named: str = "x"
+    ⎕drop(⎕caller_name(named))
+    0

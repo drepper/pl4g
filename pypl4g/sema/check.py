@@ -858,6 +858,7 @@ PARTS_NAME: Final[str] = "".join((BUILTIN_GLYPH, "parts"))
 PART_NAME: Final[str] = "".join((BUILTIN_GLYPH, "part"))
 APPLY_NAME: Final[str] = "".join((BUILTIN_GLYPH, "apply"))
 ALIKE_PIECES_NAME: Final[str] = "".join((BUILTIN_GLYPH, "alike"))
+CALLER_NAME_NAME: Final[str] = "".join((BUILTIN_GLYPH, "caller_name"))
 
 #: What each question about a piece of the program takes.  `⎕part` takes which one
 #: it wants rather than answering them all together, which is what keeps an array out
@@ -868,6 +869,8 @@ _ASKS_ABOUT_A_PIECE: Final[dict[str, tuple[Type, ...]]] = {
     # a macro says about the program it was asked to write.
     REFUSE_NAME: (STR,),
     PIECE_NAME: (SYNTAX,),
+    # The one that makes a piece out of text: the name the caller meant by it.
+    CALLER_NAME_NAME: (STR,),
     HEAD_NAME: (SYNTAX,),
     PARTS_NAME: (SYNTAX,),
     PART_NAME: (SYNTAX, U64),
@@ -878,7 +881,7 @@ _SYNTAX_ANSWERS: Final[dict[str, Type]] = {
     FILL_TEXT_NAME: SYNTAX, REFUSE_NAME: SYNTAX,
     HEAD_NAME: SYNTAX, KIND_NAME: U64, PIECE_NAME: STR,
     PARTS_NAME: U64, PART_NAME: SYNTAX, APPLY_NAME: SYNTAX,
-    ALIKE_PIECES_NAME: BOOL,
+    ALIKE_PIECES_NAME: BOOL, CALLER_NAME_NAME: SYNTAX,
 }
 
 

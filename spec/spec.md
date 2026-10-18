@@ -496,6 +496,25 @@ The template is handed over as it is written, which is what lets its holes be co
 runs**: a template that does not agree with them is refused at the invocation, in the macro's own words.  `{}` takes the next
 argument, and `{{` and `}}` are braces that stand for themselves.
 
+**`{name}` is what a name means where the template was written**, and takes no argument -- only `{}` is counted against them, so the
+two mix:
+
+```
+let total: u16 = 12u16
+std.format⌜"{} of {total}", n⌝     ※ "3 of 12" where n is 3
+```
+
+**Only a name**, never an expression: `{p.x}` is refused (7029), and a field goes in as the argument of a `{}`.  What is read out of a
+literal is one word the grammar never sees, so it can name something and do nothing else.  A name that means nothing there is
+reported as any unknown name is (4003), pointing at the name inside the literal.  **It is the one exception to hygiene**: every other
+name a macro writes means what it means where the macro was written, and this one means what it means at the caller -- so `{pool}` in
+a `println` is the caller's `pool` and not the one `println` makes for itself.  The macro spells the exception out, `⎕caller_name`
+(below).
+
+Compare: **Rust**'s `format!("{x}")`, which takes a name and refuses an expression for the same reason, and resolves it at the caller
+by giving the identifier the literal's position; **Python**'s f-string and **C#**'s `$"{x}"`, **Swift**'s `"\(x)"` and **Kotlin**'s
+`"${x}"`, which take any expression and are the grammar's work; **C++**'s `std::format`, which has no names at all.
+
 What a template comes to is **a join of the pieces between the holes and `⍕` of each argument**, so nothing happens while the
 program runs that would not have happened had the join been written out -- and since it is `⍕`, a type a program defined formats by
 the definition that program wrote.
@@ -6518,7 +6537,8 @@ In `swap` above the caller's variable may be called `t` and so is the macro's te
 shadow the caller's and the swap would leave both where they were.
 
 **A name a macro *reads* resolves where the macro was written**, not where it was invoked: a macro may write a call to something its
-own file can see and the caller cannot, and a caller with a function of the same name does not change what the macro means.  That is
+own file can see and the caller cannot, and a caller with a function of the same name does not change what the macro means.
+The one exception is a name made with `⎕caller_name`, below, which is the caller's on purpose.  That is
 the rule a bundle's lines already follow and for the same reason -- substituting *into* a line is not the same as substituting the
 line into the place that applied it -- so a macro means one thing everywhere it is invoked.
 
@@ -6558,6 +6578,15 @@ the three where nothing has a piece of the program is refused (7027), as is givi
 **`⎕name(e)` is what a piece is written as, as text.**  A string literal answers what is between its quotation marks and a name
 answers itself; anything else is refused, there being no one word an expression is written as.  That is what lets a macro read a
 template, a template being a literal.
+
+**`⎕caller_name(TEXT)` is the name the caller would have meant by the text**: a piece that is that name, put in as though the
+caller had written it, so that it is neither renamed nor reached through the macro's module and means what it means at the
+invocation.  It is **the one exception to hygiene**, and it is spelled out so that every macro reading a name at its caller says
+so where it does.  Only a name is made -- not a keyword, not a name the compiler provides -- and anything else is refused (7029).
+What is said about the name points at it inside the invocation's text where it is written in braces in a literal with no escape.
+It is how `std.format` reads `{name}`.  Compare **Racket**'s `datum->syntax`, which makes a name with the context of a given
+piece and so can say this and more; **Rust**'s procedural macros, an identifier made with the caller's position; **Common
+Lisp**'s `intern`, the name in the caller's package, where nothing is hygienic to begin with.
 
 **`⎕refuse(TEXT)` is how a macro says it will not write what it was asked for** (7029).  What is wrong in that case is the
 *invocation* and not the compiler, so the message is the macro's own and it points where the invocation is -- without it a template

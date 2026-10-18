@@ -235,8 +235,9 @@ removed or decided otherwise, which its last paragraph says.
         it means where the macro was written, which both documents claimed and neither
         form implemented; and `⁂` before a macro's last parameter makes it stand for all
         the remaining arguments, so a macro is variadic without the language being.
-    [ ] **`{name}` in a template**, which needs a piece made from text and is the one
-        exception to hygiene the language admits.
+    [x] **`{name}` in a template.**  Done on 2026-10-18: `{name}` is `⍕` of what the name
+        means at the caller, mixing with `{}`, which alone is counted; only a name, never an
+        expression.  The exception to hygiene is `⎕caller_name(TEXT)`.
     [x] **a width and a base.**  Done on 2026-10-18: `std.text(v, .base ← 16u8, .upper ←
         true)`, and `std.padded(v, .width ← 8u64, .fill ← '0', .align ← std.Align.right)`,
         a width counting characters and noughts going after a sign.  A call in a hole takes

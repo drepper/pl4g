@@ -3319,6 +3319,16 @@ makes `syntax` one value wide.
 (7023).  A macro the checker or the lowering refused is reported as one that cannot be run
 (7024), with the reason.
 
+**Hygiene is two walks over a quote, and a hole is filled after both.**  `_renamed` gives
+every name a quote binds a name with `#` in it, and `_reached` writes a name the module
+defines at the top level as a path through the module.  What fills a hole is the caller's
+and is walked by neither, which is all `⎕caller_name` needs: it answers a handle to a
+fresh `NameRef`, which reaches the tree only by filling a hole and so is the caller's as
+surely as anything the caller wrote.  Its position is looked for in the invocation
+(`_written_at`): the first literal handed over holding the name in braces, and the name's
+own bytes in it where the literal is exactly as long as what it holds and its two quotation
+marks -- a literal with no escape in it, where a place in the text is a place in the source.
+
 **The two should be one.**  Neither is the other's superset today: the build machine has
 strings, collections and a heap the macro machine has no need of, and the macro machine
 has the property the build machine gave up -- that what it runs was checked and lowered

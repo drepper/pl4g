@@ -1,0 +1,34 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **`{name}` in a template is `⍕` of what the name means where the template was
+※ written**, and takes no argument: `{}` alone is counted against the arguments, so
+※ the two mix.  It is the one name a macro reads at its caller rather than where it
+※ was written -- so `pool`, which `print` binds for itself, is still the caller's
+※ `pool`, and `text`, which `std` defines, is still the caller's `text`.  `{{` and
+※ `}}` are still braces, so `{{x}}` is a name in braces and not a hole.
+※
+※ Compare: **Rust**'s `format!("{x}")` and **Python**'s `f"{x}"`; Rust takes only a
+※ name, as this does, and Python any expression.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let total: u16 = 12u16
+    if std.format⌜"[{total}]"⌝ ≠ "[12]":
+        return 1u6
+    if std.format⌜"{} of {total}, {}", 3u8, ⁻2i16⌝ ≠ "3 of 12, ⁻2":
+        return 2u6
+    let pool: u8 = 7u8
+    if std.format⌜"{pool}{pool}"⌝ ≠ "77":
+        return 3u6
+    let text: str = "t"
+    if std.format⌜"{text} {{text}}"⌝ ≠ "t {text}":
+        return 4u6
+    let scratch: mut arena = ⎕arena
+    defer ⎕empty(scratch)
+    let made: str = std.format⌜scratch, "<{total}>"⌝
+    if made ≠ "<12>":
+        return 5u6
+    let went: u64 ¤size = std.println⌜&mut init.io.error, "{total}"⌝ ?? 0
+    if went ≠ 3: 6u6 else: 0u6

@@ -50,6 +50,7 @@ from . import ast
 from ..target.allocator import ALLOC_SYMBOL, GROW_SYMBOL
 from ..sema.tables import HEAP_ALLOC_SYMBOL, HEAP_FREE_SYMBOL
 from .interpret import Machine, Refused, Stopped
+from .lexer import is_a_name
 
 
 class _Said(Exception):
@@ -73,6 +74,7 @@ KIND_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}kind"
 PARTS_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}parts"
 PART_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}part"
 ALIKE_PIECES_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}alike"
+CALLER_NAME_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}caller_name"
 
 #: Which shape each piece of the program is, as the number `\N{APL FUNCTIONAL SYMBOL QUAD}kind` answers.  A
 #: number rather than a name because the machine holds numbers; the language gives it
@@ -170,6 +172,9 @@ class _Expander:
         #: is being run out of just now.
         self._defines: dict[str, frozenset[str]] = {}
         self._invoking: str | None = None
+        #: The invocation a macro is being run for, whose text a name the macro
+        #: reads out of it is found in.
+        self._invocation: ast.Invoke | None = None
         #: How many names hygiene has renamed, which is what makes each new one
         #: different from the last.
         self._renames = 0
@@ -412,6 +417,7 @@ class _Expander:
             return ast.NameRef(span=node.span, name=node.name)
         assert self._machine is not None
         outer, self._invoking = self._invoking, node.through
+        invocation, self._invocation = self._invocation, node
         try:
             answer = self._ran_named(func, given, written)
         except _Said as said:
@@ -431,6 +437,8 @@ class _Expander:
             self._diags.emit(D.LANG_MACRO_CANNOT_RUN, node.span, name=node.name,
                              detail=refused.detail)
             return ast.NameRef(span=node.span, name=node.name)
+        finally:
+            self._invocation = invocation
         if not isinstance(answer, int) or not 0 <= answer < len(self._trees):
             self._invoking = outer
             self._diags.emit(D.LANG_MACRO_ANSWERS_OTHERWISE, node.span,
@@ -494,6 +502,7 @@ class _Expander:
             PARTS_NAME: self._parts,
             PART_NAME: self._part,
             ALIKE_PIECES_NAME: self._pieces_alike,
+            CALLER_NAME_NAME: self._caller_name,
             # And the allocator, which is the one callee with no body that is not
             # a question about the program: it is per-target assembly, so there is
             # nothing to run and the machine is the allocator while a macro runs.
@@ -516,6 +525,46 @@ class _Expander:
         its arguments would be reported as the compiler stopping.
         """
         raise _Said(self._read_text(text))
+
+    def _caller_name(self, text: object) -> int:
+        """What `⎕caller_name` does: the name the caller would have meant by *text*.
+
+        **The one exception to hygiene**, and spelled as one.  Every other name a
+        macro writes means what it means where the macro was written; this one is
+        put in as a piece the caller wrote would be, so it is neither renamed nor
+        reached through the module, and it means what it means at the invocation --
+        which is what `{name}` in a template needs, and the reason it can.
+
+        Only a name: what the caller wrote inside a literal is read as one word and
+        never parsed as an expression, so that nothing the grammar does not see can
+        do more than name something.  It is found in the invocation's text where it
+        can be, so that what is said about it points at where it was written.
+        """
+        name = self._read_text(text)
+        if not is_a_name(name):
+            raise _Said("".join(("'", name, "' is not a name, and a name is all a "
+                                 "macro may read out of the caller's text")))
+        return self._handle(ast.NameRef(span=self._written_at(name), name=name))
+
+    def _written_at(self, name: str) -> Span:
+        """Where in the invocation *name* was written inside braces, as near as can
+        be said: the name itself in a literal written without escapes, else the
+        literal, else the invocation."""
+        node = self._invocation
+        if node is None:
+            return INVALID_SPAN
+        braced = "".join(("{", name, "}"))
+        for piece in node.arguments.pieces:
+            if not isinstance(piece, ast.StringLit) or braced not in piece.value:
+                continue
+            value = piece.value.encode()
+            # A literal as long as what it holds and its two quotation marks has no
+            # escape in it, so a place in what it holds is a place in the source.
+            if piece.span.end - piece.span.start != len(value) + 2:
+                return piece.span
+            start = piece.span.start + 1 + value.index(braced.encode()) + 1
+            return Span(start, start + len(name.encode()))
+        return node.span
 
     def _read_text(self, held: object) -> str:
         """The text a machine value of type `str` stands for."""

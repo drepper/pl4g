@@ -238,6 +238,13 @@ def _is_ident_continue(ch: str) -> bool:
             and ch not in SUPERSCRIPT_DIGITS and ch != POWER_GLYPH)
 
 
+def is_a_name(text: str) -> bool:
+    """Whether *text* is one name a program may write, as the lexer would read it:
+    not a keyword, and not a name the compiler provides."""
+    return text != "" and _is_ident_start(text[0]) and text[0] != BUILTIN_GLYPH \
+        and all(_is_ident_continue(ch) for ch in text[1:]) and text not in KEYWORDS
+
+
 class Lexer:
     """Turns the text of one source file into a list of tokens."""
 

@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=7029
+
+※ Only a name stands in a template's braces: what is read out of a literal is one
+※ word and never an expression, so that nothing the grammar does not see can do more
+※ than name something.  A field goes in as an argument to a `{}`.  The refusal is
+※ the macro's, at the invocation.
+※
+※ Compare: **Rust**, which refuses `format!("{p.x}")` the same way; **Python**'s
+※ f-string, which reads any expression there.
+
+let std := ⎕import("std")
+type Point = x: u8 ; y: u8
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let p: Point = Point(.x ← 1u8, .y ← 2u8)
+    if std.format⌜"{p.x}"⌝ = "1": 0u6 else: 1u6

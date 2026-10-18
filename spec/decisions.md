@@ -10169,6 +10169,24 @@ that a generic function was called neither with named arguments nor with default
 that the body of one lowered inside a caller's statement shared the caller's borrows, so that what the body's statements did to
 them was done to the caller's -- and the second hole of a template found the pool still lent to the first.  All three are fixed.
 
+## 2026-10-18T17:00+02:00 — language
+
+**`{name}` in a template, and how a macro reads a name at its caller**
+
+`{name}` had been decided in and left last as the one exception to hygiene.  Asked how a macro spells it, the user chose
+**`⎕caller_name(TEXT)`**, a piece that is the name the caller would have meant, against Racket's `datum->syntax` -- a name with
+the context of a given piece, which says the same thing less plainly where there are only two contexts -- and against `$(…)` of a
+new kind of value, which would hide the exception inside a form that has other uses.  The exception is written where it is used.
+Asked what may stand in the braces, **a name only**, Rust's rule, against member paths and against any expression (Python, C#,
+Swift, Kotlin): what is read out of a literal the grammar never sees, and so may name something and do nothing else.  And asked
+whether a template may mix the two, **yes, with `{}` alone counted** against the arguments, Rust's rule, against one kind per
+template.
+
+Taken without asking, as what those come to: a keyword and a name the compiler provides are not names here (7029, in the
+builtin's words rather than the macro's, the macro having no way to ask what a letter is); what is said about the name points at
+it inside the literal, or at the literal past an escape; and `⎕caller_name` outside a macro is refused as the questions about a
+piece are (7027).
+
 Open questions
 --------------
 

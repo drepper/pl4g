@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4003
+
+※ A name in a template that means nothing where the template was written is reported
+※ as any unknown name is, and where it was written: inside the literal.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    if std.format⌜"{totl}"⌝ = "": 1u6 else: 0u6
