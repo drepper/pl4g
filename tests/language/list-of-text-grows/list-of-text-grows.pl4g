@@ -1,0 +1,30 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A list of text grows the same way, what is joined on copied into the list's own
+※ arena -- here a pool, which the list was made in -- and an element written is copied
+※ there too, the one it replaces given back.  A list in the image is read-only, so the
+※ first change copies it out into the arena in force: `fixed` itself is as it was.
+
+let std := ⎕import("std")
+
+let fixed: [u8] = [5u8, 6u8, 7u8] in ⎕static
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let pool: mut arena = ⎕arena
+    defer ⎕empty(pool)
+    let words: mut [str] = [] in pool
+    foreach i := 0u8…20u8:
+        let w: str = ⍕i in pool
+        words ⧺← [w]
+    if #words ≠ 20 ∨ words⟦13⟧ ≠ "13":
+        return 1u6
+    words⟦13⟧ ← "thirteen"
+    words ⧺← ["more", "words"]
+    if words⟦13⟧ ≠ "thirteen" ∨ words⟦21⟧ ≠ "words":
+        return 2u6
+    let f: mut [u8] = fixed
+    f⟦0⟧ ← 9u8
+    f ⧺← [8u8]
+    let gone: u8 = †f⟦1⟧
+    if fixed⟦0⟧ ≠ 5u8 ∨ f⟦0⟧ ≠ 9u8 ∨ #f ≠ 3 ∨ f⟦2⟧ ≠ 8u8 ∨ gone ≠ 6u8: 3u6 else: 0u6

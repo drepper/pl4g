@@ -1,9 +1,8 @@
-※ pl4g-test: compile=error
-※ pl4g-test: expect-diag 4623 LANG_CONTAINER_CANNOT_COPY
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
 
 ※ An element whose allocator does not last as long as its container is copied into the
-※ container's, and a record holding text cannot be copied yet: what its fields point into would
-※ want a walk of its own.  Text in the image would have gone in as it is.
+※ container's, and a record holding text is copied field by field: what `b` held is in `a`
+※ before `b` is given back.  Text in the image would have gone in as it is.
 
 type R = f: str
 

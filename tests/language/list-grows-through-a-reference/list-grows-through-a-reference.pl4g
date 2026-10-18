@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4479,4511
+
+※ A list reached through a reference is somebody else's, so joining onto it is an
+※ effect, and a pure function does not: `add` has to be marked `@[impure]`.
+
+let std := ⎕import("std")
+type Bag = { items : [u8] }
+
+fn add(b: &mut Bag, x: u8):
+    b⌖.items ⧺← [x]
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let b: mut Bag = Bag(.items ← [])
+    add(&mut b, 4u8)
+    if #b.items = 1: 0u6 else: 1u6

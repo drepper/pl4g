@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4928
+
+※ Making room in a list where it is puts the list back where it was, so what it is
+※ written on is a place: a list a call answered is in none.  (`made() ⧺← x` is refused
+※ while reading, as an assignment to a value is: 3027.)
+
+let std := ⎕import("std")
+
+fn made() → [u8]:
+    [1u8]
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ⎕reserve(made(), 2)
+    0u6

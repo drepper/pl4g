@@ -2036,9 +2036,14 @@ class Parser:
         if self._check(TokKind.ASSIGN):
             return self._parse_assignment(value)
         if self._joins_and_assigns():
-            # The join and the assignment it is short for, written once.
+            # The join and the assignment it is short for, written once -- on a
+            # place, as an assignment is.
             self._advance()
             self._advance()
+            if not isinstance(value, (ast.NameRef, ast.Element, ast.Member,
+                                      ast.Deref, ast.Hole)):
+                self._diags.emit(D.LANG_ASSIGN_NOT_A_PLACE, value.span)
+                raise _Bail()
             more = self._parse_expression()
             return ast.JoinAssign(span=value.span.to(more.span), target=value,
                                   value=more)

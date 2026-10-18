@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ An answer made somewhere its signature does not name is copied, and a record holding
+※ text is copied field by field: the text the scratch arena held is in `⎕heap` by the
+※ time the arena is given back.  A value holding something marked `@[unique]` never is
+※ copied, and is refused (4624).
+
+type Named = name: str
+
+fn made(first: str) → Named:
+    let scratch: mut arena = ⎕arena
+    defer ⎕empty(scratch)
+    Named(.name ← first ⧺ "!" in scratch)
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if made("a").name = "a!": 0u6 else: 1u6

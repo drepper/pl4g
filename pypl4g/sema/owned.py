@@ -33,10 +33,9 @@ from ..ir.function import Function
 from ..ir.inst import BinOp, CastKind, CmpPred
 from ..ir.layout import DataLayout, parts_of, stride_of
 from ..ir.module import Module
-from ..ir.types import (ARENA, MEM, DictType, FuncType, IterType, ListType, PtrType,
-                        RunningType,
-                        SetType,
-                        StrType, Type, U8, U64, VOID)
+from ..ir.types import (ARENA, MEM, DictType, FuncType, IterType, ListType,
+                        ProductType, PtrType, RunningType, SetType, StrType,
+                        TupleType, Type, U8, U64, VOID)
 from ..ir.value import Value
 from . import lists, strings, tables
 
@@ -49,15 +48,21 @@ _LAYOUT: Final[DataLayout] = DataLayout(pointer_size=8)
 def can_own(ty: Type) -> bool:
     """Whether a value of *ty* can be copied into an allocator and given back.
 
-    Text, and a list of anything that can, or of anything that points nowhere.  A
-    record, a tuple, an array held inside something else and a table are not yet:
-    what they point into would need a walk of their own.
+    Text, and a list of anything that can, or of anything that points nowhere; and
+    a record or a tuple each part of which can, or points nowhere -- copied part by
+    part, which is all a copy of one is.  A record that is moved and never copied
+    -- `@[unique]`, closed, a device -- is not, nor is a sum, an array held inside
+    something else or a table: what they point into would need a walk of its own.
     """
     match ty:
         case StrType():
             return True
         case ListType():
             return not points(ty.element) or can_own(ty.element)
+        case ProductType() if not (ty.unique or ty.closed_by or ty.device):
+            return all(not points(part) or can_own(part) for _, part in ty.fields)
+        case TupleType():
+            return all(not points(part) or can_own(part) for part in ty.members)
     return False
 
 
@@ -137,13 +142,44 @@ def _each(builder: IRBuilder, func: Function, count: Value, name: str,
     builder.set_memory(done.add_param(MEM, "mem"))
 
 
+def _owned_leaves(builder: IRBuilder, arena: Value, leaves: list[Value],
+                  ty: Type) -> list[Value]:
+    """The parts a value of *ty* travels in, with every string and list among
+    them copied into *arena* -- a record's and a tuple's taken field by field."""
+    module = builder.module
+    match ty:
+        case StrType() | ListType():
+            copied = builder.call(own_function(module, ty),
+                                  (arena, builder.make_tuple(leaves, ty)), ty)
+            return [builder.extract(copied, at, part)
+                    for at, part in enumerate(parts_of(ty))]
+        case ProductType() | TupleType():
+            parts = [part for _, part in ty.fields] if isinstance(ty, ProductType) \
+                else list(ty.members)
+            found: list[Value] = []
+            at = 0
+            for part in parts:
+                count = len(parts_of(part))
+                piece = leaves[at:at + count]
+                found.extend(_owned_leaves(builder, arena, piece, part)
+                             if points(part) else piece)
+                at += count
+            return found
+    return leaves
+
+
 def _build_own(module: Module, func: Function, ty: Type) -> None:
-    """The copy: the bytes first, then every element that points somewhere."""
+    """The copy: the bytes first, then every element that points somewhere --
+    or, of a record or a tuple, every part that does."""
     entry = func.add_block()
     builder = IRBuilder(module, func)
     builder.position_at(entry)
     arena = entry.add_param(module.types.ptr_type(ARENA, mutable=True), "arena")
     value = entry.add_param(ty, "v")
+    if isinstance(ty, (ProductType, TupleType)):
+        builder.ret(builder.make_tuple(
+            _owned_leaves(builder, arena, builder.leaves(value, ty), ty), ty))
+        return
     start, count = _parts(builder, value, ty)
     size = _size(builder, ty, count)
     raw = builder.cast(CastKind.BITCAST, start, _bytes(module))

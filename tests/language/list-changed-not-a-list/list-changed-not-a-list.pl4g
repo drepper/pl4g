@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4929
+
+※ An array's length is in its type, so it cannot grow where it is: `a ⧺ b` makes a new
+※ array, and a list is what grows.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let a: mut u8⟦2⟧ = ⟦1u8, 2u8⟧
+    a ⧺← ⟦3u8⟧
+    0u6

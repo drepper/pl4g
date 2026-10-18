@@ -1,0 +1,37 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A list is a value.**  Another name holding the list keeps what it had, whatever is
+※ done in place to the first -- an element taken out, one written, more joined on -- so
+※ a list read out of a place into another is given elements of its own where either
+※ may be changed in place.  Where the place it came from is a local not used again, the
+※ room is simply handed over, and nothing is copied.  A `mut` parameter changed in
+※ place is a copy of what its caller handed it.
+※
+※ Compare: **Swift**'s arrays, values copied on write behind a reference count; **Rust**,
+※ where `let m = l` moves the vector and `l.clone()` is the copy; **Go**, whose slices
+※ share their room and whose `append` may or may not -- the behaviour this avoids.
+
+let std := ⎕import("std")
+
+fn grown(l: mut [u8]) → u64 ¤size:
+    l ⧺← [9u8]
+    l⟦0⟧ ← 7u8
+    #l
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: mut [u8] = [1u8, 2u8, 3u8]
+    let m: [u8] = l
+    let gone: u8 = †l⟦0⟧
+    if gone ≠ 1u8 ∨ m⟦0⟧ ≠ 1u8 ∨ m⟦1⟧ ≠ 2u8 ∨ #m ≠ 3:
+        return 1u6
+    let w: mut [u8] = m
+    w⟦0⟧ ← 5u8
+    w ⧺← [6u8]
+    if m⟦0⟧ ≠ 1u8 ∨ #m ≠ 3:
+        return 2u6
+    if grown(l) ≠ 3 ∨ l⟦0⟧ ≠ 2u8 ∨ #l ≠ 2:
+        return 3u6
+    let k: mut [u8] = l
+    k ⧺← [4u8]
+    if #k = 3 ∧ k⟦2⟧ = 4u8 ∧ w⟦0⟧ = 5u8: 0u6 else: 4u6

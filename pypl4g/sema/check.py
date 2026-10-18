@@ -434,6 +434,11 @@ def _addressed_in(node: object, into: set[str]) -> None:
     if isinstance(node, ast.JoinAssign) and isinstance(node.target, ast.NameRef):
         # And so does joining onto one, which writes the longer list back.
         into.add(node.target.name)
+    if isinstance(node, ast.ElementAssign) and isinstance(node.base, ast.NameRef):
+        # And writing an element of one, which may copy it out of the image
+        # first.  An array's element written is a place already, so for an array
+        # this changes nothing.
+        into.add(node.base.name)
     if isinstance(node, ast.Call) and isinstance(node.callee, ast.NameRef) \
             and node.callee.name == RESERVE_NAME and node.args \
             and isinstance(node.args[0], ast.NameRef):
@@ -1758,6 +1763,19 @@ def _written_in(node: object, into: set[str], parts: set[str]) -> None:
     elif isinstance(node, tuple):
         for one in node:
             _written_in(one, into, parts)
+
+
+def _holds_a_list(ty: Type) -> bool:
+    """Whether a value of *ty* is a list or has one among its parts -- which is
+    what may be changed in place, and so what two names must not share."""
+    match ty:
+        case ListType():
+            return True
+        case ProductType():
+            return any(_holds_a_list(part) for _, part in ty.fields)
+        case TupleType():
+            return any(_holds_a_list(part) for part in ty.members)
+    return False
 
 
 def _changed_in_place(name: str, node: object) -> bool:
@@ -15534,6 +15552,16 @@ class Checker:
                 self._diags.emit(D.LANG_LIST_CHANGED_NOT_A_PLACE, span,
                                  what=changing)
             return None
+        said = self._said_to_be(expr)
+        if said is not None and not isinstance(said, ListType):
+            # Said before the place is asked for, which has rules of its own about
+            # what may be in one: what is wrong is what it is.
+            if changing is None:
+                self._diags.emit(D.LANG_TAKE_NOT_A_CURSOR, span, found=said.written())
+            else:
+                self._diags.emit(D.LANG_LIST_CHANGED_NOT_A_LIST, span,
+                                 what=changing, found=said.written())
+            return None
         found = self._place_written(builder, expr)
         if found is None:
             return None
@@ -15678,7 +15706,7 @@ class Checker:
         over.  Where neither may change, sharing is something nobody can see.
         """
         ty = self._said_to_be(written)
-        if not isinstance(ty, ListType) or not owned.can_own(ty) \
+        if ty is None or not _holds_a_list(ty) or not owned.can_own(ty) \
                 or not isinstance(written, (ast.NameRef, ast.Member, ast.Element,
                                             ast.Deref)):
             return
@@ -15700,7 +15728,7 @@ class Checker:
         """A `mut` parameter holding a list, given elements of its own where the
         body changes it in place: what arrived is in its caller's room, which a
         change through the parameter would otherwise change for the caller."""
-        if not param.mutable or not isinstance(self._value_type_of(value), ListType) \
+        if not param.mutable or not _holds_a_list(self._value_type_of(value)) \
                 or not _changed_in_place(param.name, body):
             return value
         return self._copy_of(builder, value, param.span)
@@ -15713,9 +15741,10 @@ class Checker:
         return after is None or local.span.start in after
 
     def _copy_of(self, builder: IRBuilder, value: Value, span: Span) -> Value:
-        """A list of elements of its own, deep, in the arena in force."""
+        """A list of elements of its own, deep, in the arena in force -- or a
+        record or a tuple holding one, with every list it holds so copied."""
         ty = self._value_type_of(value)
-        if not isinstance(ty, ListType):
+        if not _holds_a_list(ty) or not owned.can_own(ty):
             return value
         return builder.call(owned.own_function(self._module, ty),
                             (self._out_of(builder, span), value), ty, span)

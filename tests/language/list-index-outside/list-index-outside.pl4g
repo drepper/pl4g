@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok run=native,qemu exit=82 diag=none
+
+※ An index past the end of a list stops the program, as an index past the end of an
+※ array does: a list's length is not in its type, so it is asked while running.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: mut [u8] = []
+    l ⧺← [1u8, 2u8]
+    let at: u64 ¤idx = ⎕unit(⎕drop(#init.args) + 1, ⌜idx⌝)
+    if l⟦at⟧ = 2u8: 0u6 else: 1u6

@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=3027
+
+※ `⧺←` is an assignment, so what stands on its left is a place, as it is for `←`: a
+※ value a call answered is refused while the line is read.
+
+let std := ⎕import("std")
+
+fn made() → [u8]:
+    [1u8]
+
+@[startup]
+fn main(init: std.Init) → u6:
+    made() ⧺← [2u8]
+    0u6

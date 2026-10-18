@@ -1,0 +1,36 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A list grows where it is.**  `l ⧺← more` joins `more` -- a list, or an array written
+※ out -- onto the end of the list in the place `l`, in the room it has to spare, and in
+※ room twice as large where it has not enough: a hundred joins of one are a handful of
+※ copies, not a hundred.  `l ⧺← l` joins a list onto itself.  `l⟦i⟧` reads an element
+※ and `l⟦i⟧ ← v` writes one, both checked against how many there are while running,
+※ and `⎕reserve(l, n)` makes room for `n` more ahead of time.  Nothing here is an
+※ effect: the list is the function's own, and a list is a value nobody else holds.
+※
+※ Compare: **Python**'s `l += [x]`, `l[i]` and `l[i] = v`; **Rust**'s `Vec::extend`,
+※ indexing and `reserve`; **Go**'s `l = append(l, x)`, which says the same thing with the
+※ list written twice; **C++**'s `insert` at the end and `reserve`.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: mut [u16] = []
+    foreach i := 0u16…100u16:
+        l ⧺← [i]
+    if #l ≠ 100:
+        return 1u6
+    let s: mut u16 = 0u16
+    foreach x := l:
+        s ← s + x
+    if s ≠ 4950u16:
+        return 2u6
+    l ⧺← l
+    if #l ≠ 200 ∨ l⟦150⟧ ≠ 50u16:
+        return 3u6
+    l⟦0⟧ ← 7u16
+    l ⧺← ⟦1u16, 2u16⟧
+    ⎕reserve(l, 1000)
+    l ⧺← [3u16, 4u16]
+    if #l = 204 ∧ l⟦0⟧ = 7u16 ∧ l⟦203⟧ = 4u16 ∧ l⟦201⟧ = 2u16: 0u6 else: 4u6
