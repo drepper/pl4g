@@ -3674,6 +3674,10 @@ class Checker:
         self._live_in: dict[int, frozenset[int]] = {}
         #: And as each is done, which is what says a name is not used again.
         self._live_out: dict[int, frozenset[int]] = {}
+        #: The keys standing for an array in a frame of this program's, which a
+        #: view of it carries: what it points into goes when the array's scope
+        #: does.  A copy of the elements carries none of them.
+        self._array_frames: set[int] = set()
         #: The values that are copied where they are lowered, by identity: a list
         #: read out of a place into another, where either may change it in place.
         self._copying: set[int] = set()
@@ -9021,9 +9025,13 @@ class Checker:
                 inner: set[int] = set()
                 self._collect_arenas(node.base, inner)
                 keys = {one for one in inner if _is_container_key(one)}
+                if not self._a_view_of(node):
+                    # One element is a value, and not where the array is.
+                    keys |= inner & self._array_frames
                 into.update(inner - keys)
                 if _HEAP in inner:
-                    into.update(_element_key(one) for one in keys)
+                    into.update(_element_key(one) for one in keys
+                                if _is_container_key(one))
                 return
             case ast.NameRef():
                 local = self._find_local(node.name)
@@ -9038,6 +9046,7 @@ class Checker:
                     # that is the one thing to say about it: where it goes after
                     # is the same mistake again.
                     into.update(local.arenas)
+                    into.update(self._array_frame_of(local))
                 return
             case ast.Lambda():
                 # Lowered, it said what it reaches (`_lower_lambda`).  Read ahead
@@ -9064,6 +9073,33 @@ class Checker:
                         if isinstance(each, ast.Node):
                             self._collect_arenas(each, into)
 
+    def _array_frame_of(self, local: _Local) -> frozenset[int]:
+        """The key for where an array a name holds has its elements, which a view
+        of it carries: the name's own storage for one this function keeps in its
+        frame, and the parameter for one a caller handed over -- whose elements
+        are the caller's, as long as the call is.  Nothing for anything else."""
+        if not isinstance(self._held_by(local), ArrayType) or self._is_arena(local):
+            return frozenset()
+        if local.is_parameter:
+            self._unknown_by_id.setdefault(id(local), local)
+            self._array_frames.add(id(local))
+            return frozenset({id(local)})
+        key = self._storage_key(local)
+        self._array_frames.add(key)
+        return frozenset({key})
+
+    def _a_view_of(self, node: ast.Element) -> bool:
+        """Whether `a⟦…⟧` is a view of the array and not one element of it: a run
+        of one dimension, or fewer indices than it has dimensions, which is a
+        row.  Where what the array is cannot be said yet, a view, which costs a
+        refusal at the worst and never a view let out unseen."""
+        if any(isinstance(one, ast.Range) for one in node.indices):
+            return True
+        held = self._said_to_be(node.base)
+        if not isinstance(held, ArrayType):
+            return held is None
+        return len(node.indices) < held.rank
+
     def _made_in(self, name: str, value: ast.Expr | None, span: Span,
                  assigning: bool = False) -> None:
         """Write down where what a name now holds was made, and check it fits.
@@ -9081,6 +9117,12 @@ class Checker:
             return
         made = self._arenas_in(value)
         held = self._held_by(local)
+        if isinstance(held, ArrayType) and (held.fixed or assigning):
+            # Giving an array to an array copies the elements: into the name's
+            # own room, or into the elements a view names, which are where they
+            # were -- so what a view reaches is what it reached before.
+            made = (made - self._array_frames) | (
+                local.arenas & self._array_frames if assigning else frozenset())
         if _is_owning(held):
             # A container whose elements point somewhere: which allocator they
             # are kept in, and -- for `⎕heap`'s, which gives back what is
@@ -9376,7 +9418,8 @@ class Checker:
                 D.LANG_CLOSABLE_ENDED_HERE, there[5], name=local.name,
                 how="".join(("its lifetime ended here: ", there[6])))
 
-    def _made_in_part(self, base: ast.Expr, value: ast.Expr, span: Span) -> None:
+    def _made_in_part(self, base: ast.Expr, value: ast.Expr, span: Span,
+                      element: bool = False) -> None:
         """What a field, an element or an entry was given, added to the whole.
 
         The whole holds what it held and now this as well, so what it was made in
@@ -9398,6 +9441,12 @@ class Checker:
             # the way in, so what the array was made in is what it was.
             return
         made = self._arenas_in(value)
+        given = self._said_to_be(value)
+        if isinstance(given, ArrayType) and (given.fixed or element):
+            # Copied: a fixed array into the part's own room, and anything given
+            # to an element of an array into the element's.  A view given to a
+            # field is the view.
+            made = made - self._array_frames
         for one in made:
             arena = self._arena_by_id.get(one)
             if arena is not None and arena.depth > local.depth:
@@ -10423,7 +10472,7 @@ class Checker:
             case ast.ElementAssign():
                 self._copied_where_shared(stmt.value, True)
                 self._lower_element_assign(builder, stmt)
-                self._made_in_part(stmt.base, stmt.value, stmt.span)
+                self._made_in_part(stmt.base, stmt.value, stmt.span, element=True)
             case ast.JoinAssign():
                 self._lower_join_assign(builder, stmt)
             case ast.MemberAssign():
