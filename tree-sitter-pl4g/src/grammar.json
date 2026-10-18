@@ -3584,6 +3584,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "join_assignment"
+        },
+        {
+          "type": "SYMBOL",
           "name": "return_statement"
         },
         {
@@ -4023,6 +4027,64 @@
         {
           "type": "STRING",
           "value": "←"
+        },
+        {
+          "type": "FIELD",
+          "name": "value",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_expression"
+          }
+        }
+      ]
+    },
+    "join_assignment": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "target",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "identifier"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "element_expression"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "deref_expression"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "member_expression"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "hole"
+              }
+            ]
+          }
+        },
+        {
+          "type": "TOKEN",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "⧺←"
+              },
+              {
+                "type": "STRING",
+                "value": "++←"
+              }
+            ]
+          }
         },
         {
           "type": "FIELD",

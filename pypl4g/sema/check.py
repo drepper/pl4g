@@ -32,6 +32,7 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH, EACH_GLYPH, ITER_GLYPH,
                            RESUME_NAME, START_NAME,
                            LIFETIME_GLYPH, LIFT_OPEN_GLYPH,
+                           ASSIGN_GLYPH, CONCAT_GLYPH,
                            ARRAY_OPEN_GLYPH, ARRAY_CLOSE_GLYPH,
                            SET_OPEN_GLYPH, SET_CLOSE_GLYPH,
                            DROP_NAME, LEAD_NAME, NARROW_NAME, ONES_NAME,
@@ -39,7 +40,7 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                           ENUMERATE_NAME, TYPEOF_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
                           WRAP_NAME,
-                          ENVIRON_NAME, ITER_NAME,
+                          ENVIRON_NAME, ITER_NAME, RESERVE_NAME,
                           HEAP_NAME, STATIC_NAME, SYSCALL_NAME, SYSCALL_NUMBER_PREFIX,
                           TOLERANCE_DEFAULT,
                           TOLERANCE_NAME, WILDCARD_NAME)
@@ -430,6 +431,14 @@ def _addressed_in(node: object, into: set[str]) -> None:
         # the list was, so the name has to *be* somewhere -- the same thing `&`
         # needs, got the same way.
         into.add(node.base.name)
+    if isinstance(node, ast.JoinAssign) and isinstance(node.target, ast.NameRef):
+        # And so does joining onto one, which writes the longer list back.
+        into.add(node.target.name)
+    if isinstance(node, ast.Call) and isinstance(node.callee, ast.NameRef) \
+            and node.callee.name == RESERVE_NAME and node.args \
+            and isinstance(node.args[0], ast.NameRef):
+        # As does making room in one.
+        into.add(node.args[0].name)
     if isinstance(node, ast.Call) and isinstance(node.callee, ast.NameRef) \
             and node.callee.name == ITER_NAME and len(node.args) == 1 \
             and isinstance(node.args[0], ast.NameRef):
@@ -1734,8 +1743,9 @@ def _written_in(node: object, into: set[str], parts: set[str]) -> None:
         case ast.AssignStmt():
             into.add(node.name)
             into.update(name for name, _ in node.more)
-        case ast.MemberAssign() | ast.ElementAssign() | ast.EntryAssign():
-            root = node.base
+        case ast.MemberAssign() | ast.ElementAssign() | ast.EntryAssign() \
+                | ast.JoinAssign():
+            root = node.target if isinstance(node, ast.JoinAssign) else node.base
             while isinstance(root, (ast.Member, ast.Element, ast.Index)):
                 root = root.base
             if isinstance(root, ast.NameRef):
@@ -9764,7 +9774,7 @@ class Checker:
             case ast.VarDef():
                 why = "what it would name is gone as soon as it is named"
             case ast.ExprStmt() | ast.AssignStmt() | ast.MemberAssign() \
-                    | ast.ElementAssign() | ast.DerefAssign():
+                    | ast.ElementAssign() | ast.DerefAssign() | ast.JoinAssign():
                 if _leaves(later):
                     why = "a '?' in it would leave a block already being left"
             case _:
@@ -10350,6 +10360,8 @@ class Checker:
             case ast.ElementAssign():
                 self._lower_element_assign(builder, stmt)
                 self._made_in_part(stmt.base, stmt.value, stmt.span)
+            case ast.JoinAssign():
+                self._lower_join_assign(builder, stmt)
             case ast.MemberAssign():
                 self._lower_member_assign(builder, stmt)
                 self._made_in_part(stmt.base, stmt.value, stmt.span)
@@ -11106,6 +11118,8 @@ class Checker:
             return UndefConst(ERROR)
         if isinstance(ty, TupleType):
             return self._lower_tuple_member(builder, expr, base, ty, expected)
+        if isinstance(ty, ListType):
+            return self._list_element(builder, expr, base, ty, expected)
         if not isinstance(ty, ArrayType):
             self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, expr.base.span,
                              found=ty.written())
@@ -11880,6 +11894,9 @@ class Checker:
             # tuple made of the others and the new value, which is what writing
             # that out does.
             self._diags.emit(D.LANG_TUPLE_ELEMENT_NOT_A_PLACE, stmt.span)
+            return
+        if isinstance(ty, ListType):
+            self._lower_list_element_assign(builder, stmt)
             return
         if not isinstance(ty, ArrayType):
             self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, stmt.base.span,
@@ -15450,17 +15467,22 @@ class Checker:
 
     # -- lists, and the cursors that walk them ---------------------------------
 
-    def _list_place(self, builder: IRBuilder, expr: ast.Expr, span: Span
-                    ) -> tuple[Value, ListType] | None:
-        """The place a list is in, for something that is about to shorten it.
+    def _list_place(self, builder: IRBuilder, expr: ast.Expr, span: Span,
+                    changing: str | None = None) -> tuple[Value, ListType] | None:
+        """The place a list is in, for something that is about to change it --
+        `†` where *changing* is nothing, and what it names otherwise.
 
-        A list is where its elements are and how many there are, so a list with
-        one element fewer is a different pair of words: taking one out has to
-        put what is left back where the list was.  That is a place -- a name, a
-        field, an element -- and a list that was worked out has none.
+        A list is where its elements are, how many there are, and where they came
+        from, so a list with one element fewer or more is different words: what
+        changes one has to put it back where the list was.  That is a place -- a
+        name, a field, an element -- and a list that was worked out has none.
         """
         if not _names_a_place(expr):
-            self._diags.emit(D.LANG_TAKE_NOT_A_PLACE, span)
+            if changing is None:
+                self._diags.emit(D.LANG_TAKE_NOT_A_PLACE, span)
+            else:
+                self._diags.emit(D.LANG_LIST_CHANGED_NOT_A_PLACE, span,
+                                 what=changing)
             return None
         found = self._place_written(builder, expr)
         if found is None:
@@ -15469,8 +15491,12 @@ class Checker:
         if held is ERROR:
             return None
         if not isinstance(held, ListType):
-            self._diags.emit(D.LANG_TAKE_NOT_A_CURSOR, span,
-                             found=held.written())
+            if changing is None:
+                self._diags.emit(D.LANG_TAKE_NOT_A_CURSOR, span,
+                                 found=held.written())
+            else:
+                self._diags.emit(D.LANG_LIST_CHANGED_NOT_A_LIST, span,
+                                 what=changing, found=held.written())
             return None
         if not may_change:
             self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, span, name=what)
@@ -15532,6 +15558,7 @@ class Checker:
             self._report_mismatch(expr.span, ty.element, expected)
             return UndefConst(ERROR)
         self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
+        self._made_writable(builder, place, ty, expr.span)
         elements, count, _ = self._list_at(builder, place, ty, expr.span)
         builder.check(builder.compare(CmpPred.ULT, at, count, expr.span),
                       "an index outside its list",
@@ -15539,6 +15566,210 @@ class Checker:
         gone = self._element_of(builder, elements, ty, at, expr.span)
         self._erased(builder, place, ty, elements, count, at, expr.span)
         return gone
+
+    def _room_made(self, builder: IRBuilder, place: Value, ty: ListType,
+                   more: Value, span: Span) -> tuple[Value, Value, Value, Value, Value]:
+        """Room in the list at *place* for *more* elements after the ones it has.
+
+        Answers where its elements were and where they are now, how many there
+        are, and the allocator it had and the one it has -- its own, or for a list
+        in the image, which has none, the arena in force.  Nothing is written back
+        and nothing given back: that is `_room_kept`, once what goes in the room
+        has been copied, which may come out of the old room.
+        """
+        bytes_ = self._module.types.ptr_type(U8, mutable=True)
+        elements, count, held = self._list_at(builder, place, ty, span)
+        had = builder.extract(held, 2, parts_of(ty)[2], span)
+        into = builder.call(lists.allocator_function(self._module),
+                            (had, self._out_of(builder, span)), parts_of(ty)[2],
+                            span)
+        old = builder.cast(CastKind.BITCAST, elements, bytes_, span)
+        new = builder.call(lists.grow_function(self._module),
+                           (old, count, had, into, more,
+                            builder.int_const(U64, stride_of(ty.element, _LAYOUT))),
+                           bytes_, span)
+        return old, new, count, had, into
+
+    def _room_kept(self, builder: IRBuilder, place: Value, ty: ListType,
+                   made: tuple[Value, Value, Value, Value, Value], count: Value,
+                   span: Span) -> None:
+        """The list at *place* written back with *count* elements in the room
+        `_room_made` made, and the room it grew out of given back."""
+        old, new, _, had, into = made
+        builder.call(lists.release_function(self._module),
+                     (had, old, new,
+                      builder.int_const(U64, stride_of(ty.element, _LAYOUT))),
+                     VOID, span)
+        builder.store(place, builder.make_tuple(
+            (builder.cast(CastKind.BITCAST, new, parts_of(ty)[0], span), count,
+             into), ty, span), span)
+
+    def _made_writable(self, builder: IRBuilder, place: Value, ty: ListType,
+                       span: Span) -> None:
+        """The list at *place* in room of its own before it is written in place:
+        a list in the image is copied out, into the arena in force, and any other
+        is as it was -- room for nought more being room it has."""
+        made = self._room_made(builder, place, ty, builder.int_const(U64, 0), span)
+        self._room_kept(builder, place, ty, made, made[2], span)
+
+    def _lower_join_assign(self, builder: IRBuilder, stmt: ast.JoinAssign) -> None:
+        """Lower `l ⧺← more`: *more* joined onto the end of the list in the place
+        `l`, in the room it has to spare and in new room twice as large where it
+        has not enough.
+
+        *more* is a list, or an array written out, which is the list of the same
+        elements.  What is joined on is copied in -- deep, into the list's own
+        allocator, where its elements point somewhere -- and a list written out
+        here is lowered straight into the room rather than made first.
+        """
+        found = self._list_place(builder, stmt.target, stmt.target.span,
+                                 "".join((CONCAT_GLYPH, ASSIGN_GLYPH)))
+        if found is None:
+            return
+        place, ty = found
+        written = stmt.value
+        if isinstance(written, ast.ArrayLit):
+            written = ast.ListLit(span=written.span, elements=written.elements)
+        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
+        stride = stride_of(ty.element, _LAYOUT)
+        span = stmt.span
+        if isinstance(written, ast.ListLit) and written.elements \
+                and not owned.points(ty.element):
+            values = [self._lower_into(builder, one, ty.element, one.span)
+                      for one in written.elements]
+            if any(self._value_type_of(one) is ERROR for one in values):
+                return
+            made = self._room_made(builder, place, ty,
+                                   builder.int_const(U64, len(values)), span)
+            _, new, count, _, _ = made
+            at = builder.cast(CastKind.BITCAST, new,
+                              self._module.types.ptr_type(ty.element, mutable=True),
+                              span)
+            for index, one in enumerate(values):
+                builder.store(self._element_place(
+                    builder, at, ty.element,
+                    builder.binary(BinOp.WRAP_ADD, count,
+                                   builder.int_const(U64, index), span), span),
+                    one, span)
+            self._room_kept(builder, place, ty, made, builder.binary(
+                BinOp.WRAP_ADD, count, builder.int_const(U64, len(values)), span),
+                span)
+            return
+        more = self._lower_into(builder, written, ty, written.span)
+        if self._value_type_of(more) is ERROR:
+            return
+        joined = builder.extract(more, 1, U64, span)
+        made = self._room_made(builder, place, ty, joined, span)
+        _, new, count, _, into = made
+        source = more
+        if owned.points(ty.element):
+            # Into the list's own allocator, which is known only while running.
+            source = builder.call(owned.own_function(self._module, ty), (into, more),
+                                  ty, span)
+        bytes_ = self._module.types.ptr_type(U8, mutable=True)
+        size = builder.int_const(U64, stride)
+        strings.copy_bytes(builder, new,
+                           builder.binary(BinOp.WRAP_MUL, count, size, span),
+                           builder.cast(CastKind.BITCAST,
+                                        builder.extract(source, 0, parts_of(ty)[0],
+                                                        span), bytes_, span),
+                           builder.binary(BinOp.WRAP_MUL, joined, size, span))
+        if owned.points(ty.element):
+            # Its elements are the list's now, and the run they were in is spare.
+            owned.give_back_storage(builder, source, ty, None)
+        elif _is_temporary(written):
+            owned.give_back_storage(
+                builder, more, ty, "heap" if self._freshly_heap(written) else None)
+        self._room_kept(builder, place, ty, made,
+                        builder.binary(BinOp.WRAP_ADD, count, joined, span), span)
+
+    def _list_element(self, builder: IRBuilder, expr: ast.Element, base: Value,
+                      ty: ListType, expected: Type | None) -> Value:
+        """`l⟦i⟧`: the element at *i*, which is checked against how many there
+        are while running, a list's length not being in its type."""
+        if len(expr.indices) != 1 or isinstance(expr.indices[0], ast.Range):
+            self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, expr.base.span,
+                             found=ty.written())
+            return UndefConst(ERROR)
+        at = self._index_into(builder, expr.indices[0], expr.span)
+        if at is None:
+            return UndefConst(ERROR)
+        if not self._accepts(expected, ty.element):
+            self._report_mismatch(expr.span, ty.element, expected)
+            return UndefConst(ERROR)
+        count = builder.extract(base, 1, U64, expr.span)
+        builder.check(builder.compare(CmpPred.ULT, at, count, expr.span),
+                      "an index outside its list", statuses.OUT_OF_RANGE, expr.span)
+        return self._element_of(builder, builder.extract(base, 0, parts_of(ty)[0],
+                                                         expr.span),
+                                ty, at, expr.span)
+
+    def _lower_list_element_assign(self, builder: IRBuilder,
+                                   stmt: ast.ElementAssign) -> None:
+        """`l⟦i⟧ ← v`: one element of the list in the place `l` replaced, where
+        it is -- the list copied out of the image first, which is read-only, and
+        an element that points somewhere copied into the list's allocator, the
+        one it replaces given back."""
+        if len(stmt.indices) != 1 or isinstance(stmt.indices[0], ast.Range):
+            self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, stmt.base.span,
+                             found="a list")
+            return
+        found = self._list_place(builder, stmt.base, stmt.base.span,
+                                 "an element written")
+        if found is None:
+            return
+        place, ty = found
+        at = self._index_into(builder, stmt.indices[0], stmt.span)
+        if at is None:
+            return
+        value = self._lower_into(builder, stmt.value, ty.element, stmt.value.span)
+        if self._value_type_of(value) is ERROR:
+            return
+        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
+        span = stmt.span
+        self._made_writable(builder, place, ty, span)
+        elements, count, held = self._list_at(builder, place, ty, span)
+        builder.check(builder.compare(CmpPred.ULT, at, count, span),
+                      "an index outside its list", statuses.OUT_OF_RANGE, span)
+        where = builder.binary(
+            BinOp.ADD, elements,
+            builder.binary(BinOp.WRAP_MUL, at,
+                           builder.int_const(U64, stride_of(ty.element, _LAYOUT)),
+                           span), span)
+        if owned.points(ty.element) and owned.can_own(ty.element):
+            replaced = builder.load(where, span)
+            value = builder.call(owned.own_function(self._module, ty.element),
+                                 (builder.extract(held, 2, parts_of(ty)[2], span),
+                                  value), ty.element, span)
+            builder.store(where, value, span)
+            owned.give_back(builder, replaced, ty.element, None)
+            return
+        builder.store(where, value, span)
+
+    def _lower_reserve(self, builder: IRBuilder, expr: ast.Call,
+                       expected: Type | None) -> Value:
+        """`⎕reserve(l, n)`: room in the list in the place `l` for *n* more,
+        made now, so that joining that many on takes no more room."""
+        if len(expr.args) != 2 or any(isinstance(one, (ast.Named, ast.Spread))
+                                      for one in expr.args):
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=RESERVE_NAME, expected=2, found=len(expr.args))
+            return UndefConst(ERROR)
+        found = self._list_place(builder, expr.args[0], expr.args[0].span,
+                                 RESERVE_NAME)
+        if found is None:
+            return UndefConst(ERROR)
+        place, ty = found
+        more = self._index_into(builder, expr.args[1], expr.args[1].span)
+        if more is None:
+            return UndefConst(ERROR)
+        if not self._accepts(expected, VOID):
+            self._report_mismatch(expr.span, VOID, expected)
+            return UndefConst(ERROR)
+        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
+        made = self._room_made(builder, place, ty, more, expr.span)
+        self._room_kept(builder, place, ty, made, made[2], expr.span)
+        return UndefConst(VOID)
 
     def _index_into(self, builder: IRBuilder, written: ast.Expr,
                     span: Span) -> Value | None:
@@ -23384,6 +23615,8 @@ class Checker:
                 return self._lower_address_of(builder, expr, expected)
             if given == ITER_NAME:
                 return self._lower_iter(builder, expr, expected)
+            if given == RESERVE_NAME:
+                return self._lower_reserve(builder, expr, expected)
             if given == START_NAME:
                 return self._lower_start(builder, expr, expected)
             if given == RESUME_NAME:

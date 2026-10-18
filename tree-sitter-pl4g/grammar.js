@@ -698,6 +698,7 @@ module.exports = grammar({
       $.variable_statement,
       $.unit_definition,
       $.assignment,
+      $.join_assignment,
       $.return_statement,
       $.break_statement,
       $.continue_statement,
@@ -787,6 +788,16 @@ module.exports = grammar({
       // Targets next to each other take a tuple apart, one name per member.
       repeat(seq(',', field('target', $.identifier))),
       '←', field('value', $._expression),
+    ),
+
+    // `l \u29fa\u2190 more`: the join and the assignment it is short for, which
+    // joins onto the end of the list in the place -- in the room it has to spare.
+    // The two glyphs are written together and read as one token, which is what
+    // tells it from a join while the left side is being read.
+    join_assignment: $ => seq(
+      field('target', choice($.identifier, $.element_expression,
+                             $.deref_expression, $.member_expression, $.hole)),
+      token(choice('\u29fa\u2190', '++\u2190')), field('value', $._expression),
     ),
 
     // A line may end without an end of line where the statement took it, so

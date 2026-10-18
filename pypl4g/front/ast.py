@@ -993,6 +993,15 @@ class AssignStmt(Stmt):
 
 
 @dataclass(frozen=True, slots=True)
+class JoinAssign(Stmt):
+    """`l ⧺← more`: *more* joined onto the end of the list in the place *target*,
+    in the room the list has to spare where it has enough."""
+
+    target: Expr
+    value: Expr
+
+
+@dataclass(frozen=True, slots=True)
 class DerefAssign(Stmt):
     """`r⌖ ← v`: the place a reference names, written.
 

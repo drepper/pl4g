@@ -2035,7 +2035,23 @@ class Parser:
             return self._parse_unpacking(value)
         if self._check(TokKind.ASSIGN):
             return self._parse_assignment(value)
+        if self._joins_and_assigns():
+            # The join and the assignment it is short for, written once.
+            self._advance()
+            self._advance()
+            more = self._parse_expression()
+            return ast.JoinAssign(span=value.span.to(more.span), target=value,
+                                  value=more)
         return ast.ExprStmt(span=value.span, value=value)
+
+    def _joins_and_assigns(self) -> bool:
+        """Whether `⧺←` is next: the join and the arrow written together, which
+        is one mark -- apart, they are a join missing its right side."""
+        if not self._check(TokKind.CONCAT):
+            return False
+        after = self._peek()
+        return after.kind is TokKind.ASSIGN \
+            and after.span.start == self._current.span.end
 
     def _parse_unpacking(self, first: ast.NameRef) -> ast.Stmt:
         """Parse ``NAME, NAME \N{LEFTWARDS ARROW} VALUE``, which takes a tuple apart."""
@@ -2401,6 +2417,9 @@ class Parser:
                                  glyph=token.text, operands=(left, right))
                 continue
             operator = _BINARY_OPERATORS.get(self._current.kind)
+            if operator is not None and self._joins_and_assigns():
+                # `l ⧺← more` is a statement and not a join with nothing after it.
+                return left
             if operator is None or operator.precedence < minimum:
                 if minimum == 0 and self._check(TokKind.KW_IN):
                     # `EXPR in NAME`: which arena what the expression takes room

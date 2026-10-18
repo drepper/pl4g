@@ -10485,6 +10485,55 @@
       "option": null
     },
     {
+      "number": 4928,
+      "name": "LANG_LIST_CHANGED_NOT_A_PLACE",
+      "severity": "error",
+      "message": "'{what}' changes the list itself, so what it is written on is a name, a field or an element and not a value",
+      "args": [
+        {
+          "name": "what",
+          "type": "string",
+          "description": "what changes the list"
+        }
+      ],
+      "cause": "A list is where its elements are, how many there are and where they came from, so a list with more elements, or with room for more, is different words -- and they have to go back where the list was, for whoever reads it there.  A list that was worked out is in no place, and there is nowhere to put it back.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Lists",
+        "requirement": "What changes a list in place is written on the place the list is in."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4929,
+      "name": "LANG_LIST_CHANGED_NOT_A_LIST",
+      "severity": "error",
+      "message": "'{what}' is written on a list, and this is '{found}'",
+      "args": [
+        {
+          "name": "what",
+          "type": "string",
+          "description": "what changes the list"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what it is written on"
+        }
+      ],
+      "cause": "Joining onto something where it is, and making room in it, are what a list does: it carries its elements and the room beside them.  An array's length is in its type and a view owns nothing, so neither can grow; a join `a ⧺ b` makes a new one of either.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Lists",
+        "requirement": "What changes a list in place is written on a list."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

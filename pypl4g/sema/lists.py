@@ -60,6 +60,7 @@ FREE_SYMBOL: Final[str] = "__pl4g_list_free"
 GROW_SYMBOL: Final[str] = "__pl4g_list_grow"
 RELEASE_SYMBOL: Final[str] = "__pl4g_list_release"
 JOIN_SYMBOL: Final[str] = "__pl4g_list_join"
+ALLOCATOR_SYMBOL: Final[str] = "__pl4g_list_allocator"
 
 #: What the function is called.  It carries the prefix everything of the
 #: compiler's carries, so nothing a program can write collides with it.
@@ -357,4 +358,31 @@ def join_function(module: Module) -> Function:
     copy_bytes(builder, made, first_size, second,
                builder.binary(BinOp.WRAP_MUL, second_count, stride))
     builder.ret(made)
+    return func
+
+
+def allocator_function(module: Module) -> Function:
+    """``__pl4g_list_allocator(allocator, otherwise)``: the allocator a list's new
+    room comes from -- its own, and *otherwise* for a list with none, which is
+    one in the image: that the arena in force where it is changed."""
+    func, fresh = tables.generated(module, ALLOCATOR_SYMBOL,
+                                   (_allocator(module), _allocator(module)),
+                                   _allocator(module))
+    if not fresh:
+        return func
+    entry = func.add_block()
+    own = func.add_block("own")
+    other = func.add_block("other")
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    allocator = entry.add_param(_allocator(module), "allocator")
+    otherwise = entry.add_param(_allocator(module), "otherwise")
+    builder.condbr(_nowhere(builder, allocator), other, own,
+                   true_args=(builder.memory(),), false_args=(builder.memory(),))
+    builder.position_at(own)
+    builder.set_memory(own.add_param(MEM, "mem"))
+    builder.ret(allocator)
+    builder.position_at(other)
+    builder.set_memory(other.add_param(MEM, "mem"))
+    builder.ret(otherwise)
     return func

@@ -366,6 +366,7 @@ ENVIRON_NAME: Final[str] = "".join((BUILTIN_GLYPH, "environ"))
 #: is given the *place* the list is in and not the list, because a walk may take
 #: an element out and what is left has to go back where the list was.
 ITER_NAME: Final[str] = "".join((BUILTIN_GLYPH, "iter"))
+RESERVE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "reserve"))
 
 #: What starts a walk to be driven by hand -- a coroutine, or anything a loop
 #: walks -- and what takes its next turn, handing it what it takes back.
