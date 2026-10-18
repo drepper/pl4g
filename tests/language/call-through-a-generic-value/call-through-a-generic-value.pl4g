@@ -1,0 +1,29 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `v.f(args)` on a value of a type with type parameters calls the function written
+※ under the definition the type was made from: `t.sum()` on a `Two(u8)` is
+※ `Two.sum(t)`, compiled for `u8` -- and a reference is lent where `f` takes one.
+※
+※ Compare: **Rust**'s methods in `impl<T> Two<T>`, and **C++**'s member functions of a
+※ class template, both instantiated for the arguments the value's type was given.
+
+let std := ⎕import("std")
+type Two(T') = first : T' ; second : T'
+
+fn Two.sum(t: Two(T')) → T' pre(T' + T' → T'):
+    t.first + t.second
+
+@[impure]
+fn Two.swap(t: &mut Two(T')) → T':
+    let was: T' = t⌖.first
+    t⌖.first ← t⌖.second
+    t⌖.second ← was
+    was
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let t: mut Two(u8) = Two(.first ← 2u8, .second ← 3u8)
+    let w: Two(u16) = Two(.first ← 200u16, .second ← 300u16)
+    if t.sum() ≠ 5u8 ∨ w.sum() ≠ 500u16:
+        return 1u6
+    if t.swap() ≠ 2u8 ∨ t.first ≠ 3u8: 2u6 else: 0u6

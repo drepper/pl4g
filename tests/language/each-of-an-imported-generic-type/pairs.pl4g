@@ -1,0 +1,16 @@
+※ pl4g-test: module
+※※ Two of a kind.
+
+※※ Two values of one type.
+@[export]
+type Two(T') = first : T' ; second : T'
+
+※※ Both values, the first first.
+※※
+※※ \param t the two
+※※ \param a the arena the walk is made in
+※※ \return each of the two
+@[export]
+fn Two.each(t: Two(T'), a: &mut arena) ⇉ T':
+    yield t.first
+    yield t.second

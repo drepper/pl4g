@@ -5206,7 +5206,8 @@ use for the arena takes it all the same.  An `each` taking a reference, `fn Tree
 one: lent where what is walked is a place, as a call through the value lends it.  Where the loop can see the generator, its body is written into
 the loop as any generator's is, so a walk of a program's own type costs what the loop written by hand would; a field, an element or
 what a call answers is walked the same way.  One exported by another module is reached through it, and exported as any function
-inside a type is.  An `each` that walks values of its own type walks itself and is held to the rule for that (4675): the inner
+inside a type is.  **A type with type parameters** is walked by an `each` generic in them, `fn Two.each(t: Two(T'), a: &mut
+arena) ⇉ T'`, compiled once for each instance walked.  An `each` that walks values of its own type walks itself and is held to the rule for that (4675): the inner
 walks' frames go in an arena, and the arena it was handed is the one to say -- `yield ⇉ child in a`, which hands `a` on to the
 inner walk too:
 
@@ -6848,7 +6849,10 @@ takes the value (4698): that would be a copy, or a move, nobody wrote, and `T.f(
 a call answered -- is handed where the function takes the value, and has nothing to lend where it takes a reference (4533).
 
 **The function is found as the path finds it**: in the type's own file, or exported by a module this file reaches, directly or
-handed on.  A type with nothing of that name is reported as one (4609).  A record with a field of that name holding a function and
+handed on.  **A value of a type with type parameters reaches the functions written under the definition it was made from**:
+`t.sum()` on a `Two(u8)` is `Two.sum(t)`, the generic function compiled for `u8` as a call by the path compiles it -- Rust's
+`impl<T> Two<T>`, C++'s member functions of a class template.  A type with nothing of that name is reported as one (4609).  A
+record with a field of that name holding a function and
 a function of that name is a call that could mean either, so it is refused (4697): `(v.f)(…)` is the field and `T.f(v, …)` the
 function.
 

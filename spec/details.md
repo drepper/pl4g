@@ -2770,7 +2770,9 @@ place to an `each` taking a reference and refuses a reference read out for one t
 looks at it, the loop then sees a generator's call, and `_written_in` writes its body into the loop.  Where it can only be said
 after -- `_over_a_value`, `_as_an_iterator`, `let r: ⇉ = …`, `⎕start` -- `_each_walk` lowers `T.each(_Ready(v))` with `_pick_in`
 on the call, which gives back the walk's description the way a call written out does.  A generator written `T.name` is kept in
-`_members` beside the type's functions (`_put_generator`, which holds an `each` to its shape, 4926), and `_generator_named`
+`_members` beside the type's functions (`_put_generator`, which holds an `each` to its shape, 4926).  A value of an instance of a
+type with type parameters finds them under its definition: `_path_to_member` reads the template off the instance's `family` and
+looks for the function under the template's name, holding the module's export of that name to be the template.  And `_generator_named`
 finds it through `_member_named`.  The arena is never written by the compiler's rewrite: `T.each(v)` leaves it out, and
 `_generator_arguments` fills a trailing `&mut arena` left out with `_out_of` -- the arena in force -- as `_given_arguments` does for
 any call.  `_generator_in` puts the `in` arena in force while it lowers the call, so that `g(…) in a` hands `a` both as the place

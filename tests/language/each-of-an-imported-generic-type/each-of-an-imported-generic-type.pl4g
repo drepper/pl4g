@@ -1,0 +1,15 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ The `each` of a type with type parameters another module exports is reached through
+※ the module, as the type is, and exported as any function inside a type is.
+
+let pairs := ⎕import("pairs")
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let t: pairs.Two(u8) = pairs.Two(.first ← 2u8, .second ← 3u8)
+    let n: mut u8 = 0u8
+    foreach x := t:
+        n ← n + x
+    if n = 5u8: 0u6 else: 1u6

@@ -23439,11 +23439,19 @@ class Checker:
         `m.inner.T.name`.  The first such path found is as good as any, all of
         them naming the one function.
         """
+        # A record or a sum of a type with type parameters is reached through the
+        # definition it was made from, whose name its functions are written under:
+        # `Two.each` for a `Two(u8)`.
+        family = getattr(ty, "family", None)
+
         def same(held: object) -> bool:
+            if family is not None:
+                return held is family
             return isinstance(held, _NamedType) and not held.takes_types \
                 and self._resolved(held) is ty
         span, where = at.span, at.name_span
-        owner = getattr(ty, "name", "")
+        owner = family.name if isinstance(family, _NamedType) \
+            else getattr(ty, "name", "")
         if (owner, name) in self._members and same(self._top.get(owner)):
             return ast.Member(span=span, base=ast.NameRef(span=span, name=owner),
                               name=name, name_span=where)

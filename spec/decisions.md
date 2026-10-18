@@ -10224,6 +10224,15 @@ C++'s `std::generator` with an allocator argument.
 Taken without asking, as what that comes to: a generator's call leaves out a trailing `&mut arena` as any call may, and `g(…) in a`
 hands `a` for it, the arena of the walk's frame and the arena the body is handed being one.
 
+## 2026-10-18T19:15+02:00 — language
+
+**A value of a type with type parameters reaches the functions of its definition**
+
+The user asked for `each` on types with type parameters.  No call through such a value reached a function inside its type at all,
+so that is what was done, without a question of its own: `v.f(args)` on a `Two(u8)` calls `Two.f`, the generic function, compiled
+for what the instance was given -- the reading Rust's `impl<T> Two<T>` and C++'s member functions of a class template give it, and
+the one `Two.f(v)` written out already had.  An `each` generic in the type's parameters then walks every instance.
+
 Open questions
 --------------
 

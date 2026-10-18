@@ -300,8 +300,9 @@ removed or decided otherwise, which its last paragraph says.
     Found and fixed on the way: two generators' frames compared equal, so a walk handed on in one step without `in` wrote
     past its description and crashed; and a generator walking itself through a value's `each` was not seen as one.
     Left over:
-    [ ] **an `each` of a type with type parameters** -- `fn Two.each(t: Two(T')) ⇉ T'`.  No function inside such a type is
-        reached through a value yet (`_path_to_member` asks for a type without them), so this is that, and then nothing.
+    [x] **an `each` of a type with type parameters.**  Done on 2026-10-18: `fn Two.each(t: Two(T'), a: &mut arena) ⇉ T'`,
+        compiled per instance walked.  With it, `v.f(args)` on a value of such a type calls the function written under its
+        definition, which no call through a value could reach before.
     [x] **the arena of an `each`.**  Done on 2026-10-18 at the user's direction: every `each` takes `a: &mut arena` second
         (4926), and the loop hands it the arena in force -- the `in` the walk is written with, or `⎕heap`.  A generator's
         call leaves out a trailing arena as any call may.
