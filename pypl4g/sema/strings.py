@@ -461,8 +461,8 @@ def _build_join(module: Module, func: Function, heap: bool = False) -> None:
         into = builder.call(heap_new_function(module), (room,), bytes_type(module))
     else:
         into = builder.call(_allocator(module), (arena, room), bytes_type(module))
-    _copy(builder, into, builder.int_const(U64, 0), first, first_len)
-    _copy(builder, into, first_len, second, second_len)
+    copy_bytes(builder, into, builder.int_const(U64, 0), first, first_len)
+    copy_bytes(builder, into, first_len, second, second_len)
     builder.ret(into)
 
 
@@ -473,7 +473,7 @@ def _allocator(module: Module) -> Function:
     return allocator_function(module)
 
 
-def _copy(builder: IRBuilder, into: Value, offset: Value, source: Value,
+def copy_bytes(builder: IRBuilder, into: Value, offset: Value, source: Value,
           count: Value) -> None:
     """Copy *count* bytes, one at a time, into the place *offset* bytes along."""
     header = builder.new_block("copy")

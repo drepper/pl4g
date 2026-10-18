@@ -38,7 +38,7 @@ from ..ir.types import (ARENA, MEM, DictType, FuncType, IterType, ListType, PtrT
                         SetType,
                         StrType, Type, U8, U64, VOID)
 from ..ir.value import Value
-from . import strings, tables
+from . import lists, strings, tables
 
 #: What the two are called.
 OWN_SYMBOL: Final[str] = "__pl4g_own"
@@ -148,13 +148,15 @@ def _build_own(module: Module, func: Function, ty: Type) -> None:
     size = _size(builder, ty, count)
     raw = builder.cast(CastKind.BITCAST, start, _bytes(module))
     # A join of the bytes with nothing: the one routine that takes room in an
-    # arena and copies into it, so a copy is what a join already is.
-    copied = builder.cast(
-        CastKind.BITCAST,
-        builder.call(strings.join_function(module),
-                     (arena, raw, size, raw, builder.int_const(U64, 0)),
-                     _bytes(module)),
-        parts_of(ty)[0])
+    # arena and copies into it, so a copy is what a join already is -- a list's
+    # own, which writes the header its room has.
+    joined = builder.call(
+        lists.join_function(module),
+        (arena, raw, count, raw, builder.int_const(U64, 0), _stride(builder, ty)),
+        _bytes(module)) if isinstance(ty, ListType) else builder.call(
+            strings.join_function(module),
+            (arena, raw, size, raw, builder.int_const(U64, 0)), _bytes(module))
+    copied = builder.cast(CastKind.BITCAST, joined, parts_of(ty)[0])
     if isinstance(ty, ListType) and points(ty.element):
         inner = own_function(module, ty.element)
         element = ty.element
@@ -197,12 +199,29 @@ def disown_function(module: Module, ty: Type) -> Function:
                                                        at)),), VOID)
 
         _each(builder, func, count, "disown", turn)
-    builder.call(tables.dispose_function(module),
-                 (builder.extract(value, 2, parts_of(ty)[2]),
-                  builder.cast(CastKind.BITCAST, start, _bytes(module)),
-                  _size(builder, ty, count)), VOID)
+    _dispose(builder, builder.extract(value, 2, parts_of(ty)[2]), start, count, ty)
     builder.ret()
     return func
+
+
+def _stride(builder: IRBuilder, ty: ListType) -> Value:
+    """How far apart a list's elements are, as a number in the program."""
+    return builder.int_const(U64, stride_of(ty.element, _LAYOUT))
+
+
+def _dispose(builder: IRBuilder, allocator: Value, start: Value, count: Value,
+             ty: Type) -> None:
+    """A string's bytes or a list's room given back to *allocator*: a list's by
+    the size its header says, which is more than its elements where it has
+    room to spare or has had an element taken out."""
+    module = builder.module
+    where = builder.cast(CastKind.BITCAST, start, _bytes(module))
+    if isinstance(ty, ListType):
+        builder.call(lists.free_function(module), (allocator, where, _stride(builder, ty)),
+                     VOID)
+        return
+    builder.call(tables.dispose_function(module),
+                 (allocator, where, _size(builder, ty, count)), VOID)
 
 
 def give_back(builder: IRBuilder, value: Value, ty: Type,
@@ -217,11 +236,16 @@ def give_back(builder: IRBuilder, value: Value, ty: Type,
     if known == "pool" or not points(ty):
         return
     module = builder.module
-    if known == "heap" and not (isinstance(ty, ListType) and points(ty.element)):
+    if known == "heap" and isinstance(ty, StrType):
         start, count = _parts(builder, value, ty)
         builder.call(tables.heap_free_function(module),
                      (builder.cast(CastKind.BITCAST, start, _bytes(module)),
                       _size(builder, ty, count)), VOID)
+        return
+    if known == "heap" and not points(ty.element):
+        start, count = _parts(builder, value, ty)
+        _dispose(builder, builder.extract(value, 2, parts_of(ty)[2]), start, count,
+                 ty)
         return
     builder.call(disown_function(module, ty), (value,), VOID)
 
@@ -237,10 +261,9 @@ def give_back_storage(builder: IRBuilder, value: Value, ty: Type,
         return
     module = builder.module
     start, count = _parts(builder, value, ty)
-    where = builder.cast(CastKind.BITCAST, start, _bytes(module))
-    size = _size(builder, ty, count)
-    if known == "heap":
-        builder.call(tables.heap_free_function(module), (where, size), VOID)
+    if known == "heap" and isinstance(ty, StrType):
+        builder.call(tables.heap_free_function(module),
+                     (builder.cast(CastKind.BITCAST, start, _bytes(module)),
+                      _size(builder, ty, count)), VOID)
         return
-    builder.call(tables.dispose_function(module),
-                 (builder.extract(value, 2, parts_of(ty)[2]), where, size), VOID)
+    _dispose(builder, builder.extract(value, 2, parts_of(ty)[2]), start, count, ty)

@@ -21975,16 +21975,15 @@ class Checker:
         bytes_ = self._module.types.ptr_type(U8, mutable=True)
         counts = [builder.extract(side, 1, U64, expr.span)
                   for side in (left, right)]
-        made = strings.joined(
-            builder, self._out_of(builder, expr.span),
-            (builder.cast(CastKind.BITCAST,
+        made = builder.call(
+            lists.join_function(self._module),
+            (self._out_of(builder, expr.span),
+             builder.cast(CastKind.BITCAST,
                           builder.extract(left, 0, pointer, expr.span),
-                          bytes_, expr.span),
-             builder.binary(BinOp.WRAP_MUL, counts[0], stride, expr.span),
+                          bytes_, expr.span), counts[0],
              builder.cast(CastKind.BITCAST,
                           builder.extract(right, 0, pointer, expr.span),
-                          bytes_, expr.span),
-             builder.binary(BinOp.WRAP_MUL, counts[1], stride, expr.span)),
+                          bytes_, expr.span), counts[1], stride),
             bytes_, expr.span)
         for one in spare:
             owned.give_back_storage(builder, one, answer,
@@ -23247,15 +23246,22 @@ class Checker:
 
     def _room_for(self, builder: IRBuilder, element: Type, count: Value | int,
                   span: Span) -> Value:
-        """Room in the arena for *count* elements, as a place to put them."""
-        stride = stride_of(element, _LAYOUT)
-        room = (builder.int_const(U64, count * stride) if isinstance(count, int)
-                else builder.binary(BinOp.WRAP_MUL, count,
-                                    builder.int_const(U64, stride), span))
+        """Room in the arena for *count* elements of a list, as a place to put
+        them: the list's own room, with the header saying how much it is, and
+        nowhere for no elements at all."""
+        pointer = self._module.types.ptr_type(element, mutable=True)
+        if count == 0:
+            return builder.cast(CastKind.BITCAST, builder.int_const(U64, 0),
+                                pointer, span)
         return builder.cast(
             CastKind.BITCAST,
-            tables.allocate(builder, self._out_of(builder, span), room),
-            self._module.types.ptr_type(element, mutable=True), span)
+            builder.call(lists.room_function(self._module),
+                         (self._out_of(builder, span),
+                          builder.int_const(U64, count) if isinstance(count, int)
+                          else count,
+                          builder.int_const(U64, stride_of(element, _LAYOUT))),
+                         self._module.types.ptr_type(U8, mutable=True), span),
+            pointer, span)
 
     def _written_text(self, builder: IRBuilder, text: str, span: Span) -> Value:
         """A string written down: where its bytes are, and how many there are.
