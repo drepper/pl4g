@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error diag=4570
+
+※ A view is where some elements are, and an array's are gone with its scope, so a view
+※ of one may not be given to something that outlives it -- here a field of a record
+※ bound further out, which a view given to it re-points.  Giving an array to a name of
+※ an array copies the elements instead, and that is no view at all.
+
+let std := ⎕import("std")
+type Holder = { seen : u8⟦⟧ }
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let h: mut Holder = Holder(.seen ← ⎕bytes("ab"))
+    if true:
+        let inner: mut u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+        inner⟦0⟧ ← ⎕narrow(⎕drop(#init.args), ⌜u8⌝) ?? 0u8
+        let v: u8⟦⟧ = inner⟦0…2⟧
+        h.seen ← v
+    if #h.seen = 2: 0u6 else: 1u6

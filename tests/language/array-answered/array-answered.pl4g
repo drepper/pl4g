@@ -1,0 +1,66 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **An array is answered with**, and the signature says where its elements are.
+※ `→ u8⟦⟧ in a`, `a` an array handed over, answers some of `a`'s elements -- a view, as
+※ long-lived as what was handed over, fixed or not.  `→ u64⟦⟧ in p`, `p` an arena,
+※ answers elements kept there, and ones the body made in its own frame are copied into
+※ it on the way out; saying nothing is `⎕heap`, and they are copied there.
+※ `→ u8⟦⟧ in ⎕static` answers ones in the image.  An array whose type says its shape,
+※ `→ u8⟦3⟧`, is answered by value: copied into the caller's room, as a record is.
+※
+※ Compare: **Rust**'s `fn head<'a>(a: &'a [u8]) -> &'a [u8]`, the same thing with the
+※ lifetime written out, and its `[u8; 3]` returned by value; **Go**, which answers a
+※ slice of anything and keeps what it reaches alive on a collected heap; **C**, whose
+※ function answers a pointer to a local array and nothing says so.
+
+let std := ⎕import("std")
+
+fn head(a: u8⟦⟧) → u8⟦⟧ in a:
+    a⟦0…2⟧
+
+fn tail(a: u8⟦4⟧) → u8⟦⟧ in a:
+    a⟦2…4⟧
+
+fn rgb() → u8⟦3⟧:
+    ⟦1u8, 2u8, 3u8⟧
+
+fn digits() → u8⟦⟧ in ⎕static:
+    let t: u8⟦3⟧ = ⟦7u8, 8u8, 9u8⟧ in ⎕static
+    t
+
+fn squares(n: u64 ¤idx, p: &mut arena) → u64⟦⟧ in p:
+    let v: mut u64⟦8⟧ = ⟦0u64, 1u64, 4u64, 9u64, 16u64, 25u64, 36u64, 49u64⟧
+    v⟦0⟧ ← 0u64
+    v⟦0…n⟧
+
+fn onheap() → u8⟦⟧:
+    let v: mut u8⟦3⟧ = ⟦5u8, 6u8, 7u8⟧
+    v⟦0⟧ ← 5u8
+    v
+
+fn either(a: u8⟦⟧, p: &mut arena) → u8⟦⟧ in a, p:
+    let mine: mut u8⟦2⟧ = ⟦0u8, 0u8⟧
+    mine⟦0⟧ ← a⟦0⟧
+    if #a > 2: a⟦1…3⟧ else: mine⟦0…2⟧
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let pool: mut arena = ⎕arena
+    defer ⎕empty(pool)
+    let a: mut u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+    a⟦3⟧ ← ⎕narrow(⎕drop(#init.args) + 3, ⌜u8⌝) ?? 0u8
+    let h: u8⟦⟧ = head(a)
+    let t: u8⟦⟧ = tail(a)
+    if #h ≠ 2 ∨ h⟦1⟧ ≠ 2u8 ∨ t⟦1⟧ ≠ 4u8:
+        return 1u6
+    let c: u8⟦3⟧ = rgb()
+    if c⟦2⟧ ≠ 3u8 ∨ digits()⟦1⟧ ≠ 8u8:
+        return 2u6
+    let s: u64⟦⟧ = squares(4, &mut pool)
+    let o: u8⟦⟧ = onheap()
+    if #s ≠ 4 ∨ s⟦3⟧ ≠ 9u64 ∨ o⟦2⟧ ≠ 7u8:
+        return 3u6
+    let e: u8⟦⟧ = either(a, &mut pool)
+    let one: u8⟦1⟧ = ⟦6u8⟧ in ⎕static
+    let f: u8⟦⟧ = either(one, &mut pool)
+    if e⟦0⟧ = 2u8 ∧ #f = 2 ∧ f⟦0⟧ = 6u8: 0u6 else: 4u6

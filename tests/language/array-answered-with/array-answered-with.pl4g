@@ -1,12 +1,12 @@
 ※ pl4g-test: compile=error diag=4454
 
-※ What a value of an array type is, is where its elements are, and the elements
-※ of an array a function made are in that function's own room -- gone by the
-※ time the caller reads them.  A slice of something that outlives the call would
-※ be safe, and there is no way yet to say that one does.
+※ What a view is, is where its elements are, and a function says where with `in`.
+※ A function's type has no `in` to say it with, so a function value answering a view
+※ is refused -- as is a lambda answering one.  An array whose type says its shape is
+※ answered by value, by anything.
 
-fn four() → u8⟦4⟧:
-    ⟦1u8, 2u8, 4u8, 8u8⟧
+fn apply(f: fn(u8⟦⟧) → u8⟦⟧, a: u8⟦⟧) → u64 ¤size:
+    #a
 
 let std := ⎕import("std")
 

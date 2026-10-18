@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4624
+
+※ An answer said to be some of what `a` holds may not be some of the function's own
+※ frame, which is gone when it returns -- and `a` is an array, nowhere to copy anything
+※ to.  Answered `in p` with `p` an arena, or with nothing said, it would be copied there.
+
+let std := ⎕import("std")
+
+fn wrong(a: u8⟦⟧) → u8⟦⟧ in a:
+    let mine: mut u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+    mine⟦0⟧ ← a⟦0⟧
+    mine⟦0…2⟧
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

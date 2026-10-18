@@ -6539,15 +6539,22 @@ class Checker:
 
         `→ T in a, b` and `s: T in a` name parameters, and only one holding an arena
         can be named (4618): a local arena is given back before the call ends, and
-        `⎕heap` is what saying nothing already allows.  Said of something that
-        points nowhere -- a number, a truth value -- it says nothing (4621).
+        `⎕heap` is what saying nothing already allows.  An answer that is a view
+        may name an array parameter as well, `→ u8⟦⟧ in a`: its elements are some
+        of the ones handed over as `a`.  Said of something that points nowhere --
+        a number, a truth value, an array whose type says its shape, which is
+        answered by value -- it says nothing (4621).
         """
         told = id(node) in self._made_in_told
         self._made_in_told.add(id(node))
         names = [one.name for one in node.params]
+        a_view = isinstance(ret, ArrayType) and not ret.fixed
 
-        def arena(name: str, span: Span) -> int | None:
+        def arena(name: str, span: Span, answer: bool = False) -> int | None:
             at = names.index(name) if name in names else None
+            if at is not None and answer and a_view \
+                    and isinstance(params[at], ArrayType):
+                return at
             if at is None or not (isinstance(params[at], PtrType)
                                   and params[at].pointee is ARENA):
                 if not told:
@@ -6574,7 +6581,7 @@ class Checker:
                 # is in one or the other, and carries its allocator to say which.
                 found = (HEAP_AT if name == HEAP_NAME
                          else STATIC_AT if name == STATIC_NAME
-                         else arena(name, span)
+                         else arena(name, span, answer=True)
                          for name, span in node.made_in)
                 made = tuple(sorted({at for at in found if at is not None}))
         given: list[int | None] = []
@@ -6660,6 +6667,9 @@ class Checker:
             arena = local_of(at)
             if arena is not None and self._is_arena(arena):
                 allowed.add(id(arena))
+            elif arena is not None and isinstance(types[at], ArrayType):
+                # Some of the elements handed over: what a view of them carries.
+                allowed |= self._array_frame_of(arena)
         self._answer_made_in = (
             frozenset(allowed),
             _one_of([HEAP_NAME if at == HEAP_AT
@@ -7853,7 +7863,7 @@ class Checker:
                 element, given, lasting=ref.kept_in is not None)
         if isinstance(ref, ast.FuncTypeRef):
             params = tuple(self._resolve_type(one) for one in ref.params)
-            ret = self._return_type(ref.ret)
+            ret = self._return_type(ref.ret, views=False)
             if ret is ERROR or any(one is ERROR for one in params):
                 return ERROR
             if ref.kept_in is not None and ref.kept_in[0] != HEAP_NAME:
@@ -9084,6 +9094,9 @@ class Checker:
             self._unknown_by_id.setdefault(id(local), local)
             self._array_frames.add(id(local))
             return frozenset({id(local)})
+        if not self._made_here(local.value):
+            # Not this call's room: an array `in ⎕static` is in the image.
+            return frozenset()
         key = self._storage_key(local)
         self._array_frames.add(key)
         return frozenset({key})
@@ -9657,8 +9670,11 @@ class Checker:
         elif made and made <= allowed:
             self._answer_kinds.append("param")
             return value
-        target = thin if thin is not None else next(iter(sorted(allowed)))
-        if not owned.can_own(ty):
+        # Something to copy into: `⎕heap`, or an arena -- an array the answer may
+        # be some of is no place to copy anything to.
+        into = sorted(one for one in allowed if one not in self._array_frames)
+        target = thin if thin is not None else into[0] if into else None
+        if target is None or not owned.can_own(ty):
             found = (["what another name still holds"] if made and made <= allowed
                      else sorted(self._owner_written(one) for one in made
                                  if one == _HEAP or one in self._arena_by_id)
@@ -13314,7 +13330,7 @@ class Checker:
                                  self._lifetime_scope(expr.params, expr)]
         try:
             params = tuple(self._resolve_type(one.type) for one in expr.params)
-            answer = self._return_type(expr.ret_type)
+            answer = self._return_type(expr.ret_type, views=False)
         finally:
             self._lifetime_scopes = outer_scopes
         if answer is ERROR or any(one is ERROR for one in params):
@@ -20775,7 +20791,7 @@ class Checker:
             self._assigning = None
         return self._as_declared(value, expected)
 
-    def _return_type(self, ref: ast.TypeExpr | None) -> Type:
+    def _return_type(self, ref: ast.TypeExpr | None, views: bool = True) -> Type:
         """What a function answers with, from what its definition wrote.
 
         Nothing written means nothing answered with.  Writing `void` out is
@@ -20796,12 +20812,10 @@ class Checker:
             self._diags.emit(D.LANG_ITERATOR_DOES_NOT_LEAVE, ref.span,
                              found=short.written(), what="answered")
             return ERROR
-        if isinstance(found, ArrayType):
-            # What a value of an array type is, is where its elements are, and
-            # the elements of an array a function made are in that function's
-            # own room -- gone by the time the caller reads them.  A slice of
-            # something that outlives the call would be safe, and there is no
-            # way yet to say that one does.
+        if isinstance(found, ArrayType) and not found.fixed and not views:
+            # What a view is, is where its elements are, and a lambda or a
+            # function value has no `in` to say where.  A function says it, and
+            # one whose type says its shape is answered by value.
             self._diags.emit(D.LANG_ARRAY_ANSWERED_WITH, ref.span,
                              found=found.written())
             return ERROR

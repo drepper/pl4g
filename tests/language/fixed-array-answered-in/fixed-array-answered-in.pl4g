@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=4621
+
+※ An array whose type says its shape is answered by value, into the caller's room, so
+※ an `in` after it says nothing about where anything is, which is said (a warning).
+
+let std := ⎕import("std")
+
+fn rgb(p: &mut arena) → u8⟦3⟧ in p:
+    ⟦1u8, 2u8, 3u8⟧
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error diag=4570
+
+※ What a call answers `in a` reaches what was handed over as `a`: the view `head` gives
+※ back is some of `inner`'s elements, and goes with `inner`'s scope.
+
+let std := ⎕import("std")
+type Holder = { seen : u8⟦⟧ }
+
+fn head(a: u8⟦⟧) → u8⟦⟧ in a:
+    a⟦0…2⟧
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let h: mut Holder = Holder(.seen ← ⎕bytes("ab"))
+    if true:
+        let inner: mut u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+        inner⟦0⟧ ← ⎕narrow(⎕drop(#init.args), ⌜u8⌝) ?? 0u8
+        h.seen ← head(inner)
+    if #h.seen = 2: 0u6 else: 1u6

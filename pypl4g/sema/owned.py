@@ -33,9 +33,9 @@ from ..ir.function import Function
 from ..ir.inst import BinOp, CastKind, CmpPred
 from ..ir.layout import DataLayout, parts_of, stride_of
 from ..ir.module import Module
-from ..ir.types import (ARENA, MEM, DictType, FuncType, IterType, ListType,
-                        ProductType, PtrType, RunningType, SetType, StrType,
-                        TupleType, Type, U8, U64, VOID)
+from ..ir.types import (ARENA, MEM, ArrayType, DictType, FuncType, IterType,
+                        ListType, ProductType, PtrType, RunningType, SetType,
+                        StrType, TupleType, Type, U8, U64, VOID)
 from ..ir.value import Value
 from . import lists, strings, tables
 
@@ -63,6 +63,9 @@ def can_own(ty: Type) -> bool:
             return all(not points(part) or can_own(part) for _, part in ty.fields)
         case TupleType():
             return all(not points(part) or can_own(part) for part in ty.members)
+        case ArrayType() if not ty.fixed and ty.rank == 1:
+            # A view of one dimension: its elements copied into a run of their own.
+            return not points(ty.element) or can_own(ty.element)
     return False
 
 
@@ -180,6 +183,9 @@ def _build_own(module: Module, func: Function, ty: Type) -> None:
         builder.ret(builder.make_tuple(
             _owned_leaves(builder, arena, builder.leaves(value, ty), ty), ty))
         return
+    if isinstance(ty, ArrayType):
+        _build_own_view(builder, func, arena, value, ty)
+        return
     start, count = _parts(builder, value, ty)
     size = _size(builder, ty, count)
     raw = builder.cast(CastKind.BITCAST, start, _bytes(module))
@@ -204,6 +210,37 @@ def _build_own(module: Module, func: Function, ty: Type) -> None:
 
         _each(builder, func, count, "own", turn)
     builder.ret(builder.make_tuple((copied, count, arena), ty))
+
+
+def _build_own_view(builder: IRBuilder, func: Function, arena: Value, value: Value,
+                    ty: ArrayType) -> None:
+    """A view's elements copied into a run of their own in *arena*, one after
+    another, and the view of that run: where, how many, and a stride of one.
+    What each element points into is copied too, where it points anywhere."""
+    module = builder.module
+    pointer, _, _ = parts_of(ty)
+    start = builder.extract(value, 0, pointer)
+    count = builder.extract(value, 1, U64)
+    apart = builder.extract(value, 2, U64)
+    size = stride_of(ty.element, _LAYOUT)
+    room = builder.cast(
+        CastKind.BITCAST,
+        tables.allocate(builder, arena,
+                        builder.binary(BinOp.WRAP_MUL, count,
+                                       builder.int_const(U64, size))),
+        pointer)
+    element = ty.element
+    inner = own_function(module, element) if points(element) else None
+
+    def turn(at: Value) -> None:
+        read = builder.load(_element(builder, start, element,
+                                     builder.binary(BinOp.WRAP_MUL, at, apart)))
+        if inner is not None:
+            read = builder.call(inner, (arena, read), element)
+        builder.store(_element(builder, room, element, at), read)
+
+    _each(builder, func, count, "own", turn)
+    builder.ret(builder.make_tuple((room, count, builder.int_const(U64, 1)), ty))
 
 
 DISOWN_SYMBOL: Final[str] = "__pl4g_disown"
