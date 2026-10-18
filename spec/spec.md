@@ -5182,13 +5182,15 @@ foreach k := s:           ※ every key of a set
 foreach k, v := d:        ※ every key of a dictionary, and what it stands for
 ```
 
-**A type of the program's own is walked by the generator written inside it as `each`** -- `fn T.each(v: T) ⇉ E`, a
-[generator](#generators) whose name is a path into the type -- and `foreach x := v` over a `T` is the loop over `T.each(v)`:
+**A type of the program's own is walked by the generator written inside it as `each`** -- `fn T.each(v: T, a: &mut arena) ⇉
+E`, a [generator](#generators) whose name is a path into the type -- and `foreach x := v` over a `T` is the loop over `T.each(v,
+a)`, **the arena handed to it by the loop**: the one in force where the walk is written, which is the arena of the `in` it is
+written with or stands in, and `⎕heap` where there is none.
 
 ```
 type Walk = at : u8 ; last : u8
 
-fn Walk.each(w: Walk) ⇉ u8:
+fn Walk.each(w: Walk, a: &mut arena) ⇉ u8:
     foreach i := w.at…w.last:
         yield i
 
@@ -5198,15 +5200,35 @@ total(w)                          ※ handed to a ⇉u8 parameter
 
 It is that call wherever a walk is wanted: handed to a `⇉E` parameter, bound as `let r: ⇉ = w`, counted by `⎕enumerate(w)`,
 handed on by `yield ⇉ w`, started by `⎕start(w)`, and kept in an arena by `w in a` -- the walk's frame being what takes room.
-`w.each()` is the same call written out.  An `each` taking a reference, `fn Tree.each(t: &Tree) ⇉ u8`, is handed one: lent where
-what is walked is a place, as a call through the value lends it.  Where the loop can see the generator, its body is written into
+`w.each()` is the same call written out, the arena left to the one in force as any call may leave it.  **Every `each` takes the
+two**, the value first and `&mut arena` second (4926): one shape, so that a loop always knows how to call it, and an `each` with no
+use for the arena takes it all the same.  An `each` taking a reference, `fn Tree.each(t: &Tree, a: &mut arena) ⇉ u8`, is handed
+one: lent where what is walked is a place, as a call through the value lends it.  Where the loop can see the generator, its body is written into
 the loop as any generator's is, so a walk of a program's own type costs what the loop written by hand would; a field, an element or
 what a call answers is walked the same way.  One exported by another module is reached through it, and exported as any function
 inside a type is.  An `each` that walks values of its own type walks itself and is held to the rule for that (4675): the inner
-walks' frames go in an arena, which it may make for itself.  **Nothing else is asked of the type**: no interface is declared and no
+walks' frames go in an arena, and the arena it was handed is the one to say -- `yield ⇉ child in a`, which hands `a` on to the
+inner walk too:
+
+```
+fn Tree.each(t: &Tree, a: &mut arena) ⇉ u8:
+    yield t⌖.value
+    foreach child := t⌖.children:
+        yield ⇉ child in a
+
+foreach x := root in pool:        ※ every frame of the walk in pool
+```
+
+Where the walk names no arena the frames are made in `⎕heap`, and live as long as the program; a walk that should give them back
+names one.  **Nothing else is asked of the type**: no interface is declared and no
 bundle met, the generator being the whole of the protocol -- and a function of that name that is not a generator is refused with a
 note saying so (4438, 4925).  A type keeps one walk; another way through it is another generator, named for what it walks and
 called by name.
+
+Compare, for the arena: **Zig**, where a function that allocates takes the allocator as a parameter and the caller always
+writes it, which is what `T.each(v, &mut pool)` written out is; **Odin**'s implicit `context.allocator`, which is this rule carried
+at run time; **C++**'s `std::generator<T, void, Alloc>`, whose frame comes from an allocator the coroutine takes as an argument
+-- the same idea, found by the type of a parameter rather than by its place.
 
 Compare: **Python**, whose `__iter__` written with `yield` is this, under a reserved name; **C#**'s `GetEnumerator` with `yield
 return`, found by the `foreach` by its name and not by an interface, which is this too; **Ruby**'s `each`, the name this takes,
@@ -5465,6 +5487,9 @@ finish: what it put off with `defer` runs, once, as it would have at its end.  A
 Compare: **Python**, whose `close` raises `GeneratorExit` at the stopped `yield` and is called when the generator object is
 collected -- at some point; **C++**, whose `coroutine_handle::destroy` runs the destructors of what is live; **C#**, whose `foreach`
 disposes the enumerator, running the `finally` blocks, exactly when the loop is left -- which is this.
+
+**An arena a generator's call leaves out is the one in force**, as in any call: a trailing `&mut arena` parameter given nothing
+is handed the arena of the `in` the call is written with or stands in -- `g(x) in a` hands `a` -- and `⎕heap` where there is none.
 
 **A generator may walk itself where the inner walks' frames are in an arena**: `yield ⇉ walk(child, scratch) in scratch` keeps
 the inner walk's description and frame in `scratch`, so the frame of a walk holds where the next one's is rather than the frame

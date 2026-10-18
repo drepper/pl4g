@@ -6,7 +6,7 @@
 let std := ⎕import("std")
 type Walk = at : u8 ; last : u8
 
-fn Walk.each(w: Walk) → u8:
+fn Walk.each(w: Walk, a: &mut arena) → u8:
     w.at
 
 @[startup]

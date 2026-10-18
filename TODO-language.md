@@ -302,9 +302,11 @@ removed or decided otherwise, which its last paragraph says.
     Left over:
     [ ] **an `each` of a type with type parameters** -- `fn Two.each(t: Two(T')) ⇉ T'`.  No function inside such a type is
         reached through a value yet (`_path_to_member` asks for a type without them), so this is that, and then nothing.
-    [ ] **an `each` taking more than the value**, defaults or an arena left to the one in force -- which is what a recursive
-        walk wants instead of making an arena of its own.  A generator's call does not take named arguments or defaults
-        (`_generator_arguments`), as an ordinary generic one now does.
+    [x] **the arena of an `each`.**  Done on 2026-10-18 at the user's direction: every `each` takes `a: &mut arena` second
+        (4926), and the loop hands it the arena in force -- the `in` the walk is written with, or `⎕heap`.  A generator's
+        call leaves out a trailing arena as any call may.
+    [ ] **named arguments and defaults for a generator's call** (`_generator_arguments`), as an ordinary generic call now
+        takes them.
     [ ] **`foreach` over a cursor**, `⎕iter(l)`, still refused (4438).  Nothing wants it now that a walk is written as a
         generator, but it is the compiler's own iterator and walking one from where it is would be the obvious meaning.
 

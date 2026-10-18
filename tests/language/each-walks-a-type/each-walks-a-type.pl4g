@@ -1,8 +1,9 @@
 ※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
 
 ※ **A type of the program's own is walked by the generator written inside it as
-※ `each`**: `fn T.each(v: T) ⇉ E` makes `foreach x := v` a walk of `T.each(v)`, and
-※ the same wherever a walk is wanted -- a `⇉E` parameter, a name bound as `⇉`,
+※ `each`**: `fn T.each(v: T, a: &mut arena) ⇉ E` makes `foreach x := v` a walk of
+※ `T.each(v, a)`, the arena being the one in force -- `⎕heap` here, nothing naming
+※ another -- and the same wherever a walk is wanted -- a `⇉E` parameter, a name bound as `⇉`,
 ※ `⎕enumerate`, `yield ⇉ v`, `⎕start` -- and of each element of an array of them.
 ※ `v.each()` is the same call written out.  Where the loop can see the generator its
 ※ body is written into the loop, as any generator's is.
@@ -14,7 +15,7 @@
 let std := ⎕import("std")
 type Walk = at : u8 ; last : u8
 
-fn Walk.each(w: Walk) ⇉ u8:
+fn Walk.each(w: Walk, a: &mut arena) ⇉ u8:
     foreach i := w.at…w.last:
         yield i
 

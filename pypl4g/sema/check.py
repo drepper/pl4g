@@ -6249,7 +6249,14 @@ class Checker:
 
     def _put_generator(self, node: ast.FuncDef, made: _Generator) -> None:
         """Make *made* reachable by the name it was defined with: at the top
-        level, or -- written `T.name` -- inside the type, as any function there is."""
+        level, or -- written `T.name` -- inside the type, as any function there is.
+
+        A type's `each` is held to the one shape a loop calls it in: what is
+        walked, and the arena the walk is made in, which the loop hands it (4926).
+        """
+        if node.held is not None and node.name == EACH_NAME and (
+                len(node.params) != 2 or not _could_be_an_arena(node.params[1].type)):
+            self._diags.emit(D.LANG_EACH_SHAPE, node.name_span, type=node.held)
         if node.held is None:
             self._top[node.name] = made
         else:
@@ -18216,9 +18223,17 @@ class Checker:
         has type parameters, what they read off them and the instance that
         makes."""
         name = found.node.name
-        if len(expr.args) != len(found.node.params):
+        params = found.node.params
+        if len(expr.args) < len(params) and all(
+                _could_be_an_arena(one.type) for one in params[len(expr.args):]):
+            # An arena left out is the one in force, as in any call: the arena of
+            # the `in` around the call -- `g(…) in a` hands `a` -- or `⎕heap`.
+            expr = replace(expr, args=(*expr.args, *(
+                _Ready(span=expr.span, value=self._out_of(builder, expr.span))
+                for _ in params[len(expr.args):])))
+        if len(expr.args) != len(params):
             self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
-                             name=name, expected=len(found.node.params),
+                             name=name, expected=len(params),
                              found=len(expr.args))
             return None
         for arg in expr.args:
@@ -18352,11 +18367,17 @@ class Checker:
         assert isinstance(expr.value, ast.Call)
         outer = self._pick_in, self._pick_walked
         self._pick_in, self._pick_walked = expr.value, None
+        # And the arena in force for the call, so that an arena it leaves out is
+        # the one its frame is kept in.
+        arenas = self._out_of_arena, self._out_of_arenas
+        self._out_of_arena = place
+        self._out_of_arenas = self._arenas_in(expr.arena)
         try:
             self._lower_expr(builder, expr.value, None)
             walk = self._pick_walked
         finally:
             self._pick_in, self._pick_walked = outer
+            self._out_of_arena, self._out_of_arenas = arenas
         if not isinstance(walk, _Iterable) or walk.generator is None:
             return UndefConst(ERROR)
         walk = replace(walk, written=expr, arena=place)

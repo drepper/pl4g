@@ -7,7 +7,7 @@
 let std := ⎕import("std")
 type Tree = { value : u8 ; children : [&Tree] }
 
-fn Tree.each(t: &Tree) ⇉ u8:
+fn Tree.each(t: &Tree, a: &mut arena) ⇉ u8:
     yield t⌖.value
     foreach child := t⌖.children:
         yield ⇉ child

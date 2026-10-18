@@ -20,7 +20,7 @@ PROGRAM = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 type Walk = at : u8 ; last : u8
 type Pair = left : Walk ; right : Walk
 
-fn Walk.each(w: Walk) \N{RIGHTWARDS PAIRED ARROWS} u8:
+fn Walk.each(w: Walk, a: &mut arena) \N{RIGHTWARDS PAIRED ARROWS} u8:
     foreach i := w.at\N{HORIZONTAL ELLIPSIS}w.last:
         yield i
 

@@ -10,6 +10,6 @@ type Span = from : u8 ; upto : u8
 ※※ \param s the span
 ※※ \return each number from its start up to its end
 @[export]
-fn Span.each(s: Span) ⇉ u8:
+fn Span.each(s: Span, a: &mut arena) ⇉ u8:
     foreach i := s.from…s.upto:
         yield i

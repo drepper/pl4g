@@ -7,7 +7,7 @@ let std := ⎕import("std")
 type Walk = at : u8 ; last : u8
 type Pair = left : Walk ; right : Walk
 
-fn Walk.each(w: Walk) ⇉ u8:
+fn Walk.each(w: Walk, a: &mut arena) ⇉ u8:
     foreach i := w.at…w.last:
         yield i
 

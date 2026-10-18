@@ -10447,6 +10447,28 @@
       "option": null
     },
     {
+      "number": 4926,
+      "name": "LANG_EACH_SHAPE",
+      "severity": "error",
+      "message": "'{type}.each' takes what is walked and the arena the walk is made in: 'fn {type}.each(v: {type}, a: &mut arena) ⇉ …'",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type the generator is written inside"
+        }
+      ],
+      "cause": "A loop walks a value of a type by calling the generator written inside it as `each`, handing it the value and an arena: the arena of the `in` the walk is written with, or the one in force where it stands, `⎕heap` where there is none.  So every `each` takes the two, the value first -- or a reference to it -- and `&mut arena` second, which is where a walk that walks further values of its own type keeps their frames: `yield ⇉ child in a`.  One that has no use for the arena takes it all the same, there being one shape for a loop to call.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / foreach",
+        "requirement": "A type's `each` takes the value walked and `&mut arena`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

@@ -10209,6 +10209,21 @@ a generator is refused with a note saying so (4925).  Making it work found that 
 two walks' descriptions into one type laid out with the smaller frame -- every `yield ⇉ g(…)` without an arena, handed to a `⇉T`
 parameter, wrote past its room.  Fixed with it.
 
+## 2026-10-18T18:30+02:00 — language
+
+**Every `each` is handed an arena**
+
+The user asked that `each` take an allocator the implementation fills in.  Asked whether every `each` takes one, the user chose
+**always, as its second parameter** -- `fn T.each(v: T, a: &mut arena) ⇉ E`, refused otherwise (4926) -- against an arena only
+where one is declared; and asked what a walk written without `in` hands it, **the arena in force**, the rule calls already follow:
+the arena of the `in` around the walk, else `⎕heap` -- against a fresh arena per walk given back when it ends.  So a recursive
+`each` hands its arena on, `yield ⇉ child in a`, and its frames live as long as the arena the loop named, or as the program where it
+named none.  Compare Zig's allocator parameter, written at every call; Odin's `context.allocator`, this rule carried at run time;
+C++'s `std::generator` with an allocator argument.
+
+Taken without asking, as what that comes to: a generator's call leaves out a trailing `&mut arena` as any call may, and `g(…) in a`
+hands `a` for it, the arena of the walk's frame and the arena the body is handed being one.
+
 Open questions
 --------------
 
