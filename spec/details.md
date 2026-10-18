@@ -3457,11 +3457,18 @@ the table carries -- and the probe, the insertion and the set operators are
 generated per shape and named for it, so a dump shows `__pl4g_table_slot.str` and
 there is no wondering which instantiation it belongs to.
 
-**A key that is text is hashed over its bytes** with FNV-1a, in a function
-generated beside the one that compares two strings -- and the comparison is that
-same function, so a key found in a table and a `=` written in a program cannot
-disagree.  A key that fits a word keeps the multiplication it had.  Which of the
-two a shape wants is `key_ir_type`, and it is the only place that asks.
+**A key is hashed by the runtime, with the table's seed.**  `pl4g_hash(bytes, count, seed)` is rapidhash in `runtime/io.c`, and
+`pl4g_hash_word(word, seed)` the same over a word's eight bytes; `_hash_of` calls one or the other, by `key_ir_type`, with what the
+block's `SEED_FIELD` holds -- the seventh word, after `used`.  `pl4g_hash_seed()` hands out a seed no table has had: a count of those
+handed out mixed with a base `hash_start` works out from the stack `pl4g_args` is handed, the number `PL4G_HASH_SEED` says in the
+environment or the sixteen bytes the kernel points `AT_RANDOM` at in the auxiliary vector.  `__pl4g_table_new` writes one, `put`
+writes a fresh one before every rehash and one where the field says nought -- a table laid out in the image empty, which
+`_empty_table_constant` writes so -- and the probe reads it.  A table laid out in the image with its keys has `tables.IMAGE_SEED`,
+and the checker places its entries with `sema/rapidhash.py`, which is the C over again; `tests/compiler/test_hash.py` compiles the
+hashing part of the C for the machine the suite runs on and holds the two to each other at every length the hash reads differently.
+The comparison of text keys is still the function `=` uses, so a key found in a table and a `=` written in a program cannot disagree.
+The RISC-V runtime stores to the seed's counter with an `R_RISCV_PCREL_LO12_S` (`PCREL_LO12_S`), which the packaged runtime had not
+needed before, and its eight-byte constants are in `.pl4grt.rodata.cst8`.
 
 **A result may now hold a value of several parts.**  `d⸨k⸩` answers `V?`, so a
 dictionary whose values are strings makes one -- and a result was two registers

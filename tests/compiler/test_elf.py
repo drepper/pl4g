@@ -246,8 +246,10 @@ def test_sections_and_symbols_are_present(built: Built) -> None:
     # everything else is an extension.
     extra = [".riscv.attributes"] if built.arch == "riscv64" else []
     # AArch64's compiler of the runtime puts its sixteen-byte constants in a
-    # section of their own.
-    constants = [".pl4grt.rodata.cst16"] if built.arch == "aarch64" else []
+    # section of their own, and RISC-V's its eight-byte ones -- the words the
+    # hash mixes with.
+    constants = {"aarch64": [".pl4grt.rodata.cst16"],
+                 "riscv64": [".pl4grt.rodata.cst8"]}.get(built.arch, [])
     # The bill of materials comes before the code because it is read-only and
     # the code is not: sections are grouped by what may be done to them, and a
     # group is one mapping.  Every program imports `std`, whose destructor drains
@@ -372,8 +374,10 @@ def test_the_image_is_small(built: Built) -> None:
     said += 2 * elfcheck.SHDR.size + elfcheck.PHDR.size
     # Every program imports `std` and carries its destructor, which drains the
     # ring through the runtime: most of what is counted is the runtime's code,
-    # about eight kilobytes of it, and the program's own is a few instructions.
-    assert built.path.stat().st_size - said < 9 * 1024
+    # about nine kilobytes of it with the hash tables' keys are hashed with, and
+    # the program's own is a few instructions.  The runtime goes in whole, which
+    # is what TODO-pypl4g.md's entry about placing only what is called is about.
+    assert built.path.stat().st_size - said < 11 * 1024
 
 
 def test_asking_the_processor_is_what_a_level_costs(tmp_path: Path) -> None:

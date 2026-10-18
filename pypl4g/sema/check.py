@@ -78,6 +78,7 @@ from ..ir.types import (ARENA, ARENA_NAME, StrType, ArrayType, BOOL, BoolType, B
                         CHAR, MAX_CODE_POINT, U8, made_of_parts, parts_of,
                         held_in_memory as _held_in_memory)
 from . import environ, lists, owned, strings, tables
+from .rapidhash import rapidhash, word_hash
 from .modules import (SUFFIX, ImportCycle, LoadedModule, ModuleNotFound,
                       ModuleRegistry, base_name, system_modules)
 from ..ir.value import (AddressConst, ArrayConst, BlockParam, BoolConst,
@@ -2960,9 +2961,8 @@ def _table_laid_out(keys: Sequence[tuple[object, Const, Const | None]],
     """Where each entry of a table goes, worked out the way the program would.
 
     The table a program builds from the same entries in the same order, grown at
-    the same points: so walking one put in the image meets its keys in the order
-    walking one built while running would.  Answers the capacity, the entries by
-    index -- nothing for an empty one -- and how many keys there are.
+    the same points, with the seed *hashed* uses.  Answers the capacity, the
+    entries by index -- nothing for an empty one -- and how many keys there are.
     """
     capacity = tables.FIRST_CAPACITY
     slots: list[tuple[object, Const, Const | None] | None] = [None] * capacity
@@ -2997,21 +2997,17 @@ def _table_laid_out(keys: Sequence[tuple[object, Const, Const | None]],
 
 
 def _word_hash(bits: object, mask: int) -> int:
-    """Where a probe for a key of one word starts: Fibonacci hashing, folded."""
+    """Where a probe for a key of one word starts, in a table laid out in the
+    image: its hash with that table's seed, as the runtime works it out."""
     assert isinstance(bits, int)
-    mixed = (bits * tables.GOLDEN) & 0xFFFFFFFFFFFFFFFF
-    return (mixed ^ (mixed >> 32)) & mask
+    return word_hash(bits, tables.IMAGE_SEED) & mask
 
 
 def _text_hash(bits: object, mask: int) -> int:
-    """Where a probe for a key of text starts: FNV-1a over its bytes."""
+    """Where a probe for a key of text starts, in a table laid out in the image:
+    the hash of its bytes with that table's seed."""
     assert isinstance(bits, bytes)
-    from .strings import FNV_BASIS, FNV_PRIME
-
-    found = FNV_BASIS
-    for byte in bits:
-        found = ((found ^ byte) * FNV_PRIME) & 0xFFFFFFFFFFFFFFFF
-    return found & mask
+    return rapidhash(bits, tables.IMAGE_SEED) & mask
 
 
 def _counted(op: UnOp, value: int, ty: IntType) -> int:
@@ -5302,10 +5298,11 @@ class Checker:
         """A set or a dictionary in the image: the table a program would build.
 
         Laid out entry by entry where the program's own insertions would put them
-        (`_table_laid_out`), so that a lookup -- which is the same generated code
-        whatever made the table -- finds every key, and a walk meets them in the
-        order it would.  Nothing gives the table back and nothing grows it: its
-        type says nothing may be put in it.
+        with `tables.IMAGE_SEED` (`_table_laid_out`), so that a lookup -- which is
+        the same generated code whatever made the table -- finds every key.
+        Nothing gives the table back and nothing grows it: its type says nothing
+        may be put in it, which is why a seed known to anyone reading the image is
+        no seed a program could do anything with.
         """
         shape = tables.Shape(key=ty.element) if isinstance(ty, SetType) \
             else tables.Shape(key=ty.key, value=ty.value)
@@ -5352,14 +5349,15 @@ class Checker:
         block = ProductType((("arena", self._module.types.ptr_type(ARENA, True)),
                              ("mask", U64), ("count", U64), ("stride", U64),
                              ("entries", self._module.types.ptr_type(U8, True)),
-                             ("used", U64)), name="table")
+                             ("used", U64), ("seed", U64)), name="table")
         made = self._image_variable(block, self._module.record_const(block, (
             AddressConst(block.fields[0][1], None),
             self._module.int_const(U64, capacity - 1),
             self._module.int_const(U64, count),
             self._module.int_const(U64, shape.stride),
             AddressConst(block.fields[4][1], entries),
-            self._module.int_const(U64, count))))
+            self._module.int_const(U64, count),
+            self._module.int_const(U64, tables.IMAGE_SEED))))
         return AddressConst(ty, made)
 
     def _empty_table_constant(self, ty: Type) -> Const:
@@ -5383,13 +5381,16 @@ class Checker:
         block = ProductType((("arena", arena), ("mask", U64), ("count", U64),
                              ("stride", U64),
                              ("entries", self._module.types.ptr_type(U8, True)),
-                             ("used", U64)), name="table")
+                             ("used", U64), ("seed", U64)), name="table")
+        # No seed yet: the first key put in is what the table takes one for,
+        # so that the one a program fills is seeded as one it made is.
         made = self._image_variable(block, self._module.record_const(block, (
             AddressConst(arena, tables.heap_global(self._module)),
             self._module.int_const(U64, capacity - 1),
             self._module.int_const(U64, 0),
             self._module.int_const(U64, shape.stride),
             AddressConst(block.fields[4][1], entries),
+            self._module.int_const(U64, 0),
             self._module.int_const(U64, 0))), mutable=True)
         return AddressConst(ty, made)
 

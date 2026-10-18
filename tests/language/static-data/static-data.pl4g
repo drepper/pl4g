@@ -6,7 +6,8 @@
 ※ numbers, characters, truth values, values of an enumeration, text -- written
 ※ at the top level or inside a body, and a definition that never changes and
 ※ holds nothing else has to say it.  A table in the image is laid out the way the
-※ program would have built it, so a walk meets its keys in the same order.
+※ program would have built it, with a seed of its own, so a walk meets every key
+※ once -- in an order of its own, not the order of one built while running.
 ※
 ※ **`→ str in ⎕static`** says every answer is in the image: it travels without
 ※ its allocator, the caller adding none.
@@ -45,15 +46,13 @@ fn main(init: std.Init) → u6:
     if (shades⸨Colour.blue⸩ ?? "") ≠ "cold" ∨ #shades ≠ 2: return 7u6
     if grid⟦1, 0⟧ ≠ 3u8: return 8u6
     if #none ≠ 0 ∨ none⸨""⸩: return 9u6
-    ※ walked in the order a table built while running would be
+    ※ walked, every key once, as a table built while running is
     let built: mut ⸨str⸩ = ⸨"x", "y", "zz", "www", "v", "u", "t"⸩
-    let a: mut str = ""
+    let met: mut u64 = 0u64
     foreach one: str = seen:
-        a ← a ⧺ one
-    let b: mut str = ""
-    foreach one: str = built:
-        b ← b ⧺ one
-    if a ≠ b: return 10u6
+        if ¬built⸨one⸩: return 10u6
+        met ← met + 1u64
+    if met ≠ 7u64: return 10u6
     ※ a table made out of one in the image is the heap's
     let other: ⸨str⸩ = ⸨"s", "x"⸩ in ⎕static
     let more: ⸨str⸩ = seen | other

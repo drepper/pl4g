@@ -28,6 +28,12 @@ ROOT = Path(__file__).resolve().parent.parent
 # this, or here -- so that a stage breaking it is found at that stage.  An
 # ordinary compilation does not.
 os.environ["PL4G_VERIFY"] = "1"
+
+# And every program it runs makes its tables from one seed, so a test that
+# walks one walks it alike every time: which order that is, is what a program
+# may not depend on, and a test that did would fail only now and then.  The
+# tests about the seed itself take this out.
+os.environ["PL4G_HASH_SEED"] = "1"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 

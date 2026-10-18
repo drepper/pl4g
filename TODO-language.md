@@ -84,10 +84,11 @@ removed or decided otherwise, which its last paragraph says.
     therefore gone, and what it cost is what it bought: a program that keys a dictionary by text and another by a number carries
     two probes.
 
-[ ] a hash a program cannot pick its keys to collide in.  FNV-1a is what the bytes of a key are hashed with and it is not
+[x] a hash a program cannot pick its keys to collide in.  FNV-1a is what the bytes of a key are hashed with and it is not
     keyed: a program fed keys chosen to land in one place degrades to a walk.  Every language that takes input from outside
     seeds its hash per run (Python, Go, Rust); this wants somewhere for the seed to live and a way for a program that wants a
-    table it can reproduce to say so.
+    table it can reproduce to say so.  Done on 2026-10-18: rapidhash with a seed each table carries, taken from the kernel's
+    random bytes or from `PL4G_HASH_SEED`.
 
 [x] a collection at the top level.  Done on 2026-09-29: the front end generates one constructor per file that has any, in front
     of the program's own, and the variable holds a word of nought until it has run.

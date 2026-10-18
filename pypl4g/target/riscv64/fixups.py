@@ -36,6 +36,11 @@ PCREL_HI20: Final[FixupKind] = FixupKind("riscv_pcrel_hi20", INSTRUCTION_SIZE,
 PCREL_LO12_I: Final[FixupKind] = FixupKind("riscv_pcrel_lo12_i", INSTRUCTION_SIZE,
                                            FixupBase.FIELD_START)
 
+#: The same twelve bits where the second instruction is a store, which keeps its
+#: immediate in two pieces either side of the register it stores.
+PCREL_LO12_S: Final[FixupKind] = FixupKind("riscv_pcrel_lo12_s", INSTRUCTION_SIZE,
+                                           FixupBase.FIELD_START)
+
 #: How far the second instruction of the pair sits after the first.
 PCREL_PAIR_DISTANCE: Final[int] = INSTRUCTION_SIZE
 
@@ -85,6 +90,15 @@ def _apply_pcrel_lo12(data: bytearray, offset: int, fixup: MCFixup,
     insert_bits(data, offset, INSTRUCTION_SIZE, value & 0xFFF, 20, 12)
 
 
+def _apply_pcrel_lo12_s(data: bytearray, offset: int, fixup: MCFixup,
+                        value: int) -> None:
+    """Store the lower twelve bits of an address into a store: the top seven
+    above the source register, the bottom five where a destination would be."""
+    del fixup
+    insert_bits(data, offset, INSTRUCTION_SIZE, (value >> 5) & 0x7F, 25, 7)
+    insert_bits(data, offset, INSTRUCTION_SIZE, value & 0x1F, 7, 5)
+
+
 #: How each of this target's relocations is stored.
 APPLIERS: Final[dict[FixupKind, Callable[[bytearray, int, MCFixup, int], None]]] = {
     # The two that reach a whole address are stored as the bytes they are: they
@@ -96,6 +110,7 @@ APPLIERS: Final[dict[FixupKind, Callable[[bytearray, int, MCFixup, int], None]]]
     BRANCH: _apply_branch,
     PCREL_HI20: _apply_pcrel_hi20,
     PCREL_LO12_I: _apply_pcrel_lo12,
+    PCREL_LO12_S: _apply_pcrel_lo12_s,
 }
 
 
@@ -120,6 +135,7 @@ FROM_ELF: Final[dict[int, str]] = {
     17: JAL.name,              # R_RISCV_JAL
     23: PCREL_HI20.name,       # R_RISCV_PCREL_HI20
     24: PCREL_LO12_I.name,     # R_RISCV_PCREL_LO12_I
+    25: PCREL_LO12_S.name,     # R_RISCV_PCREL_LO12_S
 }
 
 #: Every kind a packaged patch may name, by the name the patch carries.  The
@@ -127,7 +143,7 @@ FROM_ELF: Final[dict[int, str]] = {
 #: same field every target does.
 BY_NAME: Final[dict[str, FixupKind]] = {
     one.name: one for one in
-    (ABS32, ABS64, PCREL32, JAL, BRANCH, PCREL_HI20, PCREL_LO12_I)}
+    (ABS32, ABS64, PCREL32, JAL, BRANCH, PCREL_HI20, PCREL_LO12_I, PCREL_LO12_S)}
 
 
 #: Which relocation types name another relocation rather than what they reach.

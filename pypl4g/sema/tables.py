@@ -28,15 +28,14 @@ generated functions to call.  The three that depend on any of that are generated
 once per shape and named for it, so a program using two kinds of table carries
 two probes and one of everything else.
 
-**The hash is whatever the key is.**  A key that is a word is hashed by Fibonacci
-hashing: multiplied by the closest odd number to two to the sixty-fourth over the
-golden ratio, with the high bits folded down into the low ones.  A key that is
-text is hashed over its bytes with FNV-1a, which is what makes two strings that
-say the same thing one key wherever their bytes are -- and is compared by the same
-walk the language's own `=` uses, so a key found in a table and a comparison
-written in a program cannot disagree.  Both multiplications wrap, which no
-program of the language may write and which these are: a hash is defined on the
-bits, and there is nothing about an overflow here to report to anyone.
+**The hash is keyed, and every table has its own key.**  A key is hashed with
+rapidhash -- a word as its eight bytes, text over its bytes, which is what makes
+two strings that say the same thing one key wherever their bytes are -- with a
+seed the table carries, which the runtime works out from a base the process
+takes from the kernel's random bytes, or from `PL4G_HASH_SEED`.  So where a key
+lands is nothing a program can work out, and keys chosen to land together cannot
+be chosen.  Text is compared by the same walk the language's own `=` uses, so a
+key found in a table and a comparison written in a program cannot disagree.
 """
 
 from __future__ import annotations
@@ -100,8 +99,13 @@ ENTRIES_FIELD: Final[int] = 4 * WORD
 #: table is rebuilt.  The two differ only where something has been taken out.
 USED_FIELD: Final[int] = 5 * WORD
 
+#: What the table's keys are hashed with, its own and no other table's: worked
+#: out when the table is made, again whenever it grows, and -- for a table laid
+#: out in the image empty, which says nought here -- when the first key goes in.
+SEED_FIELD: Final[int] = 6 * WORD
+
 #: How much room a block takes, on the grain the allocator hands out.
-BLOCK_SIZE: Final[int] = 6 * WORD
+BLOCK_SIZE: Final[int] = 7 * WORD
 
 #: The fields of one entry.  The state is always the first word; where the key
 #: is is always the second; where the *value* is depends on how wide the key is,
@@ -186,10 +190,11 @@ FIRST_CAPACITY: Final[int] = 8
 LOAD_NUMERATOR: Final[int] = 3
 LOAD_DENOMINATOR: Final[int] = 4
 
-#: The closest odd number to two to the sixty-fourth divided by the golden
-#: ratio, which is the multiplier Knuth describes and every implementation of
-#: this hash uses.
-GOLDEN: Final[int] = 0x9E3779B97F4A7C15
+#: The seed of a table the compiler lays out in the image with its keys in it.
+#: Such a table is never written, so nothing a program does can make use of
+#: knowing it; one laid out empty says nought instead, and takes a seed of its
+#: own with its first key.
+IMAGE_SEED: Final[int] = 0x6A09E667F3BCC908
 
 #: What the three are called.  They are the compiler's and a program cannot
 #: name them, so the names carry the prefix everything of the compiler's does.
@@ -388,7 +393,7 @@ def release_function(module: Module) -> Function:
 
 
 def _declared(module: Module, name: str, params: tuple[Type, ...],
-              result: Type) -> Function:
+              result: Type, impure: bool = True) -> Function:
     """The declaration of a function the backend supplies, made once.
 
     It follows the system's convention, because it is written as instructions
@@ -403,8 +408,31 @@ def _declared(module: Module, name: str, params: tuple[Type, ...],
         name, module.types.func_type(params, result),
         # The runtime allocates and writes tables, all of which outlives the
         # call: what the language calls impure is what these are for.
-        FuncAttrs(abi=SYSTEM_CCONV, impure=True), cconv=SYSTEM_CCONV,
+        FuncAttrs(abi=SYSTEM_CCONV, impure=impure), cconv=SYSTEM_CCONV,
         linkage=Linkage.VISIBLE))
+
+
+#: What the runtime hashes a key with, and gives a table its seed with.
+HASH_SYMBOL: Final[str] = "pl4g_hash"
+HASH_WORD_SYMBOL: Final[str] = "pl4g_hash_word"
+HASH_SEED_SYMBOL: Final[str] = "pl4g_hash_seed"
+
+
+def hash_function(module: Module) -> Function:
+    """The runtime's ``pl4g_hash(bytes, count, seed)``, which changes nothing."""
+    return _declared(module, HASH_SYMBOL,
+                     (module.types.ptr_type(U8, mutable=True), U64, U64), U64,
+                     impure=False)
+
+
+def hash_word_function(module: Module) -> Function:
+    """The runtime's ``pl4g_hash_word(word, seed)``, which changes nothing."""
+    return _declared(module, HASH_WORD_SYMBOL, (U64, U64), U64, impure=False)
+
+
+def seed_function(module: Module) -> Function:
+    """The runtime's ``pl4g_hash_seed()``: a seed no other table has."""
+    return _declared(module, HASH_SEED_SYMBOL, (), U64)
 
 
 def generated(module: Module, name: str, params: tuple[Type, ...],
@@ -524,39 +552,24 @@ def _write(builder: IRBuilder, table: Value, offset: int, value: Value) -> None:
     builder.store(_field(builder, table, offset), value)
 
 
-def _hashed(builder: IRBuilder, key: Value, mask: Value) -> Value:
-    """Where a probe for a key that is one word starts.
+def _hash_of(builder: IRBuilder, shape: Shape, key: Value, mask: Value,
+             seed: Value) -> Value:
+    """Where a probe for *key* starts, whatever kind of key it is: its hash with
+    the table's seed, masked.
 
-    Fibonacci hashing puts what the key says into the high bits of the product,
-    and the fold brings them down where the mask can read them.  Without the
-    fold the low bits of the product would be the low bits of the key, and a
-    table of keys that are all multiples of its capacity would put every one of
-    them in one place.
+    A key that is a word is hashed as its eight bytes, and text over its bytes
+    -- two strings that say the same thing are one key, and what they have in
+    common is the bytes and not where they are.  Both with the seed, which is
+    what keeps a program from choosing keys that land together: where a key goes
+    is nothing it can work out.
     """
-    mixed = builder.binary(BinOp.WRAP_MUL, key, builder.int_const(U64, GOLDEN))
-    folded = builder.binary(BinOp.LSHR, mixed, builder.int_const(U64, 32))
-    return builder.binary(BinOp.AND,
-                          builder.binary(BinOp.XOR, mixed, folded), mask)
-
-
-def _hash_of(builder: IRBuilder, shape: Shape, key: Value,
-             mask: Value) -> Value:
-    """Where a probe for *key* starts, whatever kind of key it is.
-
-    A key that is a word is hashed by the multiplication above.  A key that is
-    text is hashed over its bytes -- two strings that say the same thing are one
-    key, and what they have in common is the bytes and not where they are -- and
-    the answer is then folded the same way, so that everything below this knows
-    one kind of hash.
-    """
-    from .strings import hash_function
-
+    module = builder.module
     if key_ir_type(shape) is U64:
-        return _hashed(builder, key, mask)
-    return builder.binary(BinOp.AND,
-                          builder.call(hash_function(builder.module),
-                                       _taken_apart(builder, key), U64),
-                          mask)
+        hashed = builder.call(hash_word_function(module), (key, seed), U64)
+    else:
+        hashed = builder.call(hash_function(module),
+                              (*_taken_apart(builder, key), seed), U64)
+    return builder.binary(BinOp.AND, hashed, mask)
 
 
 def _same_key(builder: IRBuilder, shape: Shape, held: Value,
@@ -662,6 +675,8 @@ def _build_new(module: Module) -> Function:
     _write(builder, block, USED_FIELD, builder.int_const(U64, 0))
     _write(builder, block, STRIDE_FIELD, stride)
     _write_address(builder, block, ENTRIES_FIELD, entries)
+    _write(builder, block, SEED_FIELD,
+           builder.call(seed_function(module), (), U64))
     builder.ret(block)
     return func
 
@@ -711,7 +726,8 @@ def _build_slot(module: Module, shape: Shape) -> Function:
     # One past the last index, which is what "nothing given up yet" is said
     # with: an index no entry has, so no comparison against it can be wrong.
     none = builder.binary(BinOp.WRAP_ADD, mask, builder.int_const(U64, 1))
-    builder.br(loop, (_hash_of(builder, shape, key, mask), none))
+    builder.br(loop, (_hash_of(builder, shape, key, mask,
+                               _read(builder, table, SEED_FIELD)), none))
 
     builder.position_at(loop)
     index = loop.add_param(U64, "at")
@@ -789,6 +805,10 @@ def _build_put(module: Module, shape: Shape) -> Function:
     arena_ptr = module.types.ptr_type(ARENA, mutable=True)
     alloc = allocator_function(module)
     entry = func.add_block()
+    # Before everything else, being what everything else reads: the blocks are
+    # laid out in the order they are made.
+    seeding = func.add_block("seeding")
+    seeded = func.add_block("seeded")
     grow = func.add_block("grow")
     bigger = func.add_block("bigger")
     afresh = func.add_block("afresh")
@@ -807,6 +827,19 @@ def _build_put(module: Module, shape: Shape) -> Function:
     builder.position_at(entry)
     table = entry.add_param(table_ptr, "table")
     key = entry.add_param(held, "key")
+    # A table laid out in the image empty has no seed of its own yet: the
+    # first key is what it takes one for, and it has no entries to move.
+    builder.condbr(builder.compare(CmpPred.EQ, _read(builder, table, SEED_FIELD),
+                                   builder.int_const(U64, 0)),
+                   seeding, seeded, false_args=(builder.memory(),))
+
+    builder.position_at(seeding)
+    _write(builder, table, SEED_FIELD,
+           builder.call(seed_function(module), (), U64))
+    builder.br(seeded, (builder.memory(),))
+
+    builder.position_at(seeded)
+    builder.set_memory(seeded.add_param(MEM, "mem"))
     # One more entry than the probe has to walk past now, which is what it
     # would have to walk past if this key is new.
     wanted = builder.binary(BinOp.WRAP_ADD, _read(builder, table, USED_FIELD),
@@ -859,6 +892,11 @@ def _build_put(module: Module, shape: Shape) -> Function:
            builder.binary(BinOp.WRAP_SUB, room, builder.int_const(U64, 1)))
     _write(builder, table, COUNT_FIELD, builder.int_const(U64, 0))
     _write(builder, table, USED_FIELD, builder.int_const(U64, 0))
+    # A seed of its own again: the keys are all being put somewhere new anyway,
+    # and whatever could have been learned of where the old seed put them is
+    # learned of a seed the table no longer has.
+    _write(builder, table, SEED_FIELD,
+           builder.call(seed_function(module), (), U64))
     builder.br(rehash, (builder.int_const(U64, 0), builder.memory()))
 
     # Every entry of the old array, put where the new array's own probe says.

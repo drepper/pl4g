@@ -10132,6 +10132,22 @@ changed, and to make verifying optional, with timings taken without it: `--verif
 and `pl4g-timing` takes out -- LLVM's `-verify-each`, against keeping it in every compilation and against verifying in the suite
 alone.  Building `__pl4g_one_run`'s body only where a call to it survives was measured at 1.5 ms and is not done.
 
+## 2026-10-18T12:00+02:00 — language
+
+**A table's keys are hashed with a seed of its own**
+
+The user asked for the entry in TODO-language.md and chose **rapidhash**, against SipHash-1-3 (Rust, Python) and against AES
+rounds (Go where the hardware has them): fast, seeded, its collision resistance resting on the seed; **a seed per table, in its
+header** -- from a base the process takes from the kernel's `AT_RANDOM` bytes and a count, as Rust's `RandomState` does -- against one
+seed for the process (Python, Go); **`PL4G_HASH_SEED` in the environment** to have a run again, Python's `PYTHONHASHSEED`, against a
+seed written on a collection and against none; and **keys that are one word hashed with the seed too**, against keeping Fibonacci
+hashing for them.  Taken without asking, as what those come to: the hash is in the C runtime, the IR having no product of two words'
+high half, and in the compiler again for the tables it lays out in the image; such a table with its keys in it is read-only and has a
+seed known to the compiler, one laid out empty takes its first seed with its first key, and every table takes a fresh seed whenever it
+grows.  A table in the image no longer walks in the order a table built while running would -- which was promised of it, and is not
+any more -- and the test suite sets `PL4G_HASH_SEED`, so that a test depending on an order it may not depend on fails every time and
+not one time in many.
+
 Open questions
 --------------
 

@@ -434,8 +434,13 @@ static u64 how_long(const unsigned char *s)
  * program does, which is exactly how long what a program was started with is
  * worth having.  Where the system will not give it, the answer is no arguments
  * at all rather than some of them. */
+static void hash_start(const u64 *stack);
+
 void pl4g_args(const u64 *stack, struct view *out)
 {
+  /* Where the process's tables take their seeds from is worked out here, the
+   * one thing every program calls with the stack in hand. */
+  hash_start(stack);
   out->at = 0;
   out->len = 0;
   out->stride = 1;
@@ -460,6 +465,178 @@ void pl4g_args(const u64 *stack, struct view *out)
   }
   out->at = made;
   out->len = count;
+}
+
+/* -- hashing ---------------------------------------------------------------- */
+
+/* What a table's keys are hashed with: rapidhash (after Nicolas De Carli's,
+ * itself after wyhash), seeded, so that which keys land together depends on a
+ * seed a program cannot see.  A table carries its own seed, taken from
+ * `pl4g_hash_seed`, which mixes a base worked out once per process with a count:
+ * no two tables share one, and knowing one says nothing of another.
+ *
+ * The compiler works out the same hash for the tables it lays out in the image
+ * (`pypl4g/sema/rapidhash.py`), and a test holds the two to each other. */
+static const u64 rapid_secret[3] = {
+  0x2d358dccaa6c78a5ul, 0x8bb84b93962eacc9ul, 0x4b33a62ed433d4a3ul
+};
+
+/* Both halves of the product of two words. */
+static inline void rapid_mum(u64 *a, u64 *b)
+{
+  unsigned __int128 r = (unsigned __int128) *a * *b;
+  *a = (u64) r;
+  *b = (u64) (r >> 64);
+}
+
+static inline u64 rapid_mix(u64 a, u64 b)
+{
+  rapid_mum(&a, &b);
+  return a ^ b;
+}
+
+static inline u64 rapid_read64(const unsigned char *p)
+{
+  u64 v;
+  __builtin_memcpy(&v, p, 8);
+  return v;
+}
+
+static inline u64 rapid_read32(const unsigned char *p)
+{
+  u32 v;
+  __builtin_memcpy(&v, p, 4);
+  return v;
+}
+
+/* The hash of the `len` bytes at `at`, with `seed`. */
+u64 pl4g_hash(const unsigned char *at, u64 len, u64 seed)
+{
+  const unsigned char *p = at;
+  seed ^= rapid_mix(seed ^ rapid_secret[0], rapid_secret[1]) ^ len;
+  u64 a, b;
+  if (len <= 16) {
+    if (len >= 4) {
+      const unsigned char *last = p + len - 4;
+      a = (rapid_read32(p) << 32) | rapid_read32(last);
+      u64 delta = (len & 24) >> (len >> 3);
+      b = (rapid_read32(p + delta) << 32) | rapid_read32(last - delta);
+    } else if (len > 0) {
+      a = ((u64) p[0] << 56) | ((u64) p[len >> 1] << 32) | p[len - 1];
+      b = 0;
+    } else
+      a = b = 0;
+  } else {
+    u64 i = len;
+    if (i > 48) {
+      u64 see1 = seed, see2 = seed;
+      while (i >= 96) {
+        seed = rapid_mix(rapid_read64(p) ^ rapid_secret[0], rapid_read64(p + 8) ^ seed);
+        see1 = rapid_mix(rapid_read64(p + 16) ^ rapid_secret[1], rapid_read64(p + 24) ^ see1);
+        see2 = rapid_mix(rapid_read64(p + 32) ^ rapid_secret[2], rapid_read64(p + 40) ^ see2);
+        seed = rapid_mix(rapid_read64(p + 48) ^ rapid_secret[0], rapid_read64(p + 56) ^ seed);
+        see1 = rapid_mix(rapid_read64(p + 64) ^ rapid_secret[1], rapid_read64(p + 72) ^ see1);
+        see2 = rapid_mix(rapid_read64(p + 80) ^ rapid_secret[2], rapid_read64(p + 88) ^ see2);
+        p += 96;
+        i -= 96;
+      }
+      if (i >= 48) {
+        seed = rapid_mix(rapid_read64(p) ^ rapid_secret[0], rapid_read64(p + 8) ^ seed);
+        see1 = rapid_mix(rapid_read64(p + 16) ^ rapid_secret[1], rapid_read64(p + 24) ^ see1);
+        see2 = rapid_mix(rapid_read64(p + 32) ^ rapid_secret[2], rapid_read64(p + 40) ^ see2);
+        p += 48;
+        i -= 48;
+      }
+      seed ^= see1 ^ see2;
+    }
+    if (i > 16) {
+      seed = rapid_mix(rapid_read64(p) ^ rapid_secret[2],
+                       rapid_read64(p + 8) ^ seed ^ rapid_secret[1]);
+      if (i > 32)
+        seed = rapid_mix(rapid_read64(p + 16) ^ rapid_secret[2], rapid_read64(p + 24) ^ seed);
+    }
+    a = rapid_read64(p + i - 16);
+    b = rapid_read64(p + i - 8);
+  }
+  a ^= rapid_secret[1];
+  b ^= seed;
+  rapid_mum(&a, &b);
+  return rapid_mix(a ^ rapid_secret[0] ^ len, b ^ rapid_secret[1]);
+}
+
+/* The hash of a key that is one word: its eight bytes, as they are in memory. */
+u64 pl4g_hash_word(u64 word, u64 seed)
+{
+  unsigned char bytes[8];
+  __builtin_memcpy(bytes, &word, 8);
+  return pl4g_hash(bytes, 8, seed);
+}
+
+/* What every table's seed is worked out from, once per process, and how many
+ * have been handed out. */
+static u64 hash_base;
+static u64 hash_count;
+
+/* What the auxiliary vector calls the 16 random bytes the kernel leaves on the
+ * stack for the process. */
+#define AT_NULL 0
+#define AT_RANDOM 25
+
+/* Whether `one` begins with `name` and then `=`, answering what follows. */
+static const unsigned char *setting(const unsigned char *one, const char *name)
+{
+  while (*name != 0) {
+    if (*one != (unsigned char) *name)
+      return 0;
+    one += 1;
+    name += 1;
+  }
+  return *one == '=' ? one + 1 : 0;
+}
+
+/* Work the base out from what the process was started with: `PL4G_HASH_SEED`
+ * where the environment sets it -- a number, which makes every table of the run
+ * one that can be had again -- and the kernel's random bytes otherwise. */
+static void hash_start(const u64 *stack)
+{
+  if (stack == 0)
+    return;
+  const unsigned char *const *envp =
+    (const unsigned char *const *) &stack[stack[0] + 2];
+  u64 at = 0;
+  while (envp[at] != 0) {
+    const unsigned char *said = setting(envp[at], "PL4G_HASH_SEED");
+    if (said != 0) {
+      u64 n = 0;
+      while (*said >= '0' && *said <= '9') {
+        n = n * 10 + (u64) (*said - '0');
+        said += 1;
+      }
+      hash_base = rapid_mix(n ^ rapid_secret[2], rapid_secret[0]);
+      return;
+    }
+    at += 1;
+  }
+  const u64 *aux = (const u64 *) &envp[at + 1];
+  for (; aux[0] != AT_NULL; aux += 2)
+    if (aux[0] == AT_RANDOM) {
+      const unsigned char *random = (const unsigned char *) aux[1];
+      hash_base = rapid_mix(rapid_read64(random) ^ rapid_secret[0],
+                            rapid_read64(random + 8) ^ rapid_secret[1]);
+      return;
+    }
+  /* No random bytes: where the stack is, which differs from run to run where
+   * the system places it at random, and is better than nothing where not. */
+  hash_base = rapid_mix((u64) stack ^ rapid_secret[0], rapid_secret[1]);
+}
+
+/* A seed for a table of its own: never nought, which is what a table laid out
+ * in the image says before it has been given one. */
+u64 pl4g_hash_seed(void)
+{
+  hash_count += 1;
+  u64 seed = rapid_mix(hash_base ^ rapid_secret[0], hash_count ^ rapid_secret[1]);
+  return seed == 0 ? 1 : seed;
 }
 
 /* -- the environment ------------------------------------------------------- */
