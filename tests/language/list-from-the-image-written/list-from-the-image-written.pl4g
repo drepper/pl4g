@@ -1,0 +1,18 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A list a call answers may be in the image, which is read-only, so writing an element
+※ of it or taking one out copies it out first -- and what the image holds is as it was
+※ for the next call.  A list known to be made in an arena or in `⎕heap` is written where
+※ it is, there being nothing to copy out of.
+
+let std := ⎕import("std")
+
+fn table() → [u8] in ⎕static:
+    [1u8, 2u8, 3u8] in ⎕static
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let t: mut [u8] = table()
+    t⟦0⟧ ← 9u8
+    let gone: u8 = †t⟦1⟧
+    if t⟦0⟧ = 9u8 ∧ gone = 2u8 ∧ table()⟦0⟧ = 1u8 ∧ table()⟦1⟧ = 2u8: 0u6 else: 1u6

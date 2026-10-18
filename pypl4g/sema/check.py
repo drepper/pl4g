@@ -15637,7 +15637,7 @@ class Checker:
             return UndefConst(ERROR)
         if not self._made_here(place):
             self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
-        self._made_writable(builder, place, ty, expr.span)
+        self._made_writable(builder, place, ty, expr.span, expr.base)
         elements, count, _ = self._list_at(builder, place, ty, expr.span)
         builder.check(builder.compare(CmpPred.ULT, at, count, expr.span),
                       "an index outside its list",
@@ -15684,10 +15684,21 @@ class Checker:
              into), ty, span), span)
 
     def _made_writable(self, builder: IRBuilder, place: Value, ty: ListType,
-                       span: Span) -> None:
+                       span: Span, written: ast.Expr | None = None) -> None:
         """The list at *place* in room of its own before it is written in place:
         a list in the image is copied out, into the arena in force, and any other
-        is as it was -- room for nought more being room it has."""
+        is as it was -- room for nought more being room it has.
+
+        Nothing is done where *written* -- what the place was written as -- is a
+        local of this function, not a parameter, known to be made in an arena or
+        in `⎕heap` and not in the image: there is nothing to copy out of.
+        """
+        if isinstance(written, ast.NameRef):
+            local = self._find_local(written.name)
+            if local is not None and not local.is_parameter:
+                arenas = self._arenas_in(written)
+                if arenas and _IMAGE not in arenas:
+                    return
         made = self._room_made(builder, place, ty, builder.int_const(U64, 0), span)
         self._room_kept(builder, place, ty, made, made[2], span)
 
@@ -15868,7 +15879,7 @@ class Checker:
         if not self._made_here(place):
             self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
         span = stmt.span
-        self._made_writable(builder, place, ty, span)
+        self._made_writable(builder, place, ty, span, stmt.base)
         elements, count, held = self._list_at(builder, place, ty, span)
         builder.check(builder.compare(CmpPred.ULT, at, count, span),
                       "an index outside its list", statuses.OUT_OF_RANGE, span)
