@@ -480,34 +480,17 @@ fn text(v: T', a: &mut arena, base: u8 ← 10u8, upper: bool ← false) → str 
             let d: T' = rest % radix ?? zero
             let away: T' = if below: zero - d else: d
             let place: u64 = ⎕narrow(away, ⌜u64⌝) ?? 0u64
-            out ← digit(place, upper) ⧺ out in a
+            ※ A digit past nine is a letter, counted on from the one before `a`.
+            let past: u64 = if upper: 55u64 else: 87u64
+            let code: u64 = place + (if place < 10u64: 48u64 else: past)
+            let c: char = ⎕chr(⎕narrow(code, ⌜u32⌝) ?? 48u32)
+            out ← ⎕str(c, a) ⧺ out in a
             rest ← rest ÷ radix ?? zero
             if rest = zero:
                 break §places
         ※ The raised minus the language writes a negative literal with, so that what
         ※ comes out reads back as what went in.
         if below: "⁻" ⧺ out in a else: out
-
-※※ The text of one digit, as the literal that writes it.
-※※
-※※ \details A table in the image: made while compiling, never copied and never
-※※ given back, so what is answered is the image's text and travels without its
-※※ allocator.  One function for every integer type, where a table built in the
-※※ generic body would be built in every instantiation.
-※※
-※※ \param d a number below thirty-six
-※※ \param upper whether a digit past nine is a capital
-※※ \return its digit
-fn digit(d: u64, upper: bool) → str in ⎕static:
-    let small: str⟦36⟧ = ⟦"0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-                          "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
-                          "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y",
-                          "z"⟧ in ⎕static
-    let capital: str⟦36⟧ = ⟦"0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-                            "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
-                            "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y",
-                            "Z"⟧ in ⎕static
-    if upper: capital⟦⎕unit(d, ⌜idx⌝)⟧ else: small⟦⎕unit(d, ⌜idx⌝)⟧
 
 ※※ Where a value's text stands in a field wider than it.
 ※※
