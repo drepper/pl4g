@@ -22,6 +22,12 @@ from typing import Any, Mapping, Sequence
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# Every compilation the suite makes verifies the intermediate representation
+# after each stage that changed it -- in a process of its own, which inherits
+# this, or here -- so that a stage breaking it is found at that stage.  An
+# ordinary compilation does not.
+os.environ["PL4G_VERIFY"] = "1"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 

@@ -105,6 +105,10 @@ class Options:
     #: Whether `@[system]` is acted on: with this set, a system module is warned
     #: about and logged like any other module.
     ignore_system: bool = False
+    #: Whether the intermediate representation is checked after every stage
+    #: that changed it -- what finds a defect in the compiler where it is made,
+    #: and what an ordinary compilation does without.
+    verify: bool = False
     #: What `-Dname=value` said, which is how a build file is told something
     #: from outside.  Read by `std.option` while the build function runs and by
     #: nothing else.

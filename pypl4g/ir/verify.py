@@ -8,7 +8,8 @@ emitting a user diagnostic.
 
 from __future__ import annotations
 
-from typing import Iterable
+import os
+from typing import Final, Iterable
 
 from ..diag.engine import InternalError
 from .function import BasicBlock, Function, SpecialKind
@@ -41,10 +42,14 @@ class Verifier:
         """Record one violated invariant."""
         self._problems.append("".join((where, ": ", detail)))
 
-    def run(self) -> None:
-        """Verify the module, raising on the first set of problems found."""
+    def run(self, functions: Iterable[Function] | None = None) -> None:
+        """Verify the module -- its functions, or those of *functions* that are
+        still in it -- raising on the first set of problems found."""
         self._check_module()
-        for func in self._module.functions.values():
+        present = {id(one) for one in self._module.functions.values()}
+        held = self._module.functions.values() if functions is None \
+            else [one for one in functions if id(one) in present]
+        for func in held:
             if not func.is_declaration:
                 self._check_function(func)
         if self._problems:
@@ -569,9 +574,21 @@ def _counts(ty: Type) -> bool:
     return isinstance(ty, (IntType, BoolType, CharType, EnumType))
 
 
-def verify(module: Module) -> None:
-    """Verify *module*, raising ``InternalError`` if anything is wrong."""
-    Verifier(module).run()
+def verify(module: Module, functions: Iterable[Function] | None = None) -> None:
+    """Verify *module*, raising ``InternalError`` if anything is wrong: every
+    function of it, or the ones of *functions* -- those a stage changed."""
+    Verifier(module).run(functions)
+
+
+#: What asks for the intermediate representation to be verified wherever it was
+#: changed, as `--verify` does: the test suite sets it for every compilation it
+#: makes, in a process of its own or not.
+VERIFY_VARIABLE: Final = "PL4G_VERIFY"
+
+
+def verifying_asked() -> bool:
+    """Whether the environment asks for verifying."""
+    return os.environ.get(VERIFY_VARIABLE, "") not in ("", "0")
 
 
 def verify_all(modules: Iterable[Module]) -> None:

@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Final, NoReturn, Sequence, TypeVar
 
 from ..diag import ids as D
+from ..ir.verify import verifying_asked
 from ..diag.engine import DiagEngine
 from ..diag.style import ColourWhen
 from ..sema.modules import parse_search_path
@@ -199,6 +200,7 @@ class CommandLine:
         parser.add_argument("-v", "--verbose", action="store_true")
         parser.add_argument("--time-report", dest="time_report",
                             action="store_true")
+        parser.add_argument("--verify", dest="verify", action="store_true")
         parser.add_argument("--help", dest="show_help", action="store_true")
         parser.add_argument("--help-json", dest="show_help_json",
                             action="store_true")
@@ -292,6 +294,7 @@ class CommandLine:
             self._diags.emit(D.IMPL_CLI_NOT_IMPLEMENTED, option="--incremental")
         options.verbose = found.verbose
         options.time_report = found.time_report
+        options.verify = found.verify or verifying_asked()
         options.show_help = found.show_help
         options.show_help_json = found.show_help_json
         options.show_targets = found.show_targets

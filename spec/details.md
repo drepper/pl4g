@@ -4050,6 +4050,14 @@ one place being the same value, or the same part extracted twice from one value 
 is no root** of `dropunreached`, being somebody else's definition: the allocator is emitted for a program whose code still names it
 (`wanted_by`), and one whose copies folded away no longer does.
 
+**Verifying is asked for** (`--verify`, or `PL4G_VERIFY=1`), and an ordinary compilation does without: it is a check on the
+compiler, and it was half of what optimizing took.  Asked for, the module is verified after the checker, after every pass that says
+it changed something, and after the last pass whatever it says; and after a pass that names the functions it changed (`touched`, a
+list each pass's `run` leaves behind, `settle` the union of its three), only those -- every function where a pass says nothing, which
+`coroutines` and `largeanswers`, rewriting callers and callees together, do not.  The module-wide checks run every time.  The test
+suite sets the variable for every compilation it makes, in a process of its own or not, so a pass that breaks the IR is found at that
+pass; `pl4g-timing` takes it out of what it runs, so a column is the time of an ordinary compilation.
+
 **The blocks are never reordered.**  The order they are laid out in is the order
 the backend walks, and a value has to be computed in a block standing before the
 one that reads it; merging removes a block and moves nothing, so that stays true

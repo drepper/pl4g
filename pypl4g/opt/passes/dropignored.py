@@ -30,13 +30,16 @@ class DropIgnoredCalls:
 
     def run(self, module: Module) -> bool:
         """Drop them; report whether any went."""
-        changed = False
+        self.touched: list[Function] = []
         for func in module.functions.values():
             if func.is_declaration:
                 continue
+            swept = False
             while self._sweep(func, module.reports):
-                changed = True
-        return changed
+                swept = True
+            if swept:
+                self.touched.append(func)
+        return bool(self.touched)
 
     def _sweep(self, func: Function, reports: ReportLog) -> bool:
         """Drop the ones dead now, and say whether any went.

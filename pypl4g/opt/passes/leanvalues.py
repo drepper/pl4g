@@ -50,14 +50,21 @@ class LeanValues:
 
     def run(self, module: Module) -> bool:
         """Fold, narrow every joining parameter, and sweep what is left unread."""
-        changed = False
+        self.touched: list[Function] | None = []
         for func in list(module.functions.values()):
             if not func.blocks or not _holds_text(func):
                 continue
-            changed |= _fold(func)
+            changed = _fold(func)
             changed |= self._narrow(module, func)
             changed |= _sweep(func)
-        return changed
+            if changed:
+                self.touched.append(func)
+        if self.touched:
+            # Narrowing a parameter changes what every call hands it, which is
+            # in the callers: the whole module, then.
+            self.touched = None
+            return True
+        return False
 
     def _narrow(self, module: Module, func: Function) -> bool:
         """Make every parameter whose values share one known allocator two words."""

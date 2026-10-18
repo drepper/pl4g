@@ -25,7 +25,8 @@ from time import perf_counter
 from typing import Final, Protocol, Sequence
 
 from ..ir.module import Module
-from ..ir.verify import verify
+from ..ir.function import Function
+from ..ir.verify import verify, verifying_asked
 
 
 class Pass(Protocol):
@@ -63,17 +64,28 @@ class Settle:
     simplifying: Pass
     knowing: Pass
     name: str = "settle"
+    #: The functions any of the three changed, or nothing where one of them
+    #: could not say.
+    touched: list[Function] | None = None
 
     def run(self, module: Module) -> bool:
         """Run the three until all are done; report whether anything changed."""
-        changed = False
+        found: dict[int, Function] = {}
+        whole = False
         for _ in range(SETTLE_ROUNDS):
-            round_ = (self.folding.run(module) | self.simplifying.run(module)
-                      | self.knowing.run(module))
-            changed |= round_
+            round_ = False
+            for one in (self.folding, self.simplifying, self.knowing):
+                if one.run(module):
+                    round_ = True
+                    said = _touched(one)
+                    if said is None:
+                        whole = True
+                    else:
+                        found.update((id(func), func) for func in said)
             if not round_:
                 break
-        return changed
+        self.touched = None if whole else list(found.values())
+        return whole or bool(found)
 
 
 @dataclass(slots=True)
@@ -82,19 +94,34 @@ class PassManager:
 
     passes: list[Pass] = field(default_factory=list)
     timings: list[PassTiming] = field(default_factory=list)
+    #: Whether the module is verified after each pass that changed it, and then
+    #: only the functions that pass changed: a debugging aid, which `--verify`
+    #: and the test suite ask for and an ordinary compilation goes without.
+    verifying: bool = field(default_factory=verifying_asked)
 
     def add(self, item: Pass) -> None:
         """Append a pass to the sequence."""
         self.passes.append(item)
 
     def run(self, module: Module) -> None:
-        """Run every pass, verifying the module after each one that changed it."""
+        """Run every pass, verifying what each one changed where that is asked
+        for -- and the whole module after the last."""
         for item in self.passes:
             start = perf_counter()
             changed = item.run(module)
-            if changed or item is self.passes[-1]:
-                verify(module)
             self.timings.append(PassTiming(item.name, perf_counter() - start, changed))
+            if not self.verifying:
+                continue
+            if item is self.passes[-1]:
+                verify(module)
+            elif changed:
+                verify(module, _touched(item))
+
+
+def _touched(item: Pass) -> list[Function] | None:
+    """The functions *item* says its last run changed, or nothing where it does
+    not say -- in which case every function is to be checked."""
+    return getattr(item, "touched", None)
 
 
 def pipeline_for(level: int) -> Sequence[str]:
@@ -167,7 +194,7 @@ def pipeline_for(level: int) -> Sequence[str]:
             "splitedges")
 
 
-def build_manager(level: int) -> PassManager:
+def build_manager(level: int, verifying: bool | None = None) -> PassManager:
     """Build the pass manager for optimization level *level*."""
     from .passes.constfold import ConstantFolding
     from .passes.coroutines import Coroutines
@@ -202,7 +229,8 @@ def build_manager(level: int) -> PassManager:
         "splitedges": SplitEdges(),
         "tailcalls": TailCalls(),
     }
-    manager = PassManager()
+    manager = PassManager() if verifying is None \
+        else PassManager(verifying=verifying)
     for name in pipeline_for(level):
         manager.add(available[name])
     return manager

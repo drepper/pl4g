@@ -237,6 +237,13 @@
     },
     {
       "short": null,
+      "long": "--verify",
+      "arg": "none",
+      "since": "0.1",
+      "help": "check the intermediate representation after every stage that changed it, which a defect in the compiler fails; PL4G_VERIFY=1 says the same"
+    },
+    {
+      "short": null,
       "long": "--help",
       "arg": "none",
       "since": "0.1",

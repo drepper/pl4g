@@ -69,6 +69,9 @@ class DropUnreached:
         the reader did not write it, and a library offers more than any one
         program uses.
         """
+        # Nothing is changed in what is left, so there is no function to check
+        # again -- only the module, which is always checked.
+        self.touched: list[Function] = []
         reachable = self._reachable(module)
         functions = {name: func for name, func in module.functions.items()
                      if id(func) in reachable}

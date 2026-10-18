@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import textwrap
@@ -359,7 +360,11 @@ def run_once(source: Path, triple: str, output: Path,
     command = [sys.executable, "-m", "pypl4g", "--time-report", "-o", str(output),
                "".join(("--target=", triple)), str(source)]
     start = time.perf_counter()
-    proc = subprocess.run(command, capture_output=True, text=True, cwd=compiler)
+    # What is timed is an ordinary compilation, which verifies nothing: a run of
+    # the test suite in the same shell leaves `PL4G_VERIFY` behind.
+    quiet = {key: value for key, value in os.environ.items() if key != "PL4G_VERIFY"}
+    proc = subprocess.run(command, capture_output=True, text=True, cwd=compiler,
+                          env=quiet)
     elapsed = (time.perf_counter() - start) * 1000
     if proc.returncode != 0:
         return None

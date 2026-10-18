@@ -24,6 +24,7 @@ from typing import Final, Sequence
 
 from ...ir.inst import (AssertInst, BinaryInst, BinOp, CastInst, CastKind,
                         CmpInst, CmpPred, ExtractInst, Instruction, TupleInst)
+from ...ir.function import Function
 from ...ir.module import Module
 from ...ir.types import BOOL, CHAR, BoolType, CharType, IntType, PtrType
 from ...ir.value import BoolConst, CharConst, IntConst, Value
@@ -107,11 +108,14 @@ class ConstantFolding:
 
     def run(self, module: Module) -> bool:
         """Fold what can be folded; report whether anything changed."""
-        changed = False
+        self.touched: list[Function] = []
         for func in module.functions.values():
+            folded = False
             while self._sweep(module, func):
-                changed = True
-        return changed
+                folded = True
+            if folded:
+                self.touched.append(func)
+        return bool(self.touched)
 
     def _reread(self, module: Module, inst: Instruction) -> Value | None:
         """A constant read as another type, where the operand is one."""

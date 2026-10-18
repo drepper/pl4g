@@ -76,12 +76,13 @@ class Inlining:
         """Inline what is worth inlining; report whether anything changed."""
         cyclic = in_a_cycle(module)
         counted = called_by_count(module)
-        changed = False
+        self.touched: list[Function] = []
         for func in in_call_order(module):
             if not func.blocks or id(func) in cyclic:
                 continue
-            changed |= self._into(module, func, cyclic, counted)
-        return changed
+            if self._into(module, func, cyclic, counted):
+                self.touched.append(func)
+        return bool(self.touched)
 
     def _into(self, module: Module, caller: Function, cyclic: frozenset[int],
               counted: dict[int, int]) -> bool:

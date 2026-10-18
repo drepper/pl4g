@@ -627,12 +627,14 @@ class _Says:
         return self._changed
 
 
-def _counting(monkeypatch) -> list[Module]:  # noqa: ANN001
-    """Replace the verifier by something that only counts, and return the count."""
+def _counting(monkeypatch) -> list[object]:  # noqa: ANN001
+    """Replace the verifier by something that only counts, and return what it was
+    asked to check each time: every function, or the ones a pass named."""
     from pypl4g.opt import pass_
 
-    seen: list[Module] = []
-    monkeypatch.setattr(pass_, "verify", seen.append)
+    seen: list[object] = []
+    monkeypatch.setattr(pass_, "verify",
+                        lambda module, functions=None: seen.append(functions))
     return seen
 
 
@@ -672,6 +674,37 @@ def test_the_last_pass_is_verified_after_whatever_it_says(monkeypatch) -> None: 
     manager.add(_Says(False))
     manager.run(module)
     assert len(seen) == 1
+
+
+def test_nothing_is_verified_where_nothing_asked(monkeypatch) -> None:  # noqa: ANN001
+    """An ordinary compilation does without: verifying is a check on the
+    compiler, which `--verify` and the test suite ask for."""
+    from pypl4g.opt.pass_ import PassManager
+
+    seen = _counting(monkeypatch)
+    manager = PassManager(verifying=False)
+    manager.add(_Says(True))
+    manager.add(_Says(False))
+    manager.run(Module("t"))
+    assert seen == []
+
+
+def test_only_what_a_pass_changed_is_verified_again(monkeypatch) -> None:  # noqa: ANN001
+    """A pass that names the functions it changed has those checked; one that
+    names none has everything checked, and so does the last."""
+    from pypl4g.opt.pass_ import PassManager
+
+    seen = _counting(monkeypatch)
+    module = Module("t")
+    changed = _startup(module)
+    naming = _Says(True)
+    naming.touched = [changed]
+    manager = PassManager(verifying=True)
+    manager.add(naming)
+    manager.add(_Says(True))
+    manager.add(_Says(False))
+    manager.run(module)
+    assert seen == [[changed], None, None]
 
 
 def test_a_check_that_holds_goes_away_with_its_condition() -> None:

@@ -45,19 +45,22 @@ class SimplifyCFG:
 
     def run(self, module: Module) -> bool:
         """Simplify every function; report whether anything changed."""
-        changed = False
+        self.touched: list[Function] = []
         for func in module.functions.values():
             if func.is_declaration:
                 continue
+            simpler = False
             for _ in range(ROUNDS):
                 round_ = (self._settle_branches(func)
                           | self._prune(func)
                           | self._settle_params(func)
                           | self._merge_blocks(func))
-                changed |= round_
+                simpler |= round_
                 if not round_:
                     break
-        return changed
+            if simpler:
+                self.touched.append(func)
+        return bool(self.touched)
 
     def _settle_branches(self, func: Function) -> bool:
         """Replace a branch on a known condition by the jump it would take.

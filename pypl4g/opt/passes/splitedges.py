@@ -50,12 +50,13 @@ class SplitEdges:
 
     def run(self, module: Module) -> bool:
         """Split what has to be split; report whether anything changed."""
-        changed = False
+        self.touched: list[Function] = []
         for func in module.functions.values():
             if func.is_declaration:
                 continue
-            changed |= self._split(func)
-        return changed
+            if self._split(func):
+                self.touched.append(func)
+        return bool(self.touched)
 
     def _split(self, func: Function) -> bool:
         """Put a block on every edge of *func* that needs one."""

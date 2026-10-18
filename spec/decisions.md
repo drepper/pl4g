@@ -10120,6 +10120,18 @@ answering a result it then takes apart, which is what let its way through for a 
 commit before views carried strides: a program doing no I/O compiles to a smaller image than it did, one doing I/O to one a few
 hundred bytes larger, and the smallest of those still takes about a third longer to compile, which is left in TODO-language.md.
 
+## 2026-10-18T10:00+02:00 — compiler
+
+**Verifying the intermediate representation is asked for, and then only what a pass changed**
+
+Measuring what was left of the cost of views that carry strides found two things.  A local `run` in `std` had `std.run`, the
+scheduler, lowered for every program doing I/O, lowering by name taking it for the function; renamed, with `done` beside
+`std.done`, and the question of names a definition binds itself left in TODO-pypl4g.md.  And verifying the module after every pass
+that changed it was half of what optimizing took, in every compilation.  Asked, the user chose to verify only the functions a pass
+changed, and to make verifying optional, with timings taken without it: `--verify`, or `PL4G_VERIFY=1`, which the test suite sets
+and `pl4g-timing` takes out -- LLVM's `-verify-each`, against keeping it in every compilation and against verifying in the suite
+alone.  Building `__pl4g_one_run`'s body only where a call to it survives was measured at 1.5 ms and is not done.
+
 Open questions
 --------------
 

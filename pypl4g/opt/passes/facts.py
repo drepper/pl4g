@@ -103,12 +103,13 @@ class Facts:
 
     def run(self, module: Module) -> bool:
         """Use what the branches settled; report whether anything changed."""
-        changed = False
+        self.touched: list[Function] = []
         for func in module.functions.values():
             if func.is_declaration or not func.blocks:
                 continue
-            changed |= self._use(func)
-        return changed
+            if self._use(func):
+                self.touched.append(func)
+        return bool(self.touched)
 
     def _use(self, func: Function) -> bool:
         """Walk the dominator tree, knowing at each block what holds there."""

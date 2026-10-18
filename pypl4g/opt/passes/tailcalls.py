@@ -46,11 +46,11 @@ class TailCalls:
 
     def run(self, module: Module) -> bool:
         """Do it for every function that has such a call."""
-        changed = False
+        self.touched: list[Function] = []
         for func in list(module.functions.values()):
-            if func.blocks:
-                changed |= self._loop(module, func)
-        return changed
+            if func.blocks and self._loop(module, func):
+                self.touched.append(func)
+        return bool(self.touched)
 
     def _loop(self, module: Module, func: Function) -> bool:
         """Turn *func*'s tail calls to itself into jumps to a loop's head."""

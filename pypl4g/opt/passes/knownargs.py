@@ -59,10 +59,9 @@ class KnownArguments:
                 grew |= self._learn(func, calls[id(func)], facts)
             if not grew:
                 break
-        changed = False
-        for func in closed:
-            changed |= self._apply(func, facts)
-        return changed
+        self.touched: list[Function] = [func for func in closed
+                                        if self._apply(func, facts)]
+        return bool(self.touched)
 
     def _callers(self, module: Module
                  ) -> tuple[dict[int, list[tuple[Function, CallInst]]],

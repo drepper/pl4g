@@ -342,9 +342,10 @@ class Driver:
         self._timed("semantic analysis", start)
         if self.diags.failed:
             return module
-        verify(module)
+        if self.options.verify:
+            verify(module)
         start = perf_counter()
-        manager = build_manager(self.options.opt_level)
+        manager = build_manager(self.options.opt_level, self.options.verify)
         manager.run(module)
         for timing in manager.timings:
             self.timings.append(Timing("".join(("pass ", timing.name)), timing.seconds))

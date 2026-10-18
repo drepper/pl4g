@@ -91,12 +91,13 @@ class SameValues:
 
     def run(self, module: Module) -> bool:
         """Share what can be shared; report whether anything was."""
-        changed = False
+        self.touched: list[Function] = []
         for func in module.functions.values():
             if func.is_declaration or not func.blocks:
                 continue
-            changed |= self._share(func)
-        return changed
+            if self._share(func):
+                self.touched.append(func)
+        return bool(self.touched)
 
     def _share(self, func: Function) -> bool:
         """Walk the dominator tree once, sharing as it goes."""
