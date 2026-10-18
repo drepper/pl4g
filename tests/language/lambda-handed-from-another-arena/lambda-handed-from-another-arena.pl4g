@@ -1,0 +1,21 @@
+※ pl4g-test: compile=error diag=4620
+
+※ A parameter `g: fn(u8) in a → u8` says what it is handed is kept in what `a` is given,
+※ so a lambda kept in another arena may not be handed to it.
+
+let std := ⎕import("std")
+
+fn adder(n: u8, a: &mut arena) → fn(u8) in a → u8:
+    λ x: u8 [n] in a → u8 { x + n }
+
+fn apply(g: fn(u8) in a → u8, a: &mut arena, x: u8) → u8:
+    g(x)
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let one: mut arena = ⎕arena
+    defer ⎕empty(one)
+    let two: mut arena = ⎕arena
+    defer ⎕empty(two)
+    let add5: fn(u8) → u8 = adder(5u8, &mut one)
+    if apply(add5, &mut two, 2u8) = 7u8: 0u6 else: 1u6

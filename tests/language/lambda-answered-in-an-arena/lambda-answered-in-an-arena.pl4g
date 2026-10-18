@@ -1,0 +1,26 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A function may answer a lambda kept in an arena a parameter names**: in its own
+※ signature, `fn(u8) in a → u8` with `a` an arena parameter says what the lambda brought
+※ in is kept in `a` -- where the lambda itself says it, `λ x: u8 [n] in a → u8`.  It is
+※ what `→ T in a` says of any answer, and a parameter `g: fn(u8) in a → u8` is what
+※ `s: T in a` says of one.  The type is `fn(u8) → u8` everywhere else, a type having no
+※ arena to name.
+※
+※ Compare: **Rust**, `fn adder<'a>(n: u8, a: &'a Bump) -> &'a dyn Fn(u8) -> u8`, the
+※ arena's lifetime on the answer; **C++** with `pmr`, where nothing says it.
+
+let std := ⎕import("std")
+
+fn adder(n: u8, a: &mut arena) → fn(u8) in a → u8:
+    λ x: u8 [n] in a → u8 { x + n }
+
+fn apply(g: fn(u8) in a → u8, a: &mut arena, x: u8) → u8:
+    g(x)
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let pool: mut arena = ⎕arena
+    defer ⎕empty(pool)
+    let add5: fn(u8) → u8 = adder(5u8, &mut pool)
+    if add5(1u8) = 6u8 ∧ apply(add5, &mut pool, 2u8) = 7u8: 0u6 else: 1u6

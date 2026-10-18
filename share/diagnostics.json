@@ -5258,7 +5258,7 @@
       "number": 4642,
       "name": "LANG_KEPT_IN_NOT_HEAP",
       "severity": "error",
-      "message": "a function type says what its lambda brought in is kept in '⎕heap' or says nothing, and '{name}' is not '⎕heap'",
+      "message": "a function type says what its lambda brought in is kept in '⎕heap' -- or, in a signature, in an arena parameter -- or says nothing, and '{name}' is neither",
       "args": [
         {
           "name": "name",
@@ -5266,7 +5266,7 @@
           "description": "what was named"
         }
       ],
-      "cause": "`fn(u8) in ⎕heap → u8` is the type of a lambda whose environment lasts as long as the program, so a value of it may be answered and kept anywhere.  An arena lasts as long as its maker keeps it, which nothing in a type can say.",
+      "cause": "`fn(u8) in ⎕heap → u8` is the type of a lambda whose environment lasts as long as the program, so a value of it may be answered and kept anywhere.  An arena lasts as long as its maker keeps it, which nothing in a type can say.  In a function's own signature -- its answer's type, or a parameter's -- the name of one of its arena parameters may be written there too: `→ fn(u8) in a → u8` says the lambda answered keeps what it brought in in `a`, which is what `→ T in a` says of any answer.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Lambdas / Where a lambda keeps what it brought in",

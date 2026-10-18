@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4642
+
+※ An arena may be named in a function type only where it is a parameter of the
+※ signature it is written in: anywhere else a type says only that what a lambda brought
+※ in lasts, and `⎕heap` is the one place that says so.
+
+let std := ⎕import("std")
+
+fn nowhere(n: u8) → fn(u8) in b → u8:
+    λ x: u8 [n] → u8 { x + n }
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

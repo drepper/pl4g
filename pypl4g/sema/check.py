@@ -1778,6 +1778,39 @@ def _holds_a_list(ty: Type) -> bool:
     return False
 
 
+def _kept_in_the_signature(node: ast.FuncDef) -> ast.FuncDef:
+    """*node* with `fn(…) in a → T` read as what it says in a signature.
+
+    In a function's answer type and in a parameter's, `a` one of the function's
+    parameters, it says the lambda keeps what it brought in in the arena `a`:
+    that the answer, or what the parameter is handed, is made in `a` -- which is
+    what `→ T in a` and `s: T in a` say, and how it is checked.  The type is then
+    the one it is anywhere else, a type having no arena it could name (4642);
+    written after a type that is not part of a signature, it is still refused.
+    """
+    names = {one.name for one in node.params}
+
+    def moved(ref: ast.TypeExpr | None) -> tuple[ast.TypeExpr | None,
+                                                   tuple[str, Span] | None]:
+        if isinstance(ref, ast.FuncTypeRef) and ref.kept_in is not None \
+                and ref.kept_in[0] in names:
+            return replace(ref, kept_in=None), ref.kept_in
+        return ref, None
+
+    changes: dict[str, object] = {}
+    ret, said = moved(node.ret_type)
+    if said is not None and not node.made_in:
+        changes["ret_type"], changes["made_in"] = ret, (said,)
+    params: list[ast.Param] = []
+    for param in node.params:
+        written, kept = moved(param.type)
+        params.append(replace(param, type=written, made_in=kept)
+                      if kept is not None and param.made_in is None else param)
+    if any(new is not old for new, old in zip(params, node.params)):
+        changes["params"] = tuple(params)
+    return replace(node, **changes) if changes else node
+
+
 def _changed_in_place(name: str, node: object) -> bool:
     """Whether *node* changes a list *name* holds -- or one inside it -- where it
     is: joins onto it, writes an element of it, takes one out or makes room in it,
@@ -6186,6 +6219,7 @@ class Checker:
 
     def _collect_function(self, node: ast.FuncDef, path: str) -> _Collected | None:
         """Register one function definition without looking at its body."""
+        node = _kept_in_the_signature(node)
         self._check_doc(node)
         if not self._declare(_declared_as(node), node.name_span, path):
             return None
