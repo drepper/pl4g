@@ -4565,7 +4565,7 @@
           "description": "what it was written after"
         }
       ],
-      "cause": "`in` names the arena an expression takes room from, so it may follow only something that takes room: a collection written out, a join of two strings or two lists, and an operator whose definition asks for an arena.  Everything else is worked out in registers and has no room to come from.",
+      "cause": "`in` names the arena an expression takes room from, so it may follow only something that takes room: a collection written out, a join of two strings or two lists, an operator whose definition asks for an arena, and a call that leaves out an arena it takes.  Everything else is worked out in registers and has no room to come from.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / An arena",

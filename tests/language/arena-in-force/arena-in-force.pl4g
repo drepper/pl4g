@@ -1,0 +1,29 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4614 LANG_ARENA_VALUE_OUTLIVES
+
+※ **An arena a call names none for is the one it stands in**: what `in` names
+※ around it, or `⎕heap` where nothing does.  `tagged` takes room from the arena
+※ it is handed, and `tagged(4u8) in scratch` hands it `scratch` without naming
+※ the parameter -- which is what makes `std.text(x, .base ← 16u8)` in a template's
+※ hole the template's own.  So its text goes with `scratch`, and a name bound
+※ further out may not keep it.  Outside any `in`, the same call takes `⎕heap`'s
+※ room, which lasts.
+※
+※ Compare: **Odin**'s `context.allocator`, an allocator in force that a call
+※ takes where it is given none; **Zig**, which hands every allocator over by
+※ name.
+
+fn tagged(n: u8, a: &mut arena) → str in a:
+    "#" ⧺ std.text(n, a) in a
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let lasting: str = tagged(3u8)
+    let kept: mut str = lasting
+    if #init.args > 0:
+        let scratch: mut arena = ⎕arena
+        kept ← tagged(5u8) in scratch
+        ⎕empty(scratch)
+    if kept = "#5": 0u6 else: 1u6

@@ -440,8 +440,50 @@ fn `⍕`(v: T') → str:
         std.text(v)
 ```
 
-What is not there yet: a `char`, there being no way to make a string of one; a floating-point number, whose shortest text that reads
-back as the same number is an algorithm of its own; and an enumeration, whose names do not reach run time.
+**A number may be written in another base**, from two to thirty-six, the digits past nine being letters, small or -- with
+`.upper ← true` -- capitals:
+
+```
+std.text(255u8, .base ← 16u8)                    ※ "ff"
+std.text(255u8, .base ← 16u8, .upper ← true)     ※ "FF"
+std.text(⁻5i8, .base ← 2u8)                      ※ "⁻101"
+```
+
+A base outside that range breaks the function's precondition, which stops the program as the caller's mistake -- while running,
+even where the base is written out, a generic function's conditions being checked in each body it becomes.  Neither `base` nor `upper` changes what any other type writes.  Nothing marks the base in what comes out --
+no `0x` -- because the program that asked for one knows which it asked for, and the text of a number in base sixteen is its digits;
+a prefix is a join.
+
+**`std.padded` puts a value's text in a field** at least so many characters wide:
+
+```
+std.padded(42u8, .width ← 5u64)                                    ※ "   42"
+std.padded("ab", .width ← 4u64)                                    ※ "ab  "
+std.padded(⁻42i8, .width ← 5u64, .fill ← '0')                      ※ "⁻0042"
+std.padded("ab", .width ← 5u64, .fill ← '*', .align ← std.Align.centre)   ※ "*ab**"
+```
+
+What is left over is `fill`, a space unless said otherwise, on the side `align` says.  `std.Align.natural`, the default, puts a
+number on the right and anything else -- text, a truth, a character, a record -- on the left, which is what lines up a column of
+either; `left`, `right` and `centre` say it outright, and centred, the odd one goes on the right.  **A width counts characters**, as
+`#` of text does, so `naïve` is five wide whatever its bytes; a character a terminal shows two columns wide is one all the same,
+which nothing short of the terminal can know.  Text wider than the field is all of it, nothing cut.  **Noughts filling a number on
+the right go after its sign**, `⁻0042`, the only way a padded number still reads as one; any text that begins with a sign is taken
+that way.
+
+The two are separate, and they compose: `std.padded(std.text(x, .base ← 16u8), .width ← 4u64, .fill ← '0', .align ←
+std.Align.right)` is four hexadecimal digits.  Inside a template, a call is written in the hole -- `std.format⌜"[{}]",
+std.padded(x, .width ← 4u64)⌝` -- and takes its room from the template's own arena, above.
+
+Compare: **Python**'s `format(x, '>8')`, `'08'` and `'x'`, and **Rust**'s `{:>8}`, `{:08}` and `{:x}`, say all of it in the template
+in a little language of its own; **C**'s `%8d`, `%08d` and `%x` too, and count bytes.  **C++**'s `std::format` follows Python.
+**Go**'s `strconv.FormatInt(x, 16)` is the base as a call, and `fmt`'s verbs are the template form.  **Common Lisp**'s `(format
+nil "~8,'0D" x)` and `~16R` are directives with parameters.  **APL**'s dyadic `⍕`, `8 0⍕x`, takes a width and a precision on the
+left.  Here it is a call with named arguments, which a reader who knows calls already reads, and which a generator emits without a
+second grammar to emit it in.
+
+What is not there yet: a floating-point number, whose shortest text that reads back as the same number is an algorithm of its own
+-- and with it a precision, which means nothing for a whole number; and an enumeration, whose names do not reach run time.
 
 **`format`, `print` and `println` take a template**, and they are macros:
 
@@ -691,6 +733,20 @@ left, so a parameter with a default before one without would leave a call one ar
 out.  Naming the arguments is what gets round that at a call; the rule is about what a call written without names can mean.
 Every parameter has a value at every call -- one the call wrote, by place or by name, or the default the definition wrote -- and
 a parameter with none of the three is refused (4530).
+
+**An arena a call leaves out is the one in force**: a parameter `&mut arena` given nothing is handed the arena of the `in` the
+call stands in, and `⎕heap` where there is none.  It is the one parameter that is given something without a default, and it
+may come before those that have one, so `fn text(v: T', a: &mut arena, base: u8 ← 10u8)` is called `std.text(v)`,
+`std.text(v, .base ← 16u8)` and `std.text(v, &mut scratch)`.  What it answers is made where the arena it was handed says, which
+is what the caller would have seen had it written the arena out -- so `kept ← std.text(v) in scratch` puts text in `kept` that goes
+when `scratch` does (4614 where `kept` outlives it).  That is what lets a template's hole hold a call: `{}` is `⍕ARG in pool`, and
+`std.padded(x, .width ← 4u64)` inside it takes its room from the pool the template's other pieces are made in.
+
+Compare: **Zig** has the arena as an argument at every call, which is what this is when written out; **Odin**'s `context.allocator`
+is the same rule as this -- an allocator in force that a call left without one uses -- but carried at run time through every call,
+where this is settled where the call is written and only for a call that says nothing; **Scala**'s implicit parameters, filled in
+from the scope by type, are the general mechanism this one case of is; **C++**'s `pmr` takes the default resource, a global, and
+**Rust** has no default at all.
 
 **Arguments are worked out left to right**, in the order they are written.  A call is the only thing in this language that can
 be noticed happening -- it may write a variable at the top level, and it may stop the program -- so it is the only thing the
@@ -3963,9 +4019,10 @@ let said: str = ⍕v in scratch
 ⎕empty(scratch)
 ```
 
-What may carry `in` is what takes room: a join of two strings or two lists, a collection written out, and an operator whose
-definition asks for an arena -- which is what `⍕v in scratch` is, the second operand being where to put what it builds.  Anything
-else is worked out in registers and has nowhere to come from (4568).
+What may carry `in` is what takes room: a join of two strings or two lists, a collection written out, an operator whose
+definition asks for an arena -- which is what `⍕v in scratch` is, the second operand being where to put what it builds -- and a
+call that leaves out an arena it takes, `std.text(v, .base ← 16u8) in scratch`.  Anything else is worked out in registers and has
+nowhere to come from (4568).
 
 **Taking room from an arena is not an effect**, from `⎕heap` or from any other.  What is made is new: nothing that was there
 before the call can reach it, so nothing anybody else holds changes, and a pure function may allocate wherever it likes -- named

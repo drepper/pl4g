@@ -213,8 +213,7 @@ removed or decided otherwise, which its last paragraph says.
         smallest value a signed type has comes out right.
         A `char` is covered too, `⎕str` being what makes a string of one.
         Left over: a floating-point number, whose shortest round-trip text is an algorithm
-        of its own; and an enumeration, whose names do not reach run time.  The digit table is a local filled
-        per call, a top-level array of string literals not being implemented (9902).
+        of its own; and an enumeration, whose names do not reach run time.
     [x] **reflection over a record.**  Done: `⎕isrecord(⌜T⌝)`, a truth the compiler
         settles and so the first predicate a compile-time condition admits;
         `⎕typename(⌜T⌝)`, the type written out; and `⎕fields(v)`, the fields as a tuple of
@@ -238,8 +237,11 @@ removed or decided otherwise, which its last paragraph says.
         the remaining arguments, so a macro is variadic without the language being.
     [ ] **`{name}` in a template**, which needs a piece made from text and is the one
         exception to hygiene the language admits.
-    [ ] **a width, a base and a precision**, which are calls in the hole and want the
-        `std.text` siblings with default arguments written.
+    [x] **a width and a base.**  Done on 2026-10-18: `std.text(v, .base ← 16u8, .upper ←
+        true)`, and `std.padded(v, .width ← 8u64, .fill ← '0', .align ← std.Align.right)`,
+        a width counting characters and noughts going after a sign.  A call in a hole takes
+        the template's arena: an `&mut arena` a call leaves out is the one in force.
+        Left over: **a precision**, which waits for floating-point text.
     [x] **a pool allocator for the formatting.**  Done: `EXPR in NAME` says which arena
         an expression takes room from, `⎕empty(NAME)` gives the whole of one back, `⎕arena`
         works inside a function, `std.text` takes a reference to the arena, `⍕v in a` is the

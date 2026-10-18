@@ -1988,6 +1988,39 @@ def _reached_from(value: Value, sources: Sequence[Value],
 _Laid = tuple[Value, Sequence[Value], Sequence[Value], bool]
 
 
+@dataclass(frozen=True, slots=True)
+class _Defaulted(ast.Expr):
+    """What a parameter is given where a call gives it nothing: the default its
+    definition writes, which is read where the definition is."""
+
+    value: ast.Expr
+
+
+def _could_be_an_arena(written: ast.TypeExpr) -> bool:
+    """Whether a parameter written *written* is a reference to an arena that may
+    be written, which a call may leave to the one it stands in."""
+    return isinstance(written, ast.RefTypeRef) and written.mutable \
+        and isinstance(written.pointee, ast.TypeRef) and written.pointee.name == "arena"
+
+
+def _compares_types(node: object) -> bool:
+    """Whether a type written as a value stands anywhere in *node*: a condition
+    holding one is answered while compiling."""
+    if isinstance(node, ast.Lifted):
+        return True
+    if isinstance(node, ast.Node):
+        return any(_compares_types(getattr(node, one.name)) for one in fields_of(node))
+    if isinstance(node, (tuple, list)):
+        return any(_compares_types(one) for one in node)
+    return False
+
+
+def _is_an_arena_handed(ty: Type) -> bool:
+    """Whether a parameter of *ty* is where its function takes room from: a
+    reference to an arena, which may be written."""
+    return isinstance(ty, PtrType) and ty.pointee is ARENA and ty.mutable
+
+
 def _not_copied_because(element: Type) -> str | None:
     """Why an array of *element* is not copied by copying its bytes, if it is
     not: an element pointing into room something else keeps would be a second
@@ -3754,6 +3787,9 @@ class Checker:
         #: The name a reference is being taken of, while one is: working the
         #: place out reads the name, and that read is the reference itself.
         self._taking_a_reference: str | None = None
+        #: The parameters each call handed the arena it stands in, having named
+        #: none for them, by the call's identity.
+        self._arena_in_force: dict[int, set[int]] = {}
         #: The signatures around what is being lowered, innermost last, each with
         #: the lifetime names it carries: a lambda's answer, or a function type's
         #: in the body, may live as long as one of those.
@@ -6595,6 +6631,17 @@ class Checker:
         self._received = receiving[0]
         return receiving[0].value
 
+    def _arenas_handed(self, expr: ast.Call, written: dict[int, ast.Expr],
+                       at: int) -> frozenset[int] | None:
+        """What parameter *at* of a call was handed the room of: what the call
+        wrote for it, or the arena it stands in where it wrote nothing and the
+        parameter took that; nothing where neither."""
+        if at in written:
+            return self._arenas_in(written[at])
+        if at in self._arena_in_force.get(id(expr), ()):
+            return self._out_of_arenas
+        return None
+
     def _written_for(self, expr: ast.Call, func: Function) -> dict[int, ast.Expr]:
         """What a call wrote for each parameter, by the parameter's place."""
         found: dict[int, ast.Expr] = {}
@@ -6640,9 +6687,11 @@ class Checker:
                 if at in func.writes_arrays:
                     self._container_handed(expr, func, written, at, arena_at)
                 continue
-            if arena_at is None or arena_at not in written:
+            handed = None if arena_at is None \
+                else self._arenas_handed(expr, written, arena_at)
+            if handed is None:
                 continue
-            stray = self._arenas_in(written[at]) - self._arenas_in(written[arena_at])
+            stray = self._arenas_in(written[at]) - handed
             for one in stray:
                 where = self._arena_by_id.get(one) or self._unknown_by_id.get(one)
                 if where is None and one != _HEAP:
@@ -6684,8 +6733,8 @@ class Checker:
                 elif at == HANDS_AT:
                     if self._received is not None:
                         made.add(id(self._received))
-                elif at in written:
-                    made.update(self._arenas_in(written[at]))
+                else:
+                    made.update(self._arenas_handed(expr, written, at) or ())
             self._last_made_in = frozenset(made)
             found = self._owner_of(self._last_made_in)
             if found is not None:
@@ -8750,17 +8799,20 @@ class Checker:
     # -- the conditions a body carries -----------------------------------------
 
     def _lower_conditions(self, builder: IRBuilder, node: ast.FuncDef,
-                          func: Function) -> None:
+                          func: Function, while_running: bool = False) -> None:
         """Emit the checks a function's `pre` clauses stand for.
 
         At the top of the body and once: a check in the callee that fails already
         names the function and, through the stack walk, who called it -- so the
         thing a check at every call site would buy is had for nothing, and there
-        is one copy of the code.
+        is one copy of the code.  *while_running* leaves out a condition comparing
+        types, which a generic function's call settled for the types it gave.
         """
         for clause in node.clauses:
             if clause.kind is not ast.ClauseKind.PRE \
                     or self._reading_of(clause) is not False:
+                continue
+            if while_running and _compares_types(clause.expr):
                 continue
             self._demanded(builder, clause, func,
                            "a pre-condition that does not hold",
@@ -12575,6 +12627,13 @@ class Checker:
         self._carried, self._loops, self._outside = set(), [], []
         self._initializing = self._assigning = self._operand_of = None
         self._handing_over = None
+        # This body's own conditions, at its entry and at its every `return`, and
+        # not those of the body whose call made it.
+        outer_demanding, self._demanding = self._demanding, (node, func)
+        outer_entry, self._at_entry = self._at_entry, {}
+        # What the caller has lent out is the caller's: a statement ending in
+        # here ends none of its, and nothing in here is lent from its names.
+        outer_borrows, self._borrows = self._borrows, []
         self._push_scope()
         try:
             assert node.body is not None
@@ -12585,6 +12644,7 @@ class Checker:
             arriving = [block.add_param(one, param.name)
                         for one, param in zip(func.ty.params, node.params)]
             for param, value in zip(node.params, arriving):
+                self._at_entry[param.name] = value
                 self._bind_local(param.name, value, param.span, param.mutable,
                                  is_parameter=True, builder=inner)
             if func.hands_out is not None:
@@ -12593,6 +12653,7 @@ class Checker:
                                        (func.hands_out, ".out"))),
                                    len(self._scopes))
             self._params_made_in(node, func)
+            self._lower_conditions(inner, node, func, while_running=True)
             self._lower_block(inner, node.body, func)
             if not inner.is_terminated:
                 self._all_closed(self._scopes, node.span)
@@ -12616,6 +12677,8 @@ class Checker:
              self._answer_kinds, self._thin_to, self._answer_arms,
              self._yield_answer, self._hands_out, self._hands_out_local,
              self._receiving, self._unscanned) = outer
+            self._demanding, self._at_entry = outer_demanding, outer_entry
+            self._borrows = outer_borrows
 
     def _lower_generic(self, builder: IRBuilder, expr: ast.Call,
                        written: _Generic, expected: Type | None) -> Value:
@@ -12630,15 +12693,36 @@ class Checker:
         """
         params = written.written_params if written.written_params is not None \
             else written.node.params
-        if len(expr.args) != len(params):
-            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
-                             name=written.node.name,
-                             expected=len(params),
-                             found=len(expr.args))
+        handed = self._generic_arguments(expr, written, params)
+        if handed is None:
             return UndefConst(ERROR)
         bound: dict[str, Type] = {}
         args: list[Value] = []
-        for at, (one, param) in enumerate(zip(expr.args, params)):
+        for at, (one, param) in enumerate(zip(handed, params)):
+            if one is None:
+                # An arena the call names none for: the one it stands in.
+                with self._in_scope_of(written):
+                    wanted_arena = self._worked_out(param.type, bound)
+                if wanted_arena is None or not _is_an_arena_handed(wanted_arena):
+                    self._diags.emit(D.LANG_CALL_PARAMETER_MISSING, expr.span,
+                                     name=param.name)
+                    return UndefConst(ERROR)
+                args.append(self._out_of(builder, expr.span))
+                self._arena_in_force.setdefault(id(expr), set()).add(at)
+                continue
+            if isinstance(one, _Defaulted):
+                # What the definition says it is given where nothing is, read
+                # where the definition is written.
+                with self._in_scope_of(written):
+                    wanted_default = self._worked_out(param.type, bound)
+                    value = self._lower_into(builder, one.value, wanted_default,
+                                             expr.span) \
+                        if wanted_default is not None \
+                        else self._lower_expr(builder, one.value, None)
+                if self._value_type_of(value) is ERROR:
+                    return UndefConst(ERROR)
+                args.append(value)
+                continue
             if isinstance(param.type, ast.LiftedTypeRef):
                 # A type, read where the call is and settling what the
                 # definition names: nothing is handed over.
@@ -12734,6 +12818,60 @@ class Checker:
         if func is None:
             return UndefConst(ERROR)
         return self._made_call(builder, expr, func, args, expected)
+
+    def _generic_arguments(self, expr: ast.Call, written: _Generic,
+                           params: Sequence[ast.Param]
+                           ) -> list[ast.Expr | None] | None:
+        """What a call of a generic function hands each parameter, in the
+        parameters' order: what it wrote there by place or by name, the default
+        the definition gives where it wrote nothing -- or nothing, for an arena
+        it leaves to the one it stands in.  Refused, and nothing, where a name
+        is not a parameter's, says one twice, or comes before a place."""
+        handed: list[ast.Expr | None] = [None] * len(params)
+        filled = [False] * len(params)
+        names = [param.name for param in params]
+        place = 0
+        named = False
+        for one in expr.args:
+            if isinstance(one, ast.Named):
+                named = True
+                if one.name not in names:
+                    self._diags.emit(D.LANG_CALL_UNKNOWN_PARAMETER, one.name_span,
+                                     name=one.name, func=written.node.name)
+                    return None
+                at = names.index(one.name)
+                if filled[at]:
+                    self._diags.emit(D.LANG_CALL_PARAMETER_TWICE, one.name_span,
+                                     name=one.name)
+                    return None
+                handed[at], filled[at] = one.value, True
+                continue
+            if named:
+                self._diags.emit(D.LANG_CALL_POSITION_AFTER_NAME, one.span)
+                return None
+            if place >= len(params):
+                self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                                 name=written.node.name, expected=len(params),
+                                 found=len(expr.args))
+                return None
+            handed[place], filled[place] = one, True
+            place += 1
+        for at, param in enumerate(params):
+            if filled[at]:
+                continue
+            if param.default is not None:
+                handed[at] = _Defaulted(span=param.default.span,
+                                        value=param.default)
+            elif not _could_be_an_arena(param.type):
+                if not named and not any(one.default is not None for one in params):
+                    self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                                     name=written.node.name, expected=len(params),
+                                     found=len(expr.args))
+                else:
+                    self._diags.emit(D.LANG_CALL_PARAMETER_MISSING, expr.span,
+                                     name=param.name)
+                return None
+        return handed
 
     def _conditions_can_hold(self, written: _Generic, bound: dict[str, Type],
                              span: Span) -> bool:
@@ -12922,7 +13060,11 @@ class Checker:
             return UndefConst(ERROR)
         made: list[Value] = []
         for at, (one, wanted) in enumerate(zip(args, func.ty.params)):
-            given = self._as_wanted(builder, one, wanted, expr.args[at].span)
+            # Where the argument is written, where it is; otherwise the call.
+            given = self._as_wanted(builder, one, wanted,
+                                    expr.args[at].span if at < len(expr.args)
+                                    and not isinstance(expr.args[at], ast.Named)
+                                    else expr.span)
             if self._value_type_of(given) is ERROR:
                 return UndefConst(ERROR)
             made.append(given)
@@ -23283,7 +23425,8 @@ class Checker:
                              name=func.name, expected=len(wanted),
                              found=len(values) + len(named))
             return None
-        if len(values) < len(wanted) and not named and not any(func.defaults):
+        if len(values) < len(wanted) and not named and not any(func.defaults) \
+                and not all(_is_an_arena_handed(one) for one in wanted[len(values):]):
             # Nothing in the call or the definition says anything but the
             # places, so what is wrong with it is its length and that is what
             # to say about it.
@@ -23317,6 +23460,13 @@ class Checker:
             if value is not None:
                 continue
             given = func.defaults[at] if at < len(func.defaults) else None
+            if given is None and _is_an_arena_handed(wanted[at]):
+                # An arena the call does not name is the one it stands in: what
+                # `in` names around it, or `⎕heap` where nothing does -- the
+                # lexical rule a join follows, reaching a call's parameter.
+                held[at] = self._out_of(builder, expr.span)
+                self._arena_in_force.setdefault(id(expr), set()).add(at)
+                continue
             if given is None:
                 self._diags.emit(D.LANG_CALL_PARAMETER_MISSING, expr.span,
                                  name=(func.param_names[at]
@@ -24408,9 +24558,16 @@ class Checker:
                 handed = ast.AddressOf(span=expr.arena.span, operand=expr.arena,
                                        mutable=True)
             self._last_made_in = None
-            found = self._operator_call(
-                builder, _glyph_of(inside), (*_operands_of(inside), handed),
-                expr.span, expected)
+            # And what its operands take room from where they name none.
+            outer = (self._out_of_arena, self._out_of_arenas)
+            self._out_of_arena = place
+            self._out_of_arenas = self._arenas_in(expr.arena)
+            try:
+                found = self._operator_call(
+                    builder, _glyph_of(inside), (*_operands_of(inside), handed),
+                    expr.span, expected)
+            finally:
+                self._out_of_arena, self._out_of_arenas = outer
             if self._last_made_in is not None:
                 # The operator says its answer is made in the arena it is handed,
                 # which is the one `in` names and nothing its operands were made in.
@@ -24424,7 +24581,8 @@ class Checker:
             self._diags.emit(D.LANG_HANDED_OUT_IN_AFTER_CALL, expr.span,
                              name=handing)
             return UndefConst(ERROR)
-        if not _takes_room(inside):
+        calling = isinstance(inside, ast.Call)
+        if not calling and not _takes_room(inside):
             self._diags.emit(D.LANG_ALLOCATED_NOT_A_PLACE, expr.span,
                              found=_about_the_shape(inside))
             return UndefConst(ERROR)
@@ -24435,6 +24593,14 @@ class Checker:
             found = self._lower_expr(builder, inside, expected)
         finally:
             self._out_of_arena, self._out_of_arenas = outer
+        if calling and not _takes_room(inside) \
+                and id(inside) not in self._arena_in_force \
+                and self._value_type_of(found) is not ERROR:
+            # A call takes room from an arena where it leaves its arena to the
+            # one it stands in, and from nothing `in` could name otherwise.
+            self._diags.emit(D.LANG_ALLOCATED_NOT_A_PLACE, expr.span,
+                             found=_about_the_shape(inside))
+            return UndefConst(ERROR)
         held = self._value_type_of(found)
         if isinstance(inside, ast.ArrayLit) and isinstance(held, ArrayType) \
                 and not owned.points(held.element):

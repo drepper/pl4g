@@ -1,0 +1,39 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **`std.padded` is a value's text in a field at least so many characters
+※ wide**, the rest *fill* on the side *align* says: a number on the right and
+※ anything else on the left unless said otherwise, centred with the odd one on
+※ the right.  A width counts characters, so `naïve` is five wide whatever its
+※ bytes; text wider than the field is all of it.  Noughts on the right of a
+※ number keep its sign in front of them, `⁻0042`, and a value written in another
+※ base is padded as its text: `std.padded(std.text(x, .base ← 16u8), …)`.
+※
+※ Compare: **Python**'s `format(x, '>8')`, `'08'` and `'^8'`, and **Rust**'s
+※ `{:>8}` and `{:08}`, which say the same inside the template, where this says
+※ it in a call; **C**'s `%8d` and `%08d`, which count bytes.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    if std.padded(42u8, .width ← 5u64) ≠ "   42":
+        return 1u6
+    if std.padded("ab", .width ← 4u64) ≠ "ab  ":
+        return 2u6
+    if std.padded(⁻42i8, .width ← 5u64, .fill ← '0') ≠ "⁻0042":
+        return 3u6
+    if std.padded("ab", .width ← 5u64, .align ← std.Align.centre, .fill ← '*') ≠ "*ab**":
+        return 4u6
+    if std.padded("naïve", .width ← 6u64) ≠ "naïve ":
+        return 5u6
+    if std.padded(12345u16, .width ← 3u64) ≠ "12345":
+        return 6u6
+    if std.padded(7u8, .width ← 3u64, .align ← std.Align.left) ≠ "7  ":
+        return 7u6
+    let hex: str = std.padded(std.text(10u8, .base ← 16u8), .width ← 2u64,
+                              .fill ← '0', .align ← std.Align.right)
+    if std.format⌜"[{}]", hex⌝ ≠ "[0a]":
+        return 8u6
+    if std.padded("+7", .width ← 4u64, .fill ← '0', .align ← std.Align.right) ≠ "+007":
+        return 9u6
+    0u6

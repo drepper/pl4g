@@ -1,7 +1,8 @@
 """`std.print` and `std.println` build their text in a pool of the call's own.
 
 What is checked is that nothing on the way -- the joins the template comes to,
-`⍕` of each argument, `std.text` and what it calls -- takes room from `⎕heap`: the
+`⍕` of each argument, `std.text` and what it calls, and a hole written as a call
+of `std.padded` or `std.text` that names no arena -- takes room from `⎕heap`: the
 only place the heap is named is the dispatch every allocator goes through, in the
 branch a caller handing it the heap would take, and no caller does.  A program's
 output looks the same either way, so the code is what is asked.
@@ -26,6 +27,7 @@ fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let p: Point = Point(.x \N{LEFTWARDS ARROW} 1u8, .y \N{LEFTWARDS ARROW} \N{SUPERSCRIPT MINUS}2i16)
     _ \N{LEFTWARDS ARROW} std.println\N{TOP LEFT CORNER}&mut init.io.output, "{} {} {} {} {}", 42u16, true, 'c', "text", p\N{TOP RIGHT CORNER}
     _ \N{LEFTWARDS ARROW} std.print\N{TOP LEFT CORNER}&mut init.io.output, "{}", \N{SUPERSCRIPT MINUS}7i32\N{TOP RIGHT CORNER}
+    _ \N{LEFTWARDS ARROW} std.println\N{TOP LEFT CORNER}&mut init.io.output, "[{}] [{}]", std.padded(p.x, .width \N{LEFTWARDS ARROW} 4u64), std.text(255u8, .base \N{LEFTWARDS ARROW} 16u8)\N{TOP RIGHT CORNER}
     0
 """
 

@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok run=native,qemu exit=89 diag=none
+
+※ **A generic function's condition is checked as any function's is**, at the
+※ top of each instance's body, for what the call handed it -- a condition over
+※ values, worked out while running.  One comparing types was settled for the
+※ types the call gave, where the call is.
+
+fn clamped(v: T', most: u8) → T' pre(most ≥ 1u8):
+    v
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let most: u8 = (⎕narrow(⎕drop(#init.args), ⌜u8⌝) ?? 1u8) - 1u8
+    if clamped(3u16, most) = 3u16: 0u6 else: 1u6

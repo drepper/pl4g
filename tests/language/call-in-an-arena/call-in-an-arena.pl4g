@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A call that takes room from an arena it leaves out may stand under `in`**,
+※ which says which: `tagged(4u8) in scratch` hands `scratch` to `tagged`, as a
+※ join under `in` takes its room from there.  Without `in`, it is `⎕heap`'s.
+※ A call that takes no arena so is refused under `in` (4568), there being no
+※ room it could take.
+
+fn tagged(n: u8, a: &mut arena) → str in a:
+    "#" ⧺ std.text(n, a) in a
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let scratch: mut arena = ⎕arena
+    defer ⎕empty(scratch)
+    let here: str = tagged(4u8) in scratch
+    let hex: str = std.text(255u8, .base ← 16u8) in scratch
+    let lasting: str = tagged(5u8)
+    if here = "#4" ∧ hex = "ff" ∧ lasting = "#5": 0u6 else: 1u6

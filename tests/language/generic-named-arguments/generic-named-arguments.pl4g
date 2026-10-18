@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A generic function takes arguments by name and has defaults**, as any other
+※ function does: what each argument settles about the types is read in the
+※ order the parameters are written, whatever order the call writes them in, and
+※ a default is read where the definition is.
+
+fn picked(one: T', other: T', first: bool ← true) → T':
+    if first: one else: other
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    if picked(3u8, 2u8) ≠ 3u8:
+        return 1u6
+    if picked(3u8, .first ← false, .other ← 4u8) ≠ 4u8:
+        return 2u6
+    if picked(2i16, 5i16, false) ≠ 5i16:
+        return 3u6
+    0u6

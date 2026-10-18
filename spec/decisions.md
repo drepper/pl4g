@@ -10148,6 +10148,27 @@ grows.  A table in the image no longer walks in the order a table built while ru
 any more -- and the test suite sets `PL4G_HASH_SEED`, so that a test depending on an order it may not depend on fails every time and
 not one time in many.
 
+## 2026-10-18T15:30+02:00 — language
+
+**A width, a base, and the arena a call leaves out**
+
+The user asked for the next step of formatting in TODO-language.md, a width, a base and a precision, and chose **the base on
+`std.text` and the padding a function of its own, `std.padded`**, against one function taking everything (Python's format
+specification, C's `%08x`) and against a little language inside the template's braces (Python, Rust, C++); **a width that counts
+characters**, as `#` of text does, against bytes (C) and against the columns a terminal shows (`wcwidth`), which only the terminal
+knows; and **noughts after the sign**, with numbers on the right and anything else on the left unless said otherwise, which is
+Python's and Rust's `0` flag.  That a call in a hole could not hand over the template's arena asked one more question, and the user
+chose **an arena a call leaves out being the one in force** -- the `in` the call stands in, or `⎕heap` -- against writing the pool
+out in every hole, which the hygiene of the macro forbids, and against keeping the call outside the template; Odin's
+`context.allocator`, settled where the call is written rather than carried while running.  A precision is left with the
+floating-point numbers it means something for.
+
+Taken without asking, as what those come to: `base` is from two to thirty-six, a precondition, with `upper` for capitals and no
+prefix; `std.Align` is `natural`, `left`, `right` and `centre`, and centred, the odd one goes on the right.  Making it work found
+that a generic function was called neither with named arguments nor with defaults, that its preconditions were never checked, and
+that the body of one lowered inside a caller's statement shared the caller's borrows, so that what the body's statements did to
+them was done to the caller's -- and the second hole of a template found the pool still lent to the first.  All three are fixed.
+
 Open questions
 --------------
 

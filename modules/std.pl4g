@@ -429,10 +429,20 @@ fn Io.println(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
 ※※ pairs, which `comptime foreach` walks.  It recurses, so a field that is a
 ※※ record is written the same way.
 ※※
+※※ A number is written in *base*, ten unless said otherwise and anything from two
+※※ to thirty-six, the digits past nine being letters -- small ones, or capitals
+※※ where *upper* says so: `std.text(x, .base ← 16u8)`.  Either is ignored for a
+※※ value that is not a number.  The arena is the one the call stands in where it
+※※ names none, which in a template's hole is the template's own.
+※※
 ※※ \param v what to write
+※※ \param a the arena the text is made in
+※※ \param base how many digits a place of a number has
+※※ \param upper whether the digits past nine are capitals
 ※※ \return what a program would have written to mean it
 @[export]
-fn text(v: T', a: &mut arena) → str in a, ⎕static:
+fn text(v: T', a: &mut arena, base: u8 ← 10u8, upper: bool ← false) → str in a, ⎕static
+        pre(base ≥ 2u8 ∧ base ≤ 36u8):
     comptime if ⎕typeof(⌜v⌝) = ⌜str⌝:
         ※ Copied, so that what comes back is made in `a` as the signature says:
         ※ the text handed over may be made in an arena that goes first.
@@ -462,16 +472,16 @@ fn text(v: T', a: &mut arena) → str in a, ⎕static:
         ※ negative and its digit is what that is away from nought, which is the one
         ※ way to write the smallest value a type has, there being no positive of it.
         let zero: T' = ⎕narrow(0u8, ⌜T'⌝) ?? v
-        let ten: T' = ⎕narrow(10u8, ⌜T'⌝) ?? v
+        let radix: T' = ⎕narrow(base, ⌜T'⌝) ?? v
         let below: bool = v < zero
         let out: mut str = ""
         let rest: mut T' = v
         while §places true:
-            let d: T' = rest % ten ?? zero
+            let d: T' = rest % radix ?? zero
             let away: T' = if below: zero - d else: d
             let place: u64 = ⎕narrow(away, ⌜u64⌝) ?? 0u64
-            out ← digit(place) ⧺ out in a
-            rest ← rest ÷ ten ?? zero
+            out ← digit(place, upper) ⧺ out in a
+            rest ← rest ÷ radix ?? zero
             if rest = zero:
                 break §places
         ※ The raised minus the language writes a negative literal with, so that what
@@ -485,11 +495,100 @@ fn text(v: T', a: &mut arena) → str in a, ⎕static:
 ※※ allocator.  One function for every integer type, where a table built in the
 ※※ generic body would be built in every instantiation.
 ※※
-※※ \param d a number below ten
+※※ \param d a number below thirty-six
+※※ \param upper whether a digit past nine is a capital
 ※※ \return its digit
-fn digit(d: u64) → str in ⎕static:
-    let digits: str⟦10⟧ = ⟦"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"⟧ in ⎕static
-    digits⟦⎕unit(d, ⌜idx⌝)⟧
+fn digit(d: u64, upper: bool) → str in ⎕static:
+    let small: str⟦36⟧ = ⟦"0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+                          "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+                          "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y",
+                          "z"⟧ in ⎕static
+    let capital: str⟦36⟧ = ⟦"0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+                            "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
+                            "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y",
+                            "Z"⟧ in ⎕static
+    if upper: capital⟦⎕unit(d, ⌜idx⌝)⟧ else: small⟦⎕unit(d, ⌜idx⌝)⟧
+
+※※ Where a value's text stands in a field wider than it.
+※※
+※※ \details `natural` is what the value is: a number on the right and anything else
+※※ on the left, which is what lines up a column of each.
+@[export]
+enum Align:
+    natural ;
+    left ;
+    right ;
+    centre
+
+※※ The text of a value in a field at least *width* characters wide.
+※※
+※※ \details What is left over is *fill*, on whichever side *align* says; centred,
+※※ the odd one goes on the right.  A width counts characters, as `#` of text does,
+※※ so a character of several bytes is one -- and one that a terminal shows two
+※※ columns wide is one as well, which nothing here can know.  Text wider than the
+※※ field is all of it.  A field filled with noughts on the right of a number keeps
+※※ the sign in front of them, `⁻0042`, which is the only way a number padded so
+※※ reads as one; any text that begins with a sign is taken that way.
+※※
+※※ So `std.padded(x, .width ← 8u64)` is a number in a column, and
+※※ `std.padded(std.text(x, .base ← 16u8), .width ← 4u64, .fill ← '0',
+※※ .align ← std.Align.right)` four hexadecimal digits.
+※※
+※※ \param v what to write; text is itself
+※※ \param a the arena the text is made in
+※※ \param width how many characters the field is at least
+※※ \param fill what the rest of the field is made of
+※※ \param align where the value goes in the field
+※※ \return the field
+@[export]
+fn padded(v: T', a: &mut arena, width: u64 ← 0u64, fill: char ← ' ',
+          align: Align ← Align.natural) → str in a, ⎕static:
+    let said: str = text(v, a)
+    let count: u64 = ⎕drop(#said)
+    if count ≥ width:
+        return said
+    let way: mut Align = align
+    if way = Align.natural:
+        comptime if ⎕typeof(⌜v⌝) = ⌜str⌝:
+            way ← Align.left
+        comptime elif ⎕typeof(⌜v⌝) = ⌜bool⌝:
+            way ← Align.left
+        comptime elif ⎕typeof(⌜v⌝) = ⌜char⌝:
+            way ← Align.left
+        comptime elif ⎕isrecord(⌜T'⌝):
+            way ← Align.left
+        else:
+            way ← Align.right
+    let gap: u64 = width - count
+    let before: mut u64 = gap ÷ 2u64 ?? 0u64
+    if way = Align.left:
+        before ← 0u64
+    elif way = Align.right:
+        before ← gap
+    let one: str = ⎕str(fill, a)
+    let ahead: mut str = ""
+    let n: mut u64 = 0u64
+    while n < before:
+        ahead ← ahead ⧺ one in a
+        n ← n + 1u64
+    let behind: mut str = ""
+    while n < gap:
+        behind ← behind ⧺ one in a
+        n ← n + 1u64
+    if fill = '0' and before ≠ 0u64:
+        ※ Noughts go after a sign, which stays in front.
+        let first: mut bool = true
+        let sign: mut str = ""
+        let rest: mut str = ""
+        foreach c: char = said:
+            if first and (c = '⁻' or c = '+'):
+                sign ← ⎕str(c, a)
+            else:
+                rest ← rest ⧺ ⎕str(c, a) in a
+            first ← false
+        if sign ≠ "":
+            return sign ⧺ ahead ⧺ rest ⧺ behind in a
+    ahead ⧺ said ⧺ behind in a
 
 ※※ The same, written where a reader expects an operator.
 ※※

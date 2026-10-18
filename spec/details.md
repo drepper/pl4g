@@ -2756,6 +2756,20 @@ it back, because a call to a generic function stands in the middle of another bo
 while its body is.  `self._bound` carries what each type parameter is, and `_named_type` reads it -- which is the whole of the
 substitution: there is no rewriting of the tree, only a map consulted while the types in it are resolved.
 
+What is put aside includes **the borrows the caller has out**: the body starts with none and the caller's come back when it is
+done.  They used to be shared, and a statement ending in the body ended the caller's statement borrows with it, or failed to, by
+turns -- which a template with two holes found, its second hole being told the pool was still lent to its first.  And it includes
+**the conditions being held to**, `_demanding`: the body's own `pre` is checked at its entry by `_lower_conditions` with
+`while_running`, which leaves out a clause comparing types (settled at the call, 4918), and its `post` at each `return`.  Before,
+neither was checked, and the return of an instance was held to its caller's.
+
+**Arguments are matched to parameters as in any call**, by place and then by name, by `_generic_arguments`: a parameter left out
+takes its default, lowered in the definition's own scope, and an `&mut arena` left out is `None` there and handed the arena in
+force -- `_out_of`, the one the innermost `in` around the call names, or `⎕heap`.  An ordinary call does the same in
+`_given_arguments`, and both note the call in `_arena_in_force`, so that `_where_made` takes the answer to be made in that arena
+(`_arenas_handed`) and `_lower_allocated` lets the call carry an `in` at all; a call with `in` that leaves out no arena is still
+refused (4568).
+
 **One instance per set of types**, held on the `_Generic` and keyed by the types.  A second call saying what an earlier one said
 gets the same function back, which is what keeps a loop that calls one from emitting a copy each time round.  A function that
 calls itself with the types it already has is refused rather than looped over: what it would call is the one being made, which is

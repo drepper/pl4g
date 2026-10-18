@@ -1,0 +1,11 @@
+※ pl4g-test: compile=ok run=native,qemu exit=89 diag=none
+
+※ A base is from two to thirty-six, which the signature says: one worked out to
+※ be anything else stops the program as the caller's mistake.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let base: u8 = ⎕narrow(⎕drop(#init.args), ⌜u8⌝) ?? 0u8
+    if std.text(7u8, .base ← base) = "7": 0u6 else: 1u6

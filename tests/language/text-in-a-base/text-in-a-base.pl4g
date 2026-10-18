@@ -1,0 +1,29 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **`std.text` writes a number in any base from two to thirty-six**, the digits
+※ past nine letters -- small ones, or capitals where `.upper` says so.  Both are
+※ arguments with defaults, so the ordinary call says neither, and a base is
+※ checked by the signature: one outside the range is the caller's mistake (89).
+※ What is not a number ignores both.
+※
+※ Compare: **C**'s `printf("%x")` and **C++**'s `std::hex`, which know eight,
+※ ten and sixteen only; **Python**'s `int(s, base)`, which reads any of these
+※ and writes three of them; **Go**'s `strconv.FormatInt(n, base)`, which is this.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    if std.text(255u8, .base ← 16u8) ≠ "ff":
+        return 1u6
+    if std.text(255u8, .base ← 16u8, .upper ← true) ≠ "FF":
+        return 2u6
+    if std.text(⁻5i8, .base ← 2u8) ≠ "⁻101":
+        return 3u6
+    if std.text(35u64, .base ← 36u8) ≠ "z" ∨ std.text(0u16, .base ← 7u8) ≠ "0":
+        return 4u6
+    if std.text(⁻128i8, .base ← 16u8) ≠ "⁻80":
+        return 5u6
+    if std.text("plain", .base ← 2u8) ≠ "plain" ∨ std.text(1234u32) ≠ "1234":
+        return 6u6
+    0u6
