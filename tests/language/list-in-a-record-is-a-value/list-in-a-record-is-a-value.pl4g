@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A record holding a list is a value as the list is: copied into a place that may change
+※ it, it gets a list of its own, so writing `z.items` leaves `y.items` -- and `b.items`,
+※ read out through a reference by `items` -- as they were.
+
+let std := ⎕import("std")
+type Bag = { items : [u8] }
+
+fn items(b: &Bag) → [u8]:
+    b⌖.items
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let b: mut Bag = Bag(.items ← [1u8, 2u8])
+    let x: mut [u8] = items(&b)
+    x⟦0⟧ ← 9u8
+    let y: Bag = b
+    let z: mut Bag = y
+    z.items⟦1⟧ ← 8u8
+    if b.items⟦0⟧ ≠ 1u8: 1u6 elif y.items⟦1⟧ ≠ 2u8: 2u6 else: 0u6
