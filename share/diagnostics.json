@@ -3670,7 +3670,7 @@
           "description": "the type of what was written"
         }
       ],
-      "cause": "A loop written with a binding takes its values from an iterator, and a range is the only thing that is one so far.  A single value is not a sequence of values, and there is nothing for a turn to be.",
+      "cause": "A loop written with a binding takes its values from an iterator: a range, an array, a list, a string, a set, a dictionary, an iterator (`⇉T`), a generator's call, or a value of a type with a generator `each`.  A single value is not a sequence of values, and there is nothing for a turn to be.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Statements / foreach",
@@ -10419,6 +10419,28 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition / Operators",
         "requirement": "An exported operator is in force where its module is imported, and two of one glyph are refused."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4925,
+      "name": "LANG_EACH_NOT_A_GENERATOR",
+      "severity": "note",
+      "message": "'{type}.each' is not a generator, and a loop walks a value of '{type}' by an 'each' that is",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type whose value was to be walked"
+        }
+      ],
+      "cause": "A value of a type of the program's own is walked by the generator written inside the type under the name `each`, `fn T.each(v: T) ⇉ E`: the walk is that generator's call.  A function of that name that answers a value once is not one, and there is nothing for a turn of the loop to be.  Writing its answer with `⇉` and its values with `yield` makes it the walk.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / foreach",
+        "requirement": "A value of a type with a generator `each` is walked by that generator."
       },
       "since": "0.1",
       "default_enabled": true,

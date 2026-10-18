@@ -208,7 +208,15 @@
             "named": true
           },
           {
+            "type": "identifier",
+            "named": true
+          },
+          {
             "type": "list_literal",
+            "named": true
+          },
+          {
+            "type": "member_expression",
             "named": true
           },
           {

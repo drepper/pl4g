@@ -407,6 +407,20 @@ class CoroutineFrame(Type):
 
     name: str
 
+    def __eq__(self, other: object) -> bool:
+        """The same frame only as itself.
+
+        Written out because `eq=False` only keeps the dataclass from writing
+        one: what is inherited is the base's, which compares no fields and so
+        takes any two frames for one -- and two walks' descriptions that differ
+        only in the frame for one type, one of them laid out too small.
+        """
+        return self is other
+
+    def __hash__(self) -> int:
+        """By identity, since that is what equality is."""
+        return id(self)
+
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
         return "".join(("frame<", self.name, ">"))

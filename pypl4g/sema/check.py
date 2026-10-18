@@ -846,6 +846,10 @@ _PURITY: Final[frozenset[int]] = frozenset({
 #: The names of the functions a macro is given, and what each answers.  They are
 #: the questions about a piece of the program and the two that build one; the machine
 #: that runs a macro is what gives them a meaning, and nothing here does.
+#: The name of the generator a loop walks a value of a program's own type by:
+#: `fn T.each(v: T) ⇉ E` makes `foreach x := v` a walk of `T.each(v)`.
+EACH_NAME: Final[str] = "each"
+
 QUOTE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "quote"))
 FILL_NAME: Final[str] = "".join((BUILTIN_GLYPH, "fill"))
 FILL_NUMBER_NAME: Final[str] = "".join((BUILTIN_GLYPH, "fillnumber"))
@@ -1441,7 +1445,11 @@ def _count(node: object, kind: type) -> int:
 def _mentioned(node: object, into: set[str]) -> None:
     """Every name written below *node* that could stand for a function: a bare
     name, the last part of a path, an operator's glyph.  More than are called,
-    which is what makes it safe to lower no more than these."""
+    which is what makes it safe to lower no more than these.
+
+    A loop, `yield ⇉` and a call -- one handing a value to a `⇉T` parameter,
+    `⎕start`, `⎕enumerate` -- may walk a value of a type with an `each`, which
+    calls it without writing its name, so each of those mentions `each`."""
     match node:
         case ast.NameRef():
             into.add(node.name)
@@ -1449,6 +1457,8 @@ def _mentioned(node: object, into: set[str]) -> None:
             into.add(node.name)
         case ast.Fresh():
             into.add(node.glyph)
+        case ast.ForEach() | ast.Yield() | ast.Call():
+            into.add(EACH_NAME)
     if isinstance(node, ast.Node):
         for one in fields_of(node):
             _mentioned(getattr(node, one.name), into)
@@ -3667,6 +3677,11 @@ class Checker:
         #: The generators being written into a loop just now, which a walk of
         #: one of them inside its own body may not be.
         self._writing_in: list[int] = []
+        #: Which generators each generator's body walks through calls, as they
+        #: are found: a walk that closes a ring of them is a frame that would
+        #: have to hold itself, however the generators were named.
+        self._walks_into: dict[int, list[_Generator]] = {}
+        self._walks_itself_at: set[int] = set()
         #: How many names `¨` has made up, so that each one is new.
         self._each_count = 0
         self._pick_in: ast.Expr | None = None
@@ -6218,19 +6233,27 @@ class Checker:
             written: list[str] = []
             for param in node.params:
                 _parameters_in(param.type, written)
-            self._top[node.name] = _Generator(
+            self._put_generator(node, _Generator(
                 node=node, func=None, params=(), element=ERROR,
                 impure=func_attrs.impure or func_attrs.io, frame=None, path=path,
                 exported=self._is_export(attrs), scope=self._top,
-                siblings=self._bundles, parameters=tuple(written), attrs=attrs)
+                siblings=self._bundles, parameters=tuple(written), attrs=attrs))
             return None
         made = self._generator_function(node, path, func_attrs, {})
         if made is None:
             return None
         made.exported = self._is_export(attrs)
         made.scope, made.siblings = self._top, self._bundles
-        self._top[node.name] = made
+        self._put_generator(node, made)
         return _Collected(node=node, attrs=attrs, func=made.func)
+
+    def _put_generator(self, node: ast.FuncDef, made: _Generator) -> None:
+        """Make *made* reachable by the name it was defined with: at the top
+        level, or -- written `T.name` -- inside the type, as any function there is."""
+        if node.held is None:
+            self._top[node.name] = made
+        else:
+            self._members[(node.held, node.name)] = made
 
     def _generator_function(self, node: ast.FuncDef, path: str,
                             func_attrs: FuncAttrs,
@@ -16120,6 +16143,19 @@ class Checker:
         """
         if builder.block is None:
             return UndefConst(ERROR)
+        if not stmt.comptime and self._members:
+            stmt = replace(stmt, iterable=self._called_each(builder, stmt.iterable))
+            written = stmt.iterable
+            if isinstance(written, ast.Call) and isinstance(written.callee, ast.Member) \
+                    and self._generator_named(written.callee) is None:
+                # `v.g(…)` as the call it stands for, `T.g(v, …)`, so that the
+                # loop sees the generator it walks where `g` is one -- and kept
+                # whatever `g` is, the value having been worked out here once.
+                through = self._through_a_value(builder, written)
+                if through is _REFUSED:
+                    return UndefConst(ERROR)
+                if isinstance(through, ast.Call):
+                    stmt = replace(stmt, iterable=through)
         if stmt.marks and (stmt.comptime or self._written_in(stmt) is not None):
             # What these give is made for the turn -- a member written out, what
             # a generator written into the loop yields -- and is nowhere to
@@ -17313,10 +17349,139 @@ class Checker:
             return self._over_a_table(builder, value, ty, span)
         if isinstance(ty, IterType) and ty.element is not None:
             return self._over_an_iterator(builder, value, ty, span)
-        self._diags.emit(D.LANG_LOOP_NOT_AN_ITERATOR, span, found=ty.written())
+        call = self._each_call(builder, _Ready(span=span, value=value), ty, span)
+        if call is _REFUSED:
+            return None
+        if isinstance(call, ast.Call):
+            # A type of the program's own walked by its `each`: the walk is that
+            # generator's call, handed the value.
+            generator = self._generator_named(call.callee)
+            assert generator is not None
+            element = None if generator.element is ERROR else generator.element
+            walk = self._lower_expr(builder, call,
+                                    self._module.types.iter_type(element))
+            walked = self._value_type_of(walk)
+            if not isinstance(walked, IterType) or walked.element is None:
+                return None
+            return self._over_an_iterator(builder, walk, walked, span)
+        said = self._diags.emit(D.LANG_LOOP_NOT_AN_ITERATOR, span, found=ty.written())
+        written = self._each_written(ty, span)
+        if written is not None:
+            said.note(D.LANG_EACH_NOT_A_GENERATOR, written, type=ty.written())
         return None
 
-    # -- iterators as names: `let q := arr⟦arr > 1⟧` --------------------------
+    def _each_written(self, ty: Type, span: Span) -> Span | None:
+        """Where an `each` inside *ty* that is not a generator was written, which
+        is what a loop over a value of it would have walked had it been one."""
+        named = ty.pointee if isinstance(ty, PtrType) else ty
+        if not isinstance(named, (ProductType, SumType, EnumType)) \
+                or not getattr(named, "name", ""):
+            return None
+        path = self._path_to_member(named, EACH_NAME, ast.Member(
+            span=span, base=ast.NameRef(span=span, name=named.name), name=EACH_NAME,
+            name_span=span))
+        found = self._member_named(path) if path is not None else None
+        if found is None or isinstance(found, _Generator):
+            return None
+        node = getattr(found, "node", None)
+        if isinstance(node, ast.FuncDef):
+            return node.name_span
+        return getattr(found, "name_span", None) or span
+
+    def _walking_each(self, ty: Type | None, span: Span) -> ast.Expr | None:
+        """The path to the generator a value of *ty* is walked by, where its type
+        is one of the program's own with one -- `T.each`, or `m.T.each` for a type
+        another module exports -- or a reference to one."""
+        if isinstance(ty, PtrType):
+            ty = ty.pointee
+        if not isinstance(ty, (ProductType, SumType, EnumType)) \
+                or not getattr(ty, "name", ""):
+            return None
+        path = self._path_to_member(ty, EACH_NAME, ast.Member(
+            span=span, base=ast.NameRef(span=span, name=ty.name), name=EACH_NAME,
+            name_span=span))
+        if path is None or not isinstance(self._member_named(path), _Generator):
+            return None
+        return path
+
+    def _said_to_be(self, expr: ast.Expr) -> Type | None:
+        """What *expr* is, as far as can be said before it is lowered: what
+        `_hint_of` says, and besides a field of a record and an element of an
+        array, which is what a walk is most often written over."""
+        found = self._hint_of(expr)
+        if found is not None:
+            return found
+        match expr:
+            case ast.Member():
+                held = self._said_to_be(expr.base)
+                if isinstance(held, PtrType):
+                    held = held.pointee
+                if isinstance(held, ProductType):
+                    at = _field_index(held, expr.name)
+                    return held.fields[at][1] if at is not None else None
+            case ast.Element() if not any(isinstance(one, ast.Range)
+                                          for one in expr.indices):
+                held = self._said_to_be(expr.base)
+                if isinstance(held, ArrayType) and len(expr.indices) == held.rank:
+                    return held.element
+        return None
+
+    def _each_call(self, builder: IRBuilder, base: ast.Expr, ty: Type | None,
+                   span: Span) -> "ast.Call | object | None":
+        """`T.each(base)`, the call `base.each()` stands for, where *ty* -- what
+        *base* is -- has an `each`; nothing where it has none, and `_REFUSED`
+        where it has one the value cannot be handed to.
+
+        Written as the method it is, so that the value is handed to `each` as
+        a call through it would hand it: lent where `each` takes a reference
+        and the value is a place, as it is where it is a reference already, and
+        a reference never read out for an `each` that takes the value (4698).
+        """
+        if self._walking_each(ty, span) is None:
+            return None
+        through = self._through_a_value(builder, ast.Call(
+            span=span, callee=ast.Member(span=span, base=base, name=EACH_NAME,
+                                         name_span=span), args=()))
+        if through is _REFUSED:
+            return _REFUSED
+        if isinstance(through, ast.Call) \
+                and self._generator_named(through.callee) is not None:
+            return through
+        return None
+
+    def _each_walk(self, builder: IRBuilder, value: Value, ty: Type,
+                   span: Span) -> _Iterable | None:
+        """The walk `T.each(value)` describes, where *ty* is a type of the
+        program's own with an `each`: the generator's call, lowered where a walk
+        is wanted, so that it is what a name is bound to, what is handed on and
+        what is started, as a call written out would be."""
+        call = self._each_call(builder, _Ready(span=span, value=value), ty, span)
+        if not isinstance(call, ast.Call):
+            return None
+        outer = self._pick_in, self._pick_walked
+        self._pick_in, self._pick_walked = call, None
+        try:
+            self._lower_expr(builder, call, None)
+            walked = self._pick_walked
+        finally:
+            self._pick_in, self._pick_walked = outer
+        return walked if isinstance(walked, _Iterable) else None
+
+    def _called_each(self, builder: IRBuilder, written: ast.Expr) -> ast.Expr:
+        """*written* -- or what `in` is written after -- as `T.each(…)` where
+        it is said to be a value of a type with an `each`, so that `foreach x :=
+        v`, `yield ⇉ v` and `yield ⇉ v in a` walk the generator's call as one
+        written out would: written into the loop where it can be.  Asked of what
+        the value is said to be before it is lowered; a value known only after
+        is walked through calls (`_over_a_value`)."""
+        inner = written.value if isinstance(written, ast.Allocated) else written
+        if isinstance(inner, (ast.Range, ast.ArrayLit, ast.ListLit)):
+            return written
+        call = self._each_call(builder, inner, self._said_to_be(inner), inner.span)
+        if not isinstance(call, ast.Call):
+            return written
+        return replace(written, value=call) if isinstance(written, ast.Allocated) \
+            else call
 
     def _picked_element(self, ty: ArrayType, mask: object) -> Type:
         """What a turn of a pick out of *ty* gives: an element where the mask
@@ -17348,6 +17513,10 @@ class Checker:
             if ty is ERROR:
                 self._bind_local(node.name, UndefConst(ERROR), node.name_span,
                                  value_span=node.span)
+                return
+            walked = self._each_walk(builder, value, ty, node.value.span)
+            if walked is not None:
+                self._bind_iterator(builder, node, walked, declared)
                 return
             found = self._over_a_value(builder, value, ty, node.value.span) \
                 if not isinstance(ty, TupleType) else None
@@ -17780,6 +17949,10 @@ class Checker:
             if isinstance(ty, TupleType):
                 self._report_mismatch(span, ty, wanted)
                 return UndefConst(ERROR)
+            walked = self._each_walk(builder, value, ty, span)
+            if walked is not None and walked.generator is not None:
+                return self._handed_on(builder, walked.generator.node.name, walked,
+                                       wanted, span)
             if not isinstance(ty, (ArrayType, ListType, SetType, DictType)) \
                     and ty is not STR:
                 self._report_mismatch(span, ty, wanted)
@@ -17880,6 +18053,8 @@ class Checker:
         if found is None or self._generating_out is None:
             self._diags.emit(D.LANG_YIELD_OUTSIDE_A_GENERATOR, stmt.span)
             return
+        if stmt.delegates and self._members:
+            stmt = replace(stmt, value=self._called_each(builder, stmt.value))
         if stmt.delegates and self._delegated(builder, stmt):
             return
         if stmt.delegates:
@@ -17980,10 +18155,8 @@ class Checker:
                                   self._module.types.iter_type(found.element),
                                   self._module.types.iter_type(current.element))
             return True
-        if walk.arena is None and (found is current
-                                   or self._generator_reaches_itself(found)):
-            self._diags.emit(D.LANG_GENERATOR_RECURSION, stmt.value.span,
-                             name=found.node.name)
+        if walk.arena is None and self._walks_itself(found):
+            self._walks_itself_said(found, stmt.value.span)
             return True
         if found.impure:
             self._an_effect(D.LANG_PURE_CALLS_IMPURE, stmt.value.span,
@@ -18027,7 +18200,9 @@ class Checker:
                                          and self._find_local(callee.base.name)):
                 found = held.exports.get(callee.name)
                 return found if isinstance(found, _Generator) else None
-            return None
+            # A generator inside a type, `T.each` or `m.T.each`.
+            inside = self._member_named(callee)
+            return inside if isinstance(inside, _Generator) else None
         if not isinstance(callee, ast.NameRef) \
                 or self._find_local(callee.name) is not None:
             return None
@@ -18137,7 +18312,34 @@ class Checker:
                     if other is found:
                         return True
                     waiting.append(other)
+            for other in self._walks_into.get(id(one), ()):
+                if other is found:
+                    return True
+                waiting.append(other)
         return False
+
+    def _walks_itself_said(self, found: _Generator, span: Span) -> None:
+        """Report that *found* walks itself (4675), once for each place: a body
+        written into a loop is lowered there as well as on its own, and what
+        is wrong with it is wrong once."""
+        if span.start in self._walks_itself_at:
+            return
+        self._walks_itself_at.add(span.start)
+        self._diags.emit(D.LANG_GENERATOR_RECURSION, span, name=found.node.name)
+
+    def _walks_itself(self, found: _Generator) -> bool:
+        """Note that the generator whose body is being lowered walks *found*
+        through calls, and say whether that makes a ring: a generator walking
+        itself, directly or through others -- one reached by a call, or by a
+        value whose type's `each` it is, which only lowering finds."""
+        current = self._generating
+        if current is not None:
+            walked = self._walks_into.setdefault(id(current), [])
+            if not any(one is found for one in walked):
+                walked.append(found)
+            if found is current:
+                return True
+        return self._generator_reaches_itself(found)
 
     def _generator_in(self, builder: IRBuilder, expr: ast.Allocated,
                       place: Value, expected: Type | None) -> Value:
@@ -18183,6 +18385,11 @@ class Checker:
                              name=START_NAME, expected=1, found=len(expr.args))
             return UndefConst(ERROR)
         written = expr.args[0]
+        if self._members:
+            # `⎕start(v)` and `⎕start(v in a)` over a value of a type with an
+            # `each` as the call it stands for, which is what is read back below
+            # for a walk that lasts.
+            written = self._called_each(builder, written)
         outer = self._pick_in, self._pick_walked
         self._pick_in, self._pick_walked = written, None
         try:
@@ -18190,6 +18397,11 @@ class Checker:
             walked = self._pick_walked
         finally:
             self._pick_in, self._pick_walked = outer
+        if walked is None:
+            # A type of the program's own is started as the walk its `each`
+            # describes, where what it is was known only once it was lowered.
+            walked = self._each_walk(builder, value, self._value_type_of(value),
+                                     written.span)
         span = expr.span
         given_type: Type | None = None
         given_place: Value = builder.cast(CastKind.BITCAST,
@@ -18344,9 +18556,8 @@ class Checker:
             self._diags.emit(D.LANG_COROUTINE_NOT_WALKED, span,
                              name=found.node.name, given=found.given.written())
             return UndefConst(ERROR)
-        if walk.arena is None and self._generator_reaches_itself(found):
-            self._diags.emit(D.LANG_GENERATOR_RECURSION, span,
-                             name=found.node.name)
+        if walk.arena is None and self._walks_itself(found):
+            self._walks_itself_said(found, span)
             return UndefConst(ERROR)
         if found.impure:
             self._an_effect(D.LANG_PURE_CALLS_IMPURE, span, name=found.node.name)
@@ -24548,6 +24759,19 @@ class Checker:
         if place is None:
             return UndefConst(ERROR)
         inside = expr.value
+        if self._members and not isinstance(inside, ast.Call) \
+                and not _takes_room(inside):
+            # A value of a type with an `each` takes room where it is walked: the
+            # walk is `T.each(v)`, whose frame `in` says where to keep.
+            call = self._each_call(builder, inside, self._hint_of(inside),
+                                   inside.span)
+            if call is _REFUSED:
+                return UndefConst(ERROR)
+            if isinstance(call, ast.Call):
+                walked = replace(expr, value=call)
+                if self._pick_in is expr:
+                    self._pick_in = walked
+                expr, inside = walked, call
         if isinstance(inside, (ast.Unary, ast.Binary, ast.Fresh)) \
                 and self._operators and self._operator_takes_an_arena(inside):
             # A program's own operator, handed the arena as its last operand: the

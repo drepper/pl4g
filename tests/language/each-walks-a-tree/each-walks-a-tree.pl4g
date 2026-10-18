@@ -1,0 +1,35 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ An `each` may take its value by reference, and is then handed a reference: lent
+※ where what is walked is a place, as it is where it is a reference already.  One
+※ that walks the children of a tree walks itself, so the inner walks' frames go in an
+※ arena -- here one the generator makes for itself, given back when it finishes.
+
+let std := ⎕import("std")
+type Tree = { value : u8 ; children : [&Tree] }
+
+fn Tree.each(t: &Tree) ⇉ u8:
+    let scratch: mut arena = ⎕arena
+    defer ⎕empty(scratch)
+    yield t⌖.value
+    foreach child := t⌖.children:
+        yield ⇉ child in scratch
+
+fn sum(s: ⇉u8) → u8:
+    let total: mut u8 = 0u8
+    foreach x := s:
+        total ← total + x
+    total
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let pool: mut arena = ⎕arena
+    defer ⎕empty(pool)
+    let leaf1: Tree = Tree(.value ← 3u8, .children ← [] in pool)
+    let leaf2: Tree = Tree(.value ← 4u8, .children ← [] in pool)
+    let mid: Tree = Tree(.value ← 2u8, .children ← [&leaf1, &leaf2] in pool)
+    let root: Tree = Tree(.value ← 1u8, .children ← [&mid] in pool)
+    let n: mut u8 = 0u8
+    foreach x := root:
+        n ← n + x
+    if n = 10u8 ∧ sum(&root) = 10u8: 0u6 else: 1u6

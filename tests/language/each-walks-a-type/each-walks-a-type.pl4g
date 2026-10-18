@@ -1,0 +1,63 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A type of the program's own is walked by the generator written inside it as
+※ `each`**: `fn T.each(v: T) ⇉ E` makes `foreach x := v` a walk of `T.each(v)`, and
+※ the same wherever a walk is wanted -- a `⇉E` parameter, a name bound as `⇉`,
+※ `⎕enumerate`, `yield ⇉ v`, `⎕start` -- and of each element of an array of them.
+※ `v.each()` is the same call written out.  Where the loop can see the generator its
+※ body is written into the loop, as any generator's is.
+※
+※ Compare: **Python**'s `__iter__` written with `yield`, **C#**'s `GetEnumerator` with
+※ `yield return`, **Ruby**'s `each`; **Rust**'s `IntoIterator` and **C++**'s
+※ `begin`/`end`, which hand back an iterator rather than being the walk.
+
+let std := ⎕import("std")
+type Walk = at : u8 ; last : u8
+
+fn Walk.each(w: Walk) ⇉ u8:
+    foreach i := w.at…w.last:
+        yield i
+
+fn total(s: ⇉u8) → u8:
+    let t: mut u8 = 0u8
+    foreach x := s:
+        t ← t + x
+    t
+
+fn twice(w: Walk) ⇉ u8:
+    yield ⇉ w
+    yield ⇉ w
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let w: Walk = Walk(.at ← 0u8, .last ← 4u8)
+    let n: mut u8 = 0u8
+    foreach x := w:
+        n ← n + x
+    foreach x := w.each():
+        n ← n + x
+    if n ≠ 12u8:
+        return 1u6
+    if total(w) ≠ 6u8:
+        return 2u6
+    let counted: mut u64 = 0u64
+    foreach i, _ := ⎕enumerate(w):
+        counted ← counted + i
+    if counted ≠ 6u64:
+        return 3u6
+    let r: ⇉ = w
+    if total(r) ≠ 6u8:
+        return 4u6
+    if total(twice(w)) ≠ 12u8:
+        return 5u6
+    let c := ⎕start(w)
+    let first: u8 = ⎕resume(c) ?? 9u8
+    let second: u8 = ⎕resume(c) ?? 9u8
+    if first ≠ 0u8 ∨ second ≠ 1u8:
+        return 6u6
+    let ws: Walk⟦2⟧ = ⟦w, Walk(.at ← 5u8, .last ← 7u8)⟧
+    let all: mut u8 = 0u8
+    foreach one := ws:
+        foreach x := one:
+            all ← all + x
+    if all = 17u8: 0u6 else: 7u6

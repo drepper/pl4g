@@ -1,0 +1,24 @@
+※ pl4g-test: compile=error diag=4675
+
+※ An `each` walking values of its own type walks itself, which is a frame that would
+※ have to hold itself unless the inner walks' frames are put in an arena (`… in a`).
+※ It is found while lowering, a value's `each` being called without its name.
+
+let std := ⎕import("std")
+type Tree = { value : u8 ; children : [&Tree] }
+
+fn Tree.each(t: &Tree) ⇉ u8:
+    yield t⌖.value
+    foreach child := t⌖.children:
+        yield ⇉ child
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let pool: mut arena = ⎕arena
+    defer ⎕empty(pool)
+    let leaf: Tree = Tree(.value ← 2u8, .children ← [] in pool)
+    let root: Tree = Tree(.value ← 1u8, .children ← [&leaf] in pool)
+    let n: mut u8 = 0u8
+    foreach x := root:
+        n ← n + x
+    if n = 3u8: 0u6 else: 1u6

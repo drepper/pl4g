@@ -1155,8 +1155,9 @@ module.exports = grammar({
     // At the loosest level, so that `a ⧺ b in scratch` is the whole join in that
     // arena rather than `b` in it -- there being nothing an arena could mean about
     // one side of a join.
-    // What may carry it is what takes room: a join, a collection written out, or an
-    // operator whose definition asks for an arena.  Naming them rather than taking any
+    // What may carry it is what takes room: a join, a collection written out, an
+    // operator whose definition asks for an arena, or a value of a type with an
+    // `each`, whose walk keeps its frame there.  Naming them rather than taking any
     // expression keeps `in` out of the way of everything that cannot carry it -- and
     // the compiler refuses the rest with a message of its own (4568).
     allocated_expression: $ => seq(
@@ -1165,7 +1166,10 @@ module.exports = grammar({
                             $.list_literal, $.array_literal,
                             // which the compiler reads and refuses where the
                             // call hands out an arena of its own
-                            $.call_expression)),
+                            $.call_expression,
+                            // a value walked by its type's `each`, which the
+                            // compiler refuses for a type without one
+                            $.identifier, $.member_expression)),
       $._in_arena),
 
     // Whether a set holds a key, or what a dictionary has for one.  It binds

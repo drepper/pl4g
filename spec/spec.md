@@ -4039,8 +4039,9 @@ let said: str = ⍕v in scratch
 ```
 
 What may carry `in` is what takes room: a join of two strings or two lists, a collection written out, an operator whose
-definition asks for an arena -- which is what `⍕v in scratch` is, the second operand being where to put what it builds -- and a
-call that leaves out an arena it takes, `std.text(v, .base ← 16u8) in scratch`.  Anything else is worked out in registers and has
+definition asks for an arena -- which is what `⍕v in scratch` is, the second operand being where to put what it builds -- a
+call that leaves out an arena it takes, `std.text(v, .base ← 16u8) in scratch`, and a value walked by its type's `each`, whose
+walk's frame `in` keeps (`yield ⇉ child in scratch`).  Anything else is worked out in registers and has
 nowhere to come from (4568).
 
 **Taking room from an arena is not an effect**, from `⎕heap` or from any other.  What is made is new: nothing that was there
@@ -5171,6 +5172,8 @@ bound to what there was, and a loop over something with nothing in it runs no tu
 | an iterator, `⇉T` | each `T` it gives |
 | a set | each key it holds |
 | a dictionary | a key and what it stands for, as a tuple |
+| a generator's call | each value it hands out with `yield` (below) |
+| a value of a type with an `each` | what `T.each` of it hands out |
 
 ```
 foreach x := a:           ※ every element of a vector
@@ -5178,6 +5181,38 @@ foreach row := m:         ※ every row of a table
 foreach k := s:           ※ every key of a set
 foreach k, v := d:        ※ every key of a dictionary, and what it stands for
 ```
+
+**A type of the program's own is walked by the generator written inside it as `each`** -- `fn T.each(v: T) ⇉ E`, a
+[generator](#generators) whose name is a path into the type -- and `foreach x := v` over a `T` is the loop over `T.each(v)`:
+
+```
+type Walk = at : u8 ; last : u8
+
+fn Walk.each(w: Walk) ⇉ u8:
+    foreach i := w.at…w.last:
+        yield i
+
+foreach x := w:                   ※ w.at, w.at + 1, … up to w.last
+total(w)                          ※ handed to a ⇉u8 parameter
+```
+
+It is that call wherever a walk is wanted: handed to a `⇉E` parameter, bound as `let r: ⇉ = w`, counted by `⎕enumerate(w)`,
+handed on by `yield ⇉ w`, started by `⎕start(w)`, and kept in an arena by `w in a` -- the walk's frame being what takes room.
+`w.each()` is the same call written out.  An `each` taking a reference, `fn Tree.each(t: &Tree) ⇉ u8`, is handed one: lent where
+what is walked is a place, as a call through the value lends it.  Where the loop can see the generator, its body is written into
+the loop as any generator's is, so a walk of a program's own type costs what the loop written by hand would; a field, an element or
+what a call answers is walked the same way.  One exported by another module is reached through it, and exported as any function
+inside a type is.  An `each` that walks values of its own type walks itself and is held to the rule for that (4675): the inner
+walks' frames go in an arena, which it may make for itself.  **Nothing else is asked of the type**: no interface is declared and no
+bundle met, the generator being the whole of the protocol -- and a function of that name that is not a generator is refused with a
+note saying so (4438, 4925).  A type keeps one walk; another way through it is another generator, named for what it walks and
+called by name.
+
+Compare: **Python**, whose `__iter__` written with `yield` is this, under a reserved name; **C#**'s `GetEnumerator` with `yield
+return`, found by the `foreach` by its name and not by an interface, which is this too; **Ruby**'s `each`, the name this takes,
+which hands the block each value; **Rust**'s `IntoIterator`, and **C++**'s `begin` and `end`, which answer an iterator rather than
+being the walk, and so ask the program to write the state machine a generator here is compiled to; **Go 1.23**'s range over a
+function taking `yield`, which is the walk as a value and costs a call per turn where the compiler does not inline it.
 
 **Iterating an array is over its outermost dimension**, so a turn of a `T⟦2,3⟧` gives a `T⟦3⟧`.  Row-major is what makes that
 cheap: a row is a run of elements, so naming one is arithmetic on the place and no copy at all.  An array whose type does not say
@@ -5269,8 +5304,8 @@ it is for is in the section on leaving a loop and repeating it, above.
 Compare: Python's `for x in r`, which this follows in meaning -- including `for k, v in d` taking a pair apart, which is where the
 two-name form over a dictionary comes from; Rust's `for x in r` over anything that is `IntoIterator`; Go's `for i, v := range`,
 which spells the pair as two results rather than as one tuple; Zig's `for (0..n) |i|`.  What none of them has is the second
-spelling, and what this has instead of Rust's trait is a single iterator protocol the compiler knows -- until a program can write
-one, there is nothing for a trait to abstract over.
+spelling, and what this has instead of Rust's trait is the generator: a program writes a walk as one, and attaches it to a type
+as `each`, which is all `foreach` asks of the type.
 
 ##### Iterators as values
 

@@ -10187,6 +10187,28 @@ builtin's words rather than the macro's, the macro having no way to ask what a l
 it inside the literal, or at the literal past an escape; and `⎕caller_name` outside a macro is refused as the questions about a
 piece are (7027).
 
+## 2026-10-18T17:45+02:00 — language
+
+**A program's own type walked by its `each`**
+
+The user asked for "let a program write an iterator" in TODO-language.md, which by now meant one thing: `foreach` over a value of
+a program's own type, programs already writing walks as generators.  Asked what a type provides, the user chose **a generator on
+the type** -- Python's `__iter__` written with `yield`, C#'s `GetEnumerator` with `yield return`, Ruby's `each` -- against a step
+function through `&mut` (Rust's `next`, Python's `__next__`), which writing through a reference makes impure today; against a pure
+step answering the element and the rest together (Haskell's `unfoldr`), which wants a tuple as a result's answer; and against the
+operators of C++'s iterators (`⇧`, `⌖`, a test for being over), three glyph decisions for what a generator already says.  Asked
+its name, **`T.each`**, against the operator `⇉` and against `T.walk`.  And asked where else such a value may stand, **wherever a
+walk is wanted** -- a `⇉E` parameter, a name bound as `⇉`, `⎕enumerate`, `yield ⇉`, `⎕start` -- against the loop alone; `foreach`
+over a compiler's cursor was offered and not taken.
+
+Taken without asking, as what those come to: `v in a` keeps the walk's frame in `a`, so the grammar reads `in` after a name and a
+member path; an `each` taking a reference is handed one as a call through the value would hand it; one of another module is reached
+through the module and exported as any function inside a type is; a recursive `each` is held to the rule for a generator walking
+itself (4675), found while lowering now that a walk may call a generator without naming it; and a function named `each` that is not
+a generator is refused with a note saying so (4925).  Making it work found that two generators' frames compared equal, which merged
+two walks' descriptions into one type laid out with the smaller frame -- every `yield ⇉ g(…)` without an arena, handed to a `⇉T`
+parameter, wrote past its room.  Fixed with it.
+
 Open questions
 --------------
 

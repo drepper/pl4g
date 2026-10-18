@@ -2763,6 +2763,26 @@ turns -- which a template with two holes found, its second hole being told the p
 `while_running`, which leaves out a clause comparing types (settled at the call, 4918), and its `post` at each `return`.  Before,
 neither was checked, and the return of an instance was held to its caller's.
 
+**A value of a type with an `each` is walked as the call `T.each(v)`**, made in one of two places.  Where what the value is can be
+said before it is lowered -- `_said_to_be`: what `_hint_of` says, a field of a record, an element of an array -- `_called_each`
+rewrites the tree, `v` and `v in a` alike, into the method call `v.each()` resolved by `_through_a_value`, which is what lends a
+place to an `each` taking a reference and refuses a reference read out for one taking the value.  Rewritten before anything else
+looks at it, the loop then sees a generator's call, and `_written_in` writes its body into the loop.  Where it can only be said
+after -- `_over_a_value`, `_as_an_iterator`, `let r: ⇉ = …`, `⎕start` -- `_each_walk` lowers `T.each(_Ready(v))` with `_pick_in`
+on the call, which gives back the walk's description the way a call written out does.  A generator written `T.name` is kept in
+`_members` beside the type's functions (`_put_generator`), and `_generator_named` finds it through `_member_named`.
+
+Since a loop calls `each` without writing its name, `_mentioned` counts a loop, a `yield` and a call as mentioning `each`, so that a
+module read only as far as it is named still lowers the `each` of its types.  And since a generator may walk another through a
+value, which no name in its body says, the ring check behind 4675 is fed by the lowering: `_walks_itself` records each generator a
+body walks through calls (`_walks_into`), and `_generator_reaches_itself` follows those edges as well as the calls it reads off the
+tree.  A body written into a loop is lowered there too, so the report is made once per place.
+
+**A coroutine frame is a type of its own**, compared by identity.  `CoroutineFrame` was declared `eq=False`, which keeps the
+dataclass from writing an equality and leaves the base's: generated for `Type`, which has no fields, it took any two frames for one,
+and `tuple_type` interned two walks' descriptions with alike arguments as one -- laid out with the frame of whichever came first.
+It now says its equality itself, as the nominal types do.
+
 **Arguments are matched to parameters as in any call**, by place and then by name, by `_generic_arguments`: a parameter left out
 takes its default, lowered in the definition's own scope, and an `&mut arena` left out is `None` there and handed the arena in
 force -- `_out_of`, the one the innermost `in` around the call names, or `⎕heap`.  An ordinary call does the same in

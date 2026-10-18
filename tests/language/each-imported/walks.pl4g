@@ -1,0 +1,15 @@
+※ pl4g-test: module
+※※ A type that says how it is walked, for a program beside this one to walk.
+
+※※ The numbers from one place up to, and not including, another.
+@[export]
+type Span = from : u8 ; upto : u8
+
+※※ Every number the span holds, in order.
+※※
+※※ \param s the span
+※※ \return each number from its start up to its end
+@[export]
+fn Span.each(s: Span) ⇉ u8:
+    foreach i := s.from…s.upto:
+        yield i

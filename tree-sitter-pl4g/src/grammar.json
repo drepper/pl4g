@@ -5893,6 +5893,14 @@
               {
                 "type": "SYMBOL",
                 "name": "call_expression"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "identifier"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "member_expression"
               }
             ]
           }

@@ -1,0 +1,34 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ What a loop walks by its type's `each` may be a field of a record, an element of an
+※ array or what a call answers, as well as a name; each is walked as `T.each(…)`.
+
+let std := ⎕import("std")
+type Walk = at : u8 ; last : u8
+type Pair = left : Walk ; right : Walk
+
+fn Walk.each(w: Walk) ⇉ u8:
+    foreach i := w.at…w.last:
+        yield i
+
+fn total(s: ⇉u8) → u8:
+    let t: mut u8 = 0u8
+    foreach x := s:
+        t ← t + x
+    t
+
+fn made(n: u8) → Walk:
+    Walk(.at ← 0u8, .last ← n)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let p: Pair = Pair(.left ← Walk(.at ← 0u8, .last ← 3u8), .right ← Walk(.at ← 1u8, .last ← 3u8))
+    let ws: Walk⟦2⟧ = ⟦p.left, p.right⟧
+    let n: mut u8 = 0u8
+    foreach x := p.left:
+        n ← n + x
+    foreach x := ws⟦1⟧:
+        n ← n + x
+    foreach x := made(3u8):
+        n ← n + x
+    if n = 9u8 ∧ total(p.right) = 3u8 ∧ total(made(4u8)) = 6u8: 0u6 else: 1u6

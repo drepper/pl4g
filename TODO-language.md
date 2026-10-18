@@ -293,49 +293,20 @@ removed or decided otherwise, which its last paragraph says.
     **Out of date (2026-10-04):** "Nothing implemented" is no longer true: `⍕`, `std.text`, `std.format`, `print`, `println` and
     their pools are done (std-format, print-and-println, std-text, format-in-a-pool); what is left is in the items below.
 
-[ ] let a program write an iterator.  The compiler is the only implementor of the protocol, and there are five of its
-    implementations now: a range, an array, a list, a string and a table.  What the entry used to say waits on "something to
-    iterate over that is not a range" has arrived, so nothing waits on that any more.  What is actually missing, measured against
-    what the language can do today:
-    A program **can** already write one and drive it by hand.  A record, a free `fn next(it: &mut Walk) → T?` marked `@[impure]`,
-    and a `while` whose body is a `match` over what `next` answered: that compiles and runs on all three targets today.  So the
-    protocol is not what is missing; the *loop* is.
-    **`foreach` has no rule for it** (4438).  The rule wants to know which function is a type's `next`, and the language has no way
-    to attach anything to a type -- no method, no trait, no `impl` -- so this is the first decision about that and not a small one.
-    [spec/attaching-code.md](spec/attaching-code.md) is a proposal for it: four designs, a recommendation of the smallest one that
-    is not a dead end -- a function named `T.next`, called as the path the parser already reads -- and what each would cost.
-    **Design B is done**, on 2026-10-01: a definition's name may be a path, the first parameter is written out, and a path through
-    a module (`m.T.name`) reaches what an exported type exports.  So the thing `foreach` needs in order to know which function is a
-    type's `next` now exists -- what is left for the loop is the rule itself, which is the entry below about a cursor.  No
-    `value.name(args)` sugar, and a type from another module may not be written to.
-    **Operators are done** and not by attaching them to a type: an operator is a free function whose name is the glyph,
-    `fn `+`(a: Point, b: Point) → Point`, which needs nothing from this entry and is generic for nothing -- `fn `+`(a: T', b: T')` is
-    one definition for every type whose body works, which a receiver form cannot express.  So a bundle requiring `T' ⊞ T' → T'`
-    can now be met by a type a program defined, which was the sharpest of the four things this entry is for.
-    A **bracket pair** is a definable operator too, named by the pair and taking as many operands as it likes, so `A'⟦I'⟧ → E'`
-    is met by a program's own collection and `g⟦i, j⟧` is sayable -- which C++ took until C++23 to allow.
-    Left over from the operator half: `=` together with a hash, which is what turns a record into a dictionary key (4429 already
-    calls a key a type that "answers" both); `≠` following from `=` and the three orderings from `<`; and mixed-type operators.
-    **And the operators change what the iterator needs**, which that document now works out: the protocol is four operations and the
-    cursor is where to read them off -- on to the next (`⇧`, definable today and measured), what the walk is at (`⌖`, reserved),
-    taking it out (`†`, punctuation and so not a symbol), and whether the walk is over (a cursor where a truth is wanted, which has
-    no operator at all).  So attaching code to a type is *not* a prerequisite for a program writing an iterator: the order is
-    `foreach` over a cursor, then `⌖` nameable, then a way to ask whether a walk is over -- the one real decision, and the one to
-    put to the user -- and then one `foreach` rule covering the compiler's cursor and a program's own walk alike.  A bundle can say
-    what the protocol *is*, which is the possibility that did not exist before bundles did.
-    **`foreach` over a cursor is refused** (4438) although a cursor is the compiler's own iterator value and the loop's own shape
-    fits it.  That is the same rule asked of a type the compiler already has, and it is worth doing first: it needs no decision
-    about methods at all.
-    **A cursor has no spelling**, so a program cannot write a function that takes or answers one -- which is what a program
-    wrapping the compiler's iterator would want.
-    **The pure shape cannot be written.**  A `next` that advances through `&mut` writes memory that outlives the call, so it is
-    impure, and every `foreach` over a program's iterator would be in an impure function.  The pure alternative is a `next` that
-    answers the element and the next iterator together -- `fn next(it: Walk) → 〈T, Walk〉?` -- and a result whose answer is a
-    tuple cannot be written at all: the `?` is parsed only after a named type, in the compiler and in the grammar alike.  That is
-    an entry of its own below, and this one waits on it if the pure shape is the one wanted.
-    **Out of date (2026-10-04):** Programs write iterators as generators (`fn g(…) ⇉ T`, 2026-10-03), a cursor is spelled `⌖⇉T ⇇
-    U`, and `value.name(args)` exists since 2026-10-04T13:00; only a `foreach` over a program's own record with a `T.next` is
-    still refused (4438).
+[x] let a program write an iterator.  Done on 2026-10-18 at the user's direction: a program writes a walk as a generator, and
+    attaches one to a type as `fn T.each(v: T) ⇉ E`, which `foreach x := v` walks -- and so does everything else that wants a
+    walk: a `⇉E` parameter, `let r: ⇉ = v`, `⎕enumerate`, `yield ⇉ v`, `⎕start`, and `v in a`.  Nothing else is asked of the
+    type.  The operator protocol the entry used to weigh (`⇧`, `⌖`, a test for being over) is not needed for it.
+    Found and fixed on the way: two generators' frames compared equal, so a walk handed on in one step without `in` wrote
+    past its description and crashed; and a generator walking itself through a value's `each` was not seen as one.
+    Left over:
+    [ ] **an `each` of a type with type parameters** -- `fn Two.each(t: Two(T')) ⇉ T'`.  No function inside such a type is
+        reached through a value yet (`_path_to_member` asks for a type without them), so this is that, and then nothing.
+    [ ] **an `each` taking more than the value**, defaults or an arena left to the one in force -- which is what a recursive
+        walk wants instead of making an arena of its own.  A generator's call does not take named arguments or defaults
+        (`_generator_arguments`), as an ordinary generic one now does.
+    [ ] **`foreach` over a cursor**, `⎕iter(l)`, still refused (4438).  Nothing wants it now that a walk is written as a
+        generator, but it is the compiler's own iterator and walking one from where it is would be the obvious meaning.
 
 [ ] let a result's answer be any type.  `u8 ? ⎕narrowing` is written today and `〈u8, u8〉 ? ⎕narrowing` is not: the `?` is read
     only after a named type, in `_parse_named_type` and in the grammar's `_plain_type` alike, so a tuple, a list, a set or an
