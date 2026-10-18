@@ -2017,10 +2017,25 @@ type of every value the loop gives out by a rule the reader has to know.  Only a
 range is refused -- what one would have to say is how many steps it takes rather than how large each is, which is a different
 construct.
 
-**How far each turn moves is written down** (4441), and it is not zero (4442).  Its sign says which way the range runs, and that
-decides which comparison ends the loop; a step the compiler cannot read would need both comparisons and a choice between them on
-every turn, for a generality nothing has asked for.  The sign is read off the step and what is left is the distance, so a range
-that counts down is written the same way over an unsigned type as over a signed one.
+**How far each turn moves is written down, or worked out while running.**  Written down, its sign says which way the range runs
+and decides which comparison ends the loop, it is not zero (4442), and the distance is what is left -- so a range that counts down
+is written the same way over an unsigned type as over a signed one, `5u8…0u8…⁻1`.
+
+**A step worked out while running** says which way only then, so **how many turns there are is worked out once, before the
+loop**: the distance between the ends over the step, rounded up, and none where the step points away from the far end.  The loop
+counts them -- one comparison a turn and no choice inside it -- and nothing steps past the end of the type, the step after the
+last turn being one nothing reads, so `250u8…255u8…by` ends at 254 whatever `by` is.  **It is of the ends' type, or of the signed
+type of their width** (4927): over `u8` a `u8`, which counts up, or an `i8`, which counts either way; nothing is widened on the
+way in.  **A step that comes to nought stops the program** (status 91), a range that never ends being nobody's intent.
+
+```
+foreach i := from…upto…by:      ※ by: i8 over u8 ends, either way
+```
+
+Compare: **Python**, whose `range(a, b, s)` works its length out the same way and raises for a step of nought; **Rust**'s
+`(a..b).step_by(s)`, which counts up only and panics on nought, a range counting down being `.rev()` of one; **C**, **Go** and
+**Zig**, whose loop with a computed step is a `for` whose comparison the program chooses -- and gets wrong when the step's sign is
+not the one it assumed.
 
 **Three ends and no more** (3029).  A range is not a binary operator: three written with one would nest, and `a…b…c` does not mean
 `(a…b)…c`.  The ends bind one level in from the range itself, so `1…n-1` reads the way it looks.
@@ -7524,6 +7539,7 @@ allocation that could not be met are three different things.
 | 88 | a test the binary runs did not pass |
 | 89 | a pre-condition written in a signature did not hold, which is the **caller's** fault |
 | 90 | a post-condition written in a signature did not hold, which is the **callee's** |
+| 91 | a range whose step was worked out while running and came to nought, which would never end |
 
 **89 and 90 are two numbers because they have two culprits.**  A caller acting on
 a status can tell "I called this wrongly" from "the thing I called is broken",

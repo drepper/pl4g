@@ -8176,7 +8176,7 @@ class Checker:
             [left, right], BOOL, expr.span)
         if expr.op is ast.BinaryOp.NOT_EQUAL:
             return builder.binary(BinOp.XOR, found,
-                                  builder.bool_const(True), BOOL, expr.span)
+                                  builder.bool_const(True), expr.span)
         return found
 
     def _syntax_builtin(self, name: str, params: tuple[Type, ...]) -> Function:
@@ -17045,6 +17045,9 @@ class Checker:
         if found is None:
             return None
         first, last, step, rising, element = found
+        if rising is None:
+            return self._over_a_counted_range(builder, stmt, first, last, step,
+                                              element)
         signed = element.signed
         going = ((CmpPred.SLT if signed else CmpPred.ULT) if rising
                  else (CmpPred.SGT if signed else CmpPred.UGT))
@@ -19211,10 +19214,89 @@ class Checker:
                 (table, b.binary(BinOp.WRAP_ADD, s[0], b.int_const(U64, 1), span)),
                 U64, span),))
 
+    def _over_a_counted_range(self, builder: IRBuilder, stmt: ast.ForEach,
+                              first: Value, last: Value, step: Value,
+                              element: IntType) -> _Iteration:
+        """Walk a range whose step is worked out while running.
+
+        Which way it runs is known only then, so the comparison that would end
+        it cannot be chosen while compiling.  Instead how many turns there are is
+        worked out once, before the loop -- the distance between the ends over
+        the step, rounded up, and none where the step points away from the far
+        end -- and the loop counts them: one comparison a turn, and nothing
+        stepping past the end of the type, the last step being one nothing reads.
+        A step of nought would never end, and stops the program (status 91).
+        """
+        span = stmt.span
+        stepped = self._value_type_of(step)
+        assert isinstance(stepped, IntType)
+
+        def wide(b: IRBuilder, value: Value, ty: IntType) -> Value:
+            """*value* as a 64-bit unsigned number, its sign carried along: a
+            signed one extended by its sign, and the bits then read unsigned."""
+            if ty is U64:
+                return value
+            return b.cast(CastKind.SEXT if ty.signed and ty.bits < 64
+                          else CastKind.ZEXT, value, U64, span)
+
+        def mask(b: IRBuilder, truth: Value) -> Value:
+            """All ones where *truth* holds, nought where it does not."""
+            return b.binary(BinOp.WRAP_SUB, b.int_const(U64, 0),
+                            b.cast(CastKind.ZEXT, truth, U64, span), span)
+
+        zero = builder.int_const(stepped, 0)
+        falling = builder.compare(CmpPred.SLT, step, zero, span) if stepped.signed \
+            else builder.bool_const(False)
+        size = wide(builder, step, stepped)
+        size = builder.binary(BinOp.OR, builder.binary(
+            BinOp.AND, mask(builder, falling),
+            builder.binary(BinOp.WRAP_SUB, builder.int_const(U64, 0), size, span),
+            span), builder.binary(BinOp.AND, builder.binary(
+                BinOp.XOR, mask(builder, falling), builder.int_const(U64, -1 & (2**64 - 1)),
+                span), size, span), span)
+        builder.check(builder.compare(CmpPred.NE, size, builder.int_const(U64, 0),
+                                      span),
+                      "a range whose step came to nought", statuses.ZERO_STEP, span)
+        signed = element.signed
+        below = builder.compare(CmpPred.SLT if signed else CmpPred.ULT,
+                                first, last, span)
+        above = builder.compare(CmpPred.SGT if signed else CmpPred.UGT,
+                                first, last, span)
+        rising = builder.binary(BinOp.XOR, falling, builder.bool_const(True), span)
+        ahead = builder.binary(BinOp.OR,
+                               builder.binary(BinOp.AND, rising, below, span),
+                               builder.binary(BinOp.AND, falling, above, span), span)
+        start, end = wide(builder, first, element), wide(builder, last, element)
+        up = builder.binary(BinOp.WRAP_SUB, end, start, span)
+        down = builder.binary(BinOp.WRAP_SUB, start, end, span)
+        distance = builder.binary(
+            BinOp.OR,
+            builder.binary(BinOp.AND, mask(builder, rising), up, span),
+            builder.binary(BinOp.AND, mask(builder, falling), down, span), span)
+        whole = builder.binary(BinOp.UDIV, distance, size, span)
+        part = builder.compare(CmpPred.NE,
+                               builder.binary(BinOp.UREM, distance, size, span),
+                               builder.int_const(U64, 0), span)
+        turns = builder.binary(BinOp.AND, mask(builder, ahead), builder.binary(
+            BinOp.WRAP_ADD, whole, builder.cast(CastKind.ZEXT, part, U64, span),
+            span), span)
+        # The step in the ends' own type: a signed twin's bits are what adding it
+        # with wrapping does to an unsigned number, in either direction.
+        moving = step if stepped == element \
+            else builder.cast(CastKind.ZEXT, step, element, span)
+        return _Iteration(
+            element=element, start=(first, builder.int_const(U64, 0)),
+            more=lambda b, s: b.compare(CmpPred.ULT, s[1], turns, span),
+            take=lambda b, s: s[0],
+            step=lambda b, s: (b.binary(BinOp.WRAP_ADD, s[0], moving, span),
+                               b.binary(BinOp.WRAP_ADD, s[1], b.int_const(U64, 1),
+                                        span)))
+
     def _range_of(self, builder: IRBuilder, stmt: ast.ForEach
-                  ) -> tuple[Value, Value, Value, bool, IntType] | None:
+                  ) -> tuple[Value, Value, Value, bool | None, IntType] | None:
         """What a loop's expression gives out: where it starts, where it stops,
-        how far it moves, which way it runs, and of what type.
+        how far it moves, which way it runs, and of what type -- or nothing for
+        the way, where the step is worked out while running and only then says.
 
         Nothing but a range is one of these yet, and anything else is reported
         as not being something to take values from rather than as not being a
@@ -19248,6 +19330,25 @@ class Checker:
             self._diags.emit(D.LANG_RANGE_ENDS_DIFFER, written.span,
                              first=element.written(), second=other.written())
             return None
+        if written.step is not None and not isinstance(written.step, ast.IntLit):
+            # Worked out while running: of the ends' type, or -- so that an
+            # unsigned range may count down -- of the signed type of its width.
+            twin = replace(element, signed=True)
+            # Lowered as what it is said to be where that is the twin, and as
+            # the ends' type otherwise, which is what a literal in it takes.
+            said = self._hint_of(written.step)
+            step = self._lower_expr(builder, written.step,
+                                    said if said in (element, twin)
+                                    else None if said is not None else element)
+            stepped = self._value_type_of(step)
+            if stepped is ERROR:
+                return None
+            if stepped != element and stepped != twin:
+                self._diags.emit(D.LANG_RANGE_STEP_TYPE, written.step.span,
+                                 element=element.written(), twin=twin.written(),
+                                 found=stepped.written())
+                return None
+            return first, last, step, None, element
         distance, rising = self._range_step(written, element)
         if distance is None:
             return None
@@ -19255,22 +19356,18 @@ class Checker:
 
     def _range_step(self, written: ast.Range,
                     element: IntType) -> tuple[int | None, bool]:
-        """How far a range moves each turn, and whether it counts up.
+        """How far a range whose step is written down moves each turn, and
+        whether it counts up.
 
-        It is written down rather than computed.  Which way the range runs
-        follows from its sign, and that decides which comparison ends the loop;
-        a step the compiler cannot read would need both comparisons and a choice
-        between them on every turn, for a generality nothing has asked for.  The
-        sign is read here and the distance is what is left, so a range that
-        counts down over an unsigned type is written the way one that counts up
-        is.
+        Which way the range runs follows from the sign, and that decides which
+        comparison ends the loop, here and while compiling; a step worked out
+        while running is `_over_a_counted_range`'s.  The sign is read here and
+        the distance is what is left, so a range that counts down over an
+        unsigned type is written the way one that counts up is.
         """
         if written.step is None:
             return 1, True
-        if not isinstance(written.step, ast.IntLit):
-            self._diags.emit(D.LANG_RANGE_STEP_NOT_WRITTEN_DOWN,
-                             written.step.span)
-            return None, True
+        assert isinstance(written.step, ast.IntLit)
         given = written.step.value
         if given == 0:
             self._diags.emit(D.LANG_RANGE_STEP_IS_ZERO, written.step.span)

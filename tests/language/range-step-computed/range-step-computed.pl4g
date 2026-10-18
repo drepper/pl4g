@@ -1,0 +1,45 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A step may be worked out while running.**  Which way the range runs is then known
+※ only then, so how many turns there are is worked out once, before the loop -- the
+※ distance between the ends over the step, rounded up, and none where the step points
+※ away from the far end -- and the loop counts them.  The step is of the ends' type,
+※ or of the signed type of their width, so that an unsigned range counts down by a
+※ computed amount.  Nothing steps past the end of the type: a range running up to
+※ the largest value there is ends there.
+※
+※ Compare: **Python**'s `range(a, b, s)`, whose length is worked out the same way;
+※ **Rust**'s `(a..b).step_by(s)`, which takes only a positive step; **C**'s `for`, where
+※ the comparison is the program's to choose and to get wrong.
+
+let std := ⎕import("std")
+
+fn total(from: u8, upto: u8, by: i8) → u16:
+    let t: mut u16 = 0u16
+    foreach i := from…upto…by:
+        t ← t + ⎕widen(i, ⌜u16⌝)
+    t
+
+fn count(from: i8, upto: i8, by: i8) → u16:
+    let n: mut u16 = 0u16
+    foreach _ := from…upto…by:
+        n ← n + 1u16
+    n
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let up: u8 = 2u8
+    let s: mut u8 = 0u8
+    foreach i := 0u8…7u8…up:
+        s ← s + i
+    if s ≠ 12u8:
+        return 1u6
+    if total(10u8, 0u8, ⁻3i8) ≠ 22u16:
+        return 2u6
+    if total(0u8, 10u8, ⁻1i8) ≠ 0u16 ∨ total(10u8, 0u8, 1i8) ≠ 0u16:
+        return 3u6
+    if total(250u8, 255u8, 4i8) ≠ 504u16:
+        return 4u6
+    if count(⁻128i8, 127i8, 127i8) ≠ 3u16 ∨ count(127i8, ⁻128i8, ⁻128i8) ≠ 2u16:
+        return 5u6
+    if count(0i8, 0i8, 5i8) = 0u16: 0u6 else: 6u6

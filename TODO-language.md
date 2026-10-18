@@ -324,10 +324,9 @@ removed or decided otherwise, which its last paragraph says.
     value means a type for it, a layout, and a rule about what a range of one type compared with a range of another means; Rust
     has all of that and needs it because its ranges are iterators like any other.  Worth doing when something wants to pass one.
 
-[ ] a step that is computed rather than written down.  Refused today (4441).  Which way a range runs follows from the sign of the
-    step, and that decides which comparison ends the loop; a computed step needs both comparisons and a choice between them, or a
-    loop written so that the choice is made once before it starts.  The second is what a real implementation does and is worth
-    doing when a program wants it.
+[x] a step that is computed rather than written down.  Done on 2026-10-18 at the user's direction: how many turns there are is
+    worked out once before the loop and the loop counts them; the step is of the ends' type or its signed twin (4927), and one
+    that comes to nought stops the program (status 91).  4441, which refused it, is gone from the catalog.
 
 [x] leaving a loop early.  Done on 2026-09-14: `break §name` leaves a loop and `continue §name` begins its next turn, the loop
     named by `§` after its keyword and the label written on every jump (3033), so that a jump says which loop it means rather than

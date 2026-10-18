@@ -3730,22 +3730,6 @@
       "option": null
     },
     {
-      "number": 4441,
-      "name": "LANG_RANGE_STEP_NOT_WRITTEN_DOWN",
-      "severity": "error",
-      "message": "how far a range moves each turn is written down, not computed",
-      "args": [],
-      "cause": "Which way a range runs follows from the sign of its step, and that decides which comparison ends the loop.  A step the compiler cannot read would need both comparisons and a choice between them on every turn, for a generality nothing has asked for; a generated program writes the number.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Expressions / Ranges",
-        "requirement": "The step of a range is a literal."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 4442,
       "name": "LANG_RANGE_STEP_IS_ZERO",
       "severity": "error",
@@ -10463,6 +10447,38 @@
         "document": "spec/spec.md",
         "section": "The Language / Statements / foreach",
         "requirement": "A type's `each` takes the value walked and `&mut arena`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4927,
+      "name": "LANG_RANGE_STEP_TYPE",
+      "severity": "error",
+      "message": "a range over '{element}' moves by a '{element}' or a '{twin}', not by a '{found}'",
+      "args": [
+        {
+          "name": "element",
+          "type": "string",
+          "description": "the type of the range's ends"
+        },
+        {
+          "name": "twin",
+          "type": "string",
+          "description": "the signed type of the same width"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type the step was worked out to be"
+        }
+      ],
+      "cause": "A step worked out while running is of the ends' own type, or -- so that a range over an unsigned type may count down by a computed amount -- of the signed type of the same width.  Nothing is widened on the way in, so that what the loop gives out is never of a type decided by a rule the reader has to know.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Ranges",
+        "requirement": "A computed step is of the ends' type or of its signed twin."
       },
       "since": "0.1",
       "default_enabled": true,

@@ -108,3 +108,7 @@ PRE_CONDITION: Final[int] = FIRST + 10
 #: A condition written in a signature that did not hold on the way out.  The
 #: callee is what was wrong here, whatever it was called with.
 POST_CONDITION: Final[int] = FIRST + 11
+
+#: A range whose step was worked out while running and came to nought, which
+#: would never end.  One written down is refused while compiling instead.
+ZERO_STEP: Final[int] = FIRST + 12

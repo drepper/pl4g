@@ -10233,6 +10233,20 @@ so that is what was done, without a question of its own: `v.f(args)` on a `Two(u
 for what the instance was given -- the reading Rust's `impl<T> Two<T>` and C++'s member functions of a class template give it, and
 the one `Two.f(v)` written out already had.  An `each` generic in the type's parameters then walks every instance.
 
+## 2026-10-18T19:45+02:00 — language
+
+**A range's step may be worked out while running**
+
+The user asked for the entry in TODO-language.md.  Asked how such a range is compiled, the user chose **counting the turns first**
+-- the distance over the step, rounded up, worked out once before the loop, which the loop then counts: CPython's `range` and Rust's
+`StepBy` -- against two copies of the loop chosen by the step's sign, and against choosing the comparison on every turn.  Asked what a
+step that comes to nought does, **it stops the program**, with a status of its own (91), as Python raises -- against a range of no
+turns.  And asked what type the step may be, **the ends' type or the signed type of their width**, so that an unsigned range counts
+down by a computed amount -- against the ends' type alone and against any integer type.
+
+Taken without asking: a written-down step keeps the loop it had, and its nought is still refused while compiling (4442); a step of
+another type is refused (4927); 4441, which refused a computed step, is gone from the catalog and its number not reused.
+
 Open questions
 --------------
 

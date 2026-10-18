@@ -2814,6 +2814,18 @@ literal, and the only thing it costs is a name immediately followed by a charact
 nothing readable writes, and which the whole test suite confirmed nothing does.  It is Haskell's rule and ML's.
 
 
+A range with a computed step
+----------------------------
+
+**A written-down step keeps the loop it always had**: the comparison its sign chooses and a saturating step.  One worked out while
+running goes to `_over_a_counted_range`, which works out the number of turns before the loop and carries a count beside the value.
+Everything is done in 64 unsigned bits -- the ends and the step extended by their own signedness and read unsigned -- where the
+difference of the two ends, taken in whichever direction the step points, is exact for every width up to sixty-four.  The direction,
+the magnitude and the count are worked out without a branch, there being no select in the representation: a truth becomes a mask
+(nought less its widening), and `(d ÷ s) + (d % s ≠ 0)` rounds up without the addition that `d + s - 1` would overflow.  The value
+steps with a wrapping addition of the step in the ends' type -- a signed twin's bits being what a wrapping addition of a negative
+amount is -- and the step after the last turn, which may go round, is never read.  The check for nought comes before any of it.
+
 A block written on one line
 ---------------------------
 
