@@ -1760,6 +1760,42 @@ def _written_in(node: object, into: set[str], parts: set[str]) -> None:
             _written_in(one, into, parts)
 
 
+def _changed_in_place(name: str, node: object) -> bool:
+    """Whether *node* changes a list *name* holds -- or one inside it -- where it
+    is: joins onto it, writes an element of it, takes one out or makes room in it,
+    directly or by walking it with a cursor.  Read off what is written, so a
+    name shadowed somewhere counts too, which costs a copy and never an answer."""
+    def rooted(expr: object) -> bool:
+        while isinstance(expr, (ast.Member, ast.Element, ast.Deref)):
+            expr = expr.operand if isinstance(expr, ast.Deref) else expr.base
+        return isinstance(expr, ast.NameRef) and expr.name == name
+
+    found = False
+
+    def visit(one: object) -> None:
+        nonlocal found
+        if found:
+            return
+        match one:
+            case ast.JoinAssign() if rooted(one.target):
+                found = True
+            case ast.ElementAssign() | ast.TakeAt() if rooted(one.base):
+                found = True
+            case ast.Call() if isinstance(one.callee, ast.NameRef) \
+                    and one.callee.name in (RESERVE_NAME, ITER_NAME) \
+                    and one.args and rooted(one.args[0]):
+                found = True
+        if isinstance(one, ast.Node):
+            for field_ in fields_of(one):
+                visit(getattr(one, field_.name))
+        elif isinstance(one, (tuple, list)):
+            for item in one:
+                visit(item)
+
+    visit(node)
+    return found
+
+
 def _is_owning(ty: Type) -> bool:
     """Whether a container of *ty* copies what is put in it into its allocator."""
     return isinstance(ty, ArrayType) and owned.points(ty.element)
@@ -3618,6 +3654,11 @@ class Checker:
         #: What `Liveness` said of every statement of the functions lowered so far,
         #: by the statement's identity, and which functions it has been asked of.
         self._live_in: dict[int, frozenset[int]] = {}
+        #: And as each is done, which is what says a name is not used again.
+        self._live_out: dict[int, frozenset[int]] = {}
+        #: The values that are copied where they are lowered, by identity: a list
+        #: read out of a place into another, where either may change it in place.
+        self._copying: set[int] = set()
         self._live_reach: dict[int, frozenset[tuple[int, int]]] = {}
         self._live_ends: dict[int, dict[tuple[int, int], str]] = {}
         self._live_ends_after: dict[int, frozenset[tuple[int, int]]] = {}
@@ -10091,6 +10132,7 @@ class Checker:
                                  is_parameter=True, builder=builder,
                                  placed_as=held)
                 continue
+            value = self._own_when_changed(builder, param, value, node.body)
             self._bind_local(param.name, value, param.span,
                              param.mutable, is_parameter=True, builder=builder)
         outer_lifetimes = self._enter_lifetimes(
@@ -10324,6 +10366,7 @@ class Checker:
                 self._report_inferred(((stmt.name, stmt.name_span), *stmt.more),
                                       stmt.type)
             case ast.VarDef():
+                self._copied_where_shared(stmt.value, stmt.mutable)
                 self._lower_local(builder, stmt)
                 self._made_in(stmt.name, stmt.value, stmt.span)
                 self._report_inferred(((stmt.name, stmt.name_span), *stmt.more),
@@ -10332,6 +10375,8 @@ class Checker:
                 # An assignment stands for the variable it changed, so it can be
                 # a function's result the way any other last statement can.
                 wants_value = is_last and func.ty.ret is not VOID
+                if not stmt.more:
+                    self._copied_where_shared(stmt.value, True)
                 result = self._lower_assignment(builder, stmt, wants_value)
                 if not stmt.more:
                     self._made_in(stmt.name, stmt.value, stmt.span,
@@ -10358,11 +10403,13 @@ class Checker:
                     if _marked(stmt.base) is not None:
                 self._assign_each(builder, stmt, func)
             case ast.ElementAssign():
+                self._copied_where_shared(stmt.value, True)
                 self._lower_element_assign(builder, stmt)
                 self._made_in_part(stmt.base, stmt.value, stmt.span)
             case ast.JoinAssign():
                 self._lower_join_assign(builder, stmt)
             case ast.MemberAssign():
+                self._copied_where_shared(stmt.value, True)
                 self._lower_member_assign(builder, stmt)
                 self._made_in_part(stmt.base, stmt.value, stmt.span)
             case ast.Yield():
@@ -12695,6 +12742,7 @@ class Checker:
                         for one, param in zip(func.ty.params, node.params)]
             for param, value in zip(node.params, arriving):
                 self._at_entry[param.name] = value
+                value = self._own_when_changed(inner, param, value, node.body)
                 self._bind_local(param.name, value, param.span, param.mutable,
                                  is_parameter=True, builder=inner)
             if func.hands_out is not None:
@@ -13814,6 +13862,7 @@ class Checker:
                     brought.append((one, bound))
                     inherited.append((local, bound, one.by_reference))
             for one, value in zip(expr.params, arriving[1:]):
+                value = self._own_when_changed(inner, one, value, expr.body)
                 self._bind_local(one.name, value, one.span, one.mutable,
                                  is_parameter=True, builder=inner)
             outer_lifetimes = self._enter_lifetimes(
@@ -14158,6 +14207,7 @@ class Checker:
         else:
             found.function(node)
         self._live_in.update(found.live_in)
+        self._live_out.update(found.live_out)
         self._live_reach.update(found.reach_in)
         self._live_ends.update(found.ends)
         self._live_ends_after.update(found.ends_after)
@@ -15557,7 +15607,8 @@ class Checker:
         if not self._accepts(expected, ty.element):
             self._report_mismatch(expr.span, ty.element, expected)
             return UndefConst(ERROR)
-        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
+        if not self._made_here(place):
+            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
         self._made_writable(builder, place, ty, expr.span)
         elements, count, _ = self._list_at(builder, place, ty, expr.span)
         builder.check(builder.compare(CmpPred.ULT, at, count, expr.span),
@@ -15612,6 +15663,63 @@ class Checker:
         made = self._room_made(builder, place, ty, builder.int_const(U64, 0), span)
         self._room_kept(builder, place, ty, made, made[2], span)
 
+    def _copied_where_shared(self, written: ast.Expr, changes: bool) -> None:
+        """Note *written* as a value to copy where it is lowered, where it is a
+        list read out of a place into another -- one that may itself change it
+        in place where *changes* says so -- and the two would otherwise share
+        the room the elements are in.
+
+        A list is a value: changing one in place -- `l ⧺← x`, `l⟦i⟧ ← v`,
+        `†l⟦i⟧` -- changes no other name's.  So where either the place it was
+        read from or the place it goes may be changed so, the new one gets
+        elements of its own, unless the one it came from is done with: a local
+        of this function, not a parameter -- whose room is its caller's -- and
+        not used again after this statement, whose room is then simply handed
+        over.  Where neither may change, sharing is something nobody can see.
+        """
+        ty = self._said_to_be(written)
+        if not isinstance(ty, ListType) or not owned.can_own(ty) \
+                or not isinstance(written, (ast.NameRef, ast.Member, ast.Element,
+                                            ast.Deref)):
+            return
+        root: ast.Expr = written
+        through_a_reference = False
+        while isinstance(root, (ast.Member, ast.Element, ast.Deref)):
+            through_a_reference |= isinstance(root, ast.Deref)
+            root = root.operand if isinstance(root, ast.Deref) else root.base
+        local = self._find_local(root.name) if isinstance(root, ast.NameRef) else None
+        if local is not None and isinstance(written, ast.NameRef) \
+                and not local.is_parameter and not self._used_after(local):
+            return
+        may_change = through_a_reference or local is None or local.mutable
+        if changes or may_change:
+            self._copying.add(id(written))
+
+    def _own_when_changed(self, builder: IRBuilder, param: ast.Param, value: Value,
+                          body: object) -> Value:
+        """A `mut` parameter holding a list, given elements of its own where the
+        body changes it in place: what arrived is in its caller's room, which a
+        change through the parameter would otherwise change for the caller."""
+        if not param.mutable or not isinstance(self._value_type_of(value), ListType) \
+                or not _changed_in_place(param.name, body):
+            return value
+        return self._copy_of(builder, value, param.span)
+
+    def _used_after(self, local: _Local) -> bool:
+        """Whether *local* is used again after the statement being lowered --
+        on any way on from it, the loop it is in included."""
+        stmt = self._current_stmt
+        after = self._live_out.get(id(stmt)) if stmt is not None else None
+        return after is None or local.span.start in after
+
+    def _copy_of(self, builder: IRBuilder, value: Value, span: Span) -> Value:
+        """A list of elements of its own, deep, in the arena in force."""
+        ty = self._value_type_of(value)
+        if not isinstance(ty, ListType):
+            return value
+        return builder.call(owned.own_function(self._module, ty),
+                            (self._out_of(builder, span), value), ty, span)
+
     def _lower_join_assign(self, builder: IRBuilder, stmt: ast.JoinAssign) -> None:
         """Lower `l ⧺← more`: *more* joined onto the end of the list in the place
         `l`, in the room it has to spare and in new room twice as large where it
@@ -15630,7 +15738,10 @@ class Checker:
         written = stmt.value
         if isinstance(written, ast.ArrayLit):
             written = ast.ListLit(span=written.span, elements=written.elements)
-        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
+        if not self._made_here(place):
+            # A list is a value, so one in this function's own room is changed
+            # for nobody else; one reached through a reference is somebody's.
+            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
         stride = stride_of(ty.element, _LAYOUT)
         span = stmt.span
         if isinstance(written, ast.ListLit) and written.elements \
@@ -15725,7 +15836,8 @@ class Checker:
         value = self._lower_into(builder, stmt.value, ty.element, stmt.value.span)
         if self._value_type_of(value) is ERROR:
             return
-        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
+        if not self._made_here(place):
+            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
         span = stmt.span
         self._made_writable(builder, place, ty, span)
         elements, count, held = self._list_at(builder, place, ty, span)
@@ -15766,7 +15878,8 @@ class Checker:
         if not self._accepts(expected, VOID):
             self._report_mismatch(expr.span, VOID, expected)
             return UndefConst(ERROR)
-        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
+        if not self._made_here(place):
+            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
         made = self._room_made(builder, place, ty, more, expr.span)
         self._room_kept(builder, place, ty, made, made[2], expr.span)
         return UndefConst(VOID)
@@ -20649,6 +20762,10 @@ class Checker:
         not twice at once.  An answer that may hold a reference keeps what it was
         handed until the statement ends, or until the name it is bound to goes.
         """
+        if self._copying and id(expr) in self._copying:
+            self._copying.discard(id(expr))
+            return self._copy_of(builder, self._lower_expr(builder, expr, expected),
+                                 expr.span)
         if self._abstract is not None and isinstance(expr, _APPLYING):
             handled = self._abstractly(builder, expr)
             if isinstance(handled, Value):
