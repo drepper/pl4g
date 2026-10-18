@@ -213,6 +213,7 @@ GROUPS: tuple[Group, ...] = (
            "each-walks-a-type": "a program's own type walked by its each, in loops and through calls",
            "range-step-computed": "ranges whose step is worked out while running, counted first",
            "list-grows": "a list joined onto where it is, read, written and given room ahead",
+           "array-answered": "arrays answered as views of parameters, copied into arenas and by value",
            "lambda-answered": "lambdas answered, boxed, listed and written through a reference",
            "static-data": "arrays, lists, sets and dictionaries laid out in the image",
            "lambda-handed-on": "lambdas that last, composed, handed on and kept in a field",

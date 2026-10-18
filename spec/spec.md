@@ -3888,15 +3888,44 @@ always of a value.
 ##### Where the elements are
 
 A variable at the top level of type `T⟦N⟧` holds them itself, as bytes in the image.  One inside a function holds them in the
-function's own room, which lasts exactly as long as the call.
+function's own room, which lasts exactly as long as the scope it is bound in.
 
-Two things follow from that, and both are refusals the language will lift when it can say where something lives:
+**A view is where some elements are**, so it lasts no longer than they do: a view of an array in a function's room may not be given
+to anything that outlives the array -- a name or a field bound further out, which a view given to it would point at what is gone
+(4570), the rule a reference follows.  Giving an array to a name of an array copies the elements instead (below), which is no view
+at all, and one element read out is a value.
 
-- **A function does not answer with an array type** (4454).  The elements of an array a function made are in that function's own
-  room, which is gone by the time the caller reads them.  A slice of something that outlives the call would be safe, and there is
-  no way yet to say that one does.
-- **A variable at the top level of type `T⟦⟧` is refused** (4455).  It owns nothing, and there is nothing for it to point at
-  before the program runs.
+**A function answers an array, and says where its elements are**, with the `in` an answer made in an arena is written with:
+
+```
+fn head(a: u8⟦⟧) → u8⟦⟧ in a:                      ※ some of what a holds
+    a⟦0…2⟧
+
+fn squares(n: u64 ¤idx, p: &mut arena) → u64⟦⟧ in p:    ※ kept in p
+    let v: mut u64⟦8⟧ = …
+    v⟦0…n⟧                                          ※ the frame's: copied into p
+
+fn digits() → u8⟦⟧ in ⎕static: …                    ※ in the image
+fn rgb() → u8⟦3⟧: ⟦1u8, 2u8, 3u8⟧                    ※ by value
+```
+
+- **`in a`, `a` an array handed over** -- fixed or not -- says the answer is some of `a`'s elements: the caller's answer reaches
+  them, and lasts as long as what it handed over.  The body is held to it: a view of its own frame said to be some of `a`'s is
+  refused (4624), there being nothing to copy it to.
+- **`in p`, `p` an arena**, says the elements are kept in `p`, and **saying nothing says `⎕heap`**: elements the body made in its
+  own frame, or anywhere else, are copied there on the way out, as text is.  A view of one dimension is copied so; one of more is
+  not yet (4624).
+- **`in ⎕static`** says they are in the image, and several may be named, as for any answer: `→ u8⟦⟧ in a, p`.
+- **An array whose type says its shape is answered by value**: copied into the caller's room, as a record is, so an `in` after one
+  says nothing (4621).
+
+A function's type and a lambda have no `in` to say it with, and answer no view (4454).  **A variable at the top level of type `T⟦⟧`
+is refused** (4455): it owns nothing, and there is nothing for it to point at before the program runs.
+
+Compare: **Rust**'s `fn head<'a>(a: &'a [u8]) -> &'a [u8]`, the same thing with the lifetime written out, its arena crates for
+the second, and `[u8; 3]` by value; **Zig**, whose slice answers are the program's to keep alive; **Go**, which answers a slice of
+anything and keeps what it reaches on a collected heap; **C**, whose function answers a pointer to a local array and nothing says
+so.
 
 ##### What one occupies
 

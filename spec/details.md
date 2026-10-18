@@ -3701,6 +3701,25 @@ room the new value was made in: that room belongs to a place in the program and
 not to a turn of a loop, so a value kept from one turn to the next would
 otherwise read what the next turn made.
 
+Where a view's elements are
+---------------------------
+
+**A view carries a key for the array it was taken of**, which nothing did before: an array in a frame had the empty provenance an
+array in the image has, so a view of one could be given to anything.  `_array_frame_of` answers the key -- `_storage_key`, the
+stand-in a lambda's reference to a variable already uses, at the variable's depth, for an array this function keeps in its frame
+(`_made_here` of its value, which is no frame for one `in ⎕static`), and the parameter itself, in `_unknown_by_id`, for one a
+caller handed over -- and `_collect_arenas` adds it for a name of an array.  The keys are noted in `_array_frames`, so that where
+the elements are copied they are taken out again: one element read out (`_a_view_of`), a fixed array given a value, any array
+given to an array name or an element, which copies the elements rather than re-pointing anything.  A view given to a field of a
+record re-points the field, and keeps them.  What then refuses an escape is what refused one made in an arena: `_made_in` and
+`_made_in_part` against the stand-in's depth, said as a reference outliving its place (4570).
+
+**An answer `in a`, `a` an array, is allowed the parameter's key** (`_params_made_in`); `_made_in_of` takes an array parameter
+after `in` only for a view's answer.  A caller's answer is made in what the argument was (`_arenas_handed`), its frame key
+included, so the escape rule holds there too.  `_answered` copies into an allocator only -- never into an array's key -- and a
+view of one dimension is copied by `__pl4g_own.T` into a dense run (`_build_own_view`).  `_return_type` lets a function answer an
+array; a fixed one goes through the caller's storage (`largeanswers`), which was there already.
+
 A list joined onto where it is
 ------------------------------
 

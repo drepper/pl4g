@@ -10270,6 +10270,24 @@ changing a list in the function's own room is no effect, one reached through a r
 list is copied part by part, which also lets a record holding text be copied where it was refused (4623, 4624, 4633).  `⧺←`
 written apart is a join missing its right side, and on a value it is refused as an assignment to one is (3027).
 
+## 2026-10-19T12:00+02:00 — language
+
+**A function answers an array, and `in` says where its elements are**
+
+The user asked for "say where the elements of an array live" in TODO-language.md.  Asked how a signature says it, the user chose
+**`in`, naming a parameter** -- an array handed over, an arena, or `⎕static`, `→ u8⟦⟧ in a` -- the word an answer made in an arena
+already takes, against lifetime names on array types (Rust's `&'a [T]`) and against inferring it (Rust's elision).  Asked what
+`→ u8⟦3⟧` is, **answered by value**, as a record is, against treating it as a view; and asked about a view the body made and answers
+`in` an arena, **copied there on the way out**, as text is, against refusing it.
+
+Building it found that nothing said where a view's elements were when they were a local array's: a view of one could be given to a
+name or a field further out and read after the array was gone.  Taken without asking, as what the decision needs: a view carries
+a key for the storage of the array it was taken of, or for the parameter it was handed as, and is held to it as a reference to a
+variable is (4570); a copy of the elements -- an element read out, an array given to an array -- carries none.  Saying nothing
+after an answer is `⎕heap`, so a view answered with nothing said is copied there; a view of the body's own frame said to be a
+parameter's is refused (4624); a view of more than one dimension is not copied yet; and a function's type and a lambda, which
+have no `in`, still answer no view (4454).
+
 Open questions
 --------------
 

@@ -432,13 +432,14 @@ removed or decided otherwise, which its last paragraph says.
     [ ] **a list inside a sum, or an array of lists, copied** -- the rule above copies lists, and records and tuples
         holding them, part by part; a sum would need its tag asked and an array a walk.
 
-[ ] say where the elements of an array live, so that one can be answered with.  Refused today (4454): the elements of an array a
-    function made are in that function's own room.  A slice of something that outlives the call is safe and the language cannot say
-    so.  Rust says it with a lifetime, Zig by leaving it to the programmer, Go by putting everything a slice can point at on a
-    collected heap.  The arena is the shape of an answer here -- a value could name the arena its elements are in, which is what the
-    entry about giving an arena back already wants for collections -- and the two should be answered together.
-    **Out of date (2026-10-04):** The arena machinery it would pair with exists now (`→ T in a`, `in ⎕static`); the refusal (4454)
-    is what is left.
+[x] say where the elements of an array live, so that one can be answered with.  Done on 2026-10-19 at the user's direction:
+    `→ u8⟦⟧ in a` -- an array handed over, an arena, `⎕static` -- and `→ u8⟦3⟧` by value; a view the body made is copied into
+    the arena named, or `⎕heap`.  With it, a view of a local array carries where it points and may not outlive it (4570).
+    Left over:
+    [ ] **a view of more than one dimension copied** into an allocator, which `__pl4g_own` does for one dimension only.
+    [ ] **a lambda and a function type answering a view** (4454), which want an `in` of their own.
+    [ ] **what a generator yields**, a view of its own frame as `std.read_lines` yields one, is still unchecked: a loop's name
+        bound to it may be kept past the walk.
 
 [x] iterate over an array, a set and a dictionary.  Done: four things are iterators and none of them is called.  An array gives
     each element where it has one dimension and each row of the outermost where it has more; a set gives each key; a dictionary

@@ -3977,7 +3977,7 @@
       "number": 4454,
       "name": "LANG_ARRAY_ANSWERED_WITH",
       "severity": "error",
-      "message": "a function does not answer with '{found}'",
+      "message": "a function's type or a lambda does not answer with '{found}'",
       "args": [
         {
           "name": "found",
@@ -3985,7 +3985,7 @@
           "description": "the array type written"
         }
       ],
-      "cause": "What a value of an array type is, is where its elements are, and the elements of an array a function made are in that function's own room -- which is gone by the time the caller reads them.  A slice of something that outlives the call would be safe, and the language has no way yet to say that one does; until it has, nothing is answered with.",
+      "cause": "A view is where some elements are, and a function says where with `→ T⟦⟧ in a` -- an array handed over, an arena, `⎕static`.  A function's type and a lambda have no `in` to say it with, so neither answers a view; an array whose type says its shape is answered by value by anything.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Arrays",
@@ -4715,7 +4715,7 @@
       "number": 4618,
       "name": "LANG_MADE_IN_NOT_AN_ARENA",
       "severity": "error",
-      "message": "'{name}' is not a parameter holding an arena, and only one -- or ⎕heap, for an answer -- can say where something was made",
+      "message": "'{name}' is not a parameter holding an arena, and only one -- or ⎕heap, or for a view an array, for an answer -- can say where something was made",
       "args": [
         {
           "name": "name",
@@ -4723,7 +4723,7 @@
           "description": "the name after 'in'"
         }
       ],
-      "cause": "`→ T in a` and `s: T in a` name the arena parameter a value was made in, so what follows `in` is a parameter of type `&mut arena` or `&arena`; an answer may name `⎕heap` as well, which fixes it in the heap.  A local arena is given back before the call ends and cannot be named.",
+      "cause": "`→ T in a` and `s: T in a` name the arena parameter a value was made in, so what follows `in` is a parameter of type `&mut arena` or `&arena`; an answer may name `⎕heap` as well, which fixes it in the heap.  A local arena is given back before the call ends and cannot be named.  An answer that is a view may also name an array parameter, `→ u8⟦⟧ in a`: its elements are some of `a`'s.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Arenas / Where an answer was made",
