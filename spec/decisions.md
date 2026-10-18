@@ -10247,6 +10247,29 @@ down by a computed amount -- against the ends' type alone and against any intege
 Taken without asking: a written-down step keeps the loop it had, and its nought is still refused while compiling (4442); a step of
 another type is refused (4927); 4441, which refused a computed step, is gone from the catalog and its number not reused.
 
+## 2026-10-19T09:00+02:00 — language
+
+**A list grows where it is, and is a value**
+
+The user asked for "an array that can grow" in TODO-language.md, and was asked first what grows: **the list, with how much room
+it has kept in a header before its elements**, so the value stays three words -- Rust's `Vec`, C++'s `vector`, Redis's sds header --
+against a fourth word in every list (Go's slice header) and against a new growable type beside array, view and list.  Asked how
+a program appends, **`l ⧺← more`**, the join and the assignment it is short for written as one, against recognizing `l ← l ⧺ more`
+and against a builtin; and asked what comes with it, **`l⟦i⟧` read, `l⟦i⟧ ← v` written, and `⎕reserve(l, n)`**.
+
+Building it found that two names could already share one list's room -- `let m = l` and then `†l⟦0⟧` changed `m` -- against what
+the specification promised, and growing in place would have made it Go's slices.  Asked, the user chose **a list is a value:
+copied, unless the source is done** -- Swift's semantics without its reference count, Mojo's transfer at the last use -- against
+Rust's move with an explicit copy and against sharing as Go does.
+
+Taken without asking, as what those come to: the room doubles, from four elements at the least; a list in the image, which has no
+header, counts as full, and is copied out into the arena in force before it is first written, `†` included, which wrote into the
+image before; a copy is made where either place may change the list in place, and not where the source is a local of the function
+not used again, nor where neither may change it; a `mut` parameter is copied on the way in where its body changes it in place;
+changing a list in the function's own room is no effect, one reached through a reference is; and a record or a tuple holding a
+list is copied part by part, which also lets a record holding text be copied where it was refused (4623, 4624, 4633).  `⧺←`
+written apart is a join missing its right side, and on a value it is refused as an assignment to one is (3027).
+
 Open questions
 --------------
 

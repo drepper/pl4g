@@ -4826,7 +4826,7 @@
           "description": "the element's type"
         }
       ],
-      "cause": "An element not provably made in its container's allocator is copied into it.  Text and lists of text or of plain values can be copied; a record, a tuple, an array held inside a container and a set or a dictionary cannot yet.",
+      "cause": "An element not provably made in its container's allocator is copied into it.  Text, lists of text or of plain values, and records and tuples of those can be copied; a sum holding text, an array held inside a container, a set or a dictionary, and a record that is moved rather than copied cannot yet.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Arenas / What a container holds",
@@ -4863,7 +4863,7 @@
           "description": "the answer's type"
         }
       ],
-      "cause": "A function answers in the allocator its signature names -- `→ T in a`, or `⎕heap` where it names none -- and an answer made anywhere else is copied there before the function leaves.  Text, and lists of text or of plain values, can be copied; a record or a tuple holding text, a result, and anything holding a value marked `@[unique]` cannot.",
+      "cause": "A function answers in the allocator its signature names -- `→ T in a`, or `⎕heap` where it names none -- and an answer made anywhere else is copied there before the function leaves.  Text, lists of text or of plain values, and records and tuples of those can be copied; a result, and anything holding a value marked `@[unique]`, cannot.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Arenas / Knowing the allocator",

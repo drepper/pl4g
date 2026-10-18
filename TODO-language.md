@@ -269,7 +269,8 @@ removed or decided otherwise, which its last paragraph says.
     [ ] **sets and dictionaries holding text** are not yet held to the element rules: their
         keys and values go in as they are, and nothing is given back.
     [ ] **copying records, tuples and nested arrays into an allocator** (4623), which a container
-        of them needs.
+        of them needs.  Records and tuples done on 2026-10-19, part by part, with the list growing; a sum and an array
+        held inside something are what is left.
     [x] **a top-level array of text** is refused (9902), which is what a table of literal text
         such as `std.text`'s digits would want.
         Found done on 2026-10-04: `in ⎕static` (2026-10-02T20:00): `std.text`'s digits are a `str⟦10⟧ … in ⎕static`, and
@@ -418,10 +419,18 @@ removed or decided otherwise, which its last paragraph says.
     such a type carries a count for every dimension, the stated ones included, so it is one shape of value however much of the
     shape the type says; 4456, which refused it, is gone.
 
-[ ] an array that can grow.  A `T⟦⟧` is a place, a count and a stride and owns nothing, so there is nothing to grow: appending
-    wants a third thing beside them -- how much room there is -- and an arena to ask for more from, which is what Go's slice header
-    carries and what this one deliberately does not while no operation appends.  What it needs first is the operation: there is no
-    syntax for appending to anything, and inventing one for arrays alone would be inventing it twice.
+[x] an array that can grow.  Done on 2026-10-19 at the user's direction: the list grows, its room's size in a header before the
+    elements, by `l ⧺← more`; `l⟦i⟧`, `l⟦i⟧ ← v` and `⎕reserve(l, n)` came with it.  A list is now a value: read into another
+    place it is copied where either may change it in place, unless its source is done with.
+    Left over:
+    [ ] **an array that is not written out on the right of `⧺←`**, `l ⧺← a` with `a` a name; an array literal is the list of
+        its elements, and anything else is refused as not a list.
+    [ ] **a run of a list**, `l⟦i…j⟧`, and **a reference to an element**, `&l⟦i⟧` -- both still refused (4449), the second
+        because a list may move its elements when it grows.
+    [ ] **giving a list's room back when a name stops holding it** -- a heap list replaced by `←`, or a copy made for a
+        binding, is not given back; an arena's goes with the arena.  The entry about giving back what a name held is this.
+    [ ] **a list inside a sum, or an array of lists, copied** -- the rule above copies lists, and records and tuples
+        holding them, part by part; a sum would need its tag asked and an array a walk.
 
 [ ] say where the elements of an array live, so that one can be answered with.  Refused today (4454): the elements of an array a
     function made are in that function's own room.  A slice of something that outlives the call is safe and the language cannot say

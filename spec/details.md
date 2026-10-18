@@ -491,11 +491,15 @@ the members are walked here, and for each one the name is bound to an `extract` 
 body is lowered separately, so each sees the name at that member's type -- which is the whole of how one loop binds a name of
 several types.
 
-**A list is two words and no new runtime.**  The value is where the elements are and how many there are, which `parts_of`
-answers as it does for a string and for an array of unstated length -- so a list travels in two registers and needed nothing of
-the calling convention's own.  Its elements come from the arena, one allocation per literal, and a join uses the very function a
-string's join uses: a join of two runs of bytes is a join of two runs of bytes whatever the bytes mean, and what a list adds is
-one multiplication apiece to turn a count of elements into a count of bytes.
+**A list is three words and its room says how large it is.**  The value is where the elements are, how many there are, and the
+allocator (below, beside strings).  The room it was given has a header of sixteen bytes before the elements holding how many there
+is room for, which keeps them as aligned as the allocators' room is; a list with no allocator -- in the image, or the zeroed one a
+record starts with -- has none, and nor does one that points nowhere, which is what an empty list made while running is.  Both
+count as full.  `sema/lists.py` is the only place the header is written or read: `__pl4g_list_room` takes room and writes it,
+`__pl4g_list_capacity` reads it, `__pl4g_list_free` gives the room back by the size it says -- which after an element was taken
+out is more than the elements, and was given back as the elements' size before -- `__pl4g_list_join` makes the room a join answers,
+and `__pl4g_list_grow` and `__pl4g_list_release` are a join onto one where it is (below).  `owned` copies and gives back a list
+through them, and a string as it always did.
 
 The element type lives in the type and not beside the value.  That is the whole of what "store the common element type" needs
 today, and it is the shape the boxed case will be told apart from: a list whose type says what it holds is the one that needs no
@@ -3696,6 +3700,28 @@ A `mut` local of such a type, an array excepted, is given storage of its own
 room the new value was made in: that room belongs to a place in the program and
 not to a turn of a loop, so a value kept from one turn to the next would
 otherwise read what the next turn made.
+
+A list joined onto where it is
+------------------------------
+
+**`l ⧺← more` is one statement, `ast.JoinAssign`**, and the two marks are one token to the grammar and two adjacent ones to the
+compiler's parser, which is what tells it from a join while the left side is read.  `_lower_join_assign` takes the list's place
+with `_list_place` -- `†`'s, saying which operator it is checking -- and `_room_made` asks `__pl4g_list_grow` for room for that many
+more: the same room where there is enough, otherwise new room twice as large from the list's own allocator, or the arena in force
+for a list in the image (`__pl4g_list_allocator`), with the elements copied.  What is joined on is copied in after that, and only
+then is the old room given back (`_room_kept`, `__pl4g_list_release`), which is what makes `l ⧺← l` read what it joins before it
+goes.  A list written out is lowered straight into the room; one whose elements point somewhere is copied deep into the list's
+allocator first, known only while running, and the run that copy was in given back.  `⎕reserve` is the same with nothing copied
+in, and a list in the image made writable before `l⟦i⟧ ←` or `†` is the same with room for nought more: it has none, so it is
+copied out.
+
+**A list read into another place is copied by noting the value** (`_copying`, by identity) where a binding, an assignment, a field
+or an element is lowered, and `_lower_expr` wraps it in `__pl4g_own.T` when it gets there: liveness answers by the identity of the
+statement, which a rewritten tree would not have.  `_copied_where_shared` decides -- a list, or a record or tuple holding one, read
+from a name, a field, an element or through a reference, where either side may change it -- and `_used_after` asks the new
+`live_out` whether a local is used again, which is the hand-over.  A `mut` parameter is copied on the way in where
+`_changed_in_place` finds the body changing it so, read off what is written.  Whether a change is an effect is `_made_here` of the
+list's place, the question an array's element write already asked.
 
 A cursor is where the list is, and how far along
 -----------------------------------------------

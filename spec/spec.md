@@ -3939,9 +3939,9 @@ let plain: [u16] = [1, 2, 3, 4]      ※ the elements take the list's type
 ```
 
 **A list is not an array.**  An array carries its shape in its type and takes no room of its own; a list carries how many there
-are beside where the elements are, and the elements live in an arena.  So an array is what a program reaches for when it knows
-how many, and a list when it does not.  Making one allocates, and allocating is no effect: a pure function may make a list and
-answer it.
+are beside where the elements are, and the elements live in an arena -- **with room to spare**, so that a list grows where it is.
+So an array is what a program reaches for when it knows how many, and a list when it does not.  Making one allocates, and
+allocating is no effect: a pure function may make a list and answer it.
 
 **Its elements must all be of one type, for now.**  A list is the sequence whose elements need not be: what makes that work is
 *boxing* -- a value held with enough beside it to say what it is -- which this compiler does not do yet, so until it does, they
@@ -3962,6 +3962,31 @@ a ⧺ [4u8]                            ※ [u8] holding four
 
 Both sides of a join hold the same type, which today is every list's rule and will later be the case worth not boxing.
 
+**`l ⧺← more` joins onto the list in the place `l`**, where it is: the join and the assignment it is short for, written once.
+
+```
+let l: mut [u16] = []
+foreach i := 0u16…100u16:
+    l ⧺← [i]                         ※ a hundred elements, a handful of copies
+l ⧺← ⟦1u16, 2u16⟧                     ※ an array written out is the list of its elements
+l ⧺← l                               ※ a list joined onto itself
+⎕reserve(l, 1000)                    ※ room for a thousand more, made now
+```
+
+**Room is doubled where it runs out**, so joining one at a time costs a copy of the elements now and then and not every time --
+the room a list has is kept with its elements, how much of it there is written just before them.  What is joined on is copied
+in; where the elements point somewhere, into the list's own allocator.  **`⎕reserve(l, n)`** makes the room for `n` more at
+once, so that a known number of joins takes one allocation.  The two marks of `⧺←` are written together, and what stands on the
+left is a place (3027), a list's (4929) -- an array's length is in its type, and a join of two makes a new one.
+
+**`l⟦i⟧` is the element at `i`, and `l⟦i⟧ ← v` writes one**, both checked against how many there are while running -- a list's
+length is not in its type -- and written as an array's are.  A list in the image is read-only, so the first change made to one
+where it stands copies it out, into the arena in force; what is in the image is as it was.
+
+Compare: **Python**'s `l += [x]`, `l[i]` and `l[i] = v`; **Rust**'s `Vec`, whose `extend`, indexing and `reserve` these are and
+which doubles the same way; **Go**'s `l = append(l, x)`, the same thing with the list written twice and a slice whose room may or
+may not be shared with another; **C++**'s `std::vector`, `insert` at the end and `reserve`.
+
 **`†l⟦i⟧` takes one element out**, and answers what it was:
 
 ```
@@ -3972,14 +3997,32 @@ let gone: u8 = †l⟦1⟧                ※ 2, and the list is [1, 3]
 
 What followed the element moves down into its place and the list is one shorter.
 **What follows the `†` is where the list is** (4701) and not a list that was worked out: a list is where its elements are and
-how many there are, so one element fewer is a different pair of words, and they have to go back where the list was.  The place has
-to allow it, so the name needs `mut` (4004) -- and **another name holding that list keeps what it had**, a list being a value and
-not a handle.  That is the bargain Go strikes with its slices, written down here rather than discovered.
+how many there are, so one element fewer is different words, and they have to go back where the list was.  The place has to allow
+it, so the name needs `mut` (4004).
+
+**A list is a value**, and **another name holding that list keeps what it had** whatever is done in place to the first -- an element
+taken out, one written, more joined on.  So a list read out of a place into another -- bound to a name, assigned, put in a field
+or an element -- **gets elements of its own where either place may change it in place**, and a `mut` parameter whose body changes
+it in place is a copy of what it was handed.  **Where the place it came from is done with** -- a local of the function, not a
+parameter, not used again -- its room is simply handed over and nothing is copied; and where neither place may change, the two
+share what nobody can see them share.  A record or a tuple holding a list is copied the same way, part by part.  Changing a list
+in the function's own room is therefore no effect: nothing anyone else holds changes.  One reached through a reference is
+somebody's, and changing it is (4479).
+
+```
+let l: mut [u8] = [1u8, 2u8, 3u8]
+let m: [u8] = l                       ※ l is used below: m gets a copy
+†l⟦0⟧                                 ※ l is [2, 3], m still [1, 2, 3]
+let k: mut [u8] = l                   ※ l is not used again: handed over
+```
+
+Compare: **Swift**'s arrays, values copied when written behind a reference count, which is the cost this does not pay -- it copies
+where it cannot see that nothing will write; **Mojo**, which transfers a value at its last use, as the hand-over does; **Rust**,
+where `let m = l` moves the vector and a copy is `l.clone()`; **Go**, whose slices share their room, the behaviour this avoids.
 
 **An index past the end stops the program** (as an array's does), which is a comparison at run time: a list's length is not in its
 type, so there is nothing for the compiler to refuse.
 
-There is no plain `l⟦i⟧` read yet (4449); what reads one element is a cursor, below.
 
 ##### Walking one with a cursor
 
@@ -4164,8 +4207,8 @@ allocator, and lasts as long as the call.
 the function leaves -- before what it put off runs, so an arena given back on the way out has been copied out of first.  That is
 how a value made in a scope's own arena reaches past the scope.  Text in the image goes as it is; a value of the heap's is the
 caller's alone, so only a temporary of the heap's is answered as it is, and a name holding one is copied.  **What cannot be copied
-is refused** (4624): a record or a tuple holding text, a result, and anything holding a value marked `@[unique]`, which is what
-`@[unique]` is for.
+is refused** (4624): a result, and anything holding a value marked `@[unique]`, which is what `@[unique]` is for.  A record or a
+tuple holding text is copied part by part.
 
 **An answer whose allocator is fixed travels without it.**  `→ str in ⎕heap` says every answer is made in the heap -- text in the
 image is copied there.  A caller that knows the allocator learns nothing from the third word, so such a function answers a string
@@ -4302,8 +4345,9 @@ over an element with `v⟦i⟧ ← x`, and in a join of two lists:
   pool made goes in as it is, giving that back being nothing.
 
 The copy goes all the way down: a list of lists of text is copied list by list and text by text, and a temporary that was copied
-is given back.  **Some values cannot be copied yet** (4623): a record or a tuple holding text, a set or a dictionary -- and an array
-of text held by another name, which is its elements, so copying it by value would give each element two owners.
+is given back -- and a record or a tuple holding text or a list is copied part by part.  **Some values cannot be copied yet**
+(4623): a sum holding text, a set or a dictionary, a record that is moved and never copied (`@[unique]`, closed, a device) -- and an
+array of text held by another name, which is its elements, so copying it by value would give each element two owners.
 
 **A value read out of a heap container is the same object, not a copy**, and lives until an element is replaced: after `v⟦i⟧ ←`,
 or after `v` is handed to a call that may replace one, what was read out of it before is dead (4626).  Which element is not asked:
@@ -5929,6 +5973,8 @@ A variable that was defined with `mut` is changed by an assignment:
 ```
 NAME ← VALUE
 ```
+
+A list in a place is joined onto with `PLACE ⧺← VALUE`, the join and the assignment written as one (see [Lists](#lists)).
 
 ```
 let count: mut u8 = 0u8
