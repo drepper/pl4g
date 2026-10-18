@@ -3701,6 +3701,15 @@ room the new value was made in: that room belongs to a place in the program and
 not to a turn of a loop, so a value kept from one turn to the next would
 otherwise read what the next turn made.
 
+A lambda answered in an arena a parameter names
+-----------------------------------------------
+
+**It is a rewrite of the signature before anything reads it.**  `_kept_in_the_signature`, the first thing `_collect_function`
+does, takes `fn(…) in a → T` off the answer's type and off each parameter's where `a` is a parameter, and writes it as the
+definition's `made_in` and the parameter's: `→ T in a` and `s: T in a`, which `_made_in_of` checks (4618 where `a` is no arena)
+and every rule about where an answer was made then applies -- `_lambda_may_leave` already let a lambda leave kept in an arena the
+signature names.  Written anywhere else, `kept_in` reaches `_resolve_type` as it is, and 4642 says only `⎕heap` may stand there.
+
 Where a view's elements are
 ---------------------------
 

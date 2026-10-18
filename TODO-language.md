@@ -1050,8 +1050,9 @@ Runtime
 [ ] say in a function type which parameters write the arrays they are handed, so that a function that writes one can be a value
     (4641).
 
-[ ] answer a lambda in an arena a parameter names.  `→ fn(u8) → u8 in a` reads as the lambda's own handing out of an arena, so
-    the signature cannot say it; a type of the answer written in parentheses, or a name for a function type, would.
+[x] answer a lambda in an arena a parameter names.  Done on 2026-10-19 at the user's direction: `→ fn(u8) in a → u8`, where a
+    function type says where a lambda keeps what it brought in, `a` one of the signature's parameters -- `→ T in a` of the
+    answer, and `g: fn(u8) in a → u8` is `s: T in a` of a parameter.
 
 [x] decide whether a type parameter may say what it must support.  It does, in `pre` clauses and bundles, and since 2026-10-02
     the body is checked against them where it is written (4645, 4646), `comptime` arms being left to the call.  What follows was

@@ -1079,6 +1079,22 @@ says it lasts -- not a variable of the call, an arena, or whatever a parameter t
 nothing in, and a function named where a value is wanted, stand where one is wanted as they are, kept nowhere.  Only `⎕heap` is
 written in a type (4642): an arena lasts as long as its maker keeps it, which a type cannot say.
 
+**In a function's own signature an arena parameter may be named there**, which is where a lambda's own `in` stands:
+
+```
+fn adder(n: u8, a: &mut arena) → fn(u8) in a → u8:
+    λ x: u8 [n] in a → u8 { x + n }
+
+fn apply(g: fn(u8) in a → u8, a: &mut arena, x: u8) → u8:
+    g(x)
+```
+
+Said of the answer, it is what `→ T in a` says of any answer: the lambda may leave the call kept in `a`, and the caller's lambda
+lasts as long as what it handed over as `a` -- dead once that is emptied (4615), held by nothing further out (4614).  Said of a
+parameter, it is what `s: T in a` says: what is handed over is kept in what `a` is given (4620).  The type itself is `fn(u8) → u8`,
+and nowhere but a signature does the name mean anything.  `→ fn(u8) → u8 in a` would not say it: `in` after the answer's type
+says where the *answer* is made, and that answer is the lambda's own.
+
 **An environment is never given back.**  What a lambda kept in `⎕heap` stays there, as a string a name held does; one kept in an
 arena goes with the arena.  The third word says which allocator it is, so that giving it back can come later without changing what
 a lambda is.

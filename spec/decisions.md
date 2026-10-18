@@ -10288,6 +10288,19 @@ after an answer is `⎕heap`, so a view answered with nothing said is copied the
 parameter's is refused (4624); a view of more than one dimension is not copied yet; and a function's type and a lambda, which
 have no `in`, still answer no view (4454).
 
+## 2026-10-19T14:00+02:00 — language
+
+**A lambda answered in an arena a parameter names: `→ fn(u8) in a → u8`**
+
+The user asked for the entry in TODO-language.md, which said the signature could not say it: `→ fn(u8) → u8 in a` puts the `in`
+on the lambda's own answer.  Asked how it is said, the user chose **the place a function type already says where a lambda keeps
+what it brought in**, `fn(u8) in a → u8` -- the place `λ x: u8 [n] in a → u8` says it and `fn(u8) in ⎕heap → u8` already does --
+allowed in a function's own answer and parameters, `a` being one of its parameters; against the answer's type in parentheses,
+`→ (fn(u8) → u8) in a`, a new form of the type grammar; and against a name for a function type, a feature of its own.
+
+Taken without asking: it means exactly `→ T in a` of the answer and `s: T in a` of a parameter, and is checked as they are; the
+type is `fn(u8) → u8`, and anywhere outside a signature only `⎕heap` may stand there still (4642).
+
 Open questions
 --------------
 
