@@ -10301,6 +10301,24 @@ allowed in a function's own answer and parameters, `a` being one of its paramete
 Taken without asking: it means exactly `→ T in a` of the answer and `s: T in a` of a parameter, and is checked as they are; the
 type is `fn(u8) → u8`, and anywhere outside a signature only `⎕heap` may stand there still (4642).
 
+## 2026-10-19T16:30+02:00 — language
+
+**A lifetime name of a callee's stands, at each call, for what is handed for it**
+
+The user asked for "hand a function a lambda whose answer lives as long as a name of the caller's" in TODO-language.md: a
+parameter `g: fn() → &⧖a u32` beside `v: &⧖a u32` could be handed nothing but a function whose answer lasts, a lambda's own
+lifetime names being the caller's signature's.  Asked how a call should accept one, the user chose **per-call names, and a lambda
+written in the argument inheriting** -- Rust's lifetime parameters, instantiated at each call, and its closures taking their
+lifetimes from the type they are handed for -- against the renaming alone, which would leave a lambda answering a local of the
+caller refused, and against names for variables (`⧖x`).
+
+Taken without asking, as what that comes to: what a function of a type naming the caller's own `⧖b` answers lives longer than
+any variable of the call and as long as an argument reached from what `⧖b` stands for, and as nothing else -- `⧖b` said nothing
+about `⧖c`, so `pick(s, λ [&r] → &⧖b u32 { r })` is refused where `s` is `⧖c` (4930), which a plain renaming would have let
+through; a lambda that inherits may answer only a reference or a variable it brought in, and each is weighed against what the
+parameters carrying the name are handed (4930); its own copy of a value is no answer at all (4561).  Only a call of a definition
+does this; a call through a value, and one of a generic function, still compare the names as written.
+
 Open questions
 --------------
 

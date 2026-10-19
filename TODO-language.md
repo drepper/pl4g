@@ -1135,11 +1135,13 @@ Runtime
     would follow a longer path, and what stops it today is that nothing needs it yet.  Done on 2026-10-17: a name on a member of
     a tuple is that member's, a lambda's may be one of the signature around it, and a function's type carries them.
 
-[ ] hand a function a lambda whose answer lives as long as a name of the caller's.  A parameter's function type may say its answer
-    lives as long as another parameter of the same signature (`g: fn() → &⧖a u32` beside `v: &⧖a u32`), and inside the body that
-    is right; but nothing can be handed for it except a function whose answer lasts, a lambda's own name around being one of the
-    caller's signature and not the callee's.  What a call would have to show is that what the lambda's answer lives as long as
-    lasts at least as long as what was handed for `v`.
+[x] hand a function a lambda whose answer lives as long as a name of the caller's.  Done on 2026-10-19 at the user's direction:
+    a callee's lifetime name stands, at each call, for what the arguments carrying it live as long as, and a lambda written as
+    the argument may leave its answer's lifetime out and take the parameter's (4930 where it does not live long enough).
+    Left over:
+    [ ] **a call through a function value, and one of a generic function**, which still compare lifetime names as written.
+    [ ] **a lambda answering a tuple of references** inheriting the parameter's names member by member; only one reference
+        answered is taken from the parameter.
 
 [ ] let a reference name an array, a list or a string.  A reference names a place holding one value (4536); those are already
     several values or already a place, and what a reference to one would mean -- the place the value is, or the place the elements

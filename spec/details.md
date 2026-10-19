@@ -3701,6 +3701,23 @@ room the new value was made in: that room belongs to a place in the program and
 not to a turn of a loop, so a value kept from one turn to the next would
 otherwise read what the next turn made.
 
+A lifetime name at a call
+-------------------------
+
+**A name of the callee's is free while its call's arguments are lowered.**  `_given_arguments` puts the callee's
+`Function.lifetime_key` in `_calling_key`, and `_borrows_as_much` lets anything stand for a name of that key in a function type
+the argument is handed for; `_shorter_life` reads the argument as the parameter's type and keeps the type it had in
+`_promised_as`.  The call is then held to it by `_answers_as_long`, run once every argument is lowered: for each such name, what
+the parameters carrying it (`Function.lifetimes`, function types left out) were handed is weighed with `_lifetime_of_value` -- a
+local of the call with its depth, the names of the signature around it reaches (`_lifetime_outer`), lasting, or nothing -- against
+what the function handed answers: the names its type says, or for a lambda written there and saying nothing, each reference it
+brought in.
+
+**Such a lambda takes the parameter's borrows** (`_adopted_borrows`, in `_lower_lambda`, in place of 4562), and while its body is
+lowered every reference it brought in, and every variable it brought in by reference, is what the parameter's name stands for
+(`_adopting`, added to `_lifetime_sources`), so that the body may answer those and nothing else (4561); `_lower_lambda` leaves
+them in `_lambda_notes` for the call to weigh.
+
 A lambda answered in an arena a parameter names
 -----------------------------------------------
 

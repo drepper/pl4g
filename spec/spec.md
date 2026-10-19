@@ -3081,6 +3081,32 @@ u32` is Rust's function pointer type naming one; C++'s lambdas and `std::functio
 of those is a place made further in (4570) -- `r ← first(&m)` with `m` in an inner block -- through a definition and through a
 value alike.
 
+**At a call, a name of the callee's stands for what the arguments carrying it live as long as**, and a function type among its
+parameters is read with that: what is handed for `g: fn() → &⧖a u32` beside `v: &⧖a u32` has to answer something living as long
+as what is handed for `v`.
+
+```
+fn pick(v: &⧖a u32, g: fn() → &⧖a u32) → &⧖a u32:
+    g()
+
+fn outer(r: &⧖b u32) → u32:
+    pick(r, λ [&r] → &⧖b u32 { r })⌖          ※ ⧖a is ⧖b at this call
+
+let x: u32 = 5u32
+pick(&x, λ [&x] → &u32 { &x })                ※ written here: as long as what v is handed
+```
+
+- **A function of a type naming a lifetime of the caller's signature** answers as long as that name: longer than any variable of
+  the call, and as long as an argument reached from what the name stands for -- and as nothing else, `⧖b` saying nothing about
+  `⧖c` (4930).
+- **A lambda written as the argument may leave its answer's lifetime out**, and it is the parameter's.  Its body may then answer a
+  reference it brought in, or a variable it brought in by reference -- not a copy of its own (4561) -- and the call weighs each of
+  those against what is handed for the parameters carrying the name: a variable of a block further in than that does not last
+  long enough (4930).
+
+Compare: **Rust**'s lifetime parameters, instantiated at each call, and its closures, whose lifetimes are taken from the type they
+are handed for -- which this is, the check made where the call is written.
+
 Rust softens all of this with elision, which lets the common case go unwritten; nothing here does, because a missing lifetime
 there is still a lifetime being inferred and here the two answers mean different things to a caller.  C++ has no rule at all and
 a dangling reference is a program nobody notices is wrong; Go and Java move what escapes to the heap instead, which needs a
