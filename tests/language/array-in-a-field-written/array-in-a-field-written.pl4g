@@ -1,0 +1,37 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ An element of an array held in a field of a record is written where it is -- in the
+※ record, through a reference to it, in a field of a field -- and read from there.
+※ Reading the field as a whole copies it, an array being copied wherever it is given
+※ to something else; an element written or read is not the field read.  A copy of the
+※ record has arrays of its own.
+
+let std := ⎕import("std")
+type Holder = { held : u8⟦3⟧ ; tag : u8 }
+type Outer = { inner : Holder }
+
+fn changed(h: mut Holder) → u8:
+    h.held⟦0⟧ ← 9u8
+    h.held⟦0⟧
+
+@[impure]
+fn through(h: &mut Holder):
+    h⌖.held⟦2⟧ ← 6u8
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let n: u8 = ⎕narrow(⎕drop(#init.args), ⌜u8⌝) ?? 0u8
+    let r: mut Holder = Holder(.held ← ⟦n, 2u8, 3u8⟧, .tag ← 0u8)
+    let s: Holder = r
+    r.held⟦0⟧ ← 9u8
+    if r.held⟦0⟧ ≠ 9u8 ∨ s.held⟦0⟧ ≠ 1u8:
+        return 1u6
+    if changed(r) ≠ 9u8 ∨ r.held⟦1⟧ ≠ 2u8:
+        return 2u6
+    through(&mut r)
+    r.held⟦r.held < 3u8⟧ ← 4u8
+    if r.held⟦1⟧ ≠ 4u8 ∨ r.held⟦2⟧ ≠ 6u8:
+        return 3u6
+    let o: mut Outer = Outer(.inner ← s)
+    o.inner.held⟦1⟧ ← 8u8
+    if o.inner.held⟦1⟧ = 8u8 ∧ s.held⟦1⟧ = 2u8: 0u6 else: 4u6

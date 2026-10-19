@@ -4888,6 +4888,34 @@ class Checker:
             self._record_into(builder, place, value, ty, expr.span)
         return self._field_of_place(builder, place, ty, expr, expected)
 
+    def _array_in_a_field(self, builder: IRBuilder, expr: ast.Expr,
+                          writing: bool) -> Value | None:
+        """An array whose type says its shape, held in a field of a record that
+        is somewhere, as where it is -- which is what a value of it is -- so that
+        an element of it is read or written there.
+
+        Reading the field as a value would copy the array, as reading one out of
+        a record does anywhere else: what was written would be written into the
+        copy, and what was read, read from it.  Nothing where *expr* is not such
+        a field, which is then lowered as it is.
+        """
+        if not isinstance(expr, ast.Member):
+            return None
+        somewhere = self._record_at(builder, expr.base, writing=writing,
+                                    below=(expr.name,))
+        if somewhere is None:
+            return None
+        where, ty = somewhere
+        at = _field_index(ty, expr.name)
+        if at is None:
+            return None
+        held = ty.fields[at][1]
+        if not isinstance(held, ArrayType) or not held.fixed:
+            return None
+        return builder.cast(CastKind.BITCAST,
+                            self._field_place(builder, where, ty, at, expr.span),
+                            held, expr.span)
+
     def _field_of_place(self, builder: IRBuilder, where: Value,
                         ty: ProductType, expr: ast.Member,
                         expected: Type | None) -> Value:
@@ -11364,7 +11392,9 @@ class Checker:
                              expr.span, expected)
         if found is not None:
             return found
-        base = self._lower_expr(builder, expr.base, None)
+        base = self._array_in_a_field(builder, expr.base, writing=False)
+        if base is None:
+            base = self._lower_expr(builder, expr.base, None)
         ty = self._value_type_of(base)
         if ty is ERROR:
             return UndefConst(ERROR)
@@ -12120,7 +12150,9 @@ class Checker:
     def _lower_element_assign(self, builder: IRBuilder,
                               stmt: ast.ElementAssign) -> None:
         """Lower `a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} \N{LEFTWARDS ARROW} v`, which puts a value at one place."""
-        base = self._lower_expr(builder, stmt.base, None)
+        base = self._array_in_a_field(builder, stmt.base, writing=True)
+        if base is None:
+            base = self._lower_expr(builder, stmt.base, None)
         ty = self._value_type_of(base)
         if ty is ERROR:
             return
