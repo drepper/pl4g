@@ -84,11 +84,15 @@ _FOLDERS = {
     BinOp.SAT_ADD: lambda a, b: a + b,
     BinOp.SAT_SUB: lambda a, b: a - b,
     BinOp.SAT_MUL: lambda a, b: a * b,
-    # The divisions are not here.  What one answers with is a result -- the
-    # number where there is one, and the fact that there is none where there is
-    # not -- and there is no constant of that shape to fold it to.  `_towards_zero`
-    # and `_left_over` stay because they say what the language means by the two,
-    # and a folder that has a result constant to make will want them.
+    # The divisions the representation holds are the machine's: a division the
+    # program writes answers a result, and what it is lowered to is the check
+    # that there is an answer and then one of these.  So one of two constants
+    # folds where the divisor is not nought -- left standing below -- and the
+    # answer fits, which the smallest signed number over minus one does not.
+    BinOp.UDIV: lambda a, b: a // b,
+    BinOp.UREM: lambda a, b: a % b,
+    BinOp.SDIV: _towards_zero,
+    BinOp.SREM: _left_over,
     BinOp.AND: lambda a, b: a & b,
     BinOp.OR: lambda a, b: a | b,
     BinOp.XOR: lambda a, b: a ^ b,

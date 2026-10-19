@@ -11186,6 +11186,54 @@ class Checker:
                 left = builder.binary(BinOp.UDIV, left, lengths[at], span)
         return offset
 
+    @staticmethod
+    def _odometer(builder: IRBuilder, indices: Sequence[Value],
+                  lengths: Sequence[Value], downward: bool, span: Span
+                  ) -> list[Value]:
+        """The index along each dimension of the next place a walk in order
+        reaches, or of the one before where *downward*: the last dimension moves,
+        and one that runs off its end starts again and moves the one before it.
+
+        What carries is worked out rather than branched on -- a comparison, and
+        a multiplication by what it came to -- so that a walk of a view of
+        several dimensions needs no division to know where it is."""
+        one = builder.int_const(U64, 1)
+        moved: list[Value] = list(indices)
+        carry: Value = one
+        for at in reversed(range(len(indices))):
+            index = indices[at]
+            if at == 0:
+                moved[0] = builder.binary(BinOp.WRAP_SUB if downward else BinOp.WRAP_ADD,
+                                          index, carry, span)
+                break
+            if downward:
+                # Going under nought is being at nought with something to take.
+                under = builder.cast(CastKind.ZEXT, builder.compare(
+                    CmpPred.ULT, index, carry, span), U64, span)
+                moved[at] = builder.binary(BinOp.WRAP_ADD, builder.binary(
+                    BinOp.WRAP_SUB, index, carry, span), builder.binary(
+                        BinOp.WRAP_MUL, under, lengths[at], span), span)
+                carry = under
+                continue
+            next_ = builder.binary(BinOp.WRAP_ADD, index, carry, span)
+            over = builder.cast(CastKind.ZEXT, builder.compare(
+                CmpPred.EQ, next_, lengths[at], span), U64, span)
+            moved[at] = builder.binary(BinOp.WRAP_SUB, next_, builder.binary(
+                BinOp.WRAP_MUL, over, lengths[at], span), span)
+            carry = over
+        return moved
+
+    @staticmethod
+    def _offset_at(builder: IRBuilder, indices: Sequence[Value],
+                   strides: Sequence[Value], span: Span) -> Value:
+        """How far from the first element the place at *indices* is, in
+        elements: each index by its dimension's stride, added up."""
+        offset: Value = builder.int_const(U64, 0)
+        for index, stride in zip(indices, strides):
+            offset = builder.binary(BinOp.WRAP_ADD, offset, builder.binary(
+                BinOp.WRAP_MUL, index, stride, span), span)
+        return offset
+
     def _checked_index(self, builder: IRBuilder, written: ast.Expr,
                        along: int | None, length: Value,
                        span: Span, one_past: bool = False) -> Value | None:
@@ -17810,23 +17858,45 @@ class Checker:
         element = ty.element if depth == ty.rank else self._row_type(ty, depth)
         strides = self._strides_of(builder, base, ty, span)
 
+        # A view of several dimensions is walked with an index along each, so
+        # that where the walk is takes no division; one run, or one dimension,
+        # is a multiplication of how far along it is.
+        counted = depth > 1 and not ty.fixed
+        mask_strides = self._strides_of(builder, mask, held, span) if counted else ()
+
+        def offset_of(b: IRBuilder, s: tuple[Value, ...]) -> Value:
+            if counted:
+                return self._offset_at(b, s[1:], strides[:depth], span)
+            return self._flat_offset(b, lengths, strides, s[0], depth, ty.fixed,
+                                     span)
+
         def take(b: IRBuilder, s: tuple[Value, ...]) -> Value:
-            offset = self._flat_offset(b, lengths, strides, s[0], depth,
-                                       ty.fixed, span)
+            offset = offset_of(b, s)
             if depth == ty.rank:
                 return b.load(
                     self._element_place(b, start, ty.element, offset, span), span)
             return self._row_at(b, start, ty, lengths, strides, offset, depth,
                                 span)
 
+        def step(b: IRBuilder, s: tuple[Value, ...]) -> tuple[Value, ...]:
+            flat = b.binary(BinOp.WRAP_ADD, s[0], b.int_const(U64, 1), span)
+            if not counted:
+                return (flat,)
+            return (flat, *self._odometer(b, s[1:], lengths[:depth], False, span))
+
+        def wanted(b: IRBuilder, s: tuple[Value, ...]) -> Value:
+            if not counted:
+                return b.load(self._flat_place(b, mask, held, s[0], span), span)
+            return b.load(self._element_place(
+                b, marks, held.element, self._offset_at(b, s[1:], mask_strides, span),
+                span), span)
+
+        zero = builder.int_const(U64, 0)
         return _Iteration(
-            element=element, start=(builder.int_const(U64, 0),),
+            element=element,
+            start=(zero, *((zero,) * depth if counted else ())),
             more=lambda b, s: b.compare(CmpPred.ULT, s[0], places, span),
-            take=take,
-            step=lambda b, s: (b.binary(BinOp.WRAP_ADD, s[0],
-                                        b.int_const(U64, 1), span),),
-            wanted=lambda b, s: b.load(
-                self._flat_place(b, mask, held, s[0], span), span))
+            take=take, step=step, wanted=wanted)
 
     def _pick_per_place(self, builder: IRBuilder, expr: ast.Element,
                         base: Value, ty: ArrayType) -> bool:
@@ -24876,9 +24946,20 @@ class Checker:
         header = builder.new_block("copy.element")
         body = builder.new_block("copying.element")
         after = builder.new_block("copied.elements")
-        builder.br(header, (builder.int_const(U64, 0), builder.memory()), span)
+        # Where either side is a view of several dimensions, an index along each
+        # is carried with the loop -- from the last place where it runs back --
+        # so that no turn divides to find where it is.
+        lengths = into_shape[1]
+        counted = len(lengths) > 1 and not (into_shape[3] and from_shape[3])
+        one = builder.int_const(U64, 1)
+        first = [builder.binary(BinOp.WRAP_SUB, length, one, span) if downward
+                 else builder.int_const(U64, 0) for length in lengths] \
+            if counted else []
+        builder.br(header, (builder.int_const(U64, 0), *first, builder.memory()),
+                   span)
         builder.position_at(header)
         turn = header.add_param(U64, "turn")
+        indices = [header.add_param(U64, "along") for _ in first]
         token = header.add_param(MEM, "mem")
         builder.set_memory(token)
         builder.condbr(builder.compare(CmpPred.ULT, turn, count, span), body,
@@ -24890,14 +24971,16 @@ class Checker:
             turn, span)
         places = [self._element_place(
             builder, start, element,
-            self._flat_offset(builder, lengths, strides, at, len(lengths), one_run,
-                              span), span)
-            for start, lengths, strides, one_run in (into_shape, from_shape)]
+            self._offset_at(builder, indices, strides, span) if counted
+            else self._flat_offset(builder, shape, strides, at, len(shape), one_run,
+                                   span), span)
+            for start, shape, strides, one_run in (into_shape, from_shape)]
         self._copy_bytes(builder, places[0], places[1], size_of(element, _LAYOUT),
                          span)
-        builder.br(header, (builder.binary(BinOp.WRAP_ADD, turn,
-                                           builder.int_const(U64, 1), span),
-                            builder.memory()), span)
+        moved = self._odometer(builder, indices, lengths, downward, span) \
+            if counted else []
+        builder.br(header, (builder.binary(BinOp.WRAP_ADD, turn, one, span),
+                            *moved, builder.memory()), span)
         builder.position_at(after)
         # What holds after the loop is what the header carried: the body is not
         # on every way here.
