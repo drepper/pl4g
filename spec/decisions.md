@@ -10479,6 +10479,19 @@ the end of the body and is answered by every edge into the block, a loop's way b
 unless it brings something else.  So a name given another fresh table in an arm or on some turns stays the function's own, and
 one given the table at the top level on the way back round is not, though the write comes before the rebinding.
 
+## 2026-10-20T15:00+02:00 — language
+
+**Filling a table one was handed to fill is not an effect**
+
+The user asked for the entry in TODO-language.md on handing a table a pure function made to a function that fills it, deciding
+that *the called function is not impure but at most opaque*.  So a parameter whose type is a writable set or dictionary is a table
+the function may fill without `@[impure]`: its signature says it may, and what it changes is what it was handed.  The caller is
+asked instead, as for a table it writes itself: a table it made, or was handed to fill, is its own; anything else handed over is
+an effect of the caller's (4934).  In the IR a function that fills what it was handed is opaque, so a call answering nothing is not
+dropped.  Taken without asking: a lambda's writable table parameters are asked of its caller the same way; a table parameter kept
+in the frame, its address taken, is still taken to be somebody else's.  Compare Rust's `&mut` parameters, D's weakly pure functions
+and Haskell's `ST`.
+
 Open questions
 --------------
 

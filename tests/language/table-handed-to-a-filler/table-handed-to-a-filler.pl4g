@@ -1,0 +1,24 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4934 LANG_TABLE_HANDED_TO_A_FILLER
+
+※ A parameter whose type is a writable table is one the function may fill, and
+※ filling it is no effect of the function's: its signature says so, and what it
+※ changes is what it was handed.  Whether that is an effect is the caller's
+※ question.  A table is a handle, so the one at the top level handed over here
+※ is the one every other function reads, and a pure function does not hand it
+※ to be filled -- where one it made itself it may.
+
+let std := ⎕import("std")
+
+let kept: mut ⸨str: u8⸩ = ⸨⸩
+
+fn filled(d: mut ⸨str: u8⸩) → u8:
+    d⸨"a"⸩ ← 1u8
+    1u8
+
+fn spread() → u8:
+    filled(kept)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if spread() = 1u8: 0u6 else: 1u6

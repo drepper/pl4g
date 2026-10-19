@@ -38,7 +38,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let d: mut ⸨str: u64⸩ = ⸨"a": 1u64, "b": 2u64, "c": 3u64⸩
     ※ what was under the key comes back, and the key is gone
@@ -69,7 +69,6 @@ fn main(init: std.Init) → u6:
             sets()
 
 ※ A set answers whether it held the key, which is what reading one answers.
-@[impure]
 fn sets() → u6:
     let s: mut ⸨u8⸩ = ⸨1u8, 2u8, 3u8⸩
     if ¬†s⸨2u8⸩:
@@ -85,7 +84,6 @@ fn sets() → u6:
         many()
 
 ※ Enough of them, taken out and put back, that the table is rebuilt.
-@[impure]
 fn many() → u6:
     let d: mut ⸨u64: u64⸩ = ⸨⸩
     foreach i := 0u64…40u64:
@@ -108,7 +106,6 @@ fn many() → u6:
             refilled(d)
 
 ※ Putting them back takes the entries given up rather than crowding the table.
-@[impure]
 fn refilled(d: mut ⸨u64: u64⸩) → u6:
     foreach i := 0u64…40u64…2:
         d⸨i⸩ ← i + 500u64

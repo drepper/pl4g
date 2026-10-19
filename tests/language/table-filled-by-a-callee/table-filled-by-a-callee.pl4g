@@ -1,0 +1,36 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A pure function may hand a table it made to a function that fills it, and
+※ that function may hand it on: what either changes is a table nobody else can
+※ reach, so neither is `@[impure]`.  A call that fills a table answers nothing
+※ anybody reads, and is kept all the same -- in the code the function is
+※ opaque, which is all it has to be.  A lambda taking a writable table is
+※ asked the same of its caller.
+
+let std := ⎕import("std")
+
+fn fill(d: mut ⸨str: u8⸩):
+    d⸨"a"⸩ ← 1u8
+    d⸨"b"⸩ ← 2u8
+
+fn refill(d: mut ⸨str: u8⸩):
+    fill(d)
+    †d⸨"b"⸩
+
+fn built() → u64 ¤size:
+    let d: mut ⸨str: u8⸩ = ⸨⸩
+    fill(d)
+    refill(d)
+    #d
+
+fn counted() → u64 ¤size:
+    let s: mut ⸨u8⸩ = ⸨1u8, 2u8⸩
+    let into := λ t: mut ⸨u8⸩ → u8 { †t⸨1u8⸩; 0u8 }
+    _ ← into(s)
+    #s
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if built() ≠ 1: return 1u6
+    if counted() ≠ 1: return 2u6
+    0u6

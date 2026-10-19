@@ -6486,7 +6486,17 @@ putting a key in it or taking one out changes nothing outside the call.  A table
 to be the function's and not the name: a local bound to a parameter's table, or to one at the top level, is a second name for
 somebody else's, and writing through it is on the list.  A name given another table the function made, in one arm of an `if` or
 on some turns of a loop, still holds one of its own; one that may be given somebody else's along any way -- the way back round a
-loop included -- does not, wherever the write stands.  Compare **D**, whose weakly pure functions may change what they made;
+loop included -- does not, wherever the write stands.
+
+**Filling a table it was handed to fill is not an effect either.**  A parameter whose type is a writable set or dictionary,
+`d: mut ⸨str: u8⸩`, says the function may put keys in it and take them out, and what that changes is what the caller handed over:
+the signature has said it, and the function stays pure.  The question moves to the caller (4934).  Handing over a table of its own
+-- one it made, or one it was itself handed to fill -- changes nothing anybody else holds; handing over one at the top level, one
+read out of memory or one another call answered may change what somebody else reads, and is an effect of the caller's.  Such a
+function is opaque to the optimizer, which may not drop a call to it for answering nothing.  The same is asked of a lambda's
+parameters.  Compare **Rust**, where `fn fill(d: &mut HashMap<…>)` is an ordinary function and the borrow is what the caller
+answers for; **D**'s weakly pure functions, which may write what their parameters reach and stay pure; **Haskell**'s `ST`, whose
+`STRef`s and mutable maps are handed to functions that write them inside one `runST`.  Compare **D**, whose weakly pure functions may change what they made;
 **Haskell**'s `ST`, where a table made inside `runST` may be written and the result is pure; **Koka**, whose local state is not an
 effect once it cannot escape.
 

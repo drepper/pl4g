@@ -985,7 +985,11 @@ binary operator, and what a `foreach` walks -- and a writable table among them k
 Whether a table is the function's own, for 4479, is `_table_made_here`: the handle traced through casts to the call of
 `__pl4g_table_new`, which every literal and set operator lowers to.  A handle that is a block parameter is not answered there: `_written_table` keeps the write in
 `_unsettled_tables`, one list per body -- a function's, an instance's, a lambda's -- and `_settle_tables` answers it when that body
-is lowered, following every edge into the block (`_incoming_of`), a parameter already being followed counting as made.
+is lowered, following every edge into the block (`_incoming_of`), a parameter already being followed counting as made.  A call
+hands every argument for a writable table parameter (`_fills`) to `_written_table` as well, with the callee's name, so the same
+question is asked of it and a refusal says 4934.  Where the table settles to a writable table parameter of the body's own
+(`_through_a_parameter`), it is the caller's to answer for: nothing is reported, and the body's function is set `opaque` so that a
+call to it is kept.
 
 The log travels on the module, since every stage has the module and any of them may decide something.  It is not the design log in
 [decisions.md](decisions.md), which records what was decided about the *language* and is written by hand; this one is about one

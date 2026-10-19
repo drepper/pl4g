@@ -11461,6 +11461,27 @@
       },
       "since": "0.1",
       "default_enabled": true
+    },
+    {
+      "number": 4934,
+      "name": "LANG_TABLE_HANDED_TO_A_FILLER",
+      "severity": "error",
+      "message": "'{func}' may fill the table it is handed here, which is not this function's own, and a pure function changes nothing that is not",
+      "args": [
+        {
+          "name": "func",
+          "type": "string",
+          "description": "the function called"
+        }
+      ],
+      "cause": "A parameter whose type is a writable set or dictionary is a table the function may put keys in and take them out of, and doing so is no effect of the function's: its signature says so, and what it changes is what its caller handed over.  Whether that is an effect is the caller's question.  A table the caller made -- written down, or answered by a set operator -- or was itself handed to fill is the caller's own, and nothing anybody else holds changes; one at the top level, read out of memory or answered by another call may be somebody else's, and handing it over to be filled changes what they hold.  Mark the caller `@[impure]`, or hand over a table of its own.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A pure function hands a function that fills a table only a table of its own."
+      },
+      "since": "0.1",
+      "default_enabled": true
     }
   ]
 }

@@ -3090,6 +3090,12 @@ def _shape_written(expr: ast.ArrayLit) -> tuple[int, ...] | None:
     return (len(rows), *shape)
 
 
+def _fills(ty: Type) -> bool:
+    """Whether a parameter of *ty* is a table the function may fill: a set or a
+    dictionary whose type says it may be written."""
+    return isinstance(ty, (SetType, DictType)) and ty.mutable
+
+
 def _writes_arrays(node: object, params: Sequence[Type]) -> tuple[int, ...]:
     """Which parameters of a definition are arrays its body may write: `mut` ones."""
     return tuple(at for at, (param, ty) in enumerate(zip(node.params, params))
@@ -3880,7 +3886,7 @@ class Checker:
         self._marking: _Marks | None = None
         #: The tables written in the body being lowered whose handle arrives
         #: where branches meet, and where, asked once the body is complete.
-        self._unsettled_tables: list[tuple[Value, Span]] = []
+        self._unsettled_tables: list[tuple[Value, Span, str]] = []
         self._mut_told: set[int] = set()
         #: The type a function value had before it was read as one promising
         #: less, by the identity of what it was read as.
@@ -12730,6 +12736,7 @@ class Checker:
             # What its type promises is what is known of it: a pure one may be
             # called from a pure function, as a pure definition may.
             self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=local.name)
+        self._tables_handed(ty.params, args, local.name, expr.span)
         # Both halves are read once, before any call is made: a walk makes one
         # call per element and they all go to the same code with the same
         # environment.
@@ -13591,6 +13598,7 @@ class Checker:
             made.append(place)
         args = made
         self._what_it_changes(func, expr.span)
+        self._tables_handed(func.ty.params, args, func.name, expr.span)
         self._kept_alike(func, args, expr.span)
         answer = builder.call(func, list(args), func.ty.ret, expr.span)
         answer = self._as_long_as_given(builder, func, args, answer, expr.span)
@@ -24663,6 +24671,7 @@ class Checker:
         # Asked before the walk and not after, a walked call being as much a call as
         # any other: what the callee does, it does once for every element.
         self._what_it_changes(func, expr.span)
+        self._tables_handed(wanted, args, func.name, expr.span)
         if func.attrs.listable \
                 and any(value.ty is not ty for value, ty in zip(args, wanted)):
             return self._walked(
@@ -27867,13 +27876,41 @@ class Checker:
         return isinstance(seen, CallInst) \
             and seen.callee is self._module.functions.get(tables.NEW_SYMBOL)
 
-    def _written_table(self, table: Value, span: Span) -> None:
-        """A table written at *span*: an effect unless it is this call's own."""
+    def _written_table(self, table: Value, span: Span, filler: str = "") -> None:
+        """A table written at *span* -- or, where *filler* names a function, handed
+        to one that writes it: an effect unless it is this call's own."""
         made = self._table_made_here(table)
         if made is None:
-            self._unsettled_tables.append((table, span))
+            self._unsettled_tables.append((table, span, filler))
         elif not made:
+            self._table_not_ours(span, filler)
+
+    def _table_not_ours(self, span: Span, filler: str) -> None:
+        """Report writing a table somebody else may hold, directly or by handing
+        it to a function that fills it."""
+        if filler:
+            self._an_effect(D.LANG_TABLE_HANDED_TO_A_FILLER, span, func=filler)
+        else:
             self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, span)
+
+    def _tables_handed(self, params: Sequence[Type], args: Sequence[Value],
+                       name: str, span: Span) -> None:
+        """Ask of every table a call hands where a writable one is wanted whether
+        it is the caller's own: the callee may fill it, which is no effect of the
+        callee's -- its signature says so -- but is the caller's where the table
+        is somebody else's."""
+        for wanted, given in zip(params, args):
+            if _fills(wanted):
+                self._written_table(given, span, name)
+
+    def _through_a_parameter(self, table: Value, func: Function) -> bool:
+        """Whether *table* is what *func* was handed as a writable table: one of
+        its parameters, whose type says the body may fill it."""
+        while isinstance(table, CastInst):
+            table = table.operands[0]
+        entry = func.entry
+        return isinstance(table, BlockParam) and entry is not None \
+            and table.block is entry and _fills(table.ty)
 
     def _settle_tables(self, func: Function) -> None:
         """Answer what writing a table asked where branches met, now that every
@@ -27892,6 +27929,9 @@ class Checker:
                 return value.callee is new
             if not isinstance(value, BlockParam):
                 return False
+            if self._through_a_parameter(value, func):
+                # Handed over to be filled: the caller's to answer for.
+                return True
             if id(value) in seen:
                 # Back where this walk already is: a loop hands on what it was
                 # entered with, which the walk is asking about along that way.
@@ -27904,9 +27944,16 @@ class Checker:
                 for arm in arms)
 
         pending, self._unsettled_tables = self._unsettled_tables, []
-        for table, span in pending:
-            if not made(table, set()):
-                self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, span)
+        for table, span, filler in pending:
+            through = self._through_a_parameter(table, func)
+            if through:
+                # The table the caller handed over: the callee fills it, which
+                # changes nothing of its own, and a call to it is kept as an
+                # opaque one is, its answer or none being beside the point.
+                if not func.attrs.opaque:
+                    func.attrs = replace(func.attrs, opaque=True)
+            elif not made(table, set()):
+                self._table_not_ours(span, filler)
 
     def _report_mismatch(self, span: Span, found: Type, expected: Type) -> None:
         """Report a type that does not match what the context requires.
