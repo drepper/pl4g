@@ -10527,6 +10527,15 @@ functions `@[impure]` only for calling through such a slot, in one fixpoint (493
 -- read out of a list, answered through a value -- is taken to need the mark; a slot in a generic record, a lambda's parameter or a
 type nested in another is not asked.
 
+## 2026-10-20T19:00+02:00 — compiler
+
+**A set operator answers a writable set**
+
+The user asked for the entry in TODO-language.md on a set operator into a writable set.  `let s: mut ⸨u8⸩ = a | b` was refused
+because the writable type wanted was what the operands were asked for, and read-only operands are not writable.  An operator reads
+its operands, so they are asked for the set alone; and what it answers is a table of its own, so it is of the writable type, which
+stands where a read-only one is wanted as well.  The spec says so now beside the operators, as it already did of a collection written down.
+
 Open questions
 --------------
 

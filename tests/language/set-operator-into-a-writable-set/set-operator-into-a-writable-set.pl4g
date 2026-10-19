@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A set operator reads its operands and answers a set of its own, so what it
+※ answers may be written whatever the operands may: read-only sets laid out in
+※ the image give a writable union, intersection, difference and symmetric
+※ difference, each changed afterwards without touching either operand.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let a: ⸨u8⸩ = ⸨1u8, 2u8, 3u8⸩ in ⎕static
+    let b: ⸨u8⸩ = ⸨3u8, 4u8⸩ in ⎕static
+    let joined: mut ⸨u8⸩ = a | b
+    let both: mut ⸨u8⸩ = a & b
+    let either: mut ⸨u8⸩ = a ^ b
+    let without: mut ⸨u8⸩ = a - b
+    if ¬†joined⸨4u8⸩ ∨ ¬†both⸨3u8⸩ ∨ ¬†either⸨1u8⸩ ∨ ¬†without⸨2u8⸩: return 1u6
+    if #joined ≠ 3 ∨ #both ≠ 0 ∨ #either ≠ 2 ∨ #without ≠ 1: return 2u6
+    if #a ≠ 3 ∨ #b ≠ 2 ∨ ¬b⸨4u8⸩: return 3u6
+    0u6

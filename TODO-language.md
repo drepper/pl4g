@@ -1308,5 +1308,7 @@ Runtime
     Done 2026-10-20: before `λ` it was already refused (3204).  A function type's is asked of every slot it stands in, over the
     whole unit, with the functions calling through it (4935).
 
-[ ] a set operator into a writable set.  `let s: mut ⸨u8⸩ = a | b` is refused as `|` on integers (4205), where the same with `s`
+[x] a set operator into a writable set.  `let s: mut ⸨u8⸩ = a | b` is refused as `|` on integers (4205), where the same with `s`
     read-only is accepted: the writable type wanted is not matched against the read-only operands when the operator is looked up.
+    Done 2026-10-20: the operands are asked for the set, not for one that may be written, and what the operator answers is of
+    the writable type, being new.

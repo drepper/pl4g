@@ -4608,6 +4608,9 @@ collection is not a place to put a different collection either (4599): what stan
 | `a ^ b` | everything in one and not the other |
 | `a - b` | everything in `a` and not in `b` |
 
+What each answers is a set of its own, so it is of the writable type whatever its operands are, as a collection written down
+is: `let s: mut ⸨u8⸩ = a | b` may be written afterwards and changes neither `a` nor `b`.
+
 `=` and `≠` compare two sets, or two dictionaries, for holding the same thing.  Ordering is not defined on them: Python reads `<=`
 as "is part of", and here ordering is about which of two comes first, which neither does.
 

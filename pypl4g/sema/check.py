@@ -22277,7 +22277,11 @@ class Checker:
         A table of its own, filled by walking one or both operands.  Neither
         operand is changed: an operator answers with a value everywhere else in
         the language, and a set is no different for being a place in memory.
+        What it answers is new and nobody else's, so it is of the writable type
+        whatever the operands are, which stands where a read-only one is wanted
+        as well.
         """
+        ty = self._module.types.set_type(ty.element, mutable=True)
         select = tables.ensure_operators(self._module, self._table_shape(ty))
         table_ptr = tables.table_type(self._module)
         as_table = {
@@ -23257,6 +23261,11 @@ class Checker:
         # lets a number stand beside an array and take its element's type.
         context = self._scalar_of(self._aiming_at(expected)) \
             if expected is not None else self._hint_of(expr)
+        if isinstance(context, SetType) and context.mutable:
+            # A set operator reads its operands and answers a set of its own,
+            # which may be written whatever they may: what is wanted of the
+            # operands is the set, not that they may be written.
+            context = self._module.types.set_type(context.element)
         # A product and a quotient are the two that work a unit out rather than
         # demand one, so while their operands are lowered any unit stands where
         # any other does -- and a literal among them takes no unit at all, `d \N{MULTIPLICATION SIGN} 3`
