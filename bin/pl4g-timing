@@ -223,6 +223,7 @@ GROUPS: tuple[Group, ...] = (
            "generic-calls-itself": "generic functions calling themselves and each other",
            "generic-types": "records and sums with type parameters, built, matched and imported",
            "reference-at-the-top-level": "variables at the top level holding addresses of others",
+           "defer-on-every-early-exit": "arenas given back by the compiler on every way out of their blocks",
            "pure-calls": "pure calls reused, moved out of a loop and worked out while compiling"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
