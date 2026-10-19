@@ -10534,6 +10534,38 @@
       "option": null
     },
     {
+      "number": 4930,
+      "name": "LANG_LAMBDA_ANSWERS_SHORTER",
+      "severity": "error",
+      "message": "what is handed to '{name}' as argument {at} answers a reference that may not live as long as what is handed for {given}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function called"
+        },
+        {
+          "name": "at",
+          "type": "string",
+          "description": "which argument, counting from one"
+        },
+        {
+          "name": "given",
+          "type": "string",
+          "description": "the parameters whose lifetime name the argument's answer is said to share"
+        }
+      ],
+      "cause": "A parameter whose function type answers `&⧖a T`, `⧖a` a name of the signature, is handed a function whose answer lives as long as what the call hands for the parameters carrying `⧖a` -- which is what the name stands for at that call.  A lambda written there and saying nothing answers what it brought in that is a reference, and each of those has to last that long: a variable of an inner block does not outlast one of an outer one, and nothing of this call's outlasts what the signature around it names.  A function of a type naming a lifetime of that signature lasts as long as an argument reached from what the name stands for, and longer than any variable of the call.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "What a function handed for a parameter answers lives as long as the lifetime name the parameter's type says, as it stands at the call."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

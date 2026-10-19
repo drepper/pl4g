@@ -1252,7 +1252,8 @@ def _lifetimes_of(node: object, found: set[str] | None = None) -> set[str]:
     return found
 
 
-def _promises_as_much(expected: Type | None, found: Type) -> bool:
+def _promises_as_much(expected: Type | None, found: Type,
+                      free: str | None = None) -> bool:
     """Whether *found* promises at least what *expected* asks.
 
     Two promises, each of which may be given away without anything being lost:
@@ -1288,7 +1289,7 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
                 and found.hands_out == expected.hands_out
                 and found.params == expected.params
                 and found.ret is expected.ret
-                and _borrows_as_much(expected, found))
+                and _borrows_as_much(expected, found, free))
     if isinstance(expected, RunningType) and isinstance(found, RunningType):
         # A walk kept in the heap is everything one kept in a call's room is,
         # in the same four words, and lasts longer.
@@ -1301,14 +1302,23 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
             and (found.mutable or not expected.mutable))
 
 
-def _borrows_as_much(expected: FuncType, found: FuncType) -> bool:
+def _borrows_as_much(expected: FuncType, found: FuncType,
+                     free: str | None = None) -> bool:
     """Whether every reference a function of type *found* answers with lives at
     least as long as *expected* says: as long as what fewer of the parameters
-    named -- or fewer parts of them -- is longer, never shorter."""
+    named -- or fewer parts of them -- is longer, never shorter.
+
+    A name of the signature *free* stands for, at a call of it, what the
+    arguments carrying it live as long as -- so any lifetime may stand for it
+    here, and the call is what is held to it (`_answers_as_long`)."""
     wanted = expected.borrowed()
     for leaf, borrowed in found.borrows:
         said = wanted.get(leaf)
-        if said is None or not set(borrowed.outer) <= set(said.outer):
+        if said is None:
+            return False
+        if free is not None and any(key == free for key, _ in said.outer):
+            continue
+        if not set(borrowed.outer) <= set(said.outer):
             return False
         for param in borrowed.params:
             if param not in said.params:
@@ -1776,6 +1786,20 @@ def _holds_a_list(ty: Type) -> bool:
         case TupleType():
             return any(_holds_a_list(part) for part in ty.members)
     return False
+
+
+def _carried_lifetimes(node: ast.FuncDef, types: Sequence[Type]
+                       ) -> tuple[tuple[str, tuple[int, ...]], ...]:
+    """Each lifetime name a signature carries, with the parameters carrying it:
+    those whose own references carry it, and not a function's whose answer is
+    said to live as long as it -- that one is what the others are for."""
+    found: dict[str, list[int]] = {}
+    for at, (param, ty) in enumerate(zip(node.params, types)):
+        if isinstance(ty, FuncType):
+            continue
+        for name in _lifetimes_of(param.type):
+            found.setdefault(name, []).append(at)
+    return tuple((name, tuple(found[name])) for name in sorted(found))
 
 
 def _kept_in_the_signature(node: ast.FuncDef) -> ast.FuncDef:
@@ -3707,6 +3731,20 @@ class Checker:
         self._live_in: dict[int, frozenset[int]] = {}
         #: And as each is done, which is what says a name is not used again.
         self._live_out: dict[int, frozenset[int]] = {}
+        #: The lifetime names of the signature whose call's arguments are being
+        #: lowered, which stand for what that call hands over and so may be any
+        #: lifetime in a function type handed to it (`_answers_as_long`).
+        self._calling_key: str | None = None
+        #: The type a function value had before it was read as one promising
+        #: less, by the identity of what it was read as.
+        self._promised_as: dict[int, Type] = {}
+        #: What each lambda written as an argument of that call and taking its
+        #: answer's lifetime from the parameter brought in that is a reference --
+        #: whether by reference, and the name -- by the parameter's index.
+        self._lambda_notes: dict[int, list[tuple[bool, _Local]]] | None = None
+        #: The names of the callee's signature a lambda being lowered took, which
+        #: what it brought in stands for in its body.
+        self._adopting: frozenset[tuple[str, str]] = frozenset()
         #: The keys standing for an array in a frame of this program's, which a
         #: view of it carries: what it points into goes when the array's scope
         #: does.  A copy of the elements carries none of them.
@@ -6284,6 +6322,8 @@ class Checker:
                                           for leaf, one in borrows.items()
                                           if leaf >= 0},
                             keeps=_kept_pairs(node),
+                            lifetime_key=self._lifetime_key(node),
+                            lifetimes=_carried_lifetimes(node, params),
                             made_in=made_in, param_made_in=param_made_in,
                             exported=self._is_export(attrs),
                             cconv=(func_attrs.abi if func_attrs.abi is not None
@@ -12775,6 +12815,8 @@ class Checker:
                 leaf_borrows={leaf: one.params for leaf, one in borrows.items()
                               if leaf >= 0},
                 keeps=_kept_pairs(node),
+                lifetime_key=self._lifetime_key(node),
+                lifetimes=_carried_lifetimes(node, params),
                 made_in=made_in, param_made_in=param_made_in)
             self._module.add_function(
                 func, key=self._key("".join((node.name, "\N{TOP LEFT CORNER}",
@@ -13371,8 +13413,10 @@ class Checker:
             return UndefConst(ERROR)
         # How long a reference it answers with lives, said as a definition says
         # it -- or as long as what a name of the signature around it stands
-        # for, which it reaches through what it brought in.
-        borrows = self._borrows_written(
+        # for, which it reaches through what it brought in -- or, written as an
+        # argument saying nothing, as long as the parameter says.
+        adopted = self._adopted_borrows(expr, answer, expected)
+        borrows = adopted if adopted is not None else self._borrows_written(
             tuple(one.type for one in expr.params), params, expr.ret_type, answer,
             expr.ret_type.span if expr.ret_type is not None else expr.span,
             around=True)
@@ -13444,8 +13488,20 @@ class Checker:
         context = (self._operand_of, self._handing_over, self._assigning,
                    self._initializing)
         try:
-            func = self._function_of_a_lambda(expr, params, answer, held, offsets,
-                                              taken, name, borrows)
+            adopting, self._adopting = self._adopting, frozenset(
+                pair for one in (adopted or {}).values() for pair in one.outer)
+            try:
+                func = self._function_of_a_lambda(expr, params, answer, held,
+                                                  offsets, taken, name, borrows)
+            finally:
+                self._adopting = adopting
+            if adopted is not None and self._lambda_notes is not None \
+                    and self._handing_over is not None:
+                # What the call is held to: what it brought in that its answer may
+                # be, which is a reference brought in or a variable by reference.
+                self._lambda_notes[self._handing_over[1] - 1] = [
+                    (one.by_reference, local) for one, local in taken
+                    if one.by_reference or isinstance(self._held_by(local), PtrType)]
         finally:
             (self._operand_of, self._handing_over, self._assigning,
              self._initializing) = context
@@ -13985,6 +14041,19 @@ class Checker:
             outer_lifetimes = self._enter_lifetimes(
                 self._lifetime_key(expr), expr.params, params, arriving[1:],
                 inherited)
+            for pair in self._adopting:
+                # A name of the signature it is handed to: at that call it stands
+                # for whatever the call says, so here for every reference the
+                # lambda brought in -- the call weighs each of them.
+                # A variable brought in by reference is answered as the place it
+                # is; one holding a reference, by what is read out of it.
+                self._lifetime_sources[pair] = [
+                    (inside.value, None, inside.name,
+                     by_reference and isinstance(self._held_by(outside), PtrType))
+                    for outside, inside, by_reference in inherited
+                    if by_reference or isinstance(self._held_by(outside), PtrType)]
+            calling, self._calling_key = self._calling_key, None
+            notes, self._lambda_notes = self._lambda_notes, None
             # What a lambda is handed, and what it brought in, may have been made
             # anywhere: it carries its allocator, and lasts as long as the call.
             for scope in self._scopes:
@@ -13999,6 +14068,7 @@ class Checker:
             self._answered_as_said(func, borrows,
                                    tuple(one.name for one in expr.params),
                                    arriving[1:])
+            self._calling_key, self._lambda_notes = calling, notes
             self._lifetime_scopes, self._lifetime_sources = outer_lifetimes
             self._all_of_it_used(brought)
             if not inner.is_terminated:
@@ -14931,6 +15001,100 @@ class Checker:
         return any(_reached_from(place, self._parameter_sources(slot))
                    and _reached_from(value, self._parameter_sources(kept))
                    for slot, kept in _kept_pairs(node))
+
+    def _adopted_borrows(self, expr: ast.Lambda, answer: Type,
+                         expected: Type | None) -> dict[int, Borrowed] | None:
+        """What a lambda written as an argument answers, where it says nothing of
+        how long a reference it answers lives and the parameter it is handed for
+        does, in a name of the signature being called: that, which stands at the
+        call for what the call hands over -- the call being what is held to it."""
+        if self._calling_key is None or not isinstance(expected, FuncType) \
+                or not isinstance(answer, PtrType) or answer.lasting \
+                or not isinstance(expr.ret_type, ast.RefTypeRef) \
+                or expr.ret_type.lifetime is not None:
+            return None
+        said = expected.borrowed().get(-1)
+        if said is None or said.params \
+                or not any(key == self._calling_key for key, _ in said.outer):
+            return None
+        return {-1: said}
+
+    def _lifetime_of_value(self, value: Value) -> tuple[str, object]:
+        """How long what *value* refers to is there, as a call can say it: a
+        variable of this function, with its depth; one or more names of the
+        signature around, which outlast its body; as long as the program; or
+        nothing that can be said."""
+        named = self._named_place_of(value)
+        if named is not None:
+            return "local", named
+        if self._lasting(value):
+            return "lasting", None
+        names = frozenset(pair for pair, sources in self._lifetime_outer().items()
+                          if _reached_from(value, sources))
+        return ("names", names) if names else ("unknown", None)
+
+    @staticmethod
+    def _lasts_as_long(answer: tuple[str, object], given: tuple[str, object]) -> bool:
+        """Whether what *answer* says lives at least as long as *given*."""
+        kind, held = answer
+        if kind == "lasting":
+            return True
+        wanted, there = given
+        if kind == "unknown" or wanted in ("lasting", "unknown"):
+            return False
+        if wanted == "local":
+            assert isinstance(there, _Local)
+            return kind == "names" or (isinstance(held, _Local)
+                                       and held.depth <= there.depth)
+        return kind == "names" and bool(held) and held <= there  # type: ignore[operator]
+
+    def _answers_as_long(self, func: Function, args: Sequence[Value],
+                         notes: Mapping[int, list[tuple[bool, _Local]]],
+                         span: Span) -> None:
+        """Hold a call to what a function type among its parameters says: that
+        what a function handed for it answers lives as long as what is handed for
+        the parameters carrying the same name (4930).
+
+        At the call the name stands for what those arguments live as long as.  A
+        function value of a type naming a lifetime of the signature around answers
+        as long as that name -- longer than any variable here, and as long as an
+        argument reached from what the name stands for.  A lambda written as the
+        argument and saying nothing answers what it brought in that is a
+        reference, and each of those is weighed: a variable it brought in by
+        reference is where it is, a reference it brought in reaches what it does.
+        """
+        carriers = dict(func.lifetimes)
+        for at, (param, value) in enumerate(zip(func.ty.params, args)):
+            had = self._promised_as.get(id(value), value.ty)
+            if not isinstance(param, FuncType) or not isinstance(had, FuncType):
+                continue
+            for leaf, said in param.borrows:
+                free = [name for key, name in said.outer if key == func.lifetime_key]
+                if not free:
+                    continue
+                given = [self._lifetime_of_value(args[one])
+                         for name in free for one in carriers.get(name, ())
+                         if one < len(args)]
+                found = had.borrowed().get(leaf)
+                if found is None:
+                    continue
+                if at in notes:
+                    answers = [("local", local) if by_reference
+                               else self._lifetime_of_value(local.value)
+                               for by_reference, local in notes[at]]
+                elif found.outer and not found.params:
+                    answers = [("names", frozenset(found.outer))]
+                else:
+                    continue
+                if not all(self._lasts_as_long(one, other)
+                           for one in answers for other in given):
+                    self._diags.emit(D.LANG_LAMBDA_ANSWERS_SHORTER, span,
+                                     name=func.name, at=str(at + 1),
+                                     given=", ".join(
+                                         "".join(("'", func.param_names[one], "'"))
+                                         for name in free
+                                         for one in carriers.get(name, ())
+                                         if one < len(func.param_names)))
 
     def _kept_alike(self, func: Function, args: Sequence[Value],
                     span: Span) -> None:
@@ -24250,7 +24414,14 @@ class Checker:
                 failed = True
             else:
                 placed.append(one)
-        values = self._one_by_one(builder, placed, wanted, func.name)
+        calling, self._calling_key = self._calling_key, func.lifetime_key or None
+        notes, self._lambda_notes = self._lambda_notes, {}
+        try:
+            values = self._one_by_one(builder, placed, wanted, func.name)
+            if values is not None and len(values) == len(wanted):
+                self._answers_as_long(func, values, self._lambda_notes, expr.span)
+        finally:
+            self._calling_key, self._lambda_notes = calling, notes
         if values is None:
             return None
         if len(values) > len(wanted):
@@ -27081,17 +27252,20 @@ class Checker:
         stands there has that type, the same bits read as the smaller promise.
         """
         found = self._value_type_of(value)
-        if not _promises_as_much(expected, found):
+        if not _promises_as_much(expected, found, self._calling_key):
             return value
         if isinstance(expected, (FuncType, RunningType)):
             # A function is three words and not one, so there is nothing for
             # one instruction to read differently: the three are taken out and
             # put back under the type that promises less, which is the same
             # registers and no work at all.
-            return builder.make_tuple(
+            read = builder.make_tuple(
                 [builder.extract(value, at, part, span)
                  for at, part in enumerate(parts_of(expected))],
                 expected, span)
+            # What it promised, for a call to hold it to (`_answers_as_long`).
+            self._promised_as[id(read)] = found
+            return read
         return builder.cast(CastKind.BITCAST, value, expected, span)
 
     def _spread(self, builder: IRBuilder, expr: ast.Expr, expected: ArrayType,
@@ -27180,7 +27354,7 @@ class Checker:
             # The same number in a unit the program said may stand here.  The
             # bits are the same bits, so nothing is emitted for it.
             return True
-        if _promises_as_much(expected, found):
+        if _promises_as_much(expected, found, self._calling_key):
             # A reference that promises at least what is wanted.  What lives as
             # long as the program lives long enough for anything, and what may
             # be written may be read; both go one way only, a call's storage

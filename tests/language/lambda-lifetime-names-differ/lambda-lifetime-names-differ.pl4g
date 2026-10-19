@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4930
+
+※ What `pick` answers lives as long as what it is handed for `v`, here `s` and so `⧖c` --
+※ and the lambda answers `r`, which lives as long as `⧖b`.  Nothing says `⧖b` lasts as
+※ long as `⧖c`, so `mixed` would answer a reference shorter than it says.
+
+let std := ⎕import("std")
+
+fn pick(v: &⧖a u32, g: fn() → &⧖a u32) → &⧖a u32:
+    g()
+
+fn mixed(r: &⧖b u32, s: &⧖c u32) → &⧖c u32:
+    pick(s, λ [&r] → &⧖b u32 { r })
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

@@ -1,0 +1,18 @@
+※ pl4g-test: compile=error diag=4561
+
+※ A lambda saying nothing of its answer's lifetime may answer only a reference it brought
+※ in, or a variable it brought in by reference: a value it brought in is its own copy,
+※ which lives as long as the lambda and not as long as anything handed to `pick`.
+
+let std := ⎕import("std")
+
+fn pick(v: &⧖a u32, g: fn() → &⧖a u32) → &⧖a u32:
+    g()
+
+fn copied(r: &⧖b u32) → u32:
+    let n: u32 = 3u32
+    pick(r, λ [n] → &u32 { &n })⌖
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

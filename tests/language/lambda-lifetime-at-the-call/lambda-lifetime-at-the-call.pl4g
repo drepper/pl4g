@@ -1,0 +1,31 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A lifetime name of a callee's stands, at each call, for what the arguments carrying it
+※ live as long as.**  So `g: fn() → &⧖a u32` beside `v: &⧖a u32` is handed a lambda whose
+※ answer lives as long as what is handed for `v`: one of a type naming the caller's own
+※ `⧖b`, where `v` is handed what `⧖b` stands for -- and a lambda written right there and
+※ saying nothing, which takes the parameter's name and answers what it brought in by
+※ reference, each of which lasts at least as long as what `v` is handed.
+※
+※ Compare: **Rust**'s lifetime parameters, instantiated at each call, and its closures,
+※ whose lifetimes come from the type they are handed for.
+
+let std := ⎕import("std")
+
+fn pick(v: &⧖a u32, g: fn() → &⧖a u32) → &⧖a u32:
+    g()
+
+fn outer(r: &⧖b u32) → u32:
+    let p: &u32 = pick(r, λ [&r] → &⧖b u32 { r })
+    p⌖
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let x: u32 = 5u32
+    let q: &u32 = pick(&x, λ [&x] → &u32 { &x })
+    let s: mut u32 = 0u32
+    if true:
+        let inner: u32 = 7u32
+        let o: &u32 = pick(&inner, λ [&x] → &u32 { &x })
+        s ← o⌖
+    if outer(&x) = 5u32 ∧ q⌖ = 5u32 ∧ s = 5u32: 0u6 else: 1u6

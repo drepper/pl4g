@@ -264,6 +264,11 @@ class Function:
     #: the two live as long as each other, so the body may put the one in the
     #: other and each call is held to it.
     keeps: tuple[tuple[int, int], ...] = ()
+    #: What tells the lifetime names of the signature from every other's, as a
+    #: function type written in it records them, and which parameters carry each
+    #: -- the ones a function type among them is held to at each call.
+    lifetime_key: str = ""
+    lifetimes: tuple[tuple[str, tuple[int, ...]], ...] = ()
     #: Which arena parameters the answer was made in, where `→ T in a, b` said so,
     #: and nothing where the signature said nothing -- in which case a caller takes
     #: the answer to be made in any arena it handed over.

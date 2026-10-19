@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error diag=4930
+
+※ A lambda written as the argument and saying nothing answers what it brought in by
+※ reference -- here `inner`, of a block further in than `x`, which is what `pick`'s answer
+※ is said to live as long as.
+
+let std := ⎕import("std")
+
+fn pick(v: &⧖a u32, g: fn() → &⧖a u32) → &⧖a u32:
+    g()
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let x: u32 = 5u32
+    let q: mut u32 = 0u32
+    if true:
+        let inner: u32 = 7u32
+        q ← pick(&x, λ [&inner] → &u32 { &inner })⌖
+    if q = 7u32: 0u6 else: 1u6
