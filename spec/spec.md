@@ -3889,7 +3889,8 @@ arena `in` names, or in `⎕heap`.  Something that reads elements as a run, the 
 `write`, `write_sync`, `print` and `println` ask for one, so a column goes out as the bytes it holds and a read into one fills it.
 **The copy is given back when the kernel has answered**: `write` hands the request what it copied, and the ring gives it back as the
 answer comes in -- the kernel reading it after the call has returned -- while `read`, `print` and `println`, which wait for their
-answers, give it back once they have them, `read` after copying what came into the view.  `read` writes the elements it is handed,
+answers, make it in an arena of their own that goes when they leave, `read` after copying what came into the view.  Nothing
+in a program gives it back.  `read` writes the elements it is handed,
 so it takes a `mut u8⟦⟧` and is `impure`.
 
 Compare: **NumPy**, whose `m[0:3, 1]` and `m[0, 0:4:2]` are views with strides as these are and whose `ascontiguousarray` is

@@ -177,12 +177,6 @@ fn write(to: &mut io.Writer, what: u8⟦⟧) → io.Pending ? i32:
     else:
         io.Writer.start(to, at, ⎕drop(#laid))
 
-※※ Give back `laid` where `⎕one_run(of)` made a copy rather than answering `of`.
-@[impure]
-fn given_back(laid: u8⟦⟧, of: u8⟦⟧):
-    if #laid ≠ 0 and ⎕address(&laid⟦0⟧) ≠ ⎕address(&of⟦0⟧):
-        io.give_back(⎕address(&laid⟦0⟧), ⎕drop(#laid))
-
 ※※ Wait for a request and answer how many bytes went, or what the kernel said.
 @[export]
 fn flush(of: io.Pending) → u64 ¤size ? i32:
@@ -269,11 +263,11 @@ fn run(s: &mut fs.State) → u64:
 ※ There is no form of this that does not wait: what a read is for is the bytes,
 ※ and a program that has not waited does not have them.  The kernel writes a run
 ※ of bytes, so into a view that is not one this reads into a copy, copies what
-※ came into the view, and gives the copy back.
+※ came into the view, and the copy goes with the arena it was made in.
 @[export, impure]
 fn read(from: &mut io.Reader, into: mut u8⟦⟧) → u64 ¤size ? i32:
-    let laid: u8⟦⟧ = ⎕one_run(into)
-    defer given_back(laid, into)
+    let scratch: mut arena = ⎕arena
+    let laid: u8⟦⟧ = ⎕one_run(into) in scratch
     let at: u64 = if #laid = 0: 0u64 else: ⎕address(&laid⟦0⟧)
     let got: u64 ¤size = flush(io.Reader.start(from, at, ⎕drop(#laid))?)?
     if #laid ≠ 0 and ⎕address(&laid⟦0⟧) ≠ ⎕address(&into⟦0⟧):
@@ -370,9 +364,9 @@ fn Io.print(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
         ⎕unit(0u64, ⌜size⌝)
     else:
         ※ the kernel reads a run of bytes: a view that is not one is copied, and
-        ※ the copy given back once the kernel has it all
-        let laid: u8⟦⟧ = ⎕one_run(what)
-        defer given_back(laid, what)
+        ※ the copy goes with its arena once the kernel has it all
+        let scratch: mut arena = ⎕arena
+        let laid: u8⟦⟧ = ⎕one_run(what) in scratch
         Io.all_of(to, ⎕address(&laid⟦0⟧), total)
 
 ※※ The same, with a newline after it, written as one request.
@@ -397,9 +391,9 @@ fn Io.println(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
         Io.all_of(to, after, 1u64)
     else:
         ※ the kernel reads runs of bytes: a view that is not one is copied, and
-        ※ the copy given back once the kernel has it all
-        let laid: u8⟦⟧ = ⎕one_run(what)
-        defer given_back(laid, what)
+        ※ the copy goes with its arena once the kernel has it all
+        let scratch: mut arena = ⎕arena
+        let laid: u8⟦⟧ = ⎕one_run(what) in scratch
         let before: u64 = ⎕address(&laid⟦0⟧)
         ※ The kernel's `iovec` twice over: where the bytes are and how many.
         let parts: mut u64⟦4⟧ = ⟦before, text, after, 1u64⟧

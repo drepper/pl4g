@@ -850,7 +850,7 @@ the place handed for the first by `_outlives_it` -- or, where the caller did not
 written before `fn` or a lambda by `_promised`, and held to one-way subtyping in `_promises_as_much`.  A named function's value takes the
 last two from its definition's attributes in `_function_as_a_value`, its own `func.ty` staying as it was.  A lambda's body is
 lowered pure with `_observing` set: `_an_effect`, through which everything that changes what outlives a call comes, notes the
-change there instead of reporting it, and so does `_all_given_back` for an arena left holding room; what was noted becomes the
+change there instead of reporting it; what was noted becomes the
 lambda function's `impure` and its type's, which is therefore made after the body rather than before it.  The context a mismatch
 is reported in -- what is being initialized, assigned, handed over -- is kept across lowering the body, which sets its own.  A call
 through a value is an effect only where its type says `impure`, and `_answer_is_taken` asks the type's `can_ignore`.
@@ -4653,8 +4653,8 @@ and branches: the view itself, or `_room_for` in the arena `in` named (`_takes_r
 runtime's `pl4g_args` writes the stride of one beside the place and the count.  What `std` copies for the kernel is given back by
 the ring: `kept_at` and `kept_len` per slot, set by `pl4g_io_submit` where its last argument says the bytes are such a copy (through
 `io.Writer.start_kept`) and given back by `reap` when the slot's answer is taken in -- or at once, where the request was done
-without a ring, or no slot could be had -- and
-`pl4g_io_give_back` (`io.give_back`) for a function that has waited for its answer itself.
+without a ring, or no slot could be had.  A function that waits for its answer itself makes the copy in an arena of its own,
+`⎕one_run(v) in scratch`, which goes when the function leaves.
 
 
 A generic function checked where it is written

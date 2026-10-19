@@ -10414,6 +10414,10 @@ with `⎕empty`, written or put off with `defer` (4617).  Asked whether to make 
 - **What is made in an arena still cannot outlive it** (4614).  The rule that something read after `⎕empty` is dead (4615) has no
   `⎕empty` left to follow, the arena going only where the names that could hold what it made go too.
 
+What `std` gave back by hand goes the same way: `read`, `Io.print` and `Io.println` make the copy `⎕one_run` takes of a view in
+an arena of their own, so `std.given_back`, `io.give_back` and the runtime's `pl4g_io_give_back` are gone.  `write`, which does not
+wait, still hands its copy to the ring, which gives it back as the answer comes in -- the runtime doing it, not the program.
+
 The rest of what was decided for the `@[impure]` error is recorded with it.
 
 Open questions

@@ -145,5 +145,5 @@ def names() -> Sequence[str]:
 _NAMES: tuple[str, ...] = ("pl4g_args", "pl4g_env", "pl4g_hash", "pl4g_hash_seed",
                           "pl4g_hash_word", "pl4g_heap_alloc",
                           "pl4g_heap_free", "pl4g_io_close", "pl4g_io_drain",
-                          "pl4g_io_give_back", "pl4g_io_open", "pl4g_io_ready",
+                          "pl4g_io_open", "pl4g_io_ready",
                           "pl4g_io_step", "pl4g_io_submit", "pl4g_io_wait")

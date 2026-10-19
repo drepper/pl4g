@@ -752,14 +752,6 @@ i64 pl4g_io_submit(struct pl4g_ring *r, i32 which, i32 fd, u64 at, u64 len,
 }
 
 
-/* Give back the heap's room at `at`, `len` bytes, that a view was copied into
- * for a request the caller has already seen answered -- what `std.read` and
- * `std.Io.print` do with theirs once the kernel has it all. */
-void pl4g_io_give_back(u64 at, u64 len)
-{
-  pl4g_heap_free((void *) at, len);
-}
-
 /* Wait for the request in `slot` and answer what the kernel said about it.
  * The slot is given back, so an answer is read once. */
 i64 pl4g_io_wait(struct pl4g_ring *r, i64 slot)
