@@ -2065,7 +2065,10 @@ and copies it otherwise.  A lambda still copies on the way in, being called only
 `_marking`.  `_an_effect` notes every effect there before deciding whether to report it -- as the body's own, or, given `through`,
 as a call to a marked callee -- and `_what_it_changes` notes every call to a function that does input or output.  `_check_marks`
 runs once every body of the unit is lowered and nothing else was reported: a least fixpoint over the calls, a callee with no
-record taken to need what it says.
+record taken to need what it says.  A function type's slots (4935) join the same fixpoint: `_slot` registers a parameter, a
+variable, a field or an answer by a key, `_flow` notes what each is given as a source (`_source_of`: another slot, a named
+function, a lambda's record in `_lambda_marks`, or nothing known), and a call through a variable bound to a slot is a call to it
+rather than an effect of the caller's own.  A slot is needed where it is in `_slots_outside` or any source may change things.
 
 **An arena a body made is given back by a `defer` the compiler writes.**  `_give_back_on_leaving` appends a `_Deferred` holding
 `⎕empty(a)` right after `let a: mut arena = ⎕arena` is lowered -- also for the arena `let v: T in kept = f(…)` makes, and not for one

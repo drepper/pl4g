@@ -1,0 +1,25 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4935 LANG_TYPE_MARK_NOT_NEEDED
+
+※ A field and an answer are slots as a parameter is: what is put in the field
+※ wherever a value of the record is made or the field written, and what the
+※ function answers on every way out, decide whether the mark is needed.  Here
+※ both only ever hold a pure function.
+
+let std := ⎕import("std")
+
+type Box = f : @[impure] fn(u8) → u8
+
+fn quiet(a: u8) → u8:
+    a
+
+fn chosen() → @[impure] fn(u8) → u8:
+    quiet
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let b: mut Box = Box(.f ← quiet)
+    b.f ← λ v: u8 → u8 { v + 1u8 }
+    let h := chosen()
+    let k := b.f
+    if k(1u8) + h(2u8) = 4u8: 0u6 else: 1u6

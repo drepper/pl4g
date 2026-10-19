@@ -1,0 +1,39 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A function type's `@[impure]` is needed where something given to it may
+※ change things: a named function that does, a lambda whose body does, or
+※ another slot that is given one.  Here a parameter is handed a lambda writing
+※ a variable at the top level, a field is given a function that does, and an
+※ answer hands one back -- and what is handed on from one slot to another
+※ carries the need with it.
+
+let std := ⎕import("std")
+
+let count: mut u8 = 0u8
+
+@[impure]
+fn loud(a: u8) → u8:
+    count ← count + 1u8
+    a
+
+type Box = f : @[impure] fn(u8) → u8
+
+@[impure]
+fn apply(f: @[impure] fn(u8) → u8, x: u8) → u8:
+    f(x)
+
+@[impure]
+fn again(f: @[impure] fn(u8) → u8, x: u8) → u8:
+    apply(f, x)
+
+fn chosen() → @[impure] fn(u8) → u8:
+    loud
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let n: u8 = again(λ v: u8 → u8 { count ← count + 1u8; v }, 1u8)
+    let b: Box = Box(.f ← loud)
+    let h := chosen()
+    let k := b.f
+    let m: u8 = k(2u8) + h(3u8)
+    if n + m = 6u8 ∧ count = 3u8: 0u6 else: 1u6

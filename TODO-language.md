@@ -1302,9 +1302,11 @@ Runtime
     Done 2026-10-20: the user decided a function filling a table it was handed is not impure, at most opaque.  Filling a
     writable table parameter is no effect; the caller is asked whether what it handed over is its own (4934).
 
-[ ] ask a lambda's and a function type's `@[impure]` whether anything needs it.  4933 asks it of a definition's body; one written
+[x] ask a lambda's and a function type's `@[impure]` whether anything needs it.  4933 asks it of a definition's body; one written
     before `λ` or in a parameter's type says what a value may do rather than what a body does, and nothing checks that the value
     handed over ever does it.
+    Done 2026-10-20: before `λ` it was already refused (3204).  A function type's is asked of every slot it stands in, over the
+    whole unit, with the functions calling through it (4935).
 
 [ ] a set operator into a writable set.  `let s: mut ⸨u8⸩ = a | b` is refused as `|` on integers (4205), where the same with `s`
     read-only is accepted: the writable type wanted is not matched against the read-only operands when the operator is looked up.

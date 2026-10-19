@@ -10513,6 +10513,20 @@ place: the callee copied it on the way in, every call, so building a list a call
 Building a list of 50,000 a call at a time ran out of memory under the suite's limits before, and takes a hundredth of a second
 now.  Compare C++'s `std::move`, Rust's move of a value used once, Swift's copy-on-write.
 
+## 2026-10-20T18:00+02:00 — language
+
+**A function type's `@[impure]` is asked whether anything needs it**
+
+The user asked for the entry in TODO-language.md on a lambda's and a function type's `@[impure]`.  Before a lambda it was already
+refused (3204), the lambda's purity being its body's.  For a function type the user chose, over asking only variables or leaving
+it as a permission as Koka and Haskell do, to ask **every slot over the whole unit**: a parameter, a variable, a field and an answer
+need the mark where something given to them may change things -- a named function that does, a lambda whose body does, another
+slot that needs it -- and one something outside may give a value to is taken to need it.  And, asked, **reported together** with the
+functions `@[impure]` only for calling through such a slot, in one fixpoint (4935 with 4933).  Compare Rust's clippy
+`needless_pass_by_ref_mut`, which asks the same of `&mut` across a crate.  Taken without asking: a value whose source cannot be told
+-- read out of a list, answered through a value -- is taken to need the mark; a slot in a generic record, a lambda's parameter or a
+type nested in another is not asked.
+
 Open questions
 --------------
 

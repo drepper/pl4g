@@ -3455,7 +3455,7 @@ class _Marks:
     add to the one record its definition has.
     """
 
-    node: ast.FuncDef
+    node: ast.FuncDef | ast.Lambda
     #: Where `@[impure]` and `@[io]` are written, where they are.
     impure_at: Span | None = None
     io_at: Span | None = None
@@ -3908,6 +3908,16 @@ class Checker:
         self._marks: dict[int, _Marks] = {}
         self._marks_of: dict[int, _Marks] = {}
         self._marking: _Marks | None = None
+        #: Function types written `@[impure]` (4935): every slot one stands in
+        #: -- a parameter, a variable, a field, an answer -- by a key, what was
+        #: given to it, where its mark is written, and whether something outside
+        #: this unit may give it something too.
+        self._slot_flows: dict[object, list[object]] = {}
+        self._slots_marked: dict[object, tuple[Span, str]] = {}
+        self._slots_outside: set[object] = set()
+        self._slot_of_local: dict[int, object] = {}
+        self._node_of_func: dict[int, ast.FuncDef] = {}
+        self._lambda_marks: dict[int, _Marks] = {}
         #: The tables written in the body being lowered whose handle arrives
         #: where branches meet, and where, asked once the body is complete.
         self._unsettled_tables: list[tuple[Value, Span, str]] = []
@@ -4233,6 +4243,7 @@ class Checker:
             for item in unit.items:
                 if isinstance(item, (ast.TypeDef, ast.EnumDef)):
                     self._collect_type(item, unit.path)
+                    self._field_slots(item)
         # Bundles before the functions, since a clause of one may apply a bundle
         # written below it, exactly as a type may be named before it is defined.
         for unit in units:
@@ -6565,6 +6576,7 @@ class Checker:
                                    else DEFAULT_CCONV),
                             span=node.span, name_span=node.name_span,
                             source_path=path, doc=node.doc or "")
+            self._node_of_func[id(func)] = node
             if func_attrs.listable and not params:
                 self._diags.emit(D.LANG_LISTABLE_TAKES_NOTHING, node.name_span,
                                  name=node.name)
@@ -9932,6 +9944,9 @@ class Checker:
         without its allocator, which the caller adds, and has to be in it.
         """
         ty = func.ty.ret
+        answering = self._node_of_func.get(id(func))
+        if answering is not None:
+            self._flow(("answer", id(answering)), written)
         said = self._answer_made_in
         if said is None or self._value_type_of(value) is ERROR:
             return value
@@ -10542,6 +10557,8 @@ class Checker:
                 value = self._own_when_changed(builder, param, value, node.body)
             self._bind_local(param.name, value, param.span,
                              param.mutable, is_parameter=True, builder=builder)
+        if generating is None:
+            self._parameter_slots(node, func)
         outer_lifetimes = self._enter_lifetimes(
             self._lifetime_key(node), node.params,
             func.ty.params[:len(node.params)], arriving)
@@ -10778,6 +10795,7 @@ class Checker:
             case ast.VarDef():
                 self._copied_where_shared(stmt.value, stmt.mutable)
                 self._lower_local(builder, stmt)
+                self._variable_slot(stmt)
                 self._made_in(stmt.name, stmt.value, stmt.span)
                 self._report_inferred(((stmt.name, stmt.name_span), *stmt.more),
                                       stmt.type)
@@ -11241,6 +11259,8 @@ class Checker:
         given: dict[str, ast.Named] = {}
         spoiled = False
         for one in expr.args:
+            if isinstance(one, ast.Named):
+                self._flow(("field", ty.name, one.name), one.value)
             if not isinstance(one, ast.Named):
                 self._diags.emit(D.LANG_PRODUCT_FIELD_NOT_NAMED, one.span,
                                  type=ty.written())
@@ -12497,6 +12517,11 @@ class Checker:
         """
         whole = ast.Member(span=stmt.span, base=stmt.base, name=stmt.name,
                            name_span=stmt.name_span)
+        record = self._said_to_be(stmt.base)
+        if isinstance(record, PtrType):
+            record = record.pointee
+        if isinstance(record, ProductType):
+            self._flow(("field", record.name, stmt.name), stmt.value)
         if isinstance(self._member_named(whole), GlobalVar):
             # A singleton, `T.name ← …`: one object in the image, never written.
             self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, stmt.span,
@@ -12768,8 +12793,12 @@ class Checker:
             return UndefConst(ERROR)
         if ty.impure:
             # What its type promises is what is known of it: a pure one may be
-            # called from a pure function, as a pure definition may.
-            self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=local.name)
+            # called from a pure function, as a pure definition may.  Whether
+            # it is needed is the slot's question, where the name has one.
+            key = self._slot_of_local.get(id(local))
+            self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span,
+                            through=None if key is None else ("slot", key),
+                            name=local.name)
         self._tables_handed(ty.params, args, local.name, expr.span)
         # Both halves are read once, before any call is made: a walk makes one
         # call per element and they all go to the same code with the same
@@ -13116,6 +13145,7 @@ class Checker:
                                              # an operator may be defined for one
                                              # operand and for two, over one type
                                              "/", str(len(node.params))))))
+            self._node_of_func[id(func)] = node
             self._owned.append(func)
             written.made[key] = func
             self._module.reports.record(
@@ -13202,6 +13232,7 @@ class Checker:
                     value = self._own_when_changed(inner, param, value, node.body)
                 self._bind_local(param.name, value, param.span, param.mutable,
                                  is_parameter=True, builder=inner)
+            self._parameter_slots(node, func)
             if func.hands_out is not None:
                 self._hands_out = (func.hands_out,
                                    block.add_param(func.ty.params[-1], "".join(
@@ -13633,6 +13664,7 @@ class Checker:
                 return UndefConst(ERROR)
             made.append(place)
         args = self._owned_arguments(builder, expr, func, made)
+        self._flows_of_call(expr, func)
         self._what_it_changes(func, expr.span)
         self._tables_handed(func.ty.params, args, func.name, expr.span)
         self._kept_alike(func, args, expr.span)
@@ -13965,6 +13997,11 @@ class Checker:
         two ways of writing the same value.
         """
         assert isinstance(func, Function)
+        node = self._node_of_func.get(id(func))
+        if node is not None:
+            # Called through a value, what its parameters are given is not seen.
+            self._slots_outside.update(("param", id(node), at)
+                                       for at in range(len(node.params)))
         if func.writes_arrays:
             # Called through a value, nothing would say the array it is handed
             # has to be one that may be written.
@@ -14311,6 +14348,8 @@ class Checker:
         # reported, and the lambda's type says what was noted.
         outer_observing, self._observing = self._observing, [False]
         outer_unsettled, self._unsettled_tables = self._unsettled_tables, []
+        outer_marking = self._marking
+        self._marking = self._lambda_marks.setdefault(id(expr), _Marks(node=expr))
         self._answering, self._impure = answer, False
         self._carried, self._loops = set(), []
         self._push_scope()
@@ -14413,6 +14452,7 @@ class Checker:
             self._borrows = outer_borrows
             observed, self._observing = self._observing, outer_observing
             self._unsettled_tables = outer_unsettled
+            self._marking = outer_marking
         func.attrs = replace(func.attrs, impure=bool(observed and observed[0]))
         return func
 
@@ -21196,6 +21236,10 @@ class Checker:
         where the result is wanted, since reading a place nothing looks at would
         be an instruction the program never asked for.
         """
+        for name in (node.name, *(one for one, _ in node.more)):
+            target = self._find_local(name)
+            key = self._slot_of_local.get(id(target)) if target is not None else None
+            self._flow(key, None if node.more else node.value)
         if node.more:
             self._assign_apart(builder, node)
             return None
@@ -24803,6 +24847,7 @@ class Checker:
         # Asked before the walk and not after, a walked call being as much a call as
         # any other: what the callee does, it does once for every element.
         args = self._owned_arguments(builder, expr, func, args)
+        self._flows_of_call(expr, func)
         self._what_it_changes(func, expr.span)
         self._tables_handed(wanted, args, func.name, expr.span)
         if func.attrs.listable \
@@ -27832,6 +27877,98 @@ class Checker:
         self._marks_of[id(func)] = found
         return found
 
+    def _slot(self, key: object, written: ast.TypeExpr | None, what: str,
+              outside: bool) -> None:
+        """Register a slot a function type stands in, by *key*, and the mark
+        `@[impure]` written on its type where it is."""
+        if outside:
+            self._slots_outside.add(key)
+        if isinstance(written, ast.FuncTypeRef):
+            at = next((one.name_span for one in written.attrs
+                       if one.name == "impure"), None)
+            if at is not None:
+                self._slots_marked.setdefault(key, (at, what))
+
+    def _flow(self, key: object | None, written: ast.Expr | None) -> None:
+        """Note that what *written* comes to is given to the slot *key*."""
+        if key is not None:
+            self._slot_flows.setdefault(key, []).append(
+                None if written is None else self._source_of(written))
+
+    def _source_of(self, written: ast.Expr) -> object | None:
+        """Where a function value given somewhere comes from, as far as whether it
+        may change things goes -- a slot, a named function, a lambda -- and
+        nothing where that cannot be told, which is then taken to."""
+        match written:
+            case ast.NameRef():
+                local = self._find_local(written.name)
+                if local is not None:
+                    key = self._slot_of_local.get(id(local))
+                    return None if key is None else ("slot", key)
+                found = self._provided(written.name)
+                return ("function", found) if isinstance(found, Function) else None
+            case ast.Lambda():
+                return ("lambda", id(written))
+            case ast.Member():
+                ty = self._said_to_be(written.base)
+                if isinstance(ty, PtrType):
+                    ty = ty.pointee
+                if isinstance(ty, ProductType):
+                    return ("slot", ("field", ty.name, written.name))
+            case ast.Call() if isinstance(written.callee, ast.NameRef) \
+                    and self._find_local(written.callee.name) is None:
+                found = self._provided(written.callee.name)
+                node = self._node_of_func.get(id(found)) \
+                    if isinstance(found, Function) else None
+                if node is not None:
+                    return ("slot", ("answer", id(node)))
+        return None
+
+    def _field_slots(self, node: object) -> None:
+        """Register the slots the fields of a record defined here are."""
+        if not isinstance(node, ast.TypeDef) or node.kind is not ast.TypeKind.PRODUCT \
+                or node.params:
+            return
+        outside = any(one.name == "export" for one in node.attrs)
+        for one in node.fields:
+            self._slot(("field", node.name, one.name), one.type, "".join((
+                "the field '", one.name, "' of '", node.name, "'")), outside)
+
+    def _variable_slot(self, stmt: ast.VarDef) -> None:
+        """Register the slot a variable of function type is, and what it is given."""
+        local = self._find_local(stmt.name)
+        if local is None or stmt.more \
+                or not isinstance(self._held_by(local), FuncType):
+            return
+        key = ("variable", id(local))
+        self._slot_of_local[id(local)] = key
+        self._slot(key, stmt.type, "".join(("the variable '", stmt.name, "'")),
+                   False)
+        self._flow(key, stmt.value)
+
+    def _flows_of_call(self, expr: ast.Call, func: Function) -> None:
+        """Note what a call gives each parameter of its callee."""
+        node = self._node_of_func.get(id(func))
+        if node is None:
+            return
+        written = self._written_for(expr, func)
+        for at in range(len(node.params)):
+            self._flow(("param", id(node), at), written.get(at))
+
+    def _parameter_slots(self, node: ast.FuncDef, func: Function) -> None:
+        """Register the slots a definition's parameters and answer are, and bind
+        each parameter's name to its slot."""
+        outside = func.linkage is not Linkage.INTERNAL
+        self._slot(("answer", id(node)), node.ret_type,
+                   "".join(("what '", node.name, "' answers")), outside)
+        for at, param in enumerate(node.params):
+            key = ("param", id(node), at)
+            self._slot(key, param.type, "".join((
+                "the parameter '", param.name, "' of '", node.name, "'")), outside)
+            local = self._find_local(param.name)
+            if local is not None:
+                self._slot_of_local[id(local)] = key
+
     def _check_marks(self) -> None:
         """Refuse `@[impure]` and `@[io]` written where nothing needs them (4933).
 
@@ -27849,17 +27986,45 @@ class Checker:
                 return self._marks.get(id(target))
             return self._marks_of.get(id(target))
 
-        marks = list(self._marks.values())
+        marks = [*self._marks.values(), *self._lambda_marks.values()]
         changes = {id(one) for one in marks if one.changes}
         io = {id(one) for one in marks if one.does_io}
+        slots = set(self._slots_outside)
+
+        def gives(source: object | None) -> bool:
+            """Whether what comes from *source* may change things."""
+            match source:
+                case ("slot", key):
+                    return key in slots
+                case ("function", func):
+                    assert isinstance(func, Function)
+                    if not func.attrs.impure or func.attrs.io:
+                        return False
+                    found = self._marks_of.get(id(func))
+                    return found is None or found.impure_at is None \
+                        or id(found) in changes
+                case ("lambda", at):
+                    found = self._lambda_marks.get(at)
+                    return found is None or id(found) in changes
+            return True
+
+        def calls(target: object) -> bool:
+            """Whether calling *target* may change things."""
+            if isinstance(target, tuple):
+                return target[1] in slots
+            found = record(target)
+            return found is None or found.impure_at is None or id(found) in changes
+
         grew = True
         while grew:
             grew = False
+            for key, sources in self._slot_flows.items():
+                if key not in slots and any(gives(one) for one in sources):
+                    slots.add(key)
+                    grew = True
             for one in marks:
                 if id(one) not in changes and any(
-                        (found := record(target)) is None
-                        or found.impure_at is None or id(found) in changes
-                        for target in one.changes_through):
+                        calls(target) for target in one.changes_through):
                     changes.add(id(one))
                     grew = True
                 if id(one) not in io and any(
@@ -27867,7 +28032,12 @@ class Checker:
                         for target in one.io_through):
                     io.add(id(one))
                     grew = True
+        for key, (at, what) in self._slots_marked.items():
+            if key not in slots:
+                self._diags.emit(D.LANG_TYPE_MARK_NOT_NEEDED, at, what=what)
         for one in marks:
+            if not isinstance(one.node, ast.FuncDef):
+                continue
             if one.impure_at is not None and id(one) not in changes:
                 self._diags.emit(D.LANG_MARK_NOT_NEEDED, one.impure_at,
                                  name=one.node.name, mark="impure",
@@ -27899,7 +28069,7 @@ class Checker:
         if not func.attrs.impure:
             return
         if func.attrs.io:
-            if self._marking is not None and self._observing is None:
+            if self._marking is not None:
                 self._marking.io_through.append(func)
             if not self._may_do_io:
                 self._an_effect(D.LANG_IO_WITHOUT_A_DEVICE, span, name=func.name)
@@ -27929,7 +28099,7 @@ class Checker:
         of any other: that attribute is about the program's own state, and says
         nothing about devices.
         """
-        if self._marking is not None and self._observing is None \
+        if self._marking is not None \
                 and which != D.LANG_IO_WITHOUT_A_DEVICE:
             # Written down whether or not it is allowed here: what a marked
             # function did is what says its mark is needed.  A call to a

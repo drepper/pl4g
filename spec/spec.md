@@ -6526,7 +6526,15 @@ one that does no input or output, or that is handed a device, which already says
 rather than what it says: two functions marked `@[impure]` that only call each other justify nothing between them, and both are
 reported in the one build.  A function whose body is not here -- defined somewhere else, or in a module lowered only as far as the
 program names it -- is taken at its word.  The question is asked of a program that is otherwise right, a body an error stopped
-part way not having said all it does.  Compare **Rust**'s `unused_unsafe`, which refuses an `unsafe` block nothing in needs, for the
+part way not having said all it does.
+
+**The same is asked of a function type** (4935).  `@[impure]` on `fn(u8) → u8` says a value of it may change things, and makes a
+call through it an effect.  It is needed where something given to the slot it stands in -- a parameter, a variable, a field, an
+answer -- may change things: a named function that does, a lambda whose body does, or another slot that is given one, an argument
+handed on carrying the need with it.  Every argument, initializer, assignment, field value and answer in the unit is asked, and a
+slot something outside it may give a value to is taken to need the mark: an exported function's parameters and answer, an
+exported type's fields, and the parameters of a function used as a value.  A function `@[impure]` only for calling through a slot
+that needs nothing is reported with it.  Compare **Rust**'s `unused_unsafe`, which refuses an `unsafe` block nothing in needs, for the
 same reason; **D**, whose `pure` is inferred for templates and checked where written, though nothing reports `@system` that could
 be `@safe`; **Koka**, whose inferred effect rows make a declared row that is too wide a type the compiler is free to narrow.
 

@@ -11482,6 +11482,27 @@
       },
       "since": "0.1",
       "default_enabled": true
+    },
+    {
+      "number": 4935,
+      "name": "LANG_TYPE_MARK_NOT_NEEDED",
+      "severity": "error",
+      "message": "{what} is of a function type marked '@[impure]', and nothing that may be given to it changes anything",
+      "args": [
+        {
+          "name": "what",
+          "type": "string",
+          "description": "the parameter, variable, field or answer"
+        }
+      ],
+      "cause": "A function type marked `@[impure]` says a value of it may change something that outlives a call, which makes every call through it an effect of the caller's -- and a warning to whoever reads the code.  Where nothing given to the parameter, variable, field or answer is such a function -- every argument, initializer, assignment, field value and answer being pure, or coming from somewhere that is -- the warning is false, and the callers that are `@[impure]` only for calling through it are reported with it (4933).  A slot something outside the unit may give a value to -- an exported function's parameter, an exported type's field, the parameter of a function used as a value -- is taken to need it.  Take the mark away from the type.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A function type is marked '@[impure]' only where a value given to it may change things."
+      },
+      "since": "0.1",
+      "default_enabled": true
     }
   ]
 }

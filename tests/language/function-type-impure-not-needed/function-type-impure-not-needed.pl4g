@@ -1,0 +1,25 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4935 LANG_TYPE_MARK_NOT_NEEDED
+
+※ `@[impure]` on a function type says a value of it may change something that
+※ outlives a call, and makes calling through it an effect.  Nothing given to
+※ `apply`'s parameter does -- a pure function and a lambda that only works out
+※ an answer -- and nothing given to `g` does either, so both marks are false
+※ and both are refused.  `apply` is `@[impure]` only for calling through its
+※ parameter, which justifies nothing, so it is reported in the same build
+※ (4933).
+
+let std := ⎕import("std")
+
+fn quiet(a: u8) → u8:
+    a + 1u8
+
+@[impure]
+fn apply(f: @[impure] fn(u8) → u8, x: u8) → u8:
+    f(x)
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let g: @[impure] fn(u8) → u8 = quiet
+    let n: u8 = apply(quiet, 1u8) + apply(λ v: u8 → u8 { v }, 2u8) + g(3u8)
+    if n = 8u8: 0u6 else: 1u6
