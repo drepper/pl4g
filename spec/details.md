@@ -4595,7 +4595,12 @@ of, the parts beside the counts otherwise -- and `_view` and `_dense_view` make 
 of the counts.  `_offset_of` is each index times its stride, summed, and `_row_at` keeps the strides of the dimensions it leaves;
 `_flat_offset` is the *n*-th place of the first few dimensions in the order a run has them -- one multiplication for an array whose
 type says its shape and for a vector, and for a view of more dimensions the index along each first, the counts divided out -- which
-is what the walks (`_over_an_array`, `_over_a_pick`, `¨`) and the copy (`_element_by_element`) ask.  What makes a view rather than
+is what `¨` asks, of a place written down, where the division is folded.  A walk in order does not divide: `_over_a_pick` and the
+copy (`_element_by_element`) carry an index along each dimension of a view of several with the loop, `_odometer` moving the last
+and carrying into the one before it without a branch -- a comparison, and a multiplication by what it came to -- forward, or back
+for a copy that has to run from its last place, and `_offset_at` adds each index by its stride.  The divisions that stay are the
+machine's, of two constants where the length of a run with a step is worked out, and `constfold` folds them where the divisor is
+not nought and the answer fits.  What makes a view rather than
 reading one: `_lower_slice`, an index a number or a run (`_run_along`, ends checked and a step at least one, the count rounded up)
 in each position and a dimension nothing was written for kept whole; `_as_wanted` and `_spread`'s conversion, which carry the
 strides of what they convert; and a pick, `⎕span` and `⎕bytes`, which are runs.  A dimension a run was taken along has no stated

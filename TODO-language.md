@@ -410,9 +410,10 @@ removed or decided otherwise, which its last paragraph says.
     so it is not done.  What is left, a fifth to two fifths on the smallest programs doing I/O, is every pass working on `std`'s
     view paths before they fold.  Verifying, which was the other half, is now asked for (`--verify`) and not done otherwise.
 
-[ ] walk a view of a table without dividing.  A view of more than one dimension walked a place at a time -- copied, given to `¨`
-    -- has the index along each dimension worked out by dividing the counts out (`_flat_offset`), where nested loops would add a
-    stride per turn.  A run and a vector are a multiplication either way.
+[x] walk a view of a table without dividing.  Done on 2026-10-19: a pick and a copy walked a place at a time carry an index along
+    each dimension with the loop (`_odometer`), carrying from one to the next without a branch, so no turn divides; `¨` is written
+    out a place at a time, where what it divides by is folded.  With it, a division of two constants folds where the divisor is
+    not nought and the answer fits.
 
 [x] let a dimension be told and another not.  Done on 2026-09-15, with picking by a mask, which was what asked: rows picked out
     of a table are however many, each as wide as the table, and that is a `T⟦,4⟧`.  `u6⟦2,⟧` works the same way.  A value of
