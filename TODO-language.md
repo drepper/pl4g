@@ -1289,10 +1289,12 @@ Runtime
     Done 2026-10-19: the user decided it is not impure.  A table this call made -- a literal or what a set operator answers --
     may be filled and taken from by a pure function; one handed in or at the top level may not.
 
-[ ] a table a pure function made and then rebound.  `d ← ⸨…⸩` in one arm of an `if` leaves `d` a block parameter where the arms
+[x] a table a pure function made and then rebound.  `d ← ⸨…⸩` in one arm of an `if` leaves `d` a block parameter where the arms
     meet, and whether the table is the function's own is asked as the entry is written, before the function is complete: a loop's
     back edge might still bring in somebody else's.  So that `d` is taken as not made here (4479).  Asking at the end of the body,
     with every edge in place, would answer it.
+    Done 2026-10-20: a write whose table arrives where branches meet is asked once the body is complete, by every edge into the
+    block.
 
 [ ] hand a table a pure function made to a function that fills it.  The callee writes a table it was handed, so it is
     `@[impure]` and so is every caller -- even one whose table nobody else can reach.  It is the same question the TODO entry on

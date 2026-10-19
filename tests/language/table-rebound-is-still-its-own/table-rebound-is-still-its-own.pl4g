@@ -1,0 +1,31 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A table a function made stays its own when the name is given another the
+※ function made, in one arm of an `if` or on some turns of a loop: where the
+※ arms meet, and at the top of every turn, each way in hands it a table this
+※ call made, so writing it changes nothing outside the call and a pure function
+※ may.  Whether that is so is asked once the body is complete, since a loop's
+※ way back is not there yet when its body is being worked out.
+
+let std := ⎕import("std")
+
+fn fresh(again: bool) → u8:
+    let d: mut ⸨str: u8⸩ = ⸨⸩
+    if again:
+        d ← ⸨"q": 1u8⸩
+    d⸨"r"⸩ ← 2u8
+    (d⸨"r"⸩ ?? 0u8) + (d⸨"q"⸩ ?? 0u8)
+
+fn restarted(n: u8) → u64 ¤size:
+    let d: mut ⸨u8: u8⸩ = ⸨⸩
+    foreach i := 0u8…n:
+        d⸨i⸩ ← i
+        if i = 3u8:
+            d ← ⸨⸩
+    #d
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if fresh(true) ≠ 3u8 ∨ fresh(false) ≠ 2u8: return 1u6
+    if restarted(5u8) ≠ 1: return 2u6
+    0u6

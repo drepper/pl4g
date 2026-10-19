@@ -1,0 +1,23 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4479 LANG_PURE_WRITES_ELSEWHERE
+
+※ The table taken from at the top of each turn is the one the function made
+※ on the first turn and the one at the top level on every turn after: the way
+※ back round the loop brings somebody else's.  So taking from it is an effect,
+※ which a pure function does not have -- though when the turn is worked out the
+※ way back is not there yet, which is why the question waits for the body.
+
+let std := ⎕import("std")
+
+let numbers: mut ⸨u8: u8⸩ = ⸨⸩
+
+fn drained(n: u8) → u8:
+    let d: mut ⸨u8: u8⸩ = ⸨⸩
+    foreach i := 0u8…n:
+        _ ← †d⸨i⸩
+        d ← numbers
+    n
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if drained(3u8) = 3u8: 0u6 else: 1u6

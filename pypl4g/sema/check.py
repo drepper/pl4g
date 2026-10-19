@@ -3878,6 +3878,9 @@ class Checker:
         self._marks: dict[int, _Marks] = {}
         self._marks_of: dict[int, _Marks] = {}
         self._marking: _Marks | None = None
+        #: The tables written in the body being lowered whose handle arrives
+        #: where branches meet, and where, asked once the body is complete.
+        self._unsettled_tables: list[tuple[Value, Span]] = []
         self._mut_told: set[int] = set()
         #: The type a function value had before it was read as one promising
         #: less, by the identity of what it was read as.
@@ -10441,6 +10444,7 @@ class Checker:
         self._demanding = (node, func)
         outer_marking = self._marking
         self._marking = self._marks_for(node, func, walked)
+        outer_unsettled, self._unsettled_tables = self._unsettled_tables, []
         self._push_scope()
         outer_addressed = self._addressed
         self._addressed = set()
@@ -10523,6 +10527,8 @@ class Checker:
         self._answered_as_said(func, func.ty.borrowed(),
                                tuple(one.name for one in node.params), arriving)
         self._pop_scope(node.span if not builder.is_terminated else None)
+        self._settle_tables(func)
+        self._unsettled_tables = outer_unsettled
         self._lifetime_scopes, self._lifetime_sources = outer_lifetimes
         self._addressed = outer_addressed
         self._answering = outer_answer
@@ -13131,6 +13137,7 @@ class Checker:
         outer_demanding, self._demanding = self._demanding, (node, func)
         outer_marking, self._marking = self._marking, self._marks_for(node, func,
                                                                       None)
+        outer_unsettled, self._unsettled_tables = self._unsettled_tables, []
         outer_entry, self._at_entry = self._at_entry, {}
         # What the caller has lent out is the caller's: a statement ending in
         # here ends none of its, and nothing in here is lent from its names.
@@ -13173,6 +13180,7 @@ class Checker:
             self._settle_answer(func, node)
             self._handed_out_made(func, node)
             self._pop_scope()
+            self._settle_tables(func)
         finally:
             (self._scopes, self._addressed, self._answering, self._impure,
              self._carried, self._loops, self._outside, self._initializing,
@@ -13184,6 +13192,7 @@ class Checker:
              self._receiving, self._unscanned) = outer
             self._demanding, self._at_entry = outer_demanding, outer_entry
             self._marking = outer_marking
+            self._unsettled_tables = outer_unsettled
             self._borrows = outer_borrows
             self._changed_here, self._whole_here = outer_changed
 
@@ -14252,6 +14261,7 @@ class Checker:
         # Pure, but observed: whatever the body changes is noted rather than
         # reported, and the lambda's type says what was noted.
         outer_observing, self._observing = self._observing, [False]
+        outer_unsettled, self._unsettled_tables = self._unsettled_tables, []
         self._answering, self._impure = answer, False
         self._carried, self._loops = set(), []
         self._push_scope()
@@ -14343,6 +14353,7 @@ class Checker:
                     inner.unreachable(expr.span)
             self._handed_out_made(func, expr)
             self._pop_scope()
+            self._settle_tables(func)
         finally:
             (self._scopes, self._addressed, self._answering, self._impure,
              self._carried, self._loops, self._outside, self._deferred,
@@ -14352,6 +14363,7 @@ class Checker:
              self._hands_out, self._hands_out_local, self._receiving) = outer
             self._borrows = outer_borrows
             observed, self._observing = self._observing, outer_observing
+            self._unsettled_tables = outer_unsettled
         func.attrs = replace(func.attrs, impure=bool(observed and observed[0]))
         return func
 
@@ -16031,8 +16043,7 @@ class Checker:
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
-        if not self._table_made_here(base):
-            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
+        self._written_table(base, expr.span)
         shape = self._table_shape(ty)
         tables.ensure_take(self._module, shape)
         place = self._find_key(builder, shape, base, key, expr.span)
@@ -16627,8 +16638,7 @@ class Checker:
         value = self._lower_into(builder, stmt.value, ty.value, stmt.span)
         if self._value_type_of(key) is ERROR or self._value_type_of(value) is ERROR:
             return
-        if not self._table_made_here(base):
-            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
+        self._written_table(base, stmt.span)
         shape = self._table_shape(ty)
         place = self._put_key(builder, shape, base, key, stmt.span)
         builder.store(self._value_place(builder, shape, place, ty.value), value,
@@ -27848,8 +27858,55 @@ class Checker:
         seen = table
         while isinstance(seen, CastInst):
             seen = seen.operands[0]
+        if isinstance(seen, BlockParam):
+            # Where branches meet, or the top of a loop: which tables arrive
+            # there is known only once every edge into it is, which is once the
+            # body is complete (`_settle_tables`).  A parameter of the function
+            # has no edge into it, and is somebody else's then.
+            return None
         return isinstance(seen, CallInst) \
             and seen.callee is self._module.functions.get(tables.NEW_SYMBOL)
+
+    def _written_table(self, table: Value, span: Span) -> None:
+        """A table written at *span*: an effect unless it is this call's own."""
+        made = self._table_made_here(table)
+        if made is None:
+            self._unsettled_tables.append((table, span))
+        elif not made:
+            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, span)
+
+    def _settle_tables(self, func: Function) -> None:
+        """Answer what writing a table asked where branches met, now that every
+        edge of *func* is there: the table is this call's own where every edge
+        into the block hands it one -- round a loop, what the loop started
+        with -- and somebody else's where any edge hands it anything else."""
+        if not self._unsettled_tables:
+            return
+        incoming = _incoming_of(func)
+        new = self._module.functions.get(tables.NEW_SYMBOL)
+
+        def made(value: Value, seen: set[int]) -> bool:
+            while isinstance(value, CastInst):
+                value = value.operands[0]
+            if isinstance(value, CallInst):
+                return value.callee is new
+            if not isinstance(value, BlockParam):
+                return False
+            if id(value) in seen:
+                # Back where this walk already is: a loop hands on what it was
+                # entered with, which the walk is asking about along that way.
+                return True
+            seen.add(id(value))
+            arms = incoming.get(id(value.block), [])
+            return bool(arms) and all(
+                value.index < len(getattr(arm, "args", ()))
+                and made(getattr(arm, "args")[value.index], seen)
+                for arm in arms)
+
+        pending, self._unsettled_tables = self._unsettled_tables, []
+        for table, span in pending:
+            if not made(table, set()):
+                self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, span)
 
     def _report_mismatch(self, span: Span, found: Type, expected: Type) -> None:
         """Report a type that does not match what the context requires.

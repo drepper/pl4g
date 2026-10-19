@@ -10467,6 +10467,18 @@ Some 120 functions in the suite lose a mark nothing needed, most of them startup
 a call the optimizer would work out use `@[opaque]`, and one that marked a function `@[impure]` to show what a constant may not
 call gives it something to change.
 
+## 2026-10-20T14:00+02:00 — compiler
+
+**A table rebound to another of the function's own stays its own**
+
+The user asked for the entry in TODO-language.md on a table a pure function made and then rebound.  Nothing in the language
+changes: the rule of 2026-10-19 already said a table the function made may be filled by a pure function.  What was missing was
+asking it where the name's value arrives at a block parameter -- after an `if` that rebinds it, at the top of a loop -- which was
+taken as somebody else's because a loop's way back is not there yet while its body is being lowered.  The question now waits for
+the end of the body and is answered by every edge into the block, a loop's way back counting as what the loop was entered with
+unless it brings something else.  So a name given another fresh table in an arm or on some turns stays the function's own, and
+one given the table at the top level on the way back round is not, though the write comes before the rebinding.
+
 Open questions
 --------------
 

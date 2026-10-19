@@ -983,7 +983,9 @@ A second set, `_used_whole`, holds the names a body uses whole -- anything but t
 binary operator, and what a `foreach` walks -- and a writable table among them keeps its `mut`.
 
 Whether a table is the function's own, for 4479, is `_table_made_here`: the handle traced through casts to the call of
-`__pl4g_table_new`, which every literal and set operator lowers to.
+`__pl4g_table_new`, which every literal and set operator lowers to.  A handle that is a block parameter is not answered there: `_written_table` keeps the write in
+`_unsettled_tables`, one list per body -- a function's, an instance's, a lambda's -- and `_settle_tables` answers it when that body
+is lowered, following every edge into the block (`_incoming_of`), a parameter already being followed counting as made.
 
 The log travels on the module, since every stage has the module and any of them may decide something.  It is not the design log in
 [decisions.md](decisions.md), which records what was decided about the *language* and is written by hand; this one is about one

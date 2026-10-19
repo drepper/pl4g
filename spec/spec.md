@@ -6484,7 +6484,9 @@ is on the list -- that is memory somebody else made -- and so is giving an arena
 what a set operator answers -- is new on every call, and nothing anybody else holds can reach it until the function answers it, so
 putting a key in it or taking one out changes nothing outside the call.  A table is a handle, though, so it is the *table* that has
 to be the function's and not the name: a local bound to a parameter's table, or to one at the top level, is a second name for
-somebody else's, and writing through it is on the list.  Compare **D**, whose weakly pure functions may change what they made;
+somebody else's, and writing through it is on the list.  A name given another table the function made, in one arm of an `if` or
+on some turns of a loop, still holds one of its own; one that may be given somebody else's along any way -- the way back round a
+loop included -- does not, wherever the write stands.  Compare **D**, whose weakly pure functions may change what they made;
 **Haskell**'s `ST`, where a table made inside `runST` may be written and the result is pure; **Koka**, whose local state is not an
 effect once it cannot escape.
 
