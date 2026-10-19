@@ -10358,6 +10358,17 @@ mutated and Kotlin's `var` that could be `val`.  Taken without asking:
 - **Asked where the name goes out of reach**, with the attribute on the definition able to say `@[ignore(4931)]` -- which the
   suite needs where a `mut` keeps a table out of the image (4638).  A variable at the top level is not asked.
 
+## 2026-10-19T22:30+02:00 — compiler
+
+**A walk of a table of wide entries makes its pair of words**
+
+The user asked for the entry in TODO-language.md on walking a collection whose keys or values take more than one word.  Nothing in
+the language changes: the walk of a dictionary gives a tuple of the key and the value, and two names take it apart.  What was wrong
+was the tuple, made of the key and the value whole where the IR makes a tuple of its leaves -- a string being three of them -- which
+the verifier refused (9901) and a build without the verifier compiled into a walk that ran.  It is made the way every other tuple
+is.  A test walks string keys and values, a set of strings, record and tuple values, and the environment.  Left as they are:
+`foreach k, &mut v` over a table is refused (4699), and a record or a tuple is not a key (4429).
+
 Open questions
 --------------
 

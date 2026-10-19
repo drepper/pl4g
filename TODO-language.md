@@ -525,12 +525,14 @@ removed or decided otherwise, which its last paragraph says.
     can be added without any signature changing, and nothing wants it yet: what is in it is page size, hardware capabilities and
     where the vdso is, and the language reaches none of the three.
 
-[ ] walk a collection whose keys or values take more than one word.  `foreach k, v := d` over a `⸨u8: u8⸩` works and over a
+[x] walk a collection whose keys or values take more than one word.  `foreach k, v := d` over a `⸨u8: u8⸩` works and over a
     `⸨str: str⸩` is refused by the backend (8501): the loop variable is bound to a value of several parts, which the instruction
     selectors do not build.  Reading by key, writing and counting work whatever the table holds; only the walk is waiting, and
     the environment is the first thing anybody would want to walk.
     **Out of date (2026-10-04):** Measured: the 8501 is gone, and walking a `⸨str: str⸩` now ends in an internal compiler error
     (9901, "making a 〈str, str〉 out of 2 values"), which is worse.
+    Done 2026-10-19: the pair a turn gives is made of the key's and the value's words, which is what the IR wants of a tuple;
+    the 9901 was the verifier's, so a build without it compiled a walk that ran.
 
 [ ] give the room back.  A table that has lost most of its keys keeps the array it grew into: nothing shrinks one, and the
     arena it came out of hands nothing back either.  What would decide it is the same two counts the growth already reads.

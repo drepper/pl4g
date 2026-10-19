@@ -20046,8 +20046,10 @@ class Checker:
             key = read(b, place, tables.KEY_AT, key_ty)
             if isinstance(ty, SetType):
                 return key
-            return b.make_tuple(
-                (key, read(b, place, shape.value_at, ty.value)), element, span)
+            assert isinstance(element, TupleType)
+            # A key or a value of several words is that many leaves of the pair.
+            return self._made_tuple(
+                b, (key, read(b, place, shape.value_at, ty.value)), element, span)
 
         return _Iteration(
             element=element,

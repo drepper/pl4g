@@ -1,0 +1,50 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+※ pl4g-test: setenv PL4G_WALKED=found
+
+※ A walk of a table whose keys or values take more than one word: a string is
+※ a pointer and a length, a record or a tuple as many words as it has fields.
+※ Each turn's names are bound to the whole of what the entry holds, as they are
+※ for a table of bytes.  The environment is the table anybody walks first.
+let std := ⎕import("std")
+
+type P = x : u64 ; y : u64
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    ※ string keys and string values
+    let d: mut ⸨str: str⸩ = ⸨⸩
+    d⸨"ab"⸩ ← "xyz"
+    d⸨"c"⸩ ← "q"
+    let n: mut u64 = 0u64
+    foreach k, v := d:
+        if k = "ab" ∧ v = "xyz": n ← n + 1u64
+        if k = "c" ∧ v = "q": n ← n + 10u64
+    if n ≠ 11u64: return 1u6
+    ※ a set of strings
+    let s: ⸨str⸩ = ⸨"one", "three"⸩ in ⎕static
+    let m: mut u64 = 0u64
+    foreach k := s:
+        if k = "one": m ← m + 1u64
+        if k = "three": m ← m + 2u64
+    if m ≠ 3u64: return 2u6
+    ※ a record for a value
+    let r: mut ⸨str: P⸩ = ⸨⸩
+    r⸨"a"⸩ ← P(.x ← 1u64, .y ← 2u64)
+    r⸨"b"⸩ ← P(.x ← 3u64, .y ← 4u64)
+    let t: mut u64 = 0u64
+    foreach _, v := r:
+        t ← t + v.x × v.y
+    if t ≠ 14u64: return 3u6
+    ※ a tuple for a value
+    let w: mut ⸨str: 〈u64, u64〉⸩ = ⸨⸩
+    w⸨"k"⸩ ← 〈3u64, 4u64〉
+    let z: mut u64 = 0u64
+    foreach k, v := w:
+        if k = "k": z ← z + v⟦0⟧ + v⟦1⟧
+    if z ≠ 7u64: return 4u6
+    ※ the environment
+    let e: mut u64 = 0u64
+    foreach k, v := ⎕environ:
+        if k = "PL4G_WALKED" ∧ v = "found": e ← e + 1u64
+    if e ≠ 1u64: return 5u6
+    0u6

@@ -4669,9 +4669,9 @@ first entry; Go, whose maps are built in and which has no set; Rust, where both 
 language emitted by a generator wants the shape written down rather than constructed by a call, which is why these have syntax
 here.
 
-**What is not built yet** is a walk over a collection whose keys or whose values take more than one word: `foreach k, v := d` over
-a `⸨str: str⸩` is refused by the backend (8501) where the same walk over a `⸨u8: u8⸩` is not.  Reading one by key, writing one and
-counting one work whatever it holds; only the walk is waiting, and it is in the to-do lists.
+**A walk is the same whatever the entries hold.**  `foreach k, v := d` over a `⸨str: str⸩`, a `⸨str: P⸩` of records or a
+`⸨str: 〈u64, u64〉⸩` of tuples binds each name to the whole of what the entry holds, as it does over a `⸨u8: u8⸩` -- and so over
+`⎕environ`, which is the table a program walks first.
 
 ### Statements
 
