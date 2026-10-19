@@ -1,6 +1,7 @@
 #include "ir/json.hh"
 
 #include <charconv>
+#include <limits>
 #include <unordered_map>
 
 #include <simdjson.h>
@@ -342,7 +343,11 @@ namespace pl4g::ir {
           else
             target = named(functions, string_of(t["f"]), "function");
         }
-        return module->constant<AddressConst>(ty, target, int_of(c["offset"]));
+        auto made = module->constant<AddressConst>(ty, target, int_of(c["offset"]));
+        bool ring = false;
+        if (c["ring"].get(ring) == ::simdjson::SUCCESS && ring)
+          module->ring_addresses.push_back(made);
+        return made;
       }
       if (kind == "undef")
         return module->undef(ty);
@@ -543,7 +548,10 @@ namespace pl4g::ir {
         out->text_store.push_back(std::move(var));
       }
       keys = doc["function_keys"].get_array();
+      std::int64_t listed = std::numeric_limits<std::int64_t>::max();
+      doc["listed"].get(listed);
       at = 0;
+      std::vector<Function*> all;
       for (Element f : doc["functions"].get_array()) {
         auto func = std::make_unique<Function>(std::string(string_of(f["name"])), as<FuncType>(type(f["t"])));
         Object attrs = f["attrs"].get_object();
@@ -577,8 +585,15 @@ namespace pl4g::ir {
         Array span;
         if (f["span"].get(span) == ::simdjson::SUCCESS)
           func->span = { int_of(span.at(0)), int_of(span.at(1)) };
-        functions[func->name] = func.get();
-        out->add_function(std::move(func), std::string(string_of(keys.at(at++))));
+        // Filed, and referred to, under the module's key: a name may be
+        // overloaded and a key is not.
+        std::string key(string_of(keys.at(at)));
+        functions[key] = func.get();
+        all.push_back(func.get());
+        if (std::int64_t(at++) < listed)
+          out->add_function(std::move(func), key);
+        else
+          out->unlisted.push_back(std::move(func));
       }
 
       // What the globals start with, and what the functions do.
@@ -590,7 +605,7 @@ namespace pl4g::ir {
         out->texts[at++]->initializer = constant(g["init"]);
       at = 0;
       for (Element f : doc["functions"].get_array())
-        fill(*out->functions[at++].second, f.get_object());
+        fill(*all[at++], f.get_object());
 
       auto function_named = [&](Element e) -> Function* {
         if (is_null(e))
@@ -601,8 +616,6 @@ namespace pl4g::ir {
       out->build = function_named(doc["build"]);
       if (! is_null(doc["environ"]))
         out->environ = named(globals, string_of(doc["environ"]), "global");
-      for (Element c : doc["ring_addresses"].get_array())
-        out->ring_addresses.push_back(constant(c));
       for (Element f : doc["ctors"].get_array())
         out->ctors.push_back(function_named(f));
       for (Element f : doc["dtors"].get_array())

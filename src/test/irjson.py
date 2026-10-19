@@ -40,6 +40,24 @@ class Writer:
         self.types: list[dict[str, Any]] = []
         self.type_ids: dict[int, int] = {}
         self.keep: list[object] = []
+        #: What each function is filed under, which is what a call names it by:
+        #: a name may be overloaded, a key is the module's own and is not.  A
+        #: function a call reaches that the module's table does not hold -- two
+        #: overloads of an operator filed under one key, the second replacing the
+        #: first -- is filed under a key of its own, as the back end reaches it
+        #: through the call.
+        self.functions: list[tuple[str, Function]] = list(module.functions.items())
+        self.keys: dict[int, str] = {id(f): key for key, f in self.functions}
+        at = 0
+        while at < len(self.functions):
+            for block in self.functions[at][1].blocks:
+                for one in block.insts:
+                    for found in (getattr(one, "callee", None), *one.operands):
+                        if isinstance(found, Function) and id(found) not in self.keys:
+                            key = "".join((found.name, "#", str(len(self.functions))))
+                            self.keys[id(found)] = key
+                            self.functions.append((key, found))
+            at += 1
 
     # -- types -----------------------------------------------------------------
 
@@ -187,12 +205,16 @@ class Writer:
                 if isinstance(target, GlobalVar):
                     named: Any = {"g": target.name}
                 elif isinstance(target, Function):
-                    named = {"f": target.name}
+                    named = {"f": self.keys.get(id(target), target.name)}
                 elif target is None:
                     named = None
                 else:
                     raise TypeError(repr(target))
-                return {"c": "address", "t": self.type(value.ty), "target": named, "offset": value.offset}
+                # Whether it is one of the module's addresses of the ring, whose
+                # offset the back end puts in by identity once the layout is known.
+                ring = any(value is one for one in self.module.ring_addresses)
+                return {"c": "address", "t": self.type(value.ty), "target": named, "offset": value.offset,
+                        "ring": ring}
             case V.PartsConst():
                 return {"c": "parts", "t": self.type(value.ty), "parts": [self.const(p) for p in value.parts]}
             case V.UndefConst():
@@ -205,7 +227,7 @@ class Writer:
         if isinstance(value, GlobalVar):
             return {"g": value.name}
         if isinstance(value, Function):
-            return {"f": value.name}
+            return {"f": self.keys.get(id(value), value.name)}
         if isinstance(value, V.Const):
             return self.const(value)
         found = numbers.get(id(value))
@@ -215,7 +237,7 @@ class Writer:
 
     def function_name(self, callee: object) -> Any:
         if isinstance(callee, Function):
-            return callee.name
+            return self.keys.get(id(callee), callee.name)
         return None if callee is None else str(callee)
 
     def target(self, target: I.BlockTarget, labels: dict[int, int], numbers: dict[int, int]) -> Any:
@@ -315,7 +337,7 @@ class Writer:
         module = self.module
 
         def name(func: Function | None) -> str | None:
-            return None if func is None else func.name
+            return None if func is None else self.keys.get(id(func), func.name)
 
         out: dict[str, Any] = {
             "format": "pl4g-ir-json 1", "name": module.name, "triple": module.triple,
@@ -323,13 +345,14 @@ class Writer:
             "globals": [self.global_var(v) for v in module.globals.values()],
             "global_keys": list(module.globals),
             "texts": [self.global_var(v) for v in module.texts.values()],
-            "functions": [self.function(f) for f in module.functions.values()],
-            "function_keys": list(module.functions),
+            "functions": [self.function(f) for _, f in self.functions],
+            "function_keys": [key for key, _ in self.functions],
+            "listed": len(module.functions),
             "startup": name(module.startup), "build": name(module.build),
             "environ": None if module.environ is None else module.environ.name,
             "ring_addresses": [self.const(c) for c in module.ring_addresses],
-            "ctors": [f.name for f in module.ctors], "dtors": [f.name for f in module.dtors],
-            "tests": [f.name for f in module.tests], "test_plan": [f.name for f in module.test_plan],
+            "ctors": [name(f) for f in module.ctors], "dtors": [name(f) for f in module.dtors],
+            "tests": [name(f) for f in module.tests], "test_plan": [name(f) for f in module.test_plan],
             "source_paths": list(module.source_paths),
         }
         out["types"] = self.types

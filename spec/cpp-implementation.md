@@ -71,6 +71,18 @@ src/test/                   the checks ctest runs that compare with pypl4g, and 
 bin/pl4g-interp-tests       runs tests/language through the interpreter
 ```
 
+The interpreter
+---------------
+
+What it runs is the module as the back ends receive it, after the passes that are not optimizations: generators split into
+frames, large answers through the caller's storage.  Every instruction is then one a machine runs, and what the interpreter does
+for each is what the x86-64 back end emits -- the same faults with the same statuses, the same layout of every value in memory,
+which is the host's own.  Each function is prepared once into a list of operations over numbered cells, one per part of a value;
+calls are activations on a stack of its own, so a program's recursion is measured against the stack size it was built with and
+not the interpreter's.  `runtime/io.c` is compiled into the library and called as it is, so a program's input and output go
+through the same ring; the arena allocator the back ends emit as machine code is the same few lines of C++.  The record the
+startup function is handed carries the descriptors the embedder chose (`interp::Devices`).
+
 Phases and status
 -----------------
 
@@ -81,7 +93,7 @@ Each phase is committed when its own checks pass; the status column is kept curr
 | 1 | CMake, sources, diagnostics, tokens, lexer | every test program lexes; fuzzed | done: all 980 files and the edge corpus lex as `pypl4g` lexes them, plainly and lazily; AFL++ in ctest |
 | 2 | Syntax tree and parser | every test program parses as `pypl4g` parses it | done: every file's tree, compared field by field (a dumper written by reflection), as a program's file and as a module's; no difference on 3527 inputs AFL++ found |
 | 3 | IR: types, values, instructions, layout, printer, the JSON exchange | every program's IR, read from what pypl4g compiled, prints as pypl4g prints it and is laid out alike | done; the builder and the verifier go with the checker, which is what uses them |
-| 4 | Interpreter of the IR, and the runtime: heap, io_uring | IR pypl4g compiled, read as JSON, runs and exits as the test says | |
+| 4 | Interpreter of the IR, and the runtime: heap, io_uring | IR pypl4g compiled, read as JSON, runs and exits as the test says | done: 464 of 464, and under the address and undefined-behaviour sanitizers all but the one test that needs a data limit |
 | 5 | Checker, part one: definitions, types, expressions, statements, calls | the first test programs run | |
 | 6 | Checker, part two: everything else the language has | every test program runs or is refused as it should | |
 | 7 | Macro expander | the macro tests | |

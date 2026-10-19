@@ -36,7 +36,8 @@ find_library(UNISTRING_LIBRARY unistring REQUIRED)
 # The fuzzing entry points, each src/fuzz/NAME.cc with a corpus in src/fuzz/corpus/NAME.
 set(PL4G_FUZZ_TARGETS lexer parser)
 
-set(PL4G_COMMON_FLAGS -fcontracts -freflection -Wall -Wextra -Wno-unused-parameter -Wno-trigraphs)
+set(PL4G_COMMON_FLAGS $<$<COMPILE_LANGUAGE:CXX>:-fcontracts> $<$<COMPILE_LANGUAGE:CXX>:-freflection> -Wall -Wextra
+  -Wno-unused-parameter $<$<COMPILE_LANGUAGE:CXX>:-Wno-trigraphs>)
 
 # The diagnostic catalog, generated from the shared JSON file.
 add_executable(pl4g-gen-diag src/tools/gen-diag.cc)
@@ -50,6 +51,9 @@ add_custom_command(
           ${PL4G_GENERATED}/diag/ids.hh ${PL4G_GENERATED}/diag/catalog_data.cc
   DEPENDS pl4g-gen-diag ${CMAKE_SOURCE_DIR}/share/diagnostics.json
   COMMENT "Generating the diagnostic catalog")
+
+# The runtime a compiled program carries, compiled into the library as it is.
+set_source_files_properties(runtime/io.c PROPERTIES COMPILE_OPTIONS "-fno-builtin;-fno-strict-aliasing")
 
 set(PL4G_LIB_SOURCES
   src/lib/util/unicode.cc
@@ -70,6 +74,9 @@ set(PL4G_LIB_SOURCES
   src/lib/ir/printer.cc
   src/lib/ir/json.cc
   src/lib/ir/layout.cc
+  src/lib/rt/arena.cc
+  src/lib/interp/interp.cc
+  runtime/io.c
   ${PL4G_GENERATED}/diag/catalog_data.cc
 )
 
@@ -84,7 +91,7 @@ function(pl4g_variant suffix)
   target_link_options(pl4g${suffix} PUBLIC ${flags})
   target_link_libraries(pl4g${suffix} PUBLIC simdjson::simdjson ${UNISTRING_LIBRARY})
 
-  foreach(tool lexdump astdump irdump)
+  foreach(tool lexdump astdump irdump runjson)
     add_executable(pl4g-${tool}${suffix} src/tools/${tool}.cc)
     target_link_libraries(pl4g-${tool}${suffix} PRIVATE pl4g${suffix})
   endforeach()
@@ -139,6 +146,12 @@ add_test(NAME ir-agrees
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/ir_agrees.py
           $<TARGET_FILE:pl4g-irdump> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/ir-agrees)
 set_tests_properties(ir-agrees PROPERTIES TIMEOUT 900)
+# Every program that runs, compiled by pypl4g and interpreted here, exits as its
+# test says.
+add_test(NAME runs-agree
+  COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/run_agrees.py
+          $<TARGET_FILE:pl4g-runjson> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/runs-agree)
+set_tests_properties(runs-agree PROPERTIES TIMEOUT 1800)
 # The same, sanitized, and the fuzzing entry points replayed over the test
 # programs and the corpora under the sanitizers.
 if(PL4G_SANITIZERS)
@@ -151,6 +164,10 @@ if(PL4G_SANITIZERS)
       COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/${stage}_agrees.py
               $<TARGET_FILE:pl4g-${tool}-asan> ${CMAKE_SOURCE_DIR})
   endforeach()
+  add_test(NAME runs-agree-asan
+    COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/run_agrees.py
+            $<TARGET_FILE:pl4g-runjson-asan> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/runs-agree-asan)
+  set_tests_properties(runs-agree-asan PROPERTIES TIMEOUT 1800)
   foreach(target ${PL4G_FUZZ_TARGETS})
     add_test(NAME fuzz-${target}-replay-asan
       COMMAND pl4g-fuzz-${target}-replay-asan ${PL4G_TESTS} ${CMAKE_SOURCE_DIR}/src/fuzz/corpus/${target})

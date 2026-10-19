@@ -314,6 +314,10 @@ namespace pl4g::ir {
     std::string triple = "x86_64-linux-none";
     // In the order they were added, under the key they were added with.
     std::vector<std::pair<std::string, std::unique_ptr<Function>>> functions;
+    // Functions something calls that the table above does not hold: pypl4g
+    // files two overloads of an operator under one key, the second replacing
+    // the first, and the back end reaches the first through the call.
+    std::vector<std::unique_ptr<Function>> unlisted;
     std::vector<std::pair<std::string, std::unique_ptr<GlobalVar>>> globals;
     // The texts of the program: globals kept apart from its variables.
     std::vector<GlobalVar*> texts;
