@@ -10611,6 +10611,26 @@ the `State`'s own, nothing asked of the kernel.  The test programs that made dev
 about the record a process starts with keep writing one out, which stays the language's.  Compare Rust's
 `File::from_raw_fd`, Go's `os.NewFile`, Zig's `File{ .handle = fd }`.
 
+## 2026-10-20T12:00+02:00 — compiler
+
+**A C++ implementation: a front end, the IR, and an interpreter of it**
+
+The user asked for an interpreter of the language in C++26, laid out to become the compiler: mostly a library that also holds a REPL,
+the tree-sitter service and an LSP service, with a small driver making a stand-alone REPL; sanitizers and a fuzzer part of testing,
+CMake targets for both; the descriptors a program's devices are on taken from whoever embeds the library; understandable before
+fast; developed until every test program works or is found wrong.  Asked, the user chose:
+
+- **a front end lowering to the same IR `pypl4g` uses, and an interpreter of the IR**, over interpreting the checked tree or a
+  bytecode of the interpreter's own -- so the compiler later adds passes and back ends to what is there;
+- **the same exits and the same diagnostics** as the bar for a test program, over programs that run first and refusals by any
+  diagnostic;
+- **a real io_uring ring** for what `std` asks the runtime, over doing each request at once;
+- **simdjson** for the LSP, with a writer of its own, over Boost.JSON and RapidJSON.
+
+Taken without asking: GCC 16 is the compiler, it alone having contracts and reflection; fuzzing is AFL++ with its GCC plugin over
+libFuzzer-style entry points; the work is on a branch, `cpp-interpreter`, and goes in the phases
+[cpp-implementation.md](cpp-implementation.md) lists, each committed when its own checks pass.
+
 Open questions
 --------------
 
