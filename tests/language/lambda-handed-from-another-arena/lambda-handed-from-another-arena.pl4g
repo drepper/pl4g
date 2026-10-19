@@ -14,8 +14,6 @@ fn apply(g: fn(u8) in a → u8, a: &mut arena, x: u8) → u8:
 @[startup, impure]
 fn main(init: std.Init) → u6:
     let one: mut arena = ⎕arena
-    defer ⎕empty(one)
     let two: mut arena = ⎕arena
-    defer ⎕empty(two)
     let add5: fn(u8) → u8 = adder(5u8, &mut one)
     if apply(add5, &mut two, 2u8) = 7u8: 0u6 else: 1u6

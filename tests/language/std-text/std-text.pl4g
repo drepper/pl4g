@@ -47,5 +47,4 @@ fn main(init: std.Init) → u6:
     let scratch: mut arena = ⎕arena
     if std.text(42u16, &mut scratch) ≠ "42":
         return 8u6
-    ⎕empty(scratch)
     0u6

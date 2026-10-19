@@ -10392,6 +10392,30 @@ function's own room already did.  Taken without asking:
 Six test functions lose an `@[impure]` they had only for this.  Compare D's weakly pure functions, Haskell's `ST` and Koka's
 local state, all of which let a function change what it made.
 
+## 2026-10-20T09:00+02:00 — language
+
+**An arena is given back where its block ends, and nothing writes `⎕empty`**
+
+The user asked for an error where a function is marked `@[impure]` and does not need to be, so that the attribute signals
+something to be handled with care.  Working out what it would report raised `std`'s `io.give_back`, a giving back of heap room by
+hand, and the user's answer was that a program does not give memory back: *allocation and deallocation is automatic, and
+allocators going out of scope are implicitly deallocated*.  That was not so for arenas, which a pure function had to give back
+with `⎕empty`, written or put off with `defer` (4617).  Asked whether to make it so, the user chose to.  Compare C++'s
+`monotonic_buffer_resource` and Rust's `bumpalo::Bump`, freed by their destructors at the end of the scope; Zig and Odin, where
+`defer arena.deinit()` is written by hand; Go's `arena` experiment, freed by an explicit `Free`.
+
+- **An arena a body made is given back when the block it was defined in is left**, on every way out, as if `defer ⎕empty(a)`
+  stood after its definition: after what the block put off later, and after what the block comes to was worked out.  One
+  received with an answer, `let v: T in kept = f(…)`, is given back where `kept` goes; one a body hands out is not given back by
+  the body.
+- **`⎕empty` is not written** (4932).  The checks that only ever applied to a written one go: giving back somebody else's arena
+  (4616), a handed-out one (4628), and a pure function leaving one behind (4617).  An arena wanted afresh each turn of a loop is
+  defined in the loop.
+- **What is made in an arena still cannot outlive it** (4614).  The rule that something read after `⎕empty` is dead (4615) has no
+  `⎕empty` left to follow, the arena going only where the names that could hold what it made go too.
+
+The rest of what was decided for the `@[impure]` error is recorded with it.
+
 Open questions
 --------------
 

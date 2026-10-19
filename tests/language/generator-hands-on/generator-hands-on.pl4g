@@ -39,7 +39,6 @@ let std := ⎕import("std")
 @[startup, impure]
 fn main(init: std.Init) → u6:
     let pool: mut arena = ⎕arena
-    defer ⎕empty(pool)
     let a := sum(down(10u8, &mut pool) in pool)
     let after_full := closed
     let b := until(down(10u8, &mut pool) in pool, 4u8)

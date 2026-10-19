@@ -12,5 +12,4 @@ let std := ⎕import("std")
 @[startup]
 fn main(init: std.Init) → u6:
     let x: mut arena = ⎕arena
-    defer ⎕empty(x)
     if count(&mut x) = 0u8: 0u6 else: 1u6

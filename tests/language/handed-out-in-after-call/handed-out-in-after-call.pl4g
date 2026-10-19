@@ -13,6 +13,5 @@ let std := ⎕import("std")
 @[startup]
 fn main(init: std.Init) → u6:
     let k: mut arena = ⎕arena
-    defer ⎕empty(k)
     let s: str = named(1u64) in k
     if s = "ab": 0u6 else: 1u6

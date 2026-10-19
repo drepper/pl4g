@@ -15,7 +15,6 @@ fn Tree.each(t: &Tree, a: &mut arena) ⇉ u8:
 @[startup, impure]
 fn main(init: std.Init) → u6:
     let pool: mut arena = ⎕arena
-    defer ⎕empty(pool)
     let leaf: Tree = Tree(.value ← 2u8, .children ← [] in pool)
     let root: Tree = Tree(.value ← 1u8, .children ← [&leaf] in pool)
     let n: mut u8 = 0u8

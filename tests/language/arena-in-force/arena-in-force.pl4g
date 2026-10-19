@@ -25,5 +25,4 @@ fn main(init: std.Init) → u6:
     if #init.args > 0:
         let scratch: mut arena = ⎕arena
         kept ← tagged(5u8) in scratch
-        ⎕empty(scratch)
     if kept = "#5": 0u6 else: 1u6

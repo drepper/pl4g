@@ -32,7 +32,6 @@ let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 @[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let p: mut arena = \N{APL FUNCTIONAL SYMBOL QUAD}arena
-    defer \N{APL FUNCTIONAL SYMBOL QUAD}empty(p)
     let one: str = joined("a", "b")
     let two: str = sometimes(true)
     let three: str = fixed(false)

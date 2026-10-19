@@ -32,5 +32,4 @@ let std := ⎕import("std")
 @[startup]
 fn main(init: std.Init) → u6:
     let a: mut arena = ⎕arena
-    defer ⎕empty(a)
     if pick(true, &mut a, 3u64) = 11u64: 0u6 else: 1u6

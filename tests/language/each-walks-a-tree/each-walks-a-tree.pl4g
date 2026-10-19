@@ -23,7 +23,6 @@ fn sum(s: ⇉u8) → u8:
 @[startup, impure]
 fn main(init: std.Init) → u6:
     let pool: mut arena = ⎕arena
-    defer ⎕empty(pool)
     let leaf1: Tree = Tree(.value ← 3u8, .children ← [] in pool)
     let leaf2: Tree = Tree(.value ← 4u8, .children ← [] in pool)
     let mid: Tree = Tree(.value ← 2u8, .children ← [&leaf1, &leaf2] in pool)

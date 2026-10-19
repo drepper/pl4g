@@ -17,7 +17,6 @@ let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 @[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let pool: mut arena = \N{APL FUNCTIONAL SYMBOL QUAD}arena
-    defer \N{APL FUNCTIONAL SYMBOL QUAD}empty(pool)
     if std.text(true, &mut pool) = "true": 0u6 else: 1u6
 """
 

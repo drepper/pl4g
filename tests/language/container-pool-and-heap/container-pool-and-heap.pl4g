@@ -21,7 +21,6 @@ let std := ⎕import("std")
 @[startup, impure]
 fn main(init: std.Init) → u6:
     let a: mut arena = ⎕arena
-    defer ⎕empty(a)
     let pool: mut str⟦3⟧ = ⟦"a" ⧺ "b" in a, "lit", "h" ⧺ "eap"⟧ in a
     let read: str = pool⟦0⟧
     pool⟦0⟧ ← "x" ⧺ "y"

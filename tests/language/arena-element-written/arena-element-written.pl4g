@@ -3,14 +3,14 @@
 ※ An element that points somewhere points into its container's allocator.  The array here is
 ※ made with `⎕heap` (nothing says otherwise), and the text written into it was made in `s`: not
 ※ the same allocator, so the text is copied into `⎕heap` on the way in and the temporary in `s`
-※ is given back.  Emptying `s` afterwards takes nothing from the array.
+※ is given back.  `s` going afterwards takes nothing from the array.
 
 let std := ⎕import("std")
 
 @[startup]
 fn main(init: std.Init) → u6:
-    let s: mut arena = ⎕arena
     let v: mut str⟦2⟧ = ⟦"-", "-"⟧
-    v⟦0⟧ ← "a" ⧺ "b" in s
-    ⎕empty(s)
+    if true:
+        let s: mut arena = ⎕arena
+        v⟦0⟧ ← "a" ⧺ "b" in s
     if v⟦0⟧ = "ab": 0u6 else: 1u6

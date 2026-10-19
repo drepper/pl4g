@@ -13,8 +13,6 @@ let std := ⎕import("std")
 @[startup]
 fn main(init: std.Init) → u6:
     let long: mut arena = ⎕arena
-    defer ⎕empty(long)
     let short: mut arena = ⎕arena
-    defer ⎕empty(short)
     let t: str = "a" ⧺ "b" in short
     if either(true, &mut long, t) = "ab": 0u6 else: 1u6

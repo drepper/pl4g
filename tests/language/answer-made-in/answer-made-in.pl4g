@@ -32,15 +32,15 @@ fn one_of(c: bool, a: &mut arena, b: &mut arena) → str in a, b:
 @[startup]
 fn main(init: std.Init) → u6:
     let long: mut arena = ⎕arena
-    defer ⎕empty(long)
-    let short: mut arena = ⎕arena
-    let name: str = label(&mut long, &mut short, 7u16)
-    ⎕empty(short)
+    ※ `short` is given back where its block ends, and the answer lives on in `long`
+    let name: mut str = ""
+    if true:
+        let short: mut arena = ⎕arena
+        name ← label(&mut long, &mut short, 7u16)
     if name ≠ "#7":
         return 1u6
     ※ `std.text` says it too: its answer outlives an arena it was not made in.
     let said: str = std.text(42u16, &mut long)
-    ⎕empty(short)
     if said ≠ "42":
         return 2u6
     let held: str = "ab" ⧺ "c" in long
@@ -49,6 +49,7 @@ fn main(init: std.Init) → u6:
     ※ Text from ⎕heap lasts longer than any arena, so it may stand for one made in `a`.
     if either(true, &mut long, "lit") ≠ "lit":
         return 4u6
+    let short: mut arena = ⎕arena
     let both: str = one_of(true, &mut long, &mut short)
     if both ≠ "xy":
         return 5u6

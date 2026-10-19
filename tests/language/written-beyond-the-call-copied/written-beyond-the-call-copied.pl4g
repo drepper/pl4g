@@ -12,7 +12,6 @@ type Box = inner: Inner
 @[impure]
 fn keep(b: &mut Box):
     let pool: mut arena = ⎕arena
-    defer ⎕empty(pool)
     b⌖.inner ← Inner(.s ← "a" ⧺ "b" in pool)
 
 let std := ⎕import("std")

@@ -12,7 +12,6 @@ let fixed: [u8] = [5u8, 6u8, 7u8] in ⎕static
 @[startup, impure]
 fn main(init: std.Init) → u6:
     let pool: mut arena = ⎕arena
-    defer ⎕empty(pool)
     let words: mut [str] = [] in pool
     foreach i := 0u8…20u8:
         let w: str = ⍕i in pool

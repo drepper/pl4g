@@ -14,7 +14,6 @@ let std := ⎕import("std")
 @[startup, impure]
 fn main(init: std.Init) → u6:
     let scratch: mut arena = ⎕arena
-    defer ⎕empty(scratch)
     let here: str = tagged(4u8) in scratch
     let hex: str = std.text(255u8, .base ← 16u8) in scratch
     let lasting: str = tagged(5u8)

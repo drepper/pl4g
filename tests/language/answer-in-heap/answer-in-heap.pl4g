@@ -32,7 +32,6 @@ fn kept(a: &mut arena, s: str) → str in a:
 @[startup]
 fn main(init: std.Init) → u6:
     let a: mut arena = ⎕arena
-    defer ⎕empty(a)
     ※ a heap container: replacing gives each back to the heap, which they all are
     let v: mut str⟦3⟧ = ⟦named(true), named(false), shown(7u16)⟧
     if v⟦0⟧ ≠ "literal" ∨ v⟦1⟧ ≠ "joined" ∨ v⟦2⟧ ≠ "7!":

@@ -6,7 +6,7 @@
 ※ made -- which is how a function hands a caller text when the caller gave it no arena.
 ※
 ※ What stays impure is what a call could not undo by itself: writing a variable at the top
-※ level, writing memory somebody else made, and `⎕empty` of an arena that is not its own.
+※ level and writing memory somebody else made.
 
 let std := ⎕import("std")
 

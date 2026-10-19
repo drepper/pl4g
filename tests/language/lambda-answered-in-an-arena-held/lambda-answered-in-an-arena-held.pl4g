@@ -1,8 +1,8 @@
-※ pl4g-test: compile=error diag=4632,4615,4614
+※ pl4g-test: compile=error diag=4632,4614
 
 ※ A lambda answered in an arena is held to what the arena is held to: what it brought in
-※ has to last as long as the arena (4632, `seen` being the call's), it is dead once the
-※ arena is emptied (4615), and a name further out than the arena may not hold it (4614).
+※ has to last as long as the arena (4632, `seen` being the call's), and a name further out
+※ than the arena may not hold it (4614).
 
 let std := ⎕import("std")
 
@@ -17,11 +17,8 @@ fn reaching(n: u8, a: &mut arena) → fn(u8) in a → u8:
 fn main(init: std.Init) → u6:
     let pool: mut arena = ⎕arena
     let add5: fn(u8) → u8 = adder(5u8, &mut pool)
-    ⎕empty(pool)
-    let late: u8 = add5(1u8)
     let kept: mut fn(u8) → u8 = adder(1u8, &mut pool)
     if true:
         let inner: mut arena = ⎕arena
-        defer ⎕empty(inner)
         kept ← adder(2u8, &mut inner)
-    if late = 6u8: 0u6 else: 1u6
+    if add5(1u8) = 6u8: 0u6 else: 1u6

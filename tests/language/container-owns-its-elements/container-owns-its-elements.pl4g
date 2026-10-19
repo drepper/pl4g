@@ -3,8 +3,8 @@
 ※ **An element that points somewhere points into its container's allocator.**  A container of
 ※ text or of lists is made with an allocator -- the one `in` names, or `⎕heap` where nothing
 ※ does -- and what is put in is copied there unless it was provably made there.  So a container
-※ never holds something another allocator may give back first: emptying `b` below takes nothing
-※ from `v`, `l` or `all`, though every one of them was given text made in `b`.
+※ never holds something another allocator may give back first: `b` going at the end of its block
+※ below takes nothing from `v`, `l` or `all`, though every one of them was given text made in `b`.
 ※
 ※ What is replaced is given back to the container's allocator, and so is a temporary that was
 ※ copied in, nobody else naming it.  An arena gives back only all at once, so for an arena that
@@ -22,17 +22,20 @@ let std := ⎕import("std")
 @[startup]
 fn main(init: std.Init) → u6:
     let a: mut arena = ⎕arena
-    defer ⎕empty(a)
-    let b: mut arena = ⎕arena
-    ※ made with `a`: the literal and the text from `b` are copied, the text from `a` is not
-    let v: mut str⟦3⟧ = ⟦"x", "y" ⧺ "z" in b, "w" ⧺ "v" in a⟧ in a
-    ※ replaced: the new text copied in, the old given back, the temporary given back
-    v⟦0⟧ ← "p" ⧺ "q" in b
-    ※ a list of lists, joined across arenas: copied all the way down
-    let inner: [[str]] = [["x" ⧺ "y" in b, "z"] in b, ["w"] in b] in b
-    let all: [[str]] = inner ⧺ [["v"]] in a
-    let l: [str] = ["k", v⟦1⟧] in a
-    ⎕empty(b)
+    ※ made with `a`: the literal is copied, the text from `a` is not
+    let v: mut str⟦3⟧ = ⟦"x", "-", "w" ⧺ "v" in a⟧ in a
+    let all: mut [[str]] = [] in a
+    let l: mut [str] = [] in a
+    if true:
+        let b: mut arena = ⎕arena
+        ※ the text from `b` is copied into `a` on the way in
+        v⟦1⟧ ← "y" ⧺ "z" in b
+        ※ replaced: the new text copied in, the old given back, the temporary given back
+        v⟦0⟧ ← "p" ⧺ "q" in b
+        ※ a list of lists, joined across arenas: copied all the way down
+        let inner: [[str]] = [["x" ⧺ "y" in b, "z"] in b, ["w"] in b] in b
+        all ← inner ⧺ [["v"]] in a
+        l ← ["k", v⟦1⟧] in a
     if v⟦0⟧ ≠ "pq" ∨ v⟦1⟧ ≠ "yz" ∨ v⟦2⟧ ≠ "wv":
         return 1u6
     let n: mut u64 = 0u64

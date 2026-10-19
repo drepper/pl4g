@@ -43,7 +43,6 @@ fn main(init: std.Init) → u6:
     if into⟦3, 1⟧ ≠ 97u8 ∨ into⟦6, 1⟧ ≠ 10u8 ∨ into⟦8, 1⟧ ≠ 99u8 ∨ into⟦11, 1⟧ ≠ 99u8:
         return 7u6
     let scratch: mut arena = ⎕arena
-    defer ⎕empty(scratch)
     let run: u8⟦⟧ = ⎕one_run(column) in scratch
     let row: u8⟦⟧ = table⟦1⟧
     if ⎕address(&run⟦0⟧) = ⎕address(&column⟦0⟧) ∨ run⟦2⟧ ≠ 99u8:

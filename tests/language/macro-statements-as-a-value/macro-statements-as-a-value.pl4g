@@ -18,7 +18,6 @@
 macro twice:
     ⌜$x⌝ → ⌜
         let pool: mut arena = ⎕arena
-        defer ⎕empty(pool)
         $x + $x
     ⌝
 
@@ -28,7 +27,6 @@ macro joined(a: syntax, b: syntax, want: syntax) → syntax:
     let made: syntax = ⌜$a ⧺ $b in pool⌝
     ⌜
         let pool: mut arena = ⎕arena
-        defer ⎕empty(pool)
         $made = $want
     ⌝
 

@@ -15,5 +15,4 @@ let std := ⎕import("std")
 @[startup]
 fn main(init: std.Init) → u6:
     let s: str in k = named(1u64)
-    defer ⎕empty(k)
     if s = "c": 0u6 else: 1u6

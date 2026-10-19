@@ -20,7 +20,6 @@ fn total(s: ⇉u8) → u8:
 @[startup, impure]
 fn main(init: std.Init) → u6:
     let pool: mut arena = ⎕arena
-    defer ⎕empty(pool)
     let w: Walk = Walk(.at ← 0u8, .last ← 4u8)
     let n: mut u8 = 0u8
     foreach x := w in pool:

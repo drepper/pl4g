@@ -11,8 +11,6 @@ let std := ⎕import("std")
 @[startup]
 fn main(init: std.Init) → u6:
     let a: mut arena = ⎕arena
-    defer ⎕empty(a)
     let b: mut arena = ⎕arena
-    defer ⎕empty(b)
     let l: [R] = [R(.f ← "x" ⧺ "y" in b)] in a
     if #l = 1: 0u6 else: 1u6

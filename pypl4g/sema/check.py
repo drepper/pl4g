@@ -3841,6 +3841,9 @@ class Checker:
         #: once however many instances a body is lowered for.
         self._changed_here: set[str] | None = None
         self._whole_here: set[str] = set()
+        #: The `⎕empty` calls the compiler put off itself, one for each arena a
+        #: body made, which are the only ones there are.
+        self._implicit_empties: set[int] = set()
         self._mut_told: set[int] = set()
         #: The type a function value had before it was read as one promising
         #: less, by the identity of what it was read as.
@@ -4050,9 +4053,6 @@ class Checker:
         #: What the body being checked said its answer was made in: the arena
         #: parameters' markers and how the signature named them.
         self._answer_made_in: tuple[frozenset[int], str] | None = None
-        #: The arenas already reported as never given back: there is one arena and
-        #: one mistake, however many ways out there are.
-        self._told_kept: set[int] = set()
         #: The name a reference is being taken of, while one is: working the
         #: place out reads the name, and that read is the reference itself.
         self._taking_a_reference: str | None = None
@@ -6012,7 +6012,8 @@ class Checker:
     def _report_needless_mut(self, local: _Local) -> None:
         """Report a variable or a parameter written `mut` that nothing changed
         (4931): neither given another value, nor written in part, nor lent so
-        that something else may.  A table used whole may be where a writable one
+        that something else may.  An arena changes when it is given back, which
+        the compiler does whatever is written.  A table used whole may be where a writable one
         is wanted, its `mut` being part of its type, and is not reported.  The
         compiler's own names -- a macro's, a generator's written into a loop --
         are its own business."""
@@ -6020,6 +6021,7 @@ class Checker:
                 or local.name in self._changed_here or local.value.ty is ERROR \
                 or (local.name in self._whole_here
                     and isinstance(self._held_by(local), (SetType, DictType))) \
+                or self._held_by(local) is ARENA \
                 or local.name == WILDCARD_NAME or "#" in local.name \
                 or local.name.startswith((ITER_GLYPH, BUILTIN_GLYPH)) \
                 or local.span.start in self._mut_told or not local.span.is_valid:
@@ -10084,42 +10086,6 @@ class Checker:
                             local.gone_at = body.span
                             local.gone_with = arena.name
 
-    def _all_given_back(self, opened_at: int, span: Span) -> None:
-        """Check that a pure function gives back every arena it made before leaving.
-
-        Room an arena took from the system stays taken until it is given back, so
-        leaving with one still holding room changes something that outlives the call
-        (4617).  What counts is an `⎕empty` on this way out -- written straight, or put
-        off with `defer`, which has run by the time this is asked.
-        """
-        if self._impure:
-            return
-        if self._observing is not None:
-            # A lambda leaving an arena holding room is one that changes
-            # something that outlives it, which its type then says.
-            given = set().union(*self._emptied) if self._emptied else set()
-            if any(not local.is_parameter and not local.handed_out
-                   and self._is_arena(local) and self._held_by(local) is ARENA
-                   and id(local) not in given
-                   for scope in self._scopes[opened_at:]
-                   for local in scope.values()):
-                self._observing[0] = True
-            return
-        node, func = self._demanding
-        name = func.name if func is not None else ""
-        given = set().union(*self._emptied) if self._emptied else set()
-        for scope in self._scopes[opened_at:]:
-            for local in scope.values():
-                if local.is_parameter or local.handed_out \
-                        or not self._is_arena(local):
-                    continue
-                if self._held_by(local) is not ARENA:
-                    continue
-                if id(local) not in given and id(local) not in self._told_kept:
-                    self._diags.emit(D.LANG_ARENA_NEVER_GIVEN_BACK, local.span,
-                                     arena=local.name, name=name)
-                    self._told_kept.add(id(local))
-
     def _lower_defer(self, stmt: ast.Defer) -> None:
         """Put a statement off until the block it is written in is left.
 
@@ -10149,6 +10115,23 @@ class Checker:
             return
         self._deferred[-1].append(_Deferred(node=stmt, depth=len(self._scopes),
                                             block=self._block_spans[-1]))
+
+    def _give_back_on_leaving(self, node: ast.VarDef) -> None:
+        """Put off giving back an arena this body made until its block is left.
+
+        As if `defer ⎕empty(a)` stood right after the definition: on every way
+        out, after whatever the block put off later, and after what the block
+        comes to has been worked out -- so nothing made in it is read once it
+        is gone, and nothing has to be written for it to go.
+        """
+        call = ast.Call(span=node.span,
+                        callee=ast.NameRef(span=node.span, name=EMPTY_NAME),
+                        args=(ast.NameRef(span=node.name_span, name=node.name),))
+        self._implicit_empties.add(id(call))
+        self._deferred[-1].append(_Deferred(
+            node=ast.Defer(span=node.span,
+                           stmt=ast.ExprStmt(span=node.span, value=call)),
+            depth=len(self._scopes), block=self._block_spans[-1]))
 
     def _run_deferred(self, builder: IRBuilder, func: Function | None,
                       down_to: int) -> None:
@@ -10236,7 +10219,6 @@ class Checker:
                 self._run_deferred(builder, func, 0)
                 if builder.is_terminated:
                     return
-                self._all_given_back(0, span)
                 self._all_closed(self._scopes, span)
             finally:
                 self._left(kept)
@@ -10586,7 +10568,6 @@ class Checker:
             self._borrows_ended_with(block)
             if not builder.is_terminated:
                 self._run_deferred(builder, func, frame)
-                self._all_given_back(opened_at, block.span)
             return answer
         finally:
             self._unrun_deferred(func, frame)
@@ -20889,6 +20870,10 @@ class Checker:
             self._bind_local(node.name, place, node.name_span, node.mutable,
                              value_span=node.span, builder=builder,
                              placed_as=declared)
+            if not out and declared is ARENA and self._deferred \
+                    and isinstance(node.value, ast.NameRef) \
+                    and node.value.name == EMPTY_ARENA_NAME:
+                self._give_back_on_leaving(node)
             if out:
                 local = self._find_local(node.name)
                 assert local is not None
@@ -25658,9 +25643,8 @@ class Checker:
         It takes the arena named rather than computed, an arena being a place -- and a
         reference to one, that being how an arena is handed to a function.
         """
-        if len(expr.args) != 1:
-            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
-                             name=EMPTY_NAME, expected=1, found=len(expr.args))
+        if id(expr) not in self._implicit_empties:
+            self._diags.emit(D.LANG_EMPTY_WRITTEN, expr.span)
             return UndefConst(ERROR)
         written = expr.args[0]
         owner = self._arena_owned(written)
@@ -25678,44 +25662,16 @@ class Checker:
         return UndefConst(VOID)
 
     def _arena_owned(self, written: ast.Expr) -> _Local | None:
-        """The arena an `⎕empty` names, where it is this body's to give back.
+        """The arena an `⎕empty` the compiler put off names: one this body made.
 
-        Only what made an arena gives it back (4616).  One handed over by reference
-        is its maker's, who may be holding things made in it; `⎕heap` and one at the
-        top level last as long as the program, and anything may be holding things
-        made in those.
+        Only those are put off, so the name is always a local arena of this
+        body's own; anything else is the compiler's mistake.
         """
-        if isinstance(written, ast.Deref) \
-                and isinstance(written.operand, ast.NameRef):
-            # The arena a reference names, which is whoever's the reference is.
-            written = written.operand
-        name = written.name if isinstance(written, ast.NameRef) else \
-            _about_the_shape(written)
-        if isinstance(written, ast.NameRef):
-            local = self._find_local(written.name)
-            if local is not None and local.handed_out:
-                # It leaves with the answer, which the caller gives back.
-                self._diags.emit(D.LANG_HANDED_OUT_GIVEN_BACK, written.span,
-                                 name=written.name)
-                return None
-            if local is not None and self._is_arena(local):
-                if self._held_by(local) is ARENA:
-                    return local
-                self._diags.emit(D.LANG_ARENA_NOT_YOURS_TO_EMPTY, written.span,
-                                 arena=name, whose="one this was handed")
-                return None
-            if local is None and isinstance(self._provided(written.name),
-                                            GlobalVar):
-                self._diags.emit(D.LANG_ARENA_NOT_YOURS_TO_EMPTY, written.span,
-                                 arena=name,
-                                 whose="there for as long as the program is")
-                return None
-        if isinstance(written, ast.Member):
-            self._diags.emit(D.LANG_ARENA_NOT_YOURS_TO_EMPTY, written.span,
-                             arena=name, whose="there for as long as the program is")
-            return None
-        self._diags.emit(D.LANG_EMPTY_NOT_AN_ARENA, written.span, found=name)
-        return None
+        assert isinstance(written, ast.NameRef)
+        local = self._find_local(written.name)
+        assert local is not None and not local.handed_out \
+            and self._is_arena(local) and self._held_by(local) is ARENA
+        return local
 
     def _arena_place(self, builder: IRBuilder, written: ast.Expr) -> Value | None:
         """Where the arena an expression names keeps its state, or nothing."""

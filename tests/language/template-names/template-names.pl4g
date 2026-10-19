@@ -26,7 +26,6 @@ fn main(init: std.Init) → u6:
     if std.format⌜"{text} {{text}}"⌝ ≠ "t {text}":
         return 4u6
     let scratch: mut arena = ⎕arena
-    defer ⎕empty(scratch)
     let made: str = std.format⌜scratch, "<{total}>"⌝
     if made ≠ "<12>":
         return 5u6

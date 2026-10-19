@@ -27,7 +27,6 @@ fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let renamed: fn(u8) \N{RIGHTWARDS ARROW} u8 = \N{GREEK SMALL LETTER LAMDA} a: u8 [n] \N{RIGHTWARDS ARROW} u8 { a \N{MULTIPLICATION SIGN} n }
     let other: fn(u8) \N{RIGHTWARDS ARROW} u8 = renamed
     let pool: mut arena = \N{APL FUNCTIONAL SYMBOL QUAD}arena
-    defer \N{APL FUNCTIONAL SYMBOL QUAD}empty(pool)
     let pooled: fn(u8) \N{RIGHTWARDS ARROW} u8 = \N{GREEK SMALL LETTER LAMDA} a: u8 [n] in pool \N{RIGHTWARDS ARROW} u8 { a - n }
     let plain: fn(u8) \N{RIGHTWARDS ARROW} u8 = \N{GREEK SMALL LETTER LAMDA} a: u8 \N{RIGHTWARDS ARROW} u8 { a }
     let added: fn(u8) \N{RIGHTWARDS ARROW} u8 = adding(1u8)
@@ -64,9 +63,9 @@ def test_the_report_log_says_where_each_environment_is(compile_source, tmp_path)
     assert kept[6].startswith("keeps what it brought in in \N{APL FUNCTIONAL SYMBOL QUAD}heap"), kept
     assert kept[11].startswith("keeps what it brought in in this call's frame"), kept
     assert kept[12].startswith("keeps what it brought in in \N{APL FUNCTIONAL SYMBOL QUAD}heap"), kept
-    assert kept[16].startswith("keeps what it brought in in the arena"), kept
-    assert kept[17].startswith("brings nothing in"), kept
-    assert kept[19].startswith("keeps what it brought in in this call's frame"), kept
+    assert kept[15].startswith("keeps what it brought in in the arena"), kept
+    assert kept[16].startswith("brings nothing in"), kept
+    assert kept[18].startswith("keeps what it brought in in this call's frame"), kept
 
 
 def test_only_a_lambda_that_may_leave_takes_room_from_the_heap(compile_source, tmp_path) -> None:  # noqa: ANN001

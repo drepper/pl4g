@@ -1,7 +1,7 @@
 ※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
 
-※ `EXPR in NAME` says which arena what the expression takes room from comes out of, and
-※ `⎕empty(NAME)` gives the whole of one back.
+※ `EXPR in NAME` says which arena what the expression takes room from comes out of, and the
+※ whole of one is given back when the block it was defined in is left.
 ※
 ※ **`⎕heap` is the global one and every other arena is somebody's.**  Taking room from an
 ※ arena a program named is accounted for by whoever owns it -- naming it in the line *is* the
@@ -9,10 +9,10 @@
 ※ nothing.  `@[impure]` is left meaning the arena nobody named.
 ※
 ※ An arena a function makes is a pool: room is taken from it for as long as it is wanted and
-※ the whole of it goes back in one call, which is the only granularity an arena has.  `⎕arena`
-※ is what one starts out holding, inside a function as well as at the top level.  A pure
-※ function gives back every arena it made on every way out, which `defer` says once where the
-※ arena is made rather than before every `return`.
+※ the whole of it goes back at once, which is the only granularity an arena has.  `⎕arena`
+※ is what one starts out holding, inside a function as well as at the top level.  An arena a
+※ function made is given back on every way out of the block it was defined in, and nothing is
+※ written for it.
 
 ※ Handed one, and saying the answer is made in it: `→ str in a`.  Saying nothing would mean
 ※ `⎕heap`, and the answer would be copied there.
@@ -29,13 +29,10 @@ let std := ⎕import("std")
 @[startup]
 fn main(init: std.Init) → u6:
     let scratch: mut arena = ⎕arena
-    defer ⎕empty(scratch)
     if joined(&mut scratch, "ab", "cd") ≠ "abcd":
         return 1u6
     if ⍕true in scratch ≠ "yes!":
         return 2u6
-    ※ Everything in it at once, and the arena is an arena again afterwards.
-    ⎕empty(scratch)
     if joined(&mut scratch, "ef", "gh") ≠ "efgh":
         return 3u6
     0u6

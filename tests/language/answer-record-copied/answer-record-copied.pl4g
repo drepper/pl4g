@@ -9,7 +9,6 @@ type Named = name: str
 
 fn made(first: str) → Named:
     let scratch: mut arena = ⎕arena
-    defer ⎕empty(scratch)
     Named(.name ← first ⧺ "!" in scratch)
 
 let std := ⎕import("std")

@@ -8,7 +8,6 @@
 
 fn greeting(name: str) → fn() → str:
     let pool: mut arena = ⎕arena
-    defer ⎕empty(pool)
     let said: str = "hello " ⧺ name in pool
     λ [said] → str { said }
 

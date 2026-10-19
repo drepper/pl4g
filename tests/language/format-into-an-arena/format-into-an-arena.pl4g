@@ -14,7 +14,6 @@ fn label(a: &mut arena, n: u16) → str in a:
 @[startup]
 fn main(init: std.Init) → u6:
     let scratch: mut arena = ⎕arena
-    defer ⎕empty(scratch)
     let s: str = std.format⌜scratch, "{} and {}", 1u8, "two"⌝
     let plain: str = std.format⌜scratch, "no holes"⌝
     let t: str = label(&mut scratch, 7u16)

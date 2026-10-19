@@ -32,7 +32,6 @@ fn wide(s: ⇉u16) → u16:
 @[startup, impure]
 fn main(init: std.Init) → u6:
     let pool: mut arena = ⎕arena
-    defer ⎕empty(pool)
     let t: Two(u8) = Two(.first ← 2u8, .second ← 3u8)
     let w: Two(u16) = Two(.first ← 200u16, .second ← 300u16)
     let r: Row(u8) = Row(.items ← [1u8, 2u8, 3u8] in pool)

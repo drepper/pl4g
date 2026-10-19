@@ -31,7 +31,6 @@ fn main(init: std.Init) → u6:
     let from: str = either(true, &mut pool, "image")
     let made: str = either(false, &mut pool, "image")
     let same: bool = from = "image" ∧ made = "made"
-    ⎕empty(pool)
     if named("x") ≠ "x" ∨ label.text ≠ "kept" ∨ ¬same: return 1u6
     let truth: str = std.text(true, &mut pool)
     if truth ≠ "true" ∨ ⍕false ≠ "false" ∨ ⍕12u8 ≠ "12": return 2u6

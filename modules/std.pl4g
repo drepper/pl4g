@@ -744,8 +744,8 @@ macro format(first: syntax, ⁂args: syntax) → syntax:
 ※※ `Io.print` -- so nothing is buffered and what reaches the device is one request.
 ※※
 ※※ The text is built in a **pool** of the expansion's own: room is taken from it for as
-※※ long as the line is being built, and the whole of it goes back in one call when the
-※※ write has answered, which `defer` says where the pool is made.  A pool of every
+※※ long as the line is being built, and the whole of it goes back at once when the block
+※※ the invocation stands in is left, after the write has answered.  A pool of every
 ※※ invocation's own, rather than one the module keeps, is what makes giving it back
 ※※ safe: nothing else can be holding text in it, and an argument that itself prints
 ※※ builds its line in a pool of its own.
@@ -759,7 +759,6 @@ macro print(to: syntax, template: syntax, ⁂args: syntax) → syntax:
     let said: syntax = formatted(template, args, ⌜pool⌝, 0u64)
     ⌜
         let pool: mut arena = ⎕arena
-        defer ⎕empty(pool)
         Io.print($to, ⎕bytes($said))
     ⌝
 
@@ -778,7 +777,6 @@ macro println(to: syntax, template: syntax, ⁂args: syntax) → syntax:
     let said: syntax = formatted(template, args, ⌜pool⌝, 0u64)
     ⌜
         let pool: mut arena = ⎕arena
-        defer ⎕empty(pool)
         Io.println($to, ⎕bytes($said))
     ⌝
 

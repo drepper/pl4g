@@ -1,0 +1,16 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4932 LANG_EMPTY_WRITTEN
+
+※ An arena a body made is given back when the block it was defined in is left,
+※ on every way out, so there is nothing for a program to give back and no
+※ `⎕empty` to write.  One wanted afresh for every turn of a loop is defined in
+※ the loop.
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let scratch: mut arena = ⎕arena
+    let both: str = "a" ⧺ "b" in scratch
+    let n: u64 ¤size = #both
+    ⎕empty(scratch)
+    if n = 2: 0u6 else: 1u6

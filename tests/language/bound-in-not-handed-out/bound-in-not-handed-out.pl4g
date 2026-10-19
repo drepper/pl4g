@@ -9,5 +9,4 @@ let std := ⎕import("std")
 @[startup]
 fn main(init: std.Init) → u6:
     let s: str in k = "a" ⧺ "b"
-    defer ⎕empty(k)
     if s = "ab": 0u6 else: 1u6

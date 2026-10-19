@@ -9,7 +9,6 @@ fn kept(c: bool) → bool:
     let held: mut str = "-"
     if c:
         let pool: mut arena = ⎕arena
-        defer ⎕empty(pool)
         held ← "a" ⧺ "b" in pool
     held = "ab"
 

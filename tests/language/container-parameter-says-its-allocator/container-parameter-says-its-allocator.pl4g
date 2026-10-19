@@ -13,9 +13,9 @@ let std := ⎕import("std")
 @[startup, impure]
 fn main(init: std.Init) → u6:
     let a: mut arena = ⎕arena
-    defer ⎕empty(a)
-    let b: mut arena = ⎕arena
     let w: mut str⟦2⟧ = ⟦"a", "b"⟧ in a
-    put(&mut a, w, "c" ⧺ "d" in b)
-    ⎕empty(b)
+    if true:
+        ※ given back where the block ends, and nothing of it is in `w`
+        let b: mut arena = ⎕arena
+        put(&mut a, w, "c" ⧺ "d" in b)
     if w⟦0⟧ = "cd": 0u6 else: 1u6

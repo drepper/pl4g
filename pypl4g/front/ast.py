@@ -1223,9 +1223,9 @@ class Defer(Stmt):
 
     However it is left -- by running off the end, by `return`, by `?` handing a
     failure back, by `break` or `continue` -- and last-written first, so that what
-    was set up last is taken down first.  What it is for is giving back what the
-    block took, written next to where it was taken: `defer ⎕empty(scratch)` one line
-    after the arena was made.
+    was set up last is taken down first.  What it is for is undoing what the block
+    did, written next to where it was done -- which is what the compiler writes
+    itself after an arena is made, to give it back.
 
     The statement is not run where it is written.  What it names is what those names
     meant there, whatever a block inside it later calls by the same names.

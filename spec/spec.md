@@ -524,12 +524,11 @@ there; `⍕v in a` is the operator form of the same thing, and it is what `forma
 names `⎕heap`, so what it answers lasts -- or **the arena named before the template**, `std.format⌜scratch, "{} and {}", a, b⌝`,
 whose joins and `⍕`s are all `in scratch`, so that what it answers goes when `scratch` is given back and a function may answer it
 under `→ str in a`.  Which form is meant is read off the first piece: a template is text written out, and anything else names the
-arena.  **`print` and `println` make a pool of their own** at every invocation and give it back
-when the write has finished -- the expansion is
+arena.  **`print` and `println` make a pool of their own** at every invocation, given back when the
+block the invocation stands in is left -- the expansion is
 
 ```
 let pool: mut arena = ⎕arena
-defer ⎕empty(pool)
 Io.println(to, ⎕bytes(…the join, in pool…))
 ```
 
@@ -1034,7 +1033,7 @@ three each lambda got is in the report log (`allocator`).
 
 **`in` after the capture list says where it is kept**, before the arrow -- `in` after the answer's type says where the *answer* is
 made, as it does for a function.  `λ a: u8 [n] in pool → u8 { … }` keeps it in the arena `pool`, which then gives it back with
-everything else it made: the lambda is made in `pool` as a string written `in pool` is, and is dead once `pool` is emptied (4615).
+everything else it made: the lambda is made in `pool` as a string written `in pool` is, and goes with it (4614).
 `[n] in ⎕heap` keeps it in the heap and says so in the lambda's type (below).  A lambda that brings nothing in has nothing to keep,
 and `in` is not written for it (4643).
 
@@ -1048,7 +1047,6 @@ reference it brought in.  So:
   `→ T in a`.  A variable of the call, an arena the call made, and whatever a parameter was handed do not -- the last because the
   caller may have kept it in its own frame, which the signature does not say.  A lambda is never copied, as a string is: what it
   brought in is laid out the way its body reads it, and nothing else knows how.
-- **Called after what it reaches was given back, it is refused** (4615), as reading a string would be.
 
 ```
 fn counting(n: u8) → fn(u8) → u8:
@@ -1090,7 +1088,7 @@ fn apply(g: fn(u8) in a → u8, a: &mut arena, x: u8) → u8:
 ```
 
 Said of the answer, it is what `→ T in a` says of any answer: the lambda may leave the call kept in `a`, and the caller's lambda
-lasts as long as what it handed over as `a` -- dead once that is emptied (4615), held by nothing further out (4614).  Said of a
+lasts as long as what it handed over as `a` -- held by nothing further out (4614).  Said of a
 parameter, it is what `s: T in a` says: what is handed over is kept in what `a` is given (4620).  The type itself is `fn(u8) → u8`,
 and nowhere but a signature does the name mean anything.  `→ fn(u8) → u8 in a` would not say it: `in` after the answer's type
 says where the *answer* is made, and that answer is the lambda's own.
@@ -4166,13 +4164,14 @@ compiler always knows, so no object carries a header saying it -- C23's `free_si
 are the same interface.  Where the compiler knows an allocation is `⎕heap`'s it calls the heap straight away; elsewhere one
 compare picks the kind.
 
-**`EXPR in NAME` says which arena an expression takes its room from**, and `⎕empty(NAME)` gives the whole of one back:
+**`EXPR in NAME` says which arena an expression takes its room from**, and the whole of one is given back when the block it was
+defined in is left:
 
 ```
 let scratch: mut arena = ⎕arena
 let both: str = first ⧺ second in scratch
 let said: str = ⍕v in scratch
-⎕empty(scratch)
+                                ※ scratch is given back where the block ends
 ```
 
 What may carry `in` is what takes room: a join of two strings or two lists, a collection written out, an operator whose
@@ -4187,19 +4186,21 @@ with `in`, or not named and so from `⎕heap`.  What `⎕heap` holds lasts as lo
 how a function hands a caller text when the caller gave it no arena.  Filling what was just made -- the entries of a collection,
 the elements of a list -- writes only that new room.
 
-**`⎕empty` is the only granularity there is**, which is what makes an arena a *pool*: room is taken from it for as long as it is
-wanted and the whole of it goes in one call.  What is left is an arena with nothing in it, so taking room from it again asks the
-system for a first chunk.  Emptying is what can disturb somebody else, which is why only the function that made an arena may
-do it (below), and `⎕heap`, which nobody made, is never emptied.
+**An arena is given back as a whole, and when the block it was defined in is left** -- off its end, by a `return`, a `break`, a
+`continue` or a `?` -- which is what makes it a *pool*: room is taken from it for as long as the block runs and all of it goes at
+once.  It is as if `defer ⎕empty(a)` stood right after the definition, and it runs after whatever the block put off later and after
+what the block comes to has been worked out.  An arena wanted afresh for every turn of a loop is defined inside the loop.
+**Nothing writes `⎕empty`** (4932): there is nothing a program would give back that the end of a block does not, and nothing it
+gave back early could be read again.  An arena handed over by reference is its maker's and goes where its maker's name does; one
+at the top level, and `⎕heap`, last as long as the program.
 
 **`⎕arena` works inside a function as well as at the top level**, where it is three words of nought in the frame -- so a pool of one
-call's own is one line, and giving it back is one more.  With `defer` they are the same line's neighbours, and the giving back
-happens on every way out of the block:
+call's own is one line.
 
-```
-let scratch: mut arena = ⎕arena
-defer ⎕empty(scratch)
-```
+Compare: **C++** and **Rust**, where an arena such as `std::pmr::monotonic_buffer_resource` or `bumpalo::Bump` gives its memory back
+in its destructor at the end of the scope, which this is; **Zig** and **Odin**, where `defer arena.deinit()` is written by hand and
+forgetting it is a leak; **Go**'s `arena` experiment, freed by an explicit `Free`.  The decision of 2026-10-19 took the explicit
+`⎕empty` away, so that giving back is what scope already says.
 
 **An allocation that cannot be met stops the program.**  Answering with a result would put a `?` on every value a program builds
 rather than computes, and there is nothing a program could usefully do at that point that the system will not do better by
@@ -4215,14 +4216,8 @@ a program should be able to read where a value lives off the line that makes it.
 **A value made in an arena does not outlive it.**  The compiler keeps track, for every name, of the arenas what it holds was made
 in, and refuses every way a program could read memory an arena has given back:
 
-- **Read after `⎕empty`** (4615).  Every name holding something made in the arena is dead from the `⎕empty` on, and stays dead after
-  the block it was written in ends -- on some way there it was given back, and a name read later cannot tell which way it came.  A
-  name given something new is alive again.
-- **In a loop** the same holds across turns: a turn that empties an arena leaves the next turn reading what was made in it before
-  the loop began, so that is dead for the whole of the loop.  What a turn makes for itself it makes again each turn, and is not
-  touched.
-- **Answered by the function that made the arena** (4613).  A function gives back its own arenas before it returns, so what it
-  answers out of one is gone by the time anybody reads it.  An arena the caller handed over by reference is the caller's, and what
+- **Answered by the function that made the arena.**  A function gives back its own arenas as it returns, so what it answers out
+  of one is copied into the caller's allocator first.  An arena the caller handed over by reference is the caller's, and what
   is made in it lasts as long as the caller says -- which is how a function returns text it built: it asks to be handed the arena.
 - **Put where it outlives the arena** (4614): a name bound further out than the arena, given something made in it, and the value a
   block comes to when the arena was made inside the block.  It is the rule a reference follows, asked of what an arena holds.
@@ -4240,9 +4235,9 @@ dead along any of them.  An `if` with no `else` has a way through that runs no a
 join at all.  What an `if` comes to is what its arms *yield*, the last expression of each, and not the temporaries they used on the
 way.  An arena given back in every arm that reaches the join is given back after it.
 
-**What a way out runs, it runs along that way only.**  A `defer ⎕empty(s)` lowered at a `return`, a `?`, a `break` or a `continue`
-kills what was made in `s` along the way that leaves, and the way past it still holds what it held -- the arena has not been given
-back there yet.
+**What a way out runs, it runs along that way only.**  The giving back of `s` lowered at a `return`, a `?`, a `break` or a
+`continue` kills what was made in `s` along the way that leaves, and the way past it still holds what it held -- the arena has not
+been given back there yet.
 
 **A loop's turns are one way after another.**  A name the body assigns may hold, at the top of a turn and after the loop, what any
 turn gave it, so it is taken to be made in anything the body names as well as in what it held before.  The way out of the loop is
@@ -4252,14 +4247,10 @@ the top of a turn, the end of the body, and every `break`.
 whole was made in grows, and is never replaced.  Reading a part of a dead name is reading a dead name.  And what a `match` takes
 out of a value, what a `foreach` takes out of what it walks, and what a tuple is taken apart into, were made where the whole was.
 
-**Only what made an arena gives it back** (4616).  One handed over by reference is its maker's, who may be holding things made in
-it; `⎕heap` and an arena at the top level last as long as the program, and anything anywhere may be holding things made in those.
-Without this rule none of the above would hold: a function emptying an arena it was handed would kill names in its caller that the
-caller cannot see die.
-
-**A pure function gives back every arena it made, on every way out** (4617).  Room an arena took from the system stays taken until
-it is given back, so leaving with one still holding room changes something that outlives the call -- which is what `@[impure]` is
-for.  What counts is an `⎕empty` on that way out, written there or put off with `defer`.
+**Only what made an arena gives it back.**  One handed over by reference is its maker's, who may be holding things made in it;
+`⎕heap` and an arena at the top level last as long as the program, and anything anywhere may be holding things made in those.
+Without this none of the above would hold: a function giving back an arena it was handed would kill names in its caller that the
+caller cannot see die.  Since nothing but the end of the block that made an arena gives it back, nothing has to be checked for it.
 
 Compare: **Rust**, whose lifetimes say the same thing about every reference and check it with a borrow checker; an arena crate such
 as `bumpalo` ties what it hands out to the arena's lifetime, which is this rule written as a type.  **Zig** and **Odin** have the
@@ -4372,12 +4363,11 @@ fn words(text: str) → [str] in pool:
     …build the list in pool…
 
 let found: [str] in kept = words(line)
-defer ⎕empty(kept)
 ```
 
-**`kept` is then the caller's arena like any it made**: `found` is made in it, `⎕empty(kept)` gives both back, and a pure function
-gives it back before it leaves (4617).  The body may not give `pool` back (4628) -- it is the caller's from the moment the call
-returns -- and what it answers is kept in `pool` by the rules of any answer: made elsewhere, it is copied in.
+**`kept` is then the caller's arena like any it made**: `found` is made in it, and both are given back where the block `kept` was
+defined in is left.  The body does not give `pool` back -- it is the caller's from the moment the call returns -- and what it answers
+is kept in `pool` by the rules of any answer: made elsewhere, it is copied in.
 
 **Nothing moves.**  Where the caller keeps `kept` is handed to the call, as a parameter no program writes, and the body's `let pool`
 starts the arena there instead of in its own frame: what is made in `pool` is already where the caller will hold it, and every
@@ -4456,12 +4446,15 @@ fn label(a: &mut arena, b: &mut arena, v: u16) → str in a:
     let scratch: str = ⍕v in b          ※ working space
     "#" ⧺ scratch in a                  ※ the answer
 
-let name: str = label(&mut long, &mut short, 7u16)
-⎕empty(short)                           ※ name lives on: it was made in long
+let name: mut str = ""
+if ready:
+    let short: mut arena = ⎕arena
+    name ← label(&mut long, &mut short, 7u16)
+                                        ※ short is given back; name lives on in long
 ```
 
-**A caller** takes the answer to be made in exactly what it handed the named parameters: emptying `short` leaves `name` alive, and
-emptying `long` kills it.  Without the annotation the answer is made in `⎕heap`.
+**A caller** takes the answer to be made in exactly what it handed the named parameters: `short` going leaves `name` alive, and
+`long` going would kill it -- which is why `name` may be bound outside the block `short` is in and not outside the one `long` is in.  Without the annotation the answer is made in `⎕heap`.
 
 **The body is held to it**: an answer made anywhere the signature does not name is copied into the arena it does name, before the
 function leaves (above), and refused where it cannot be copied (4624).
@@ -4977,17 +4970,17 @@ over two dimensions goes back to a variable set before the loop.  **Common Lisp*
 `return`, by a `break` or `continue` leaving it for a loop around it, and by a `?` handing a failure on.
 
 ```
-let scratch: mut arena = ⎕arena
-defer ⎕empty(scratch)
+defer tries ← tries + 1u8
 let both: str = first ⧺ second in scratch
 if both = "":
-    return 1u6                  ※ scratch is given back here
+    return 1u6                  ※ tries is counted here
 …                               ※ and here, at the end
 ```
 
 **The last put off runs first**, and only what was reached runs: a `defer` the block never got to has put nothing off.  What a block
 comes to -- the value of its last statement, or what a `return` answers -- is worked out **before** what was put off runs, so a
-deferred `⎕empty` cannot take away the value it was meant to protect, and a deferred assignment does not change what was answered.
+deferred assignment does not change what was answered -- and an arena, given back the same way, cannot take away the value it was
+meant to protect.
 
 **What may be put off is something to do**: an expression, or an assignment.  Not a way out of anything -- a deferred statement runs
 while the block is already being left, so a `return`, a `break`, a `continue` or a `?` in one would leave twice -- and not a `let`,

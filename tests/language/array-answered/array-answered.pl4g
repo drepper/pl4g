@@ -46,7 +46,6 @@ fn either(a: u8⟦⟧, p: &mut arena) → u8⟦⟧ in a, p:
 @[startup]
 fn main(init: std.Init) → u6:
     let pool: mut arena = ⎕arena
-    defer ⎕empty(pool)
     let a: mut u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
     a⟦3⟧ ← ⎕narrow(⎕drop(#init.args) + 3, ⌜u8⌝) ?? 0u8
     let h: u8⟦⟧ = head(a)

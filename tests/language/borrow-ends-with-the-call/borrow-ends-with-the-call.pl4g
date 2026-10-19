@@ -20,7 +20,6 @@ fn bump(n: &mut u8) → u8:
 
 fn three(a: u16, b: u16, c: u16) → bool:
     let pool: mut arena = ⎕arena
-    defer ⎕empty(pool)
     let t: str = ((⍕a in pool) ⧺ (⍕b in pool) in pool) ⧺ (⍕c in pool) in pool
     t = "123"
 

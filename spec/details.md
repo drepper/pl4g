@@ -2039,8 +2039,15 @@ element replacement kills.
 
 **An arena handed out lives in the caller's frame.**  A function with `→ T in pool` for no parameter (`Function.hands_out`,
 `FuncType.hands_out` for a value) takes one parameter more, last: a `ptr<mut arena>`.  `let pool: mut arena = ⎕arena` in the body's
-own scope is lowered with that pointer as its place instead of a `frame` slot, and the local is marked `handed_out`, which `⎕empty`
-refuses and the "given back on every way out" check skips.  `let v: T in kept = f(…)` lowers `let kept: mut arena = ⎕arena` first,
+own scope is lowered with that pointer as its place instead of a `frame` slot, and the local is marked `handed_out`, so the body does
+not give it back.
+
+**An arena a body made is given back by a `defer` the compiler writes.**  `_give_back_on_leaving` appends a `_Deferred` holding
+`⎕empty(a)` right after `let a: mut arena = ⎕arena` is lowered -- also for the arena `let v: T in kept = f(…)` makes, and not for one
+the body hands out -- so every way out of the block runs it, in the order `defer` already has, with everything `defer` already does
+to what was made in the arena along that way.  The call's identity is kept in `_implicit_empties`; a `⎕empty` the program wrote is
+not among them and is refused (4932).  With nothing else giving an arena back, the check that a pure function gave back what it
+made, and the ones for giving back somebody else's arena, are gone.  `let v: T in kept = f(…)` lowers `let kept: mut arena = ⎕arena` first,
 then the call with `kept`'s place waiting in `_receiving`; only the call that is the definition's whole value takes it
 (`_arena_for`), and the answer's provenance is `kept`.  `made_in` is `(HANDS_AT,)`, so the answer may be thin with the caller's
 place as its allocator.

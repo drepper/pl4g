@@ -14,7 +14,6 @@ let std := ⎕import("std")
 @[startup]
 fn main(init: std.Init) → u6:
     let a: mut arena = ⎕arena
-    defer ⎕empty(a)
     let v: str⟦2⟧ = ⟦"a" ⧺ "b", "c"⟧
     let shared: Holder = Holder(.names ← v)
     let pooled: Holder = Holder(.names ← ⟦"x", "y"⟧ in a)

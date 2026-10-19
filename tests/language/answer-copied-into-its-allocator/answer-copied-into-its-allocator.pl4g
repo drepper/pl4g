@@ -18,7 +18,6 @@ let std := ⎕import("std")
 ※ made in an arena of the call's own: copied into ⎕heap
 fn local(first: str) → str:
     let scratch: mut arena = ⎕arena
-    defer ⎕empty(scratch)
     let both: str = first ⧺ "<-" in scratch
     both
 
@@ -37,11 +36,13 @@ fn literal() → str:
 @[startup]
 fn main(init: std.Init) → u6:
     let x: mut arena = ⎕arena
-    defer ⎕empty(x)
-    let y: mut arena = ⎕arena
     let s: str = local("hello")
-    let t: str = other(&mut x, &mut y, 42u16)
-    ⎕empty(y)
+    ※ `y` is given back where its block ends, and what `other` answered was not
+    ※ made in it
+    let t: mut str = ""
+    if true:
+        let y: mut arena = ⎕arena
+        t ← other(&mut x, &mut y, 42u16)
     let u: str = kept(t)
     if s ≠ "hello<-" ∨ t ≠ "42" ∨ u ≠ "42" ∨ literal() ≠ "lit":
         return 1u6
