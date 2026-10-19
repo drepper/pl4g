@@ -10331,6 +10331,16 @@ through the bits in ordinary registers; RISC-V, with no select in the base, thro
 already did.  Taken without asking: the bits are carried in registers rather than through memory, which every target can do with
 one instruction each way, and a choice whose truth value is known folds.
 
+## 2026-10-19T20:30+02:00 — language
+
+**An array whose type says its shape is copied when it is bound**
+
+The user decided the entry in TODO-language.md by copying, which records already did since 2026-09-17: `let b = a` gives `b`
+elements of its own, against `b` naming `a`'s.  Checking it found the binding already copied -- by name, with or without a
+written type, into a field, a tuple or a lambda -- since giving an array to an array was settled; the entry was out of date.  What
+it found instead was a write lost: an element of an array held in a field of a record was written into a copy of the field, which
+reading the field makes.  That is fixed, the element written and read where it is.
+
 Open questions
 --------------
 

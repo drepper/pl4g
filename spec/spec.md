@@ -3915,7 +3915,10 @@ this an array not marked `mut` could be written all the same, which a table in a
 **Giving an array to an array copies its elements**, one for one.  A name of an array whose type says its shape owns its
 elements: `a ← r` puts `r`'s elements into `a`'s, `m⟦0⟧ ← r` into the row's, and `let b: mut u8⟦3⟧ = r` gives `b` room of its own
 holding a copy -- so writing one is never writing the other.  Two names neither of which may be written are the one place nothing
-is copied, since nobody could tell.  A name of an array whose type does not say its shape owns nothing: it names someone's
+is copied, since nobody could tell.  **Binding one is giving it**: `let b = a` gives `b` a copy whatever its type was read off,
+and so does putting one in a field of a record, in a member of a tuple, or in a lambda that brings it in by value -- the rule a
+record follows, a record holding an array being copied with it.  An element of an array held in a field is written, and read,
+where it is: `r.held⟦0⟧ ← 9u8` writes `r`'s array and not a copy of the field.  A name of an array whose type does not say its shape owns nothing: it names someone's
 elements, so `v ← w` writes those, as `v⟦i⟧ ← x` does, and a `mut` one is bound only to elements that may be written (4708), the
 rule a `mut` parameter follows.  The two runs may overlap -- `v⟦0…3⟧ ← v⟦1…4⟧` -- and the copy is as though every element was
 read before any was written.  A variable at the top level is copied into where it is in the image.

@@ -506,10 +506,10 @@ removed or decided otherwise, which its last paragraph says.
     when the two ways out were written down is the one paid -- a whole nested field is not one extract -- and where one is
     wanted from a value the record is put in a frame and the field read from there.
 
-[ ] decide whether a fixed array is copied or shared when it is bound to a name.  `let b = a` names the same elements today --
-    `a⟦0⟧ ← 9u8` is seen through `b` -- because a value of an array type is where the elements are.  Nothing in the
-    specification says so and nothing chose it; a record was settled the other way on 2026-09-17, and the two should agree or
-    the difference should be written down.
+[x] decide whether a fixed array is copied or shared when it is bound to a name.  Decided on 2026-10-19 by the user: copied, as
+    a record is.  Found already so -- giving an array to an array copies it, and binding one is giving it -- and written down in
+    the specification; what was wrong was writing an element of an array held in a field, which went into a copy of the field
+    and was lost, and is fixed.
 
 [x] the `std` module, and I/O through io_uring.  Done on 2026-09-18: `modules/std.pl4g` defines the descriptor types and
     `Init`, the startup function may take `std.Init`, and `read` and `write` reach the runtime the compiler carries.  Written in

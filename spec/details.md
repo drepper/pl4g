@@ -3701,6 +3701,15 @@ room the new value was made in: that room belongs to a place in the program and
 not to a turn of a loop, so a value kept from one turn to the next would
 otherwise read what the next turn made.
 
+An array in a field, written where it is
+----------------------------------------
+
+**A field of a record read as a value is loaded, and loading an array whose type says its shape copies it** -- which is right
+wherever the array is given to something else, and was wrong for `r.held⟦0⟧ ← 9u8`, which wrote the element into the copy and
+lost it.  `_array_in_a_field` answers such a field as where it is, through `_record_at` -- a record local, what a reference names,
+a field of a field -- and `_lower_element_assign` and `_lower_element` start from it: a write, a row, a mask, and a read of one
+element, which no longer copies the whole array to read it.
+
 A choice without a branch
 -------------------------
 
