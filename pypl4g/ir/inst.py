@@ -456,7 +456,10 @@ class CallInst(Instruction):
             # question about the place rather than about the function: the sweep
             # asks it, and what is said here is the answer where nobody has.
             return True
-        return bool(getattr(attrs, "impure", True))
+        # One that asked to be opaque is treated as one that changes things,
+        # which is everything the optimizer needs to leave every call to it be.
+        return bool(getattr(attrs, "impure", True)) \
+            or bool(getattr(attrs, "opaque", False))
 
     def __init__(self, callee: object, args: Sequence[Value], result_ty: Type,
                  span: Span = INVALID_SPAN) -> None:

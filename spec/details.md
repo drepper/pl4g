@@ -2042,6 +2042,10 @@ element replacement kills.
 own scope is lowered with that pointer as its place instead of a `frame` slot, and the local is marked `handed_out`, so the body does
 not give it back.
 
+**`@[opaque]` is a flag of its own**, `FuncAttrs.opaque`, printed and read back as `opaque` in the IR.  `CallInst.has_effects` answers
+yes for it, which is the one question every pass that would fold, merge, move or drop a call asks; the attribute sets
+`inline(never)` as well.  Nothing in the checker reads it as `impure`.
+
 **An arena a body made is given back by a `defer` the compiler writes.**  `_give_back_on_leaving` appends a `_Deferred` holding
 `⎕empty(a)` right after `let a: mut arena = ⎕arena` is lowered -- also for the arena `let v: T in kept = f(…)` makes, and not for one
 the body hands out -- so every way out of the block runs it, in the order `defer` already has, with everything `defer` already does

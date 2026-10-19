@@ -10428,6 +10428,17 @@ none is, and that `@[impure]` stops granting it: a function doing both writes `@
 the generator was handed, not to its frame.  The one program in the suite that needed both, a task writing a variable at the top
 level and a file opened through `std.fs.cwd()`, says both.  Compare Koka, whose `st` and `io` are separate effects.
 
+## 2026-10-20T11:00+02:00 — language
+
+**`@[opaque]`: a call kept as written by a function that stays pure**
+
+Part of the same request.  Tests of the optimizer marked a function `@[impure]` so that its calls would not be worked out,
+merged or moved -- `pure-calls` does it to `seed` and `looped` -- which an error for a needless `@[impure]` would refuse.  Asked,
+the user wanted an attribute saying what is meant instead, and chose the name `@[opaque]` over GCC's `noipa` and `@[keep]`.  It
+implies `inline(never)` and makes every call one the optimizer leaves be: in the IR the function says `opaque`, and a call to it
+has effects.  To the checker it is pure, so callers stay pure.  Compare GCC's `noipa`, Rust's `black_box`, Zig's
+`doNotOptimizeAway`.
+
 The rest of what was decided for the `@[impure]` error is recorded with it.
 
 Open questions

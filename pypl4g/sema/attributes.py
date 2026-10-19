@@ -140,6 +140,10 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
                  doc="an array argument is walked and the answers make an array"),
         AttrSpec("impure", AttrTarget.FUNCTION | AttrTarget.CALLABLE,
                  doc="the function may change things that outlive the call"),
+        AttrSpec("opaque", AttrTarget.FUNCTION,
+                 doc="every call to the function is a black box to the "
+                     "optimizer: not inlined, folded, merged, moved or dropped, "
+                     "though the function stays pure"),
         AttrSpec("can_ignore", AttrTarget.FUNCTION | AttrTarget.CALLABLE,
                  doc="a caller need not take what the function answers with"),
         AttrSpec("abi", AttrTarget.FUNCTION | AttrTarget.TYPE,

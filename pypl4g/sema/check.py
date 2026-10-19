@@ -7586,6 +7586,7 @@ class Checker:
         can_ignore = False
         impure = False
         io = False
+        opaque = False
         listable = False
         builtin = False
         linkage = self._linkage_of(bound)
@@ -7623,6 +7624,8 @@ class Checker:
                     # *caller* it asks only for the permission a device carries.
                     io = True
                     impure = True
+                case "opaque":
+                    opaque = True
                 case "can_ignore":
                     can_ignore = True
                 case "cdecl":
@@ -7660,8 +7663,12 @@ class Checker:
                     extra["section"] = attr.as_str("name")
                 case _:
                     pass
+        if opaque:
+            # Inlined, a call would be its body, which the optimizer may see
+            # through: the box stays shut by being a call.
+            inline = InlineHint.NEVER
         return FuncAttrs(special=special, priority=priority, inline=inline, abi=abi,
-                         io=io,
+                         io=io, opaque=opaque,
                          external=external, can_ignore=can_ignore, impure=impure,
                          listable=listable, builtin=builtin, extra=extra), linkage
 

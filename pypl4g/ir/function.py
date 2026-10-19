@@ -100,6 +100,11 @@ class FuncAttrs:
     #: a write.  What this says is only what a *caller* needs in order to make the
     #: call: the permission that a device travels with, rather than `@[impure]`.
     io: bool = False
+    #: Whether a call to it is a black box to the optimizer: never inlined,
+    #: folded, merged, moved or dropped, though it changes nothing and its
+    #: callers stay pure.  What a test of the optimizer wants of a function it
+    #: watches, said without claiming an effect there is none of.
+    opaque: bool = False
     #: Whether the function's answer is written into a place the caller hands
     #: it rather than answered in registers, which is what a function answering
     #: with more values than the style carries does after the pass that rewrites

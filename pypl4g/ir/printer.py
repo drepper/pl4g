@@ -152,6 +152,9 @@ def render_function(func: Function, out: list[str]) -> None:
         # left it out would read back as a module where everything is pure,
         # which is the one mistake about this that writes wrong code.
         head.append(" impure")
+    if func.attrs.opaque:
+        # Read back as anything else, every call to it could be folded away.
+        head.append(" opaque")
     if func.attrs.answer_in_storage:
         # And this is here for the same reason and says the other half of it:
         # a call to such a function changes memory that outlives it, so a form

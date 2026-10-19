@@ -155,11 +155,14 @@ class _FunctionReader:
         priority: int | None = None
         abi: str | None = None
         impure = False
+        opaque = False
         in_storage = False
         chained = False
         for word in words[1:]:
             if word == "impure":
                 impure = True
+            elif word == "opaque":
+                opaque = True
             elif word == "chained":
                 chained = True
             elif word == "answer-in-storage":
@@ -175,7 +178,8 @@ class _FunctionReader:
             elif word.startswith("abi("):
                 abi = word[len("abi("):-1]
         attrs = FuncAttrs(special=special, priority=priority, inline=InlineHint.DEFAULT,
-                          abi=abi, impure=impure, answer_in_storage=in_storage,
+                          abi=abi, impure=impure, opaque=opaque,
+                          answer_in_storage=in_storage,
                           chained=chained)
         func = Function(name=name, ty=self._module.types.func_type(params, ret),
                         attrs=attrs, linkage=linkage, cconv=cconv)

@@ -5,7 +5,9 @@
 ※ arguments is worked out once, a call whose arguments do not change round a loop
 ※ is moved out of it, and a call whose arguments are all constants is worked out
 ※ while compiling.  None of it changes what the program does, which is what this
-※ checks at both levels; the report log says which was done where.
+※ checks at both levels; the report log says which was done where.  `seed` and
+※ `looped` are `@[opaque]`: pure, and every call to them left as it is written,
+※ so the constant they would have folded to is not there to fold.
 
 @[inline(never)]
 fn square(x: u32) → u32:
@@ -15,11 +17,11 @@ fn square(x: u32) → u32:
 fn fib(n: u32) → u32:
     if n < 2u32: n else: fib(n - 1u32) + fib(n - 2u32)
 
-@[impure, inline(never)]
+@[opaque]
 fn seed() → u32:
     3u32
 
-@[impure, inline(never)]
+@[opaque]
 fn looped(a: u32, k: u32) → u32:
     let n: mut u32 = 0u32
     let total: mut u32 = 0u32
@@ -30,7 +32,7 @@ fn looped(a: u32, k: u32) → u32:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let s: u32 = seed()
     let twice: u32 = square(s) + square(s)

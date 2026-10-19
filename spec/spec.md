@@ -6488,6 +6488,14 @@ somebody else's, and writing through it is on the list.  Compare **D**, whose we
 **Haskell**'s `ST`, where a table made inside `runST` may be written and the result is pure; **Koka**, whose local state is not an
 effect once it cannot escape.
 
+**`@[opaque]` keeps every call without claiming an effect.**  A pure function's calls may be worked out once, moved out of a
+loop, folded while compiling or dropped when nothing reads them, which is what purity is for -- and what a program watching the
+optimizer, or timing a call, does not want.  `@[opaque]` says every call to the function is a black box: never inlined, folded,
+merged, moved or dropped.  It changes nothing about what the function may do, so it stays pure, its callers do too, and it is
+not a way to say `@[impure]` without meaning it.  Compare GCC's `noipa`, which keeps a call from being inlined or reasoned about;
+Rust's `std::hint::black_box` and Google Benchmark's `DoNotOptimize`, which do it for a value rather than a function; Zig's
+`std.mem.doNotOptimizeAway`.
+
 **Every one of them names the function that is pure, and points at it** (4511).  That is not always the function the message is
 about or even in the same file: a call a macro wrote is reported where the macro wrote it, which is wherever that macro lives, and
 what has to change is one attribute on the *caller's* line.
