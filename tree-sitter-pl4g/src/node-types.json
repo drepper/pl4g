@@ -212,6 +212,10 @@
             "named": true
           },
           {
+            "type": "invoke_expression",
+            "named": true
+          },
+          {
             "type": "list_literal",
             "named": true
           },
@@ -395,6 +399,10 @@
         },
         {
           "type": "set_literal",
+          "named": true
+        },
+        {
+          "type": "spread",
           "named": true
         },
         {
@@ -6097,6 +6105,10 @@
           "named": true
         },
         {
+          "type": "spread",
+          "named": true
+        },
+        {
           "type": "step_expression",
           "named": true
         },
@@ -9573,6 +9585,10 @@
         },
         {
           "type": "set_literal",
+          "named": true
+        },
+        {
+          "type": "spread",
           "named": true
         },
         {

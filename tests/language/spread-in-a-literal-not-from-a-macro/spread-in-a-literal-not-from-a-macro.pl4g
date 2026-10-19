@@ -1,0 +1,15 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4937 LANG_SPREAD_NOT_HERE
+
+※ `⁂` in a collection written out is where a macro spreads what it holds, and
+※ expansion has done that before anything is checked.  One the program wrote
+※ itself spreads nothing a macro holds: a tuple is spread into a call or a
+※ tuple, and written into a collection its members are written out.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let t: 〈u8, u8〉 = 〈1u8, 2u8〉
+    let l: [u8] = [⁂t]
+    if #l = 2: 0u6 else: 1u6

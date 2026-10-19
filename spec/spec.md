@@ -6978,6 +6978,24 @@ is written", read here from the other end -- it is written where the one is, and
 have one, and only as its last: a function is called with a count that is written down, and there is nothing after such a parameter
 for an argument to reach.
 
+**`⁂$args` spreads the several back out where a macro writes a list of things**: a call's arguments, a tuple's members, and the
+elements of an array, a list or a set written out.  So a macro writes a literal of any length:
+
+```
+macro table(⁂args: syntax) → syntax:
+    ⌜⸨⁂$args⸩⌝
+
+let colours: ⸨str⸩ = table⌜"red", "green"⌝ in ⎕static
+let codes: ⸨str: u8⸩ = table⌜"a", 1u8, "b", 2u8⌝ in ⎕static
+```
+
+**Whether what a set written so holds is elements or entries is the type's to say**, as for `⸨⸩` written empty: where a set is
+wanted the pieces are its elements, and where a dictionary is wanted they are taken two at a time, a key and what it stands for --
+an odd number of them being refused (4936).  A spread a program writes in a collection itself spreads nothing a macro holds and is
+refused (4937); a tuple is spread into a call or another tuple.  Compare **Rust**'s `$($k => $v),*`, a repetition that writes as
+many entries as were matched; **Scheme**'s `...` after a pattern variable; **Common Lisp**'s `,@`, which splices a list into a
+quasiquoted form -- this is that splice, with the pieces kept as pieces of the program.
+
 ###### How a macro is run
 
 **The macros are compiled and the compiler runs what it compiled.**  Every `macro` and every `comptime fn` is checked and lowered

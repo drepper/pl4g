@@ -1,0 +1,37 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⁂$args` in a collection a macro writes out spreads the several pieces the
+※ macro holds there: an array's, a list's and a set's elements, and a call's
+※ arguments.  Whether a set written so holds them as elements or a dictionary
+※ as entries two at a time is the type's to say, as it is for `⸨⸩` written
+※ empty -- so one macro writes both, in the image or built while running.
+
+let std := ⎕import("std")
+
+macro table(⁂args: syntax) → syntax:
+    ⌜⸨⁂$args⸩⌝
+
+macro listed(⁂args: syntax) → syntax:
+    ⌜[⁂$args]⌝
+
+macro row(⁂args: syntax) → syntax:
+    ⌜⟦⁂$args⟧⌝
+
+macro summed(⁂args: syntax) → syntax:
+    ⌜add(⁂$args)⌝
+
+fn add(a: u8, b: u8, c: u8) → u8:
+    a + b + c
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: [u8] = listed⌜1u8, 2u8, 3u8⌝ in ⎕static
+    let r: u8⟦3⟧ = row⌜4u8, 5u8, 6u8⌝ in ⎕static
+    let s: ⸨u8⸩ = table⌜4u8, 5u8⌝ in ⎕static
+    let d: ⸨str: u8⸩ = table⌜"a", 1u8, "b", 2u8⌝ in ⎕static
+    let grown: mut ⸨str: u8⸩ = table⌜"x", 7u8⌝
+    grown⸨"y"⸩ ← 8u8
+    if #l ≠ 3 ∨ r⟦2⟧ ≠ 6u8 ∨ ¬s⸨5u8⸩ ∨ s⸨6u8⸩: return 1u6
+    if (d⸨"b"⸩ ?? 0u8) ≠ 2u8 ∨ #grown ≠ 2 ∨ (grown⸨"x"⸩ ?? 0u8) ≠ 7u8: return 2u6
+    if summed⌜1u8, 2u8, 3u8⌝ ≠ 6u8: return 3u6
+    0u6

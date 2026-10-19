@@ -420,8 +420,10 @@ class FloatLit(Expr):
 class Spread(Expr):
     """`\N{ASTERISM}t` among a call's arguments: the members of a tuple, one argument each.
 
-    It is an expression node only so that it can stand where an argument does;
-    it is no expression on its own and nowhere else accepts one.
+    It is an expression node only so that it can stand where an argument does --
+    or, in what a macro writes, where an element of a collection written out does,
+    which expansion fills with the several pieces the macro holds.  It is no
+    expression on its own and nowhere else accepts one.
     """
 
     operand: Expr
@@ -683,6 +685,10 @@ class SetLit(Expr):
 
     elements: tuple[Expr, ...]
     arena: Expr | None = None
+    #: Whether a macro spread what it held into it, which leaves what the
+    #: elements are to the type wanted: elements of a set, or entries of a
+    #: dictionary two at a time.
+    spread: bool = False
 
 
 @dataclass(frozen=True, slots=True)

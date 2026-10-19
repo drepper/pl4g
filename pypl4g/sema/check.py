@@ -5489,6 +5489,9 @@ class Checker:
                     self._for_the_image = outer
             case _Known():
                 return node.value.const
+            case ast.Spread():
+                self._diags.emit(D.LANG_SPREAD_NOT_HERE, node.value.span)
+                return None
             case ast.Call() if self._for_the_image \
                     and isinstance(ty, (SetType, DictType, ListType, StrType)) \
                     and isinstance(node.value.callee, ast.NameRef) \
@@ -5519,6 +5522,11 @@ class Checker:
                             held)))
                 return PartsConst(ty, (run, self._module.int_const(U64, len(held)),
                                        AddressConst(pieces[2], None)))
+            case ast.SetLit() if isinstance(ty, DictType) and node.value.spread:
+                paired = self._spread_paired(node.value)
+                if paired is None:
+                    return None
+                return self._constant_value(replace(node, value=paired), ty)
             case ast.SetLit() if isinstance(ty, SetType) \
                     and (node.value.arena is None or _in_the_image(node.value)):
                 return self._table_constant(
@@ -5576,6 +5584,17 @@ class Checker:
                     D.IMPL_UNIMPLEMENTED_FEATURE, node.value.span,
                     feature="a top-level variable whose value is not a literal")
                 return None
+
+    def _spread_paired(self, written: ast.SetLit) -> ast.DictLit | None:
+        """A set written by a macro's spread, where a dictionary is wanted: the
+        pieces two at a time, a key and what it stands for."""
+        pieces = written.elements
+        if len(pieces) % 2:
+            self._diags.emit(D.LANG_SPREAD_NOT_PAIRED, written.span,
+                             count=len(pieces))
+            return None
+        return ast.DictLit(span=written.span, arena=written.arena, entries=tuple(
+            (pieces[at], pieces[at + 1]) for at in range(0, len(pieces), 2)))
 
     def _worked_out_for_the_image(self, call: ast.Call, ty: Type) -> ast.Expr | None:
         """Run a call while compiling, for what it answers to be laid out in the
@@ -15849,6 +15868,12 @@ class Checker:
         everything about the types, so that a program that will work when there
         is one is known to be right now.
         """
+        if isinstance(expr, ast.SetLit) and expr.spread \
+                and isinstance(self._aiming_at(expected), DictType):
+            paired = self._spread_paired(expr)
+            if paired is None:
+                return UndefConst(ERROR)
+            expr = paired
         if _in_the_image(expr):
             return self._lower_static(builder, expr, expr, expected)
         empty = (isinstance(expr, ast.SetLit) and not expr.elements) or \
@@ -21792,6 +21817,11 @@ class Checker:
                 is not None for one in expr.args):
             return self._lower_each_call(builder, expr, expected)
         match expr:
+            case ast.Spread():
+                # What a macro holds is spread where it writes `⁂$args`, so one left
+                # here was written by the program, which spreads into a call or a tuple.
+                self._diags.emit(D.LANG_SPREAD_NOT_HERE, expr.span)
+                return UndefConst(ERROR)
             case ast.IntLit() if self._aiming_at(expected) is CHAR \
                     and expr.type_name is None:
                 # A number written where a code point is wanted is that code

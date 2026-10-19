@@ -10536,6 +10536,28 @@ because the writable type wanted was what the operands were asked for, and read-
 its operands, so they are asked for the set alone; and what it answers is a table of its own, so it is of the writable type, which
 stands where a read-only one is wanted as well.  The spec says so now beside the operators, as it already did of a collection written down.
 
+## 2026-10-20T21:00+02:00 — language
+
+**A table in the image may be worked out while compiling, and a macro may spread pieces into a literal**
+
+The user asked for the entry in TODO-language.md on working out a table in the image while compiling, and chose both ways the
+entry named over either alone.
+
+- **A call in an initializer `in ⎕static` is run while compiling**, and what it answers is laid out as the literal it comes to: the
+  evaluator learned tables, entries put in one at a time, the four set operators, values of enumerations and `⎕fields(⌜E⌝)`,
+  the last two answered by the checker since the evaluator works over syntax.  The function must be pure and not generic.  What it
+  answers is not in the program, and a function named only there is not lowered.  `std.error_names` is now read off `Error`.
+  Compare Zig's comptime `StaticStringMap.initComptime` and D's compile-time evaluation of a static immutable associative array.
+- **`⁂$args` spreads the several pieces a macro holds** into an array, a list or a set it writes out, and into a call's arguments
+  and a tuple's members.  A macro cannot read a type, expansion coming before checking, and nothing lets one hold pieces it made; so,
+  asked, the user chose spreading what a macro already holds over adding arrays of `syntax`.  And, asked how a dictionary is
+  written, the user chose the type: `⸨⁂$args⸩` is a set's elements where a set is wanted and a dictionary's entries two at a time
+  where one is (4936 for an odd count) -- over a colon after the spread, or keys and values spread apart.  A spread the program writes
+  in a collection is refused (4937).  Compare Rust's `macro_rules!` repetition, Scheme's `...`, Common Lisp's `,@`.
+
+The grammar admits `⁂` before an element of an array, a list and a set written out, and a type is not tried where `⸨`, `[` or `〈`
+is followed by one.
+
 Open questions
 --------------
 

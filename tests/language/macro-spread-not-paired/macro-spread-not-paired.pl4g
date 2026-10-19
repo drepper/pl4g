@@ -1,0 +1,16 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4936 LANG_SPREAD_NOT_PAIRED
+
+※ Where a dictionary is wanted, what a macro spread into `⸨⁂$args⸩` is taken
+※ two at a time, a key and what it stands for.  Three pieces leave the last
+※ key standing for nothing, and that is refused.
+
+let std := ⎕import("std")
+
+macro table(⁂args: syntax) → syntax:
+    ⌜⸨⁂$args⸩⌝
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let d: ⸨str: u8⸩ = table⌜"a", 1u8, "b"⌝ in ⎕static
+    if #d = 2: 0u6 else: 1u6

@@ -355,6 +355,14 @@ class _Expander:
 
     def _expanded(self, node: ast.Invoke,
                   as_statement: bool) -> ast.Expr | ast.Block:
+        """What one invocation comes to, expanded as far as it goes, with what
+        it spread into a list of things written out (`⁂$args`) put there."""
+        found = _spread_out(self._expanded_as_written(node, as_statement))
+        assert isinstance(found, (ast.Expr, ast.Block))
+        return found
+
+    def _expanded_as_written(self, node: ast.Invoke,
+                             as_statement: bool) -> ast.Expr | ast.Block:
         """What one invocation comes to, expanded as far as it goes."""
         if self._deep >= ROUNDS:
             self._diags.emit(D.LANG_MACRO_TOO_DEEP, node.span, name=node.name)
@@ -1090,6 +1098,39 @@ def _takes(written: ast.FuncDef) -> str:
     if not _has_several(written):
         return str(fixed)
     return "".join((str(fixed), " or more"))
+
+
+def _spread_out(node: object) -> object:
+    """*node* with every `⁂` before several pieces replaced by the pieces.
+
+    What a macro holds as several -- a `⁂` parameter, or a piece of what it was
+    handed -- is spread where it is written after `⁂` in a list of things: a
+    call's arguments, a tuple's members, an array's, a list's or a set's
+    elements.  A set written so says it was, since whether its pieces are
+    elements or a dictionary's entries two at a time is the type's to say.
+    """
+    if isinstance(node, (tuple, list)):
+        out: list[object] = []
+        for one in node:
+            if isinstance(one, ast.Spread) and isinstance(one.operand, ast.Quote) \
+                    and one.operand.body is None:
+                out.extend(_spread_out(piece) for piece in one.operand.pieces)
+            else:
+                out.append(_spread_out(one))
+        return tuple(out) if isinstance(node, tuple) else out
+    if not isinstance(node, ast.Node):
+        return node
+    changed: dict[str, object] = {}
+    for one in fields_of(node):
+        held = getattr(node, one.name)
+        made = _spread_out(held)
+        if made is not held and made != held:
+            changed[one.name] = made
+    if isinstance(node, ast.SetLit) and any(
+            isinstance(one, ast.Spread) and isinstance(one.operand, ast.Quote)
+            for one in node.elements):
+        changed["spread"] = True
+    return replace(node, **changed) if changed else node
 
 
 def _has_several(written: ast.FuncDef) -> bool:

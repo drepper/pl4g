@@ -11503,6 +11503,42 @@
       },
       "since": "0.1",
       "default_enabled": true
+    },
+    {
+      "number": 4936,
+      "name": "LANG_SPREAD_NOT_PAIRED",
+      "severity": "error",
+      "message": "a dictionary is wanted, and what was spread into it is {count} pieces, which do not pair up as keys and values",
+      "args": [
+        {
+          "name": "count",
+          "type": "string",
+          "description": "how many pieces were spread"
+        }
+      ],
+      "cause": "A macro writing `⸨⁂$args⸩` leaves what the pieces are to the type the literal is wanted as: elements where a set is wanted, and where a dictionary is wanted a key and what it stands for, two at a time.  An odd number of pieces leaves the last key with nothing to stand for.  Hand the macro a value for every key.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Macros / A macro written as a function",
+        "requirement": "A spread into a dictionary is of keys and values in pairs."
+      },
+      "since": "0.1",
+      "default_enabled": true
+    },
+    {
+      "number": 4937,
+      "name": "LANG_SPREAD_NOT_HERE",
+      "severity": "error",
+      "message": "'⁂' in a collection written out spreads what a macro holds, and this is not that",
+      "args": [],
+      "cause": "In an array, a list or a set written out, `⁂$args` is where a macro spreads the several pieces it holds -- a `⁂` parameter, or the parts of a piece -- and expansion has put them there by the time anything is checked.  One the program wrote itself spreads nothing a macro holds.  A tuple is spread into a call's arguments or another tuple's members; written into a collection, its members are written out one by one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Macros / A macro written as a function",
+        "requirement": "A spread in a collection written out is filled by a macro."
+      },
+      "since": "0.1",
+      "default_enabled": true
     }
   ]
 }

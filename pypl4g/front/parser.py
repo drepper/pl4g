@@ -1409,6 +1409,11 @@ class Parser:
         equally be absent, which is a variable and a binding in a loop.
         """
         kind = self._peek(ahead).kind if ahead else self._current.kind
+        if kind in (TokKind.SET_OPEN, TokKind.LBRACKET, TokKind.TUPLE_OPEN) \
+                and self._peek(ahead + 1).kind is TokKind.SPREAD:
+            # A spread is written only in a value: what follows the bracket is
+            # what a macro holds, spread into a collection or a tuple written out.
+            return False
         return kind in (TokKind.IDENT, TokKind.SET_OPEN, TokKind.TUPLE_OPEN,
                         TokKind.LBRACKET, TokKind.AMPERSAND, TokKind.KW_FN,
                         TokKind.AT_LBRACKET, TokKind.ITER, TokKind.DEREF)
@@ -2675,7 +2680,9 @@ class Parser:
     def _parse_spreadable(self) -> ast.Expr:
         """Parse one entry of a list that admits `\N{ASTERISM}` in front of it.
 
-        The two such lists are a call's arguments and a tuple's members.  What
+        Such lists are a call's arguments and a tuple's members -- and the
+        elements of an array, a list or a set written down, where what is spread
+        is what a macro holds.  What
         the glyph marks is not an expression -- nowhere that wants exactly one
         value accepts it -- so it is a rule of the list rather than of the
         expression grammar, and this is the one place that rule lives.
@@ -2715,11 +2722,13 @@ class Parser:
             where = self._parse_arena()
             return ast.SetLit(span=start.to(where.span if where is not None else end),
                               elements=(), arena=where)
-        first = self._parse_expression()
-        if self._accept(TokKind.COLON) is None:
+        first = self._parse_spreadable()
+        # A spread has no colon after it: what it is spread into -- elements, or
+        # entries two at a time -- is the type's to say, as for `⸨⸩` written empty.
+        if isinstance(first, ast.Spread) or self._accept(TokKind.COLON) is None:
             elements = [first]
             while self._accept(TokKind.COMMA) is not None:
-                elements.append(self._parse_expression())
+                elements.append(self._parse_spreadable())
             end = self._expect(TokKind.SET_CLOSE,
                                D.LANG_SYNTAX_EXPECTED_CLOSING_SET).span
             where = self._parse_arena()
@@ -2764,9 +2773,9 @@ class Parser:
         start = self._expect(TokKind.ARRAY_OPEN).span
         elements: list[ast.Expr] = []
         if not self._check(TokKind.ARRAY_CLOSE):
-            elements.append(self._parse_expression())
+            elements.append(self._parse_spreadable())
             while self._accept(TokKind.COMMA) is not None:
-                elements.append(self._parse_expression())
+                elements.append(self._parse_spreadable())
         end = self._expect(TokKind.ARRAY_CLOSE,
                            D.LANG_SYNTAX_EXPECTED_CLOSING_ARRAY).span
         return ast.ArrayLit(span=start.to(end), elements=tuple(elements))
@@ -2780,9 +2789,9 @@ class Parser:
         start = self._expect(TokKind.LBRACKET).span
         elements: list[ast.Expr] = []
         if not self._check(TokKind.RBRACKET):
-            elements.append(self._parse_expression())
+            elements.append(self._parse_spreadable())
             while self._accept(TokKind.COMMA) is not None:
-                elements.append(self._parse_expression())
+                elements.append(self._parse_spreadable())
         end = self._expect(TokKind.RBRACKET,
                            D.LANG_SYNTAX_EXPECTED_CLOSING_LIST).span
         return ast.ListLit(span=start.to(end), elements=tuple(elements))

@@ -1117,11 +1117,11 @@ module.exports = grammar({
     // in it is neither until the type it is wanted as says which.
     // An array written down, and a lookup in one.  The same brackets: a type,
     // a value of it and a lookup in it all look alike, as a collection's do.
-    array_literal: $ => seq('\u27e6', sepBy(',', $._expression), '\u27e7'),
+    array_literal: $ => seq('\u27e6', sepBy(',', $._spreadable), '\u27e7'),
 
     // A list, whose elements need not be of one type once there is boxing
     // and which for now must be.  It is written the way its type is.
-    list_literal: $ => seq('[', sepBy(',', $._expression), ']'),
+    list_literal: $ => seq('[', sepBy(',', $._spreadable), ']'),
 
     // Which element is wanted, or -- where a range stands there -- which run
     // of them.  One index per dimension, in the order the shape was written
@@ -1132,7 +1132,7 @@ module.exports = grammar({
       '\u27e6', sepBy1(',', field('index', $._expression)), '\u27e7',
     )),
 
-    set_literal: $ => seq('\u2e28', sepBy(',', $._expression), '\u2e29',
+    set_literal: $ => seq('\u2e28', sepBy(',', $._spreadable), '\u2e29',
                           ),
 
     dictionary_literal: $ => seq(
@@ -1180,7 +1180,10 @@ module.exports = grammar({
                             $.call_expression,
                             // a value walked by its type's `each`, which the
                             // compiler refuses for a type without one
-                            $.identifier, $.member_expression)),
+                            $.identifier, $.member_expression,
+                            // what a macro writes, which may be a collection
+                            // written out
+                            $.invoke_expression)),
       $._in_arena),
 
     // Whether a set holds a key, or what a dictionary has for one.  It binds
