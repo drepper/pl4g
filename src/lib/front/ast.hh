@@ -953,6 +953,22 @@ namespace pl4g::ast {
     template<typename T>
     List<T> list(const std::vector<T>& items) { return list(std::span<const T>(items)); }
 
+    // A copy, kept here, of a node: pypl4g's `replace`, which the copy is
+    // then changed by.
+    template<typename T>
+      requires std::is_base_of_v<Node, T>
+    T* copy(const T& node)
+    {
+      T* made = new (memory.allocate(sizeof(T), alignof(T))) T(node);
+      return made;
+    }
+
+    // A copy of a node whose kind is known only by its tag.
+    Node* copy_any(const Node& node)
+    {
+      return visit(node, [&](const auto& n) -> Node* { return copy(n); });
+    }
+
     // A copy, kept here, of `text`.
     Text text(std::string_view text)
     {
@@ -983,5 +999,66 @@ namespace pl4g::ast {
     std::deque<std::vector<Token>> token_lists;
     std::vector<std::shared_ptr<void>> held;
   };
+
+} // namespace pl4g::ast
+
+
+namespace pl4g::ast {
+
+  namespace detail {
+
+    consteval auto unchecked() { return std::meta::access_context::unchecked(); }
+
+    template<typename F>
+    void child_value(const auto& v, F& f)
+    {
+      using T = std::remove_cvref_t<decltype(v)>;
+      if constexpr (std::is_pointer_v<T>) {
+        if constexpr (std::is_base_of_v<Node, std::remove_cv_t<std::remove_pointer_t<T>>>)
+          if (v != nullptr)
+            f(static_cast<const Node*>(v));
+      } else if constexpr (std::is_same_v<T, ExprPair>) {
+        child_value(v.key, f);
+        child_value(v.value, f);
+      } else if constexpr (std::is_same_v<T, UnitPair>) {
+        child_value(v.what, f);
+        child_value(v.where, f);
+      } else if constexpr (requires { v.has_value(); *v; }) {
+        if (v.has_value())
+          child_value(*v, f);
+      } else if constexpr (requires { v.begin(); v.end(); } && ! std::is_same_v<T, std::string_view>) {
+        for (const auto& one : v)
+          child_value(one, f);
+      }
+    }
+
+    template<typename T, typename F>
+    void members_of(const T& node, F& f)
+    {
+      template for (constexpr auto b : std::define_static_array(std::meta::bases_of(^^T, unchecked())))
+        members_of(static_cast<const [:std::meta::type_of(b):]&>(node), f);
+      template for (constexpr auto m : std::define_static_array(std::meta::nonstatic_data_members_of(^^T, unchecked())))
+        if constexpr (std::meta::annotations_of_with_type(m, ^^Hidden).size() == 0)
+          child_value(node.[:m:], f);
+    }
+
+  } // namespace detail
+
+
+  // Call `f` with every node directly below `node`, in the order of the fields
+  // that hold them -- what pypl4g's walks over `dataclasses.fields` reach.  A
+  // block's statements are asked for, which parses a body set aside.
+  template<typename F>
+  void for_each_child(const Node* node, F&& f)
+  {
+    if (node == nullptr)
+      return;
+    if (auto block = as<Block>(node)) {
+      for (auto stmt : block->stmts())
+        f(static_cast<const Node*>(stmt));
+      return;
+    }
+    visit(*node, [&](const auto& n) { detail::members_of(n, f); });
+  }
 
 } // namespace pl4g::ast

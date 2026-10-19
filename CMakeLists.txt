@@ -78,6 +78,23 @@ set(PL4G_LIB_SOURCES
   src/lib/opt/passes.cc
   src/lib/rt/arena.cc
   src/lib/interp/interp.cc
+  src/lib/sema/attributes.cc
+  src/lib/sema/clauses.cc
+  src/lib/sema/environ.cc
+  src/lib/sema/lastuse.cc
+  src/lib/sema/lists.cc
+  src/lib/sema/liveness.cc
+  src/lib/sema/modules.cc
+  src/lib/sema/notes.cc
+  src/lib/sema/owned.cc
+  src/lib/sema/strings.cc
+  src/lib/sema/tables.cc
+  src/lib/front/doccomment.cc
+  src/lib/comptime/build.cc
+  src/lib/comptime/evaluate.cc
+  src/lib/target/registry.cc
+  src/lib/target/syscalls.cc
+  src/lib/ir/verify.cc
   runtime/io.c
   ${PL4G_GENERATED}/diag/catalog_data.cc
 )
