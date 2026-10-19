@@ -1,0 +1,30 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A mask writes into an array of floating-point numbers as it does into one of whole
+※ numbers: one value to every element it picked, and the rest as they were.  Nothing
+※ branches -- each element is the old value or the new one by a choice the machine
+※ makes with a conditional select where it has one for the register (`csel` and
+※ `fcsel` on AArch64, `cmov` on x86-64), and with a mask over the bits where it does
+※ not (a floating-point number on x86-64, anything on RISC-V).
+※
+※ Compare: **NumPy**'s `a[a > 2] = 0.5`, which is this; **APL**'s `(m/a)←v`, the same
+※ written with a compression.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let k: f64 = 2.5f64
+    let a: mut f64⟦4⟧ = ⟦1.0f64, k, 3.0f64, 4.0f64⟧
+    a⟦a > 2.0f64⟧ ← 0.5f64
+    let h: f32 = 1.5f32
+    let b: mut f32⟦3⟧ = ⟦h, 2.5f32, 3.5f32⟧
+    b⟦b < 3.0f32⟧ ← 9.0f32
+    let n: u16 = ⎕narrow(⎕drop(#init.args), ⌜u16⌝) ?? 0u16
+    let c: mut u16⟦3⟧ = ⟦n, 5u16, 7u16⟧
+    c⟦c > 4u16⟧ ← 2u16
+    if ¬(a⟦0⟧ ≅ 1.0f64) ∨ ¬(a⟦1⟧ ≅ 0.5f64) ∨ ¬(a⟦3⟧ ≅ 0.5f64):
+        return 1u6
+    if ¬(b⟦0⟧ ≅ 9.0f32) ∨ ¬(b⟦1⟧ ≅ 9.0f32) ∨ ¬(b⟦2⟧ ≅ 3.5f32):
+        return 2u6
+    if c⟦0⟧ = 1u16 ∧ c⟦1⟧ = 2u16 ∧ c⟦2⟧ = 2u16: 0u6 else: 3u6

@@ -818,6 +818,17 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     A64InstDesc("fmov", (_v(64), _v(64)), template=0x1E604000,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
                 est_size=INSTRUCTION_SIZE),
+    # fcsel Sd, Sn, Sm, ne and fcsel Dd, Dn, Dm, ne: the first where the flags
+    # say not equal and the second where they do not, which is what a choice
+    # between two floating-point values made by a truth value comes to.
+    A64InstDesc("fcsel.ne", (_v(32), _v(32), _v(32)), template=0x1E201C00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                implicit_uses=(NZCV,), est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fcsel.ne", (_v(64), _v(64), _v(64)), template=0x1E601C00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                implicit_uses=(NZCV,), est_size=INSTRUCTION_SIZE),
     A64InstDesc("fabs", (_v(32), _v(32)), template=0x1E20C000,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
                 est_size=INSTRUCTION_SIZE),

@@ -610,6 +610,46 @@ class RVSelector(InstructionSelector):
         held.append(self._inst("xor", (MCReg(dst), MCReg(dst), difference), span))
         return tuple(held)
 
+    def select_select(self, dst: Reg, chooser: MCOperand, if_true: MCOperand,
+                      if_false: MCOperand, floating: bool, bits: int,
+                      span: Span) -> Sequence[MCInst]:
+        """Instructions that put *if_true* into *dst* where *chooser* holds and
+        *if_false* where it does not.
+
+        Nothing here moves a register only sometimes, so the truth value is made
+        a mask -- taken from nought, all ones or none -- and the difference of the
+        two let through it onto the second, as the clamp does.  A choice between
+        two floating-point values is made of their bits, moved into ordinary
+        registers and the one chosen moved back.
+        """
+        held: list[MCInst] = []
+        flag, before = self._as_register(chooser, span)
+        held.extend(before)
+        mask = MCReg(INFO.new_virtual(GPR, 64))
+        held.append(self._inst("sub", (mask, MCReg(ZERO), flag), span))
+        if floating:
+            out, back = ("fmv.x.d", "fmv.d.x") if bits == 64 else ("fmv.x.w", "fmv.w.x")
+            assert isinstance(if_true, MCReg) and isinstance(if_false, MCReg)
+            first = MCReg(INFO.new_virtual(GPR, 64))
+            second = MCReg(INFO.new_virtual(GPR, 64))
+            held.append(self._inst(out, (first, if_true), span))
+            held.append(self._inst(out, (second, if_false), span))
+        else:
+            first, before = self._as_register(if_true, span)
+            held.extend(before)
+            second, before = self._as_register(if_false, span)
+            held.extend(before)
+        difference = MCReg(INFO.new_virtual(GPR, 64))
+        held.append(self._inst("xor", (difference, first, second), span))
+        held.append(self._inst("and", (difference, difference, mask), span))
+        if floating:
+            chosen = MCReg(INFO.new_virtual(GPR, 64))
+            held.append(self._inst("xor", (chosen, second, difference), span))
+            held.append(self._inst(back, (MCReg(dst), chosen), span))
+        else:
+            held.append(self._inst("xor", (MCReg(dst), second, difference), span))
+        return tuple(held)
+
     def _as_register(self, operand: MCOperand,
                      span: Span) -> tuple[MCReg, Sequence[MCInst]]:
         """The operand as a register, with whatever it takes to put it in one."""
@@ -871,7 +911,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                    known_clobbers: Mapping[str, frozenset[RegUnit]] | None = None
                    ) -> None:
     """Build the machine form of one IR function."""
-    from ...ir.inst import (CodeInst, AddressInst, BinaryInst, BrInst, CallInst, CmpInst,
+    from ...ir.inst import (SelectInst, CodeInst, AddressInst, BinaryInst, BrInst, CallInst, CmpInst,
                             CondBrInst, SwitchInst,
                             FrameInst, AssertInst,
                             LoadInst, MemStartInst, RetInst, StoreInst,
@@ -1732,6 +1772,22 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                                                           inst.span),
                                      _bits_of(inst.operands[0].ty),
                                      _bits_of(inst.ty), inst.span)
+                case SelectInst():
+                    # One of two values, which a truth value chooses, with no
+                    # branch: how this machine does it is the selector's.
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    floating = isinstance(inst.ty, FloatType)
+                    chosen = [operands.in_register(one, inst.span) if floating
+                              else operands.value(one, inst.span)
+                              for one in inst.operands[1:]]
+                    asm.select(destination,
+                               operands.in_register(inst.operands[0], inst.span),
+                               chosen[0], chosen[1], floating,
+                               inst.ty.bits if floating else 64, inst.span)
                 case CmpInst() if isinstance(inst.operands[0].ty, FloatType):
                     # A floating-point comparison is never folded into a branch:
                     # what a branch would read is the flags, and the answer a

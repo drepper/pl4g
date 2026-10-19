@@ -11,7 +11,7 @@ from ..source.location import INVALID_SPAN, Span
 from .function import BasicBlock, Function
 from typing import Sequence
 
-from .inst import (SyscallInst,
+from .inst import (SyscallInst, SelectInst,
                    AddressInst, AnyLaneInst, AssertInst, CallInst, BinaryInst,
                    CodeInst,
                    BinOp, BlockTarget, BrInst, FrameInst, SplatInst,
@@ -177,6 +177,12 @@ class IRBuilder:
         operand's own type -- a count of bits being a count and not a number of
         the counted thing's type."""
         return self._append(UnaryInst(op, value, span, ty))
+
+    def select(self, cond: Value, if_true: Value, if_false: Value,
+               span: Span = INVALID_SPAN) -> Value:
+        """Append the choice of *if_true* where *cond* holds and *if_false*
+        where it does not, with no branch."""
+        return self._append(SelectInst(cond, if_true, if_false, span))
 
     def compare(self, pred: CmpPred, lhs: Value, rhs: Value,
                 span: Span = INVALID_SPAN) -> Value:

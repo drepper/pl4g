@@ -23,7 +23,8 @@ from __future__ import annotations
 from typing import Final, Sequence
 
 from ...ir.inst import (AssertInst, BinaryInst, BinOp, CastInst, CastKind,
-                        CmpInst, CmpPred, ExtractInst, Instruction, TupleInst)
+                        CmpInst, CmpPred, ExtractInst, Instruction, SelectInst,
+                        TupleInst)
 from ...ir.function import Function
 from ...ir.module import Module
 from ...ir.types import BOOL, CHAR, BoolType, CharType, IntType, PtrType
@@ -162,6 +163,13 @@ class ConstantFolding:
         """Return the constant *inst* computes, if it computes one."""
         if isinstance(inst, CmpInst):
             return self._fold_comparison(module, inst)
+        if isinstance(inst, SelectInst):
+            # A choice made by a truth value that is known is the one it makes,
+            # and one between a value and itself is that value.
+            chooser, first, second = inst.operands
+            if isinstance(chooser, BoolConst):
+                return first if chooser.value else second
+            return first if first is second else None
         if isinstance(inst, CastInst) and inst.kind is CastKind.BITCAST \
                 and inst.operands[0].ty is inst.ty:
             # Read as what it already is, which is reading it.

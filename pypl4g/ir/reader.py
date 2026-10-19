@@ -13,7 +13,8 @@ from typing import Sequence
 from .function import (DEFAULT_CCONV, BasicBlock, FuncAttrs, Function,
                        InlineHint, Linkage,
                        SpecialKind)
-from .inst import (AddressInst, SyscallInst, AnyLaneInst, BinaryInst, BinOp, BlockTarget,
+from .inst import (AddressInst, SyscallInst, SelectInst, AnyLaneInst, BinaryInst, BinOp,
+                   BlockTarget,
                    BrInst, CastInst, CastKind, SplatInst,
                    CmpInst, CmpPred, CondBrInst, LoadInst, MemStartInst,
                    Ordering, RetInst,
@@ -329,6 +330,10 @@ class _FunctionReader:
             return block.append(UnaryInst(_UNOPS[head], self._value(parts[0], ty, number)))
         if head in _CASTS:
             return block.append(CastInst(_CASTS[head], self._value(parts[0], ty, number), ty))
+        if head == "select":
+            return block.append(SelectInst(self._value(parts[0], BOOL, number),
+                                           self._value(parts[1], ty, number),
+                                           self._value(parts[2], ty, number)))
         if head == "splat":
             if not isinstance(ty, VecType):
                 raise IRSyntaxError(number, "".join((

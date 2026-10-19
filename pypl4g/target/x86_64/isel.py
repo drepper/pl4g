@@ -741,6 +741,49 @@ class X86Selector(InstructionSelector):
                 self._inst(_CMOV[cond], (MCReg(dst, bits=64),
                                          MCReg(bound.reg, bits=64)), span))
 
+    def select_select(self, dst: Reg, chooser: MCOperand, if_true: MCOperand,
+                      if_false: MCOperand, floating: bool, bits: int,
+                      span: Span) -> Sequence[MCInst]:
+        """Instructions that put *if_true* into *dst* where *chooser* holds and
+        *if_false* where it does not.
+
+        The second goes in first and the conditional move puts the first over it
+        where the truth value is not nought, eight bytes at a time whatever the
+        width, as the clamp does.  There is no conditional move of a
+        floating-point register, so a choice of two of those is made of their
+        bits: each moved into an ordinary register, chosen there, and the one
+        chosen moved back.
+        """
+        before: list[MCInst] = []
+
+        def in_a_register(operand: MCOperand) -> MCReg:
+            if isinstance(operand, MCReg):
+                return operand
+            carried = REGISTERS.new_virtual(GPR, 64)
+            before.extend(self.select_move(carried, operand, span))
+            return MCReg(carried)
+
+        asked = in_a_register(chooser)
+        test = self._select_compare(asked, MCImm(0, asked.bits), Condition.NE, span)
+        if not floating:
+            first = in_a_register(if_true)
+            return (*before, *self.select_move(dst, if_false, span), *test,
+                    self._inst(_CMOV[Condition.NE], (MCReg(dst, bits=64),
+                                                     MCReg(first.reg, bits=64)),
+                               span))
+        mnemonic = "movq" if bits == 64 else "movd"
+        width = 64 if bits == 64 else 32
+        assert isinstance(if_true, MCReg) and isinstance(if_false, MCReg)
+        first = REGISTERS.new_virtual(GPR, width)
+        second = REGISTERS.new_virtual(GPR, width)
+        return (*before,
+                self._inst(mnemonic, (MCReg(first, bits=width), if_true), span),
+                self._inst(mnemonic, (MCReg(second, bits=width), if_false), span),
+                *test,
+                self._inst(_CMOV[Condition.NE], (MCReg(second, bits=64),
+                                                 MCReg(first, bits=64)), span),
+                self._inst(mnemonic, (MCReg(dst), MCReg(second, bits=width)), span))
+
     def _select_compare(self, lhs: MCOperand, rhs: MCOperand, cond: Condition,
                         span: Span) -> Sequence[MCInst]:
         """The instructions that set the flags for a comparison.
@@ -1096,7 +1139,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
     The bootstrap compiler generates code for as much of the language as its own
     source needs.  A construct with no rule here is reported, not ignored.
     """
-    from ...ir.inst import (CodeInst, AddressInst, AnyLaneInst, BinaryInst, BrInst,
+    from ...ir.inst import (SelectInst, CodeInst, AddressInst, AnyLaneInst, BinaryInst, BrInst,
                             CallInst, CmpInst,
                             CondBrInst, SwitchInst,
                             FrameInst, AssertInst,
@@ -2018,6 +2061,22 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                                                           inst.span),
                                      _bits_of(inst.operands[0].ty),
                                      _bits_of(inst.ty), inst.span)
+                case SelectInst():
+                    # One of two values, which a truth value chooses, with no
+                    # branch: how this machine does it is the selector's.
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    floating = isinstance(inst.ty, FloatType)
+                    chosen = [operands.in_register(one, inst.span) if floating
+                              else operands.value(one, inst.span)
+                              for one in inst.operands[1:]]
+                    asm.select(destination,
+                               operands.in_register(inst.operands[0], inst.span),
+                               chosen[0], chosen[1], floating,
+                               inst.ty.bits if floating else 64, inst.span)
                 case CmpInst() if isinstance(inst.operands[0].ty, FloatType):
                     # A floating-point comparison is never folded into a branch:
                     # what a branch would read is the flags, and the answer a

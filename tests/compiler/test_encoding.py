@@ -119,6 +119,7 @@ SAMPLES = [
     ("movd xmm0,eax", "movd", MCReg(reg("xmm0")), MCReg(reg("eax"))),
     ("movd eax,xmm0", "movd", MCReg(reg("eax")), MCReg(reg("xmm0"))),
     ("movq xmm0,rax", "movq", MCReg(reg("xmm0")), MCReg(reg("rax"))),
+    ("movq rax,xmm0", "movq", MCReg(reg("rax")), MCReg(reg("xmm0"))),
     ("and ebx,0xffff", "and", MCReg(reg("ebx")), MCImm(0xFFFF, 32, False)),
     ("and ebx,0x5", "and", MCReg(reg("ebx")), MCImm(5, 8)),
     ("paddb xmm0,xmm1", "paddb", MCReg(reg("xmm0")), MCReg(reg("xmm1"))),

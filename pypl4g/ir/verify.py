@@ -15,7 +15,7 @@ from ..diag.engine import InternalError
 from .function import BasicBlock, Function, SpecialKind
 from .mangle import symbol_name
 from .inst import (AddressInst, SyscallInst, AnyLaneInst, AssertInst, BinaryInst, BinOp,
-                   BlockTarget, CastInst, FrameInst, SplatInst,
+                   BlockTarget, CastInst, FrameInst, SelectInst, SplatInst,
                    CastKind, CmpInst,
                    ErrorInst, ExtractInst, FailedInst,
                    Instruction, TupleInst,
@@ -24,7 +24,7 @@ from .inst import (AddressInst, SyscallInst, AnyLaneInst, AssertInst, BinaryInst
 from .module import GlobalVar, Module
 from .types import (ArrayType, BOOL, BoolType, CharType, DictType, EnumType,
                     without_units,
-                    FuncType, IntType,
+                    FloatType, FuncType, IntType,
                     MEM, PtrType, ResultType, SetType, TupleType, Type,
                     U64,
                     VecType, VOID, held_in_memory, parts_of)
@@ -366,6 +366,21 @@ class Verifier:
                 elif inst.ty is not BOOL:
                     self._fail(where, "".join((
                         "a comparison answering ", inst.ty.render())))
+            case SelectInst():
+                chooser, first, second = inst.operands
+                if chooser.ty is not BOOL:
+                    self._fail(where, "".join((
+                        "a choice made by ", chooser.ty.render(),
+                        ", which is not a truth value")))
+                elif first.ty != inst.ty or second.ty != inst.ty:
+                    self._fail(where, "".join((
+                        "a choice of ", first.ty.render(), " and ",
+                        second.ty.render(), " answering ", inst.ty.render())))
+                elif not isinstance(inst.ty, (IntType, BoolType, CharType,
+                                              FloatType, PtrType)):
+                    self._fail(where, "".join((
+                        "a choice of ", inst.ty.render(),
+                        ", which is not one register's worth")))
             case SplatInst():
                 if not isinstance(inst.ty, VecType):
                     self._fail(where, "".join((

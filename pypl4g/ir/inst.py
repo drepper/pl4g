@@ -239,6 +239,29 @@ class CmpInst(Instruction):
         return "".join(("icmp.", self.pred.value))
 
 
+class SelectInst(Instruction):
+    """One of two values, which a truth value chooses: the first where it holds,
+    the second where it does not.
+
+    Both are worked out either way, and nothing branches: which one is answered
+    is a question for the machine's own conditional move where it has one, and a
+    mask made of the truth value where it does not.  What it answers is what the
+    two are, which is one register's worth -- a number, a truth value, a code
+    point, an address or a floating-point number.
+    """
+
+    __slots__ = ()
+
+    def __init__(self, cond: Value, if_true: Value, if_false: Value,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(if_true.ty, (cond, if_true, if_false), span)
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "select"
+
+
 class SplatInst(Instruction):
     """One value in every lane of a vector.
 

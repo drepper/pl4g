@@ -11570,12 +11570,12 @@ class Checker:
         what makes a mask of a table's rows write whole rows.
 
         **Nothing branches.**  What is written to each element is the old value
-        where the mask did not pick it and the new one where it did, chosen with
-        the mask spread across the whole width of the element: all ones where it
-        picked and all zeros where it did not, so that `(old & ~m) | (v & m)` is
-        one or the other and no instruction depends on which.  Every element is
-        written either way, which for a place this program already owns is a
-        write of what was already there.
+        where the mask did not pick it and the new one where it did, chosen by a
+        `select` -- the machine's conditional move where it has one, and the mask
+        spread across the bits of the element where it does not -- so that no
+        instruction depends on which.  Every element is written either way,
+        which for a place this program already owns is a write of what was
+        already there.
         """
         held = self._value_type_of(mask)
         assert isinstance(held, ArrayType)
@@ -11588,7 +11588,8 @@ class Checker:
             self._diags.emit(D.LANG_MASK_WRONG_SHAPE, stmt.indices[0].span,
                              found=held.written(), wanted=ty.written())
             return
-        if not isinstance(ty.element, (IntType, BoolType)):
+        if not isinstance(ty.element, (IntType, BoolType, FloatType)) \
+                and ty.element is not CHAR:
             self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, stmt.span,
                              feature="".join((
                                  "writing through a mask into an array of '",
@@ -11618,30 +11619,13 @@ class Checker:
                 self._element_place(builder, marks, BOOL,
                                     builder.int_const(U64, at), stmt.span),
                 stmt.span)
-            # All ones where it picked and all zeros where it did not, in the
-            # element's own width: nought less what the truth value is.
-            spread = builder.binary(
-                BinOp.WRAP_SUB, self._zero_of(builder, ty.element, stmt.span),
-                builder.cast(CastKind.ZEXT, picked, ty.element, stmt.span),
-                stmt.span)
-            chosen = builder.binary(BinOp.AND, value, spread, stmt.span)
             for inside in range(row):
                 where = self._element_place(
                     builder, start, ty.element,
                     builder.int_const(U64, at * row + inside), stmt.span)
-                old = builder.load(where, stmt.span)
-                builder.store(where, builder.binary(
-                    BinOp.OR,
-                    builder.binary(BinOp.AND, old,
-                                   builder.unary(UnOp.NOT, spread, span=stmt.span),
-                                   stmt.span),
-                    chosen, stmt.span), stmt.span)
-
-    def _zero_of(self, builder: IRBuilder, ty: Type, span: Span) -> Value:
-        """Nought of a type, which for a truth value is the false one."""
-        if isinstance(ty, BoolType):
-            return builder.bool_const(False)
-        return builder.int_const(ty, 0)
+                builder.store(where, builder.select(
+                    picked, value, builder.load(where, stmt.span), stmt.span),
+                    stmt.span)
 
     def _lower_tuple_member(self, builder: IRBuilder, expr: ast.Element,
                             base: Value, ty: TupleType,

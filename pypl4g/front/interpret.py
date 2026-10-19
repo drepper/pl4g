@@ -34,6 +34,7 @@ from typing import Callable, Final, Sequence
 
 from ..ir.function import BasicBlock, Function
 from ..ir.inst import (AddressInst, AssertInst, BinaryInst, BinOp, BrInst,
+                       SelectInst,
                        CallInst, CastInst,
                        CastKind, CmpInst, CmpPred, CondBrInst, ErrorInst,
                        ExtractInst, FailedInst, FieldInst, FrameInst, Instruction,
@@ -239,6 +240,10 @@ class Machine:
                 return asked(left, right)
             case CastInst():
                 return self._cast(inst, values)
+            case SelectInst():
+                chooser, first, second = inst.operands
+                return self._operand(first if self._number(chooser, values)
+                                     else second, values)
             case TupleInst():
                 return tuple(self._operand(one, values) for one in inst.operands)
             case ExtractInst():

@@ -800,6 +800,35 @@ class A64Selector(InstructionSelector):
                 self._inst(_CSEL[cond], (whole, MCReg(bound.reg, bits=64), whole),
                            span))
 
+    def select_select(self, dst: Reg, chooser: MCOperand, if_true: MCOperand,
+                      if_false: MCOperand, floating: bool, bits: int,
+                      span: Span) -> Sequence[MCInst]:
+        """Instructions that put *if_true* into *dst* where *chooser* holds and
+        *if_false* where it does not: the truth value compared with nought, and
+        the select that reads the flags -- `csel` for an ordinary register and
+        `fcsel` for a floating-point one, both of which this machine has."""
+        before: list[MCInst] = []
+
+        def in_a_register(operand: MCOperand) -> MCReg:
+            if isinstance(operand, MCReg):
+                return operand
+            carried = INFO.new_virtual(GPR, 64)
+            before.extend(self.select_move(carried, operand, span))
+            return MCReg(carried)
+
+        asked = in_a_register(chooser)
+        if floating:
+            assert isinstance(if_true, MCReg) and isinstance(if_false, MCReg)
+            return (*before, *self._select_compare(asked, MCImm(0, asked.bits), span),
+                    self._inst("fcsel.ne", (MCReg(dst, bits=bits),
+                                            MCReg(if_true.reg, bits=bits),
+                                            MCReg(if_false.reg, bits=bits)), span))
+        first, second = in_a_register(if_true), in_a_register(if_false)
+        return (*before, *self._select_compare(asked, MCImm(0, asked.bits), span),
+                self._inst(_CSEL[Condition.NE], (MCReg(dst, bits=64),
+                                                 MCReg(first.reg, bits=64),
+                                                 MCReg(second.reg, bits=64)), span))
+
     def _select_compare(self, lhs: MCOperand, rhs: MCOperand,
                         span: Span) -> Sequence[MCInst]:
         """The instructions that set the flags for a comparison.
@@ -1096,7 +1125,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                    known_clobbers: Mapping[str, frozenset[RegUnit]] | None = None
                    ) -> None:
     """Build the machine form of one IR function."""
-    from ...ir.inst import (CodeInst, AddressInst, AnyLaneInst, BinaryInst, BrInst,
+    from ...ir.inst import (SelectInst, CodeInst, AddressInst, AnyLaneInst, BinaryInst, BrInst,
                             CallInst, CmpInst,
                             CondBrInst, SwitchInst,
                             FrameInst, AssertInst,
@@ -1998,6 +2027,22 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                                                           inst.span),
                                      _bits_of(inst.operands[0].ty),
                                      _bits_of(inst.ty), inst.span)
+                case SelectInst():
+                    # One of two values, which a truth value chooses, with no
+                    # branch: how this machine does it is the selector's.
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    floating = isinstance(inst.ty, FloatType)
+                    chosen = [operands.in_register(one, inst.span) if floating
+                              else operands.value(one, inst.span)
+                              for one in inst.operands[1:]]
+                    asm.select(destination,
+                               operands.in_register(inst.operands[0], inst.span),
+                               chosen[0], chosen[1], floating,
+                               inst.ty.bits if floating else 64, inst.span)
                 case CmpInst() if isinstance(inst.operands[0].ty, FloatType):
                     # A floating-point comparison is never folded into a branch:
                     # what a branch would read is the flags, and the answer a

@@ -687,6 +687,13 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 mandatory_prefix=0x66, opsize=OpSize.REXW,
                 modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, est_size=5,
                 roles=(OperandRole.DEF, OperandRole.USE)),
+    # movq r/m64, xmm                    66 REX.W 0F 7E /r
+    # The bits of a double in an ordinary register, which is where a choice
+    # between two of them is made: there is no conditional move of these.
+    X86InstDesc("movq", (_r(64), _x()), opcode=0x7E, map=OpMap.M0F,
+                mandatory_prefix=0x66, opsize=OpSize.REXW,
+                modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, est_size=5,
+                roles=(OperandRole.DEF, OperandRole.USE)),
     # The arithmetic over a whole run, one instruction per lane width.  What
     # each does to a lane it does to that lane alone: there is no carry between
     # them, which is what makes a run of additions one addition.

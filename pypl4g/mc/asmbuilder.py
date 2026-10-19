@@ -365,6 +365,19 @@ class InstructionSelector(Protocol):
         """
         ...
 
+    def select_select(self, dst: Reg, chooser: MCOperand, if_true: MCOperand,
+                      if_false: MCOperand, floating: bool, bits: int,
+                      span: Span) -> Sequence[MCInst]:
+        """Instructions that put *if_true* into *dst* where *chooser*, a truth
+        value, is not nought, and *if_false* where it is -- with no branch.
+
+        The machine's conditional move or select where it has one for the kind
+        of register *dst* is; otherwise the bits of the two, chosen with a mask
+        made of the truth value, the floating-point ones moved through ordinary
+        registers to be.
+        """
+        ...
+
     def select_set(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
                    span: Span) -> Sequence[MCInst]:
         """Instructions that put one into *dst* when *lhs* and *rhs* stand in
@@ -1011,6 +1024,14 @@ class Assembler:
         """Multiply *left* by *right* into the pair *high*:*low*."""
         self._emit(self._selector.select_wide_product(low, high, left, right,
                                                       signed, span))
+
+    def select(self, dst: Reg, chooser: MCOperand, if_true: MCOperand,
+               if_false: MCOperand, floating: bool, bits: int,
+               span: Span = INVALID_SPAN) -> None:
+        """Put *if_true* into *dst* where *chooser* holds and *if_false* where
+        it does not, without branching."""
+        self._emit(self._selector.select_select(dst, chooser, if_true, if_false,
+                                                floating, bits, span))
 
     def clamp(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
               bound: MCOperand, span: Span = INVALID_SPAN) -> None:

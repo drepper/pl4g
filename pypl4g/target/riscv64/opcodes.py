@@ -322,6 +322,21 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     RVInstDesc("fcvt.s.w", (_f(), _r()), template=0xD0007053,
                fields=(_reg(0, _RD), _reg(1, _RS1)),
                est_size=INSTRUCTION_SIZE),
+    # The bits of a floating-point register in an ordinary one and back, with
+    # nothing converted: what a choice between two floating-point values is
+    # made of here, there being no select of either kind of register.
+    RVInstDesc("fmv.x.w", (_r(), _f()), template=0xE0000053,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fmv.w.x", (_f(), _r()), template=0xF0000053,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fmv.x.d", (_r(), _f()), template=0xE2000053,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fmv.d.x", (_f(), _r()), template=0xF2000053,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               est_size=INSTRUCTION_SIZE),
     RVInstDesc("fsgnj.s", (_f(), _f(), _f()), template=0x20000053,
                fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
                est_size=INSTRUCTION_SIZE),
