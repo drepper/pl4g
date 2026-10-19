@@ -6452,7 +6452,9 @@ fn quiet(to: &mut std.io.Writer) → u64 ¤size ? i32:
 **A parameter whose type is marked `@[device]` carries it**, and so does one that holds such a type *anywhere* inside it -- which is
 how the startup function's `std.Init` carries three and why writing through it needs nothing said.  `std.fs.State` and
 `std.fs.Dir` are devices too, so running tasks and opening files need nothing said either.  **A function handed none says
-`@[io]`**: one that makes a device out of numbers, say.
+`@[io]`**: one that makes a device out of numbers, say.  **`@[impure]` does not say it** (4538): the two permissions are two, so a
+function that writes a variable at the top level and does I/O through a device it was not handed says `@[impure, io]`, each word
+for what it does.  Compare Koka's effect rows, where `st` and `io` are separate effects and a function lists the ones it has.
 
 **Reaching a device through a variable is not being handed one.**  A variable at the top level holding one is ambient, so a
 function that writes through it is doing something its signature does not account for and declares it.  `std` has no such variable:

@@ -10418,6 +10418,16 @@ What `std` gave back by hand goes the same way: `read`, `Io.print` and `Io.print
 an arena of their own, so `std.given_back`, `io.give_back` and the runtime's `pl4g_io_give_back` are gone.  `write`, which does not
 wait, still hands its copy to the ring, which gives it back as the answer comes in -- the runtime doing it, not the program.
 
+## 2026-10-20T10:00+02:00 — language
+
+**`@[impure]` does not grant input and output**
+
+Part of the same request.  `@[impure]` let a function do I/O without a device, as `@[io]` does, so a function that only did I/O
+could be marked either.  Asked, the user said a device handed over is what says a function does I/O, `@[io]` what says it where
+none is, and that `@[impure]` stops granting it: a function doing both writes `@[impure, io]`.  A generator's body is held to what
+the generator was handed, not to its frame.  The one program in the suite that needed both, a task writing a variable at the top
+level and a file opened through `std.fs.cwd()`, says both.  Compare Koka, whose `st` and `io` are separate effects.
+
 The rest of what was decided for the `@[impure]` error is recorded with it.
 
 Open questions

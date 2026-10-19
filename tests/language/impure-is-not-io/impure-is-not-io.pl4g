@@ -1,0 +1,22 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4538 LANG_IO_WITHOUT_A_DEVICE
+
+※ `@[impure]` says a function changes something of the program's -- a variable
+※ at the top level, memory somebody else made -- and nothing more.  Input and
+※ output are the other permission: a device handed over carries it, and `@[io]`
+※ says it where none is.  So a function marked only `@[impure]` that does input
+※ or output without a device is refused as one marked nothing is, and one that
+※ does both says `@[impure, io]`.
+
+let std := ⎕import("std")
+
+let waited: mut u64 = 0u64
+
+@[impure]
+fn tidy(slot: i64, ring: u64) → i64:
+    waited ← waited + 1u64
+    std.io.Pending.wait(std.io.Pending(.slot ← slot, .ring ← ring))
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    ⎕narrow(tidy(0i64, init.io.error.ring), ⌜u6⌝) ?? 0u6

@@ -18,7 +18,7 @@ let std := ⎕import("std")
 
 let turns: mut [u8] = []
 
-@[impure]
+@[impure, io]
 fn say(name: str, what: u8⟦⟧, who: u8) ⇉ std.io.Pending ⇇ std.io.Answer:
     match std.fs.cwd().open(name, ⌜std.io.Writer⌝):
         std.io.Writer(to):

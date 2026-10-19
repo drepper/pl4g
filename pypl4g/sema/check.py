@@ -10380,10 +10380,16 @@ class Checker:
         # What a device travels with: a function handed one may read or write it
         # without saying anything, which is the whole of the arrangement.  Written
         # `@[io]` where there is no parameter to carry it -- the drain a program does
-        # before it ends has nothing handed to it and still does I/O.
+        # before it ends has nothing handed to it and still does I/O.  `@[impure]`
+        # is not that: it says the function changes something of the program's,
+        # and one that does both says both.  A generator's body is handed its
+        # frame, and what the generator was handed is what it says.
+        walked = self._generator_bodies.get(id(func))
         outer_io, self._may_do_io = self._may_do_io, (
-            func.attrs.io or func.attrs.impure
-            or any(_reaches_a_device(one) for one in func.ty.params))
+            func.attrs.io
+            or any(_reaches_a_device(one)
+                   for one in (walked.params if walked is not None
+                               else func.ty.params)))
         outer_did, self._did_io = self._did_io, False
         outer_demanding = self._demanding
         self._demanding = (node, func)
@@ -27632,8 +27638,12 @@ class Checker:
         the message is about or even in the same file: a call a macro wrote is
         reported where the macro wrote it, which is wherever that macro lives -- and
         what has to change is one attribute on the *caller's* line.
+
+        Input or output without a device is asked of an `@[impure]` function as
+        of any other: that attribute is about the program's own state, and says
+        nothing about devices.
         """
-        if self._impure:
+        if self._impure and which != D.LANG_IO_WITHOUT_A_DEVICE:
             return
         if self._observing is not None:
             self._observing[0] = True
