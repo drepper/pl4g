@@ -70,7 +70,6 @@ fn keys_alone() → u6:
         counted()
 
 ※ Text as the key with a number under it, which is what counting anything is.
-@[impure]
 fn counted() → u6:
     let seen: mut ⸨str: u64⸩ = ⸨⸩
     foreach word := ⟦"a", "b", "a", "c", "a", "b"⟧:

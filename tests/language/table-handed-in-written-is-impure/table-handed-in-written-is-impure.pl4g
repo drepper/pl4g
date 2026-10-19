@@ -1,0 +1,16 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4479 LANG_PURE_WRITES_ELSEWHERE
+
+※ A table is a handle, so one handed to a function is the caller's table:
+※ putting a key in it changes what the caller holds, and a pure function
+※ does not.
+let std := ⎕import("std")
+
+fn filled(d: mut ⸨str: u8⸩) → u8:
+    d⸨"a"⸩ ← 1u8
+    1u8
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let d: mut ⸨str: u8⸩ = ⸨"b": 2u8⸩
+    if filled(d) ≠ 1u8: 1u6 else: 0u6

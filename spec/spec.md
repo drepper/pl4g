@@ -6182,7 +6182,9 @@ What changes a name is what is written: an assignment to it, a write to a field 
 it, room made in it with `⎕reserve`, a cursor walking it, `&mut` of it -- or `&` of it handed where a `&mut` is wanted, a method
 called on it, a `foreach &mut` over it -- and an assignment to it in a lambda that brought it in by reference.  Writing *through*
 a reference the name holds, `r⌖ ← v`, changes what it refers to and not the name, so a `let r: mut &mut u8` written through and
-never pointed elsewhere is reported; it is `&mut u8` that lets the write happen.  The question is asked by name over the whole
+never pointed elsewhere is reported; it is `&mut u8` that lets the write happen.  A set or a dictionary is the exception the other
+way: its `mut` is part of its type as well, saying the table may be written through, so one handed to a call, bound to another name
+or answered keeps its `mut` whatever is done to it here.  The question is asked by name over the whole
 body, every lambda in it included, so a name shadowed by one of the same spelling that is changed counts as changed: what that
 costs is a warning not given, never one given wrongly.  It is asked where the name goes out of reach, as the question whether its
 value was read is, and not of a variable at the top level.
@@ -6481,6 +6483,14 @@ languages have no word for at all: a change to something the program did not pas
 **Allocating is not on the list either.**  Taking room from an arena makes something new that nothing else can reach, so a
 pure function may join strings, make a list or a collection, and answer what it made.  Writing into a collection it was *handed*
 is on the list -- that is memory somebody else made -- and so is giving an arena back, which only the arena's maker may do.
+
+**Filling a collection it made is not.**  A set or a dictionary the function wrote down -- `let seen: mut ⸨str: u64⸩ = ⸨⸩`, or
+what a set operator answers -- is new on every call, and nothing anybody else holds can reach it until the function answers it, so
+putting a key in it or taking one out changes nothing outside the call.  A table is a handle, though, so it is the *table* that has
+to be the function's and not the name: a local bound to a parameter's table, or to one at the top level, is a second name for
+somebody else's, and writing through it is on the list.  Compare **D**, whose weakly pure functions may change what they made;
+**Haskell**'s `ST`, where a table made inside `runST` may be written and the result is pure; **Koka**, whose local state is not an
+effect once it cannot escape.
 
 **Every one of them names the function that is pure, and points at it** (4511).  That is not always the function the message is
 about or even in the same file: a call a macro wrote is reported where the macro wrote it, which is wherever that macro lives, and

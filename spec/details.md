@@ -979,6 +979,11 @@ before it is lowered (`_changed_names` in `sema/check.py`): what the syntax writ
 given where a `&mut` is wanted (`_lend`) and an array written by a function it was handed (`writes_arrays`) -- added while the
 body is lowered.  A lambda's body adds its own names to those of the function it is in.  The local that a capture by reference
 makes inside the lambda is never reported; the variable it names is, where it is defined.
+A second set, `_used_whole`, holds the names a body uses whole -- anything but the base of a lookup, the operand of `#` or of a
+binary operator, and what a `foreach` walks -- and a writable table among them keeps its `mut`.
+
+Whether a table is the function's own, for 4479, is `_table_made_here`: the handle traced through casts to the call of
+`__pl4g_table_new`, which every literal and set operator lowers to.
 
 The log travels on the module, since every stage has the module and any of them may decide something.  It is not the design log in
 [decisions.md](decisions.md), which records what was decided about the *language* and is written by hand; this one is about one

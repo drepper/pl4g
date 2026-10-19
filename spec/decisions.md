@@ -10369,6 +10369,29 @@ the verifier refused (9901) and a build without the verifier compiled into a wal
 is.  A test walks string keys and values, a set of strings, record and tuple values, and the environment.  Left as they are:
 `foreach k, &mut v` over a table is refused (4699), and a record or a tuple is not a key (4429).
 
+## 2026-10-19T23:30+02:00 — language
+
+**Filling a table the function made is not an effect**
+
+Asked why `main` in the test of walking wide tables was `@[impure]`, the answer was that every `d⸨k⸩ ← v` and `†d⸨k⸩` counted as
+writing memory the function did not make (4479), even where `d` was a local holding a table written down in the body.  The user
+decided: *d is not a global variable and therefore the compiler must not require impure*.  It is what the decision of 2026-10-01
+("Allocating is not an effect") already said -- what stays impure is writing a collection one was handed -- and what lists in the
+function's own room already did.  Taken without asking:
+
+- **A table is the function's when its handle is one the body made**: traced through casts to the call that makes a table, which
+  is what a literal and a set operator lower to.  A table handed in, read from a variable at the top level or from memory, or
+  answered by another call is not, whatever name it is under -- a table being a handle, a local bound to somebody's is a second
+  name for it.
+- **Asked as the entry is written**, so a name rebound in a branch, which is a block parameter where the arms meet, is taken as
+  not made here; asking at the end of the body would answer it, and is left in the to-do list with the case of a callee filling a
+  table it is handed.
+- **4931 keeps a table's `mut` where the table is used whole** -- handed on, bound, answered -- since its `mut` is part of the type
+  and may be what lets it stand where a writable table is wanted.
+
+Six test functions lose an `@[impure]` they had only for this.  Compare D's weakly pure functions, Haskell's `ST` and Koka's
+local state, all of which let a function change what it made.
+
 Open questions
 --------------
 

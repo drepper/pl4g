@@ -10,7 +10,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let d: mut ⸨u8: u8⸩ = ⸨⸩
     foreach i := 0u8…40u8:

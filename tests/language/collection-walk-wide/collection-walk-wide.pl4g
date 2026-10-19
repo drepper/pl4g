@@ -9,7 +9,7 @@ let std := ⎕import("std")
 
 type P = x : u64 ; y : u64
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     ※ string keys and string values
     let d: mut ⸨str: str⸩ = ⸨⸩

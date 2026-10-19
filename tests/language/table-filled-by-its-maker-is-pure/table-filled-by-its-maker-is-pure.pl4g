@@ -1,0 +1,33 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A function that makes a table and fills it is pure.  The table is new on
+※ every call and comes out of an arena, which is no effect; nothing anybody
+※ else holds can reach it until the function answers it, so putting a key in
+※ it, taking one out, or doing either through a second name for it changes
+※ nothing outside the call -- as with a list in the function's own room.
+let std := ⎕import("std")
+
+fn counted(words: [str]) → u64:
+    let seen: mut ⸨str: u64⸩ = ⸨⸩
+    foreach w := words:
+        seen⸨w⸩ ← (seen⸨w⸩ ?? 0u64) + 1u64
+    seen⸨"a"⸩ ?? 0u64
+
+fn taken(k: str) → bool:
+    let s: mut ⸨str⸩ = ⸨"x", "y"⸩
+    let also: mut ⸨str⸩ = s
+    †also⸨k⸩
+
+fn built() → mut ⸨str: u8⸩:
+    let d: mut ⸨str: u8⸩ = ⸨"a": 1u8⸩
+    d⸨"b"⸩ ← 2u8
+    †d⸨"a"⸩
+    d
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if counted(["a", "b", "a"]) ≠ 2u64: return 1u6
+    if ¬taken("x") ∨ taken("z"): return 2u6
+    let d: ⸨str: u8⸩ = built()
+    if #d ≠ 1 ∨ (d⸨"b"⸩ ?? 0u8) ≠ 2u8: return 3u6
+    0u6

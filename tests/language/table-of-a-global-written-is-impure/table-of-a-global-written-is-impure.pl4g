@@ -1,0 +1,18 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4479 LANG_PURE_WRITES_ELSEWHERE
+
+※ A local name for a table at the top level is a second name for that
+※ table, not a table of the function's own: taking a key out through it
+※ changes what every other function reads.
+let std := ⎕import("std")
+
+let kept: mut ⸨str: u8⸩ = ⸨⸩
+
+fn dropped() → u8:
+    let d: mut ⸨str: u8⸩ = kept
+    †d⸨"b"⸩ ?? 0u8
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if dropped() ≠ 0u8: return 1u6
+    0u6

@@ -28,7 +28,6 @@ fn fill(h: &mut Holder):
     h⌖.table⸨"a"⸩ ← 1u64
 
 ※ Answered with, which is where a table built in a call comes from.
-@[impure]
 fn grown() → mut ⸨str: u64⸩:
     let made: mut ⸨str: u64⸩ = ⸨⸩
     made⸨"x"⸩ ← 7u64

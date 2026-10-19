@@ -1282,7 +1282,18 @@ Runtime
     it from `⎕fields(⌜Error⌝)` works: an initializer `in ⎕static` that calls a function is refused (4636), there being no
     evaluation of one while compiling, and a macro cannot splice a run of entries of any length into a literal.  Either would do.
 
-[ ] decide whether filling a container a function made itself is impure.  A function that makes `let names: mut ⸨Colour: str⸩ =
+[x] decide whether filling a container a function made itself is impure.  A function that makes `let names: mut ⸨Colour: str⸩ =
     ⸨⸩` and puts entries in it is refused as writing memory it did not make (4479): the entries go into `⎕heap`, which outlives the
     call.  What it changes is nothing anyone else can see until it answers the table, which is what D's weakly pure functions and
     Rust's `&mut`-free functions allow.
+    Done 2026-10-19: the user decided it is not impure.  A table this call made -- a literal or what a set operator answers --
+    may be filled and taken from by a pure function; one handed in or at the top level may not.
+
+[ ] a table a pure function made and then rebound.  `d ← ⸨…⸩` in one arm of an `if` leaves `d` a block parameter where the arms
+    meet, and whether the table is the function's own is asked as the entry is written, before the function is complete: a loop's
+    back edge might still bring in somebody else's.  So that `d` is taken as not made here (4479).  Asking at the end of the body,
+    with every edge in place, would answer it.
+
+[ ] hand a table a pure function made to a function that fills it.  The callee writes a table it was handed, so it is
+    `@[impure]` and so is every caller -- even one whose table nobody else can reach.  It is the same question the TODO entry on
+    a pure function writing through an array it was handed asks, of a table.

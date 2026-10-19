@@ -17,7 +17,7 @@ enum Colour:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let names: mut ⸨Colour: str⸩ = ⸨⸩
     let letters: mut u64 = 0u64

@@ -1854,6 +1854,41 @@ def _changed_names(node: object) -> set[str]:
     return found
 
 
+def _used_whole(node: object) -> set[str]:
+    """Every name *node* uses as the whole of what it holds rather than to read
+    from it: handed to a call, bound to another name, answered, put somewhere.
+
+    A table's `mut` is part of its type -- the handle may be written through --
+    so one used whole may be where a writable table is wanted, and its `mut` is
+    needed whether or not anything here changes it (4931).  A lookup, `#`, a
+    walk and an operator over it read the table and want nothing of the kind.
+    """
+    reading: set[int] = set()
+    found: set[str] = set()
+
+    def visit(one: object) -> None:
+        match one:
+            case ast.Index():
+                reading.add(id(one.base))
+            case ast.Unary() if one.op is ast.UnaryOp.LENGTH:
+                reading.add(id(one.operand))
+            case ast.Binary():
+                reading.update((id(one.left), id(one.right)))
+            case ast.ForEach():
+                reading.add(id(one.iterable))
+            case ast.NameRef() if id(one) not in reading:
+                found.add(one.name)
+        if isinstance(one, ast.Node):
+            for field_ in fields_of(one):
+                visit(getattr(one, field_.name))
+        elif isinstance(one, (tuple, list)):
+            for item in one:
+                visit(item)
+
+    visit(node)
+    return found
+
+
 def _carried_lifetimes(node: ast.FuncDef, types: Sequence[Type]
                        ) -> tuple[tuple[str, tuple[int, ...]], ...]:
     """Each lifetime name a signature carries, with the parameters carrying it:
@@ -3805,6 +3840,7 @@ class Checker:
         #: where a `mut` that nothing needed has been said, so that it is said
         #: once however many instances a body is lowered for.
         self._changed_here: set[str] | None = None
+        self._whole_here: set[str] = set()
         self._mut_told: set[int] = set()
         #: The type a function value had before it was read as one promising
         #: less, by the identity of what it was read as.
@@ -5976,10 +6012,14 @@ class Checker:
     def _report_needless_mut(self, local: _Local) -> None:
         """Report a variable or a parameter written `mut` that nothing changed
         (4931): neither given another value, nor written in part, nor lent so
-        that something else may.  The compiler's own names -- a macro's, a
-        generator's written into a loop -- are its own business."""
+        that something else may.  A table used whole may be where a writable one
+        is wanted, its `mut` being part of its type, and is not reported.  The
+        compiler's own names -- a macro's, a generator's written into a loop --
+        are its own business."""
         if not local.mutable or self._changed_here is None \
                 or local.name in self._changed_here or local.value.ty is ERROR \
+                or (local.name in self._whole_here
+                    and isinstance(self._held_by(local), (SetType, DictType))) \
                 or local.name == WILDCARD_NAME or "#" in local.name \
                 or local.name.startswith((ITER_GLYPH, BUILTIN_GLYPH)) \
                 or local.span.start in self._mut_told or not local.span.is_valid:
@@ -10369,12 +10409,13 @@ class Checker:
         outer_addressed = self._addressed
         self._addressed = set()
         outer_unscanned, self._unscanned = self._unscanned, node.body
-        outer_changed = self._changed_here
+        outer_changed = self._changed_here, self._whole_here
         if node.body is not None:
             _addressed_in(node.body, self._addressed)
             _read_through(node.body, self._read_through_ids)
             self._live_for(node)
             self._changed_here = _changed_names(node.body)
+            self._whole_here = _used_whole(node.body)
         # Every parameter gets its register before any of them is given storage:
         # a block's parameters are what it is entered with, and the storage is
         # written by instructions that follow them.
@@ -10475,7 +10516,7 @@ class Checker:
         self._hands_out, self._hands_out_local = outer_hands
         self._demanding = outer_demanding
         self._unscanned = outer_unscanned
-        self._changed_here = outer_changed
+        self._changed_here, self._whole_here = outer_changed
         self._at_entry = outer_entry
         self._answer_made_in = outer_made_in
         self._made_from = outer_made_from
@@ -13056,7 +13097,7 @@ class Checker:
         # What the caller has lent out is the caller's: a statement ending in
         # here ends none of its, and nothing in here is lent from its names.
         outer_borrows, self._borrows = self._borrows, []
-        outer_changed = self._changed_here
+        outer_changed = self._changed_here, self._whole_here
         self._push_scope()
         try:
             assert node.body is not None
@@ -13065,6 +13106,7 @@ class Checker:
             self._live_for(node)
             self._unscanned = node.body
             self._changed_here = _changed_names(node.body)
+            self._whole_here = _used_whole(node.body)
             arriving = [block.add_param(one, param.name)
                         for one, param in zip(func.ty.params, node.params)]
             for param, value in zip(node.params, arriving):
@@ -13104,7 +13146,7 @@ class Checker:
              self._receiving, self._unscanned) = outer
             self._demanding, self._at_entry = outer_demanding, outer_entry
             self._borrows = outer_borrows
-            self._changed_here = outer_changed
+            self._changed_here, self._whole_here = outer_changed
 
     def _lower_generic(self, builder: IRBuilder, expr: ast.Call,
                        written: _Generic, expected: Type | None) -> Value:
@@ -14235,10 +14277,12 @@ class Checker:
                                  or _holds_a_lambda(held_there)):
                         local.arenas = frozenset({id(local)})
                         self._unknown_by_id[id(local)] = local
-            changed, self._changed_here = self._changed_here, \
-                (self._changed_here or set()) | _changed_names(expr.body)
+            changed = self._changed_here, self._whole_here
+            self._changed_here = (self._changed_here or set()) \
+                | _changed_names(expr.body)
+            self._whole_here = self._whole_here | _used_whole(expr.body)
             self._lower_block(inner, expr.body, func)
-            self._changed_here = changed
+            self._changed_here, self._whole_here = changed
             self._answered_as_said(func, borrows,
                                    tuple(one.name for one in expr.params),
                                    arriving[1:])
@@ -15948,7 +15992,8 @@ class Checker:
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
-        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
+        if not self._table_made_here(base):
+            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
         shape = self._table_shape(ty)
         tables.ensure_take(self._module, shape)
         place = self._find_key(builder, shape, base, key, expr.span)
@@ -16543,7 +16588,8 @@ class Checker:
         value = self._lower_into(builder, stmt.value, ty.value, stmt.span)
         if self._value_type_of(key) is ERROR or self._value_type_of(value) is ERROR:
             return
-        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
+        if not self._table_made_here(base):
+            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
         shape = self._table_shape(ty)
         place = self._put_key(builder, shape, base, key, stmt.span)
         builder.store(self._value_place(builder, shape, place, ty.value), value,
@@ -27679,6 +27725,22 @@ class Checker:
                     else made
                 continue
             return False
+
+    def _table_made_here(self, table: Value) -> bool:
+        """Whether a table is one this call made: a literal, or what a set
+        operator answers, written in this body.
+
+        Such a table is new on every call, and nothing anybody else holds can
+        reach it until the call hands it on -- so filling it or taking from it
+        changes nothing outside the call.  A table handed over, read out of a
+        variable at the top level or out of memory, or answered by another
+        call may be somebody else's, and is not.
+        """
+        seen = table
+        while isinstance(seen, CastInst):
+            seen = seen.operands[0]
+        return isinstance(seen, CallInst) \
+            and seen.callee is self._module.functions.get(tables.NEW_SYMBOL)
 
     def _report_mismatch(self, span: Span, found: Type, expected: Type) -> None:
         """Report a type that does not match what the context requires.
