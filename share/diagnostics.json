@@ -10566,6 +10566,33 @@
       "option": null
     },
     {
+      "number": 4931,
+      "name": "LANG_MUT_NEVER_CHANGED",
+      "severity": "warning",
+      "message": "the {what} '{name}' is written 'mut' and nothing changes it",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable or parameter"
+        },
+        {
+          "name": "what",
+          "type": "string",
+          "description": "'variable' or 'parameter'"
+        }
+      ],
+      "cause": "`mut` says a name may be given another value, a part of it written, or lent so that something else may write it -- and nothing in its scope does any of those: no assignment, no element or field written, nothing joined onto it or taken out, no `&mut` of it, no method called on it, no lambda bringing it in by reference, no room taken from it, no array of it handed to a parameter that writes it.  A `mut` nothing needs tells a reader to look for a change that is not there, and keeps the compiler from sharing what it would otherwise share -- an array given to a name that may not change is not copied.  Take the `mut` away, or say it was meant with `@[ignore(4931)]`.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition",
+        "requirement": "A variable or parameter written `mut` is one something changes."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "unneeded-mut"
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

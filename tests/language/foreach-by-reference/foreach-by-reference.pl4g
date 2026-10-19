@@ -36,7 +36,7 @@ fn main(init: std.Init) → u6:
     ※ written in place, through a reference
     foreach k, &mut p := ⎕enumerate(v):
         p⌖.one ← p⌖.one + (⎕narrow(k, ⌜i32⌝) ?? 0i32)
-    let us: mut ⟦⟧ = ⟦U(.n ← 5u8), U(.n ← 6u8)⟧
+    let us: ⟦⟧ = ⟦U(.n ← 5u8), U(.n ← 6u8)⟧
     let seen: mut u8 = 0u8
     foreach &u := us:
         seen ← seen + u⌖.n

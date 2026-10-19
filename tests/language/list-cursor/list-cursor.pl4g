@@ -82,14 +82,14 @@ fn moved() → u6:
 fn ended() → u6:
     let l: mut [u8] = [7u8]
     let it: mut = ⎕iter(l)
-    let after: mut = †it
+    let after := †it
     if after:
         if #l ≠ 0:
             6u6
         else:
             ※ and a list with nothing in it has a walk that is over at once
             let empty: mut [u8] = []
-            let none: mut = ⎕iter(empty)
+            let none := ⎕iter(empty)
             if none: 0u6 else: 7u6
     else:
         8u6

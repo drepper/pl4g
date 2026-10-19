@@ -11,7 +11,7 @@ let std := ⎕import("std")
 @[startup]
 fn main(init: std.Init) → u6:
     let k: u16 = ⎕narrow(⎕drop(#init.args), ⌜u16⌝) ?? 0u16
-    let m: mut u16⟦3, 4⟧ = ⟦⟦k, 2u16, 3u16, 4u16⟧, ⟦5u16, 6u16, 7u16, 8u16⟧,
+    let m: u16⟦3, 4⟧ = ⟦⟦k, 2u16, 3u16, 4u16⟧, ⟦5u16, 6u16, 7u16, 8u16⟧,
                             ⟦9u16, 10u16, 11u16, 12u16⟧⟧
     ※ every other column: 1 3 / 5 7 / 9 11
     let block: u16⟦,⟧ = m⟦0…3, 0…4…2⟧

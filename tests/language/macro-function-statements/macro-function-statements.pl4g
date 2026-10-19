@@ -18,6 +18,6 @@ let std := ⎕import("std")
 @[startup]
 fn main(init: std.Init) → u6:
     let n: mut u8 = 5u8
-    let step: mut u8 = 40u8
+    let step: u8 = 40u8
     bump⌜n⌝
     ⎕narrow(n + step, ⌜u6⌝) ?? 1u6

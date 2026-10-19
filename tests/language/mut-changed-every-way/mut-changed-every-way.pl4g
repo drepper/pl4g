@@ -1,0 +1,44 @@
+※ pl4g-test: compile=ok diag=none
+※ pl4g-test: run=native,qemu exit=0
+
+※ Every way a `mut` name can be changed, none of which is reported (4931): a
+※ variable or a parameter assigned, a field or an element written, joined onto, given
+※ room ahead of time, lent `&mut`, walked `&mut`, and written by a lambda that brought it in by
+※ reference -- and one kept `mut` on purpose, with the warning ignored.
+let std := ⎕import("std")
+
+type P = x : u8 ; y : u8
+
+@[impure]
+fn bump(n: &mut u8):
+    n⌖ ← n⌖ + 1u8
+
+fn counted(n: mut u8) → u8:
+    n ← n + 1u8
+    n
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let a: mut u8 = 1u8
+    a ← a + 1u8
+    let p: mut P = P(.x ← 1u8, .y ← 2u8)
+    p.y ← 5u8
+    let v: mut u8⟦3⟧ = 3 ⍴ 0u8
+    v⟦1⟧ ← 4u8
+    let l: mut [u8] = []
+    l ⧺← ⟦1u8, 2u8⟧
+    let roomy: mut [u8] = []
+    ⎕reserve(roomy, 8)
+    let lent: mut u8 = 3u8
+    bump(&mut lent)
+    let walked: mut u8⟦2⟧ = 2 ⍴ 1u8
+    foreach &mut w := walked:
+        w⌖ ← w⌖ + 1u8
+    let seen: mut u8 = 0u8
+    let add := λ x: u8 [&seen] → u8 { seen ← seen + x; seen }
+    @[ignore(4931)]
+    let kept: mut u8 = 6u8
+    if a ≠ 2u8 ∨ p.y ≠ 5u8 ∨ v⟦1⟧ ≠ 4u8 ∨ #l ≠ 2 ∨ #roomy ≠ 0: return 1u6
+    if lent ≠ 4u8 ∨ walked⟦0⟧ ≠ 2u8 ∨ add(1u8) ≠ 1u8 ∨ seen ≠ 1u8: return 2u6
+    if counted(p.x) ≠ 2u8 ∨ kept ≠ 6u8: return 3u6
+    0u6

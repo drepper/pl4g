@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok
+※ pl4g-test: run=native,qemu exit=9
+※ pl4g-test: expect-diag 4931 LANG_MUT_NEVER_CHANGED
+
+※ A parameter written `mut` that the function never changes is reported as a
+※ variable is: the caller's value is copied in all the same.
+let std := ⎕import("std")
+
+fn twice(n: mut u6) → u6:
+    n + n
+
+@[startup]
+fn main(init: std.Init) → u6:
+    twice(4u6) + 1u6

@@ -47,6 +47,8 @@ fn main(init: std.Init) → u6:
     if grid⟦1, 0⟧ ≠ 3u8: return 8u6
     if #none ≠ 0 ∨ none⸨""⸩: return 9u6
     ※ walked, every key once, as a table built while running is
+    ※ written mut so that it is built while running, not laid out in the image
+    @[ignore(4931)]
     let built: mut ⸨str⸩ = ⸨"x", "y", "zz", "www", "v", "u", "t"⸩
     let met: mut u64 = 0u64
     foreach one: str = seen:

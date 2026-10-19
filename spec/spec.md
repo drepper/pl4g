@@ -6170,6 +6170,29 @@ read it.  The attribute that says the report is meant still stands on the defini
 
 A variable nothing names at all is not reported but simply left out of the program, along with anything else nothing can reach.
 
+**A `mut` that nothing uses is reported.**  A variable or a parameter written `mut` that nothing changes promises a change the
+program never makes, and a reader who takes the word at its meaning looks for one (4931):
+
+```
+let a: mut u8 = 5u8         ※ warning: the variable 'a' is written 'mut' and nothing changes it
+let b: u8 = a + 1u8
+```
+
+What changes a name is what is written: an assignment to it, a write to a field or an element of it, `⧺←` onto it, `†` out of
+it, room made in it with `⎕reserve`, a cursor walking it, `&mut` of it -- or `&` of it handed where a `&mut` is wanted, a method
+called on it, a `foreach &mut` over it -- and an assignment to it in a lambda that brought it in by reference.  Writing *through*
+a reference the name holds, `r⌖ ← v`, changes what it refers to and not the name, so a `let r: mut &mut u8` written through and
+never pointed elsewhere is reported; it is `&mut u8` that lets the write happen.  The question is asked by name over the whole
+body, every lambda in it included, so a name shadowed by one of the same spelling that is changed counts as changed: what that
+costs is a warning not given, never one given wrongly.  It is asked where the name goes out of reach, as the question whether its
+value was read is, and not of a variable at the top level.
+
+The warning is controlled by the option `unneeded-mut`, and a definition that means its `mut` -- one that keeps a table out of the
+image, say, where the compiler would otherwise want `in ⎕static` (4638) -- says so with `@[ignore(4931)]`.  Rust reports the same
+by default (`unused_mut`), Swift as `variable was never mutated; consider changing to 'let' constant`, and Kotlin's tooling as `var`
+that could be `val`; C and C++, whose default is the other way round, have the inverse in clang-tidy's `misc-const-correctness`,
+which asks for a `const` where nothing changes a name.
+
 Considered for the notation: `x: u8 = 3u8` with `x := 3u8` as the short form, after Go and Odin, which is terse but leaves a
 statement beginning with an identifier ambiguous until the parser has looked past the name.  A keyword lets a parser commit on the
 first token of a definition, which is what keeps the grammar context-free and the compilation parallelizable -- the same reason

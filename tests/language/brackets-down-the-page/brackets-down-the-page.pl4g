@@ -49,6 +49,7 @@ fn main(init: std.Init) → u6:
 2u8
 ⸩ in ⎕static
     ※ and a dictionary written the way one is read
+    @[ignore(4931)]
     let d: mut ⸨str: u8⸩ = ⸨
         "a": 1u8,
         "b": 2u8⸩

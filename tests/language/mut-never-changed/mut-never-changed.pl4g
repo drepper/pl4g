@@ -1,0 +1,12 @@
+※ pl4g-test: compile=ok
+※ pl4g-test: run=native,qemu exit=7
+※ pl4g-test: expect-diag 4931 LANG_MUT_NEVER_CHANGED
+
+※ A variable written `mut` that nothing changes.  The `mut` promises a change
+※ the program never makes, so it is reported, and the program still runs.
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let a: mut u6 = 7u6
+    a

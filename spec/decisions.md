@@ -10341,6 +10341,23 @@ written type, into a field, a tuple or a lambda -- since giving an array to an a
 it found instead was a write lost: an element of an array held in a field of a record was written into a copy of the field, which
 reading the field makes.  That is fixed, the element written and read where it is.
 
+## 2026-10-19T21:30+02:00 — language
+
+**A `mut` that nothing uses is reported**
+
+The user asked for a warning where a variable or a parameter is written `mut` and is neither changed nor lent as a `&mut`
+reference.  It is 4931, controlled by the option `unneeded-mut`, after Rust's `unused_mut`, Swift's warning for a `var` never
+mutated and Kotlin's `var` that could be `val`.  Taken without asking:
+
+- **What counts is read off what is written**, over the body and every lambda in it: an assignment, a write to a field or an
+  element, `⧺←`, `†`, `⎕reserve`, a cursor, `&mut`, `&` given where `&mut` is wanted, a method call on it, `foreach &mut`.  A
+  lambda that brought the name in by reference counts only where its body writes it, so `[&x]` used for reading is reported.
+- **By name, not by binding**: a shadowing name of the same spelling that is changed counts for both, which gives a warning too
+  few and never one too many.
+- **Writing through a reference does not change the name**: `r⌖ ← v` leaves `r` what it was, so its `mut` is reported.
+- **Asked where the name goes out of reach**, with the attribute on the definition able to say `@[ignore(4931)]` -- which the
+  suite needs where a `mut` keeps a table out of the image (4638).  A variable at the top level is not asked.
+
 Open questions
 --------------
 

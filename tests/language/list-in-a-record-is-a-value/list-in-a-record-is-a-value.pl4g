@@ -12,7 +12,7 @@ fn items(b: &Bag) → [u8]:
 
 @[startup]
 fn main(init: std.Init) → u6:
-    let b: mut Bag = Bag(.items ← [1u8, 2u8])
+    let b: Bag = Bag(.items ← [1u8, 2u8])
     let x: mut [u8] = items(&b)
     x⟦0⟧ ← 9u8
     let y: Bag = b

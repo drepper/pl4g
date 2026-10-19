@@ -1788,6 +1788,72 @@ def _holds_a_list(ty: Type) -> bool:
     return False
 
 
+def _changed_names(node: object) -> set[str]:
+    """Every name *node* may change, read off what is written: given a new value,
+    a part of it written, joined onto, taken out of or made room in, walked by a
+    cursor, lent `&mut` -- or lent to a method, which may take it so -- taken
+    room from or emptied, or walked by reference that may write.  A lambda that
+    brought a name in by reference changes it by writing it in its body, which
+    is part of what is walked.
+
+    By name and not by binding, and every lambda in it included, so that a name
+    shadowed or brought in counts as changed wherever one of that spelling is:
+    what that costs is a warning not given (4931), and never one given wrongly.
+    Writing through a reference a name holds changes what it names and not the
+    name, and does not count."""
+    found: set[str] = set()
+
+    def root(expr: object) -> None:
+        while isinstance(expr, (ast.Member, ast.Element, ast.Index, ast.Each)):
+            expr = expr.operand if isinstance(expr, ast.Each) else expr.base
+        if isinstance(expr, ast.NameRef):
+            found.add(expr.name)
+
+    def visit(one: object) -> None:
+        match one:
+            case ast.AssignStmt():
+                found.add(one.name)
+                found.update(name for name, _ in one.more)
+            case ast.MemberAssign() | ast.ElementAssign() | ast.EntryAssign() \
+                    | ast.TakeAt() | ast.Take():
+                root(one.base)
+            case ast.TakeThrough():
+                root(one.operand)
+            case ast.JoinAssign():
+                root(one.target)
+            case ast.AddressOf() if one.mutable:
+                root(one.operand)
+            case ast.Allocated():
+                root(one.arena)
+            case ast.Call() if isinstance(one.callee, ast.NameRef) \
+                    and one.callee.name in (RESERVE_NAME, ITER_NAME, EMPTY_NAME) \
+                    and one.args:
+                root(one.args[0])
+            case ast.Call() if isinstance(one.callee, ast.NameRef) \
+                    and one.callee.name == ADDRESS_NAME and one.args:
+                # A place's address, which may be written through.
+                target = one.args[0]
+                root(target.operand if isinstance(target, ast.AddressOf)
+                     else target)
+            case ast.Call() if isinstance(one.callee, ast.Member):
+                root(one.callee.base)
+            case ast.ForEach() if any("mut" in mark for mark in one.marks):
+                walked = one.iterable
+                if isinstance(walked, ast.Call) and walked.args:
+                    # `⎕enumerate(v)`: what is walked is what it counts.
+                    walked = walked.args[0]
+                root(walked)
+        if isinstance(one, ast.Node):
+            for field_ in fields_of(one):
+                visit(getattr(one, field_.name))
+        elif isinstance(one, (tuple, list)):
+            for item in one:
+                visit(item)
+
+    visit(node)
+    return found
+
+
 def _carried_lifetimes(node: ast.FuncDef, types: Sequence[Type]
                        ) -> tuple[tuple[str, tuple[int, ...]], ...]:
     """Each lifetime name a signature carries, with the parameters carrying it:
@@ -3735,6 +3801,11 @@ class Checker:
         #: lowered, which stand for what that call hands over and so may be any
         #: lifetime in a function type handed to it (`_answers_as_long`).
         self._calling_key: str | None = None
+        #: The names the body being lowered may change (`_changed_names`), and
+        #: where a `mut` that nothing needed has been said, so that it is said
+        #: once however many instances a body is lowered for.
+        self._changed_here: set[str] | None = None
+        self._mut_told: set[int] = set()
         #: The type a function value had before it was read as one promising
         #: less, by the identity of what it was read as.
         self._promised_as: dict[int, Type] = {}
@@ -5876,6 +5947,7 @@ class Checker:
         self._unit_scopes.pop()
         for local in self._scopes.pop().values():
             self._report_unused(local)
+            self._report_needless_mut(local)
             self._settle_local(local)
 
     def _report_unused(self, local: _Local) -> None:
@@ -5898,6 +5970,26 @@ class Checker:
         try:
             self._diags.emit(D.LANG_VARDEF_VALUE_UNUSED, local.value_span,
                              name=local.name)
+        finally:
+            self._end_expecting(local.expectation)
+
+    def _report_needless_mut(self, local: _Local) -> None:
+        """Report a variable or a parameter written `mut` that nothing changed
+        (4931): neither given another value, nor written in part, nor lent so
+        that something else may.  The compiler's own names -- a macro's, a
+        generator's written into a loop -- are its own business."""
+        if not local.mutable or self._changed_here is None \
+                or local.name in self._changed_here or local.value.ty is ERROR \
+                or local.name == WILDCARD_NAME or "#" in local.name \
+                or local.name.startswith((ITER_GLYPH, BUILTIN_GLYPH)) \
+                or local.span.start in self._mut_told or not local.span.is_valid:
+            return
+        self._mut_told.add(local.span.start)
+        if local.expectation is not None:
+            self._diags.resume(local.expectation)
+        try:
+            self._diags.emit(D.LANG_MUT_NEVER_CHANGED, local.span, name=local.name,
+                             what="parameter" if local.is_parameter else "variable")
         finally:
             self._end_expecting(local.expectation)
 
@@ -6929,6 +7021,13 @@ class Checker:
                 self._diags.emit(D.LANG_ARRAY_HANDED_NOT_WRITABLE,
                                  written[at].span, param=func.param_names[at],
                                  func=func.name)
+            elif at in written and self._changed_here is not None:
+                # Its elements are written by the callee: that is a change.
+                root: ast.Expr = written[at]
+                while isinstance(root, (ast.Member, ast.Element, ast.Index)):
+                    root = root.base
+                if isinstance(root, ast.NameRef):
+                    self._changed_here.add(root.name)
         if not (owned.points(func.ty.ret) or _holds_a_lambda(func.ty.ret)):
             return
         if func.attrs.external is not None:
@@ -10270,10 +10369,12 @@ class Checker:
         outer_addressed = self._addressed
         self._addressed = set()
         outer_unscanned, self._unscanned = self._unscanned, node.body
+        outer_changed = self._changed_here
         if node.body is not None:
             _addressed_in(node.body, self._addressed)
             _read_through(node.body, self._read_through_ids)
             self._live_for(node)
+            self._changed_here = _changed_names(node.body)
         # Every parameter gets its register before any of them is given storage:
         # a block's parameters are what it is entered with, and the storage is
         # written by instructions that follow them.
@@ -10374,6 +10475,7 @@ class Checker:
         self._hands_out, self._hands_out_local = outer_hands
         self._demanding = outer_demanding
         self._unscanned = outer_unscanned
+        self._changed_here = outer_changed
         self._at_entry = outer_entry
         self._answer_made_in = outer_made_in
         self._made_from = outer_made_from
@@ -12954,6 +13056,7 @@ class Checker:
         # What the caller has lent out is the caller's: a statement ending in
         # here ends none of its, and nothing in here is lent from its names.
         outer_borrows, self._borrows = self._borrows, []
+        outer_changed = self._changed_here
         self._push_scope()
         try:
             assert node.body is not None
@@ -12961,6 +13064,7 @@ class Checker:
             _read_through(node.body, self._read_through_ids)
             self._live_for(node)
             self._unscanned = node.body
+            self._changed_here = _changed_names(node.body)
             arriving = [block.add_param(one, param.name)
                         for one, param in zip(func.ty.params, node.params)]
             for param, value in zip(node.params, arriving):
@@ -13000,6 +13104,7 @@ class Checker:
              self._receiving, self._unscanned) = outer
             self._demanding, self._at_entry = outer_demanding, outer_entry
             self._borrows = outer_borrows
+            self._changed_here = outer_changed
 
     def _lower_generic(self, builder: IRBuilder, expr: ast.Call,
                        written: _Generic, expected: Type | None) -> Value:
@@ -14096,6 +14201,8 @@ class Checker:
                                             else None))
                 bound = self._find_local(one.name)
                 if bound is not None:
+                    # Its `mut` is the variable's, reported where that is.
+                    self._mut_told.add(bound.span.start)
                     brought.append((one, bound))
                     inherited.append((local, bound, one.by_reference))
             for one, value in zip(expr.params, arriving[1:]):
@@ -14128,7 +14235,10 @@ class Checker:
                                  or _holds_a_lambda(held_there)):
                         local.arenas = frozenset({id(local)})
                         self._unknown_by_id[id(local)] = local
+            changed, self._changed_here = self._changed_here, \
+                (self._changed_here or set()) | _changed_names(expr.body)
             self._lower_block(inner, expr.body, func)
+            self._changed_here = changed
             self._answered_as_said(func, borrows,
                                    tuple(one.name for one in expr.params),
                                    arriving[1:])
@@ -14540,6 +14650,9 @@ class Checker:
             self._diags.emit(D.LANG_BORROW_ALIASED, span, name=name) \
                 .note(D.LANG_BORROW_LENT_HERE, one.span, name=name)
             return
+        if mutable and self._changed_here is not None:
+            # Lent so that something else may write it, which is a change.
+            self._changed_here.add(name)
         self._borrows.append(_Borrow(name, mutable, span,
                                      _UNTIL_THE_STATEMENT_ENDS, path))
 

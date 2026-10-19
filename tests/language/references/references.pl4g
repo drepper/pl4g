@@ -87,7 +87,7 @@ fn main(init: std.Init) → u6:
     ※ a name given a reference to a place of the same scope, and one of an
     ※ outer scope, both of which last as long as the name does
     let far: mut i8 = 60i8
-    let reaching: mut &mut i8 = &far
+    let reaching: &mut i8 = &far
     if only⌖ = 30i8:
         ※ outward, which is allowed: what it names outlives the name
         reaching⌖ ← reaching⌖ + 1i8
@@ -99,7 +99,7 @@ fn main(init: std.Init) → u6:
     ※ a name of this scope stands for and last as long as it does
     let inside: mut i8 = 61i8
     let paired: 〈&mut i8, u8〉 = 〈&inside, 1u8〉
-    let watched: mut i8 = 61i8
+    let watched: i8 = 61i8
     let watching: fn() → i8 = λ [&watched] → i8 { watched }
     ※ a variable at the top level, which is an address already
     let g: &mut u16 = &mut counter
