@@ -1630,6 +1630,10 @@
     {
       "hash": "0475331",
       "subject": "✨ A task waits in a function it calls, and a generator may answer"
+    },
+    {
+      "hash": "5d12611",
+      "subject": "✨ A directory is opened with Dir.open and ⌜Dir⌝"
     }
   ],
   "times": {
@@ -195216,6 +195220,892 @@
         69.539,
         220.15817696228623
       ]
+    },
+    "5d12611": {
+      "exit0": [
+        28.14,
+        182.49963293783367
+      ],
+      "global-variable": [
+        28.218999999999998,
+        185.41183194611222
+      ],
+      "assign-widths": [
+        30.037,
+        185.86501490790397
+      ],
+      "many-values-at-once": [
+        29.819,
+        183.73113893903792
+      ],
+      "unreached-function": [
+        28.753000000000004,
+        182.2473630309105
+      ],
+      "export-visibility": [
+        25.92200000000001,
+        169.4355079671368
+      ],
+      "digit-separators": [
+        25.669,
+        165.7446059398353
+      ],
+      "boolean-values": [
+        25.497,
+        164.9438189342618
+      ],
+      "bitwise-operators": [
+        25.854000000000006,
+        161.91332205198705
+      ],
+      "bitwise-precedence": [
+        25.768,
+        167.43769694585353
+      ],
+      "spill-to-the-frame": [
+        36.580000000000005,
+        177.95518599450588
+      ],
+      "boolean-in-memory": [
+        30.443,
+        183.54157404974103
+      ],
+      "comparison-operators": [
+        30.610000000000003,
+        187.19891994260252
+      ],
+      "logic-operators": [
+        30.443999999999996,
+        184.02268993668258
+      ],
+      "logic-short-circuit": [
+        29.839,
+        184.46171993855387
+      ],
+      "saturating-precedence": [
+        29.292000000000005,
+        186.5876199444756
+      ],
+      "arithmetic-operators": [
+        30.078000000000007,
+        185.48486102372408
+      ],
+      "semicolon-separates-statements": [
+        30.002000000000006,
+        184.55527094192803
+      ],
+      "call-nested": [
+        30.381,
+        185.3729720460251
+      ],
+      "arithmetic-division": [
+        30.162999999999993,
+        184.9513070192188
+      ],
+      "shift-operators": [
+        30.318,
+        185.73175196070224
+      ],
+      "float-arithmetic": [
+        35.684999999999995,
+        191.6070650331676
+      ],
+      "float-approximate": [
+        40.822,
+        197.2808230202645
+      ],
+      "result-type": [
+        33.211000000000006,
+        187.46572209056467
+      ],
+      "type-definitions": [
+        28.622000000000003,
+        184.0623690513894
+      ],
+      "result-as-an-argument": [
+        39.114999999999995,
+        194.36209101695567
+      ],
+      "match-a-result": [
+        34.627,
+        192.9461699910462
+      ],
+      "enum-values": [
+        33.727,
+        189.98896901030093
+      ],
+      "enum-flag": [
+        52.853,
+        211.98369096964598
+      ],
+      "if-statement": [
+        31.825999999999997,
+        190.98889408633113
+      ],
+      "tuple-values": [
+        32.225,
+        186.65228702593595
+      ],
+      "while-loop": [
+        30.450000000000003,
+        185.63456600531936
+      ],
+      "while-loop-nested": [
+        31.803,
+        187.87851405795664
+      ],
+      "foreach-over-a-range": [
+        29.719,
+        184.34926099143922
+      ],
+      "foreach-range-step": [
+        32.7,
+        190.01796294469386
+      ],
+      "collection-syntax": [
+        56.769999999999996,
+        216.85679396614432
+      ],
+      "collection-operators": [
+        60.813,
+        219.43530603311956
+      ],
+      "collection-grows": [
+        51.10600000000001,
+        207.67432602588087
+      ],
+      "collection-arena": [
+        53.61600000000001,
+        212.32089900877327
+      ],
+      "cdecl-attribute": [
+        31.596,
+        184.77397097740322
+      ],
+      "array-fixed": [
+        34.376,
+        190.20325201563537
+      ],
+      "array-slice": [
+        34.053,
+        187.8849429776892
+      ],
+      "array-global": [
+        30.959999999999997,
+        184.18931204359978
+      ],
+      "array-table": [
+        35.39,
+        191.94661499932408
+      ],
+      "array-row": [
+        33.666,
+        189.75845200475305
+      ],
+      "foreach-over-an-array": [
+        36.906000000000006,
+        191.888217930682
+      ],
+      "foreach-over-a-collection": [
+        42.242000000000004,
+        199.18634102214128
+      ],
+      "tuple-element": [
+        32.741,
+        189.00450807996094
+      ],
+      "parameter-mut": [
+        32.787,
+        188.01076197996736
+      ],
+      "call-spread": [
+        34.34,
+        188.27348796185106
+      ],
+      "call-spread-an-array": [
+        34.731,
+        191.10016198828816
+      ],
+      "tuple-spread": [
+        43.20600000000001,
+        205.7799140457064
+      ],
+      "array-written-with-no-length": [
+        36.64399999999999,
+        200.41206607129425
+      ],
+      "array-written-on-its-own": [
+        28.810000000000002,
+        170.9323829272762
+      ],
+      "loop-break": [
+        31.189000000000007,
+        186.66107498575002
+      ],
+      "loop-break-nested": [
+        33.314,
+        188.65892302710563
+      ],
+      "loop-continue": [
+        33.013999999999996,
+        190.8436530502513
+      ],
+      "order-left-to-right": [
+        39.663000000000004,
+        198.05603299755603
+      ],
+      "loop-break-value": [
+        33.1,
+        187.6351919490844
+      ],
+      "loop-else": [
+        34.776999999999994,
+        187.9378880839795
+      ],
+      "loop-break-value-nested": [
+        33.633,
+        187.20549601130188
+      ],
+      "result-from-a-plain-value": [
+        41.003,
+        197.29733106214553
+      ],
+      "tuple-answered-through-storage": [
+        39.789,
+        200.28252596966922
+      ],
+      "assign-to-the-wildcard": [
+        31.984,
+        187.7473610220477
+      ],
+      "pure-by-default": [
+        35.02,
+        188.65378596819937
+      ],
+      "pure-call-is-dropped": [
+        29.476000000000003,
+        185.80906302668154
+      ],
+      "listable-over-an-array": [
+        59.55,
+        219.0397479571402
+      ],
+      "listable-operators": [
+        68.77499999999999,
+        223.62853691447526
+      ],
+      "array-masked-pick": [
+        71.797,
+        208.63950799684972
+      ],
+      "array-masked-write": [
+        48.297000000000004,
+        188.3663929766044
+      ],
+      "arithmetic-at-each-width": [
+        33.98500000000001,
+        170.01138592604548
+      ],
+      "operators-over-a-run": [
+        59.550999999999995,
+        195.5014760605991
+      ],
+      "run-of-each-width": [
+        35.352999999999994,
+        171.3649429148063
+      ],
+      "run-arithmetic": [
+        44.693000000000005,
+        180.25302595924586
+      ],
+      "run-longer-than-a-register": [
+        33.175,
+        166.81122698355466
+      ],
+      "wrap-arithmetic": [
+        32.266999999999996,
+        165.61193205416203
+      ],
+      "wrap-over-a-run": [
+        32.648999999999994,
+        166.49433004204184
+      ],
+      "concatenate-arrays": [
+        46.45300000000001,
+        182.27954802569002
+      ],
+      "concatenate-tables": [
+        34.31400000000001,
+        167.99837409052998
+      ],
+      "character-values": [
+        31.701999999999998,
+        174.27448404487222
+      ],
+      "string-walk": [
+        37.172,
+        179.1127099422738
+      ],
+      "string-join": [
+        41.047000000000004,
+        183.91548201907426
+      ],
+      "length-operator": [
+        46.889,
+        185.72685890831053
+      ],
+      "shape-operator": [
+        66.979,
+        212.22339395899326
+      ],
+      "list-values": [
+        39.78900000000001,
+        179.17483299970627
+      ],
+      "list-join": [
+        52.35500000000001,
+        208.86057103052735
+      ],
+      "foreach-declares-the-turn": [
+        65.548,
+        220.73216293938458
+      ],
+      "comptime-tuple-loop": [
+        39.071000000000005,
+        197.45613995473832
+      ],
+      "extremum-operators": [
+        136.49200000000002,
+        296.9470589887351
+      ],
+      "extremum-of-floats": [
+        39.666,
+        194.84083191491663
+      ],
+      "string-compare": [
+        63.06,
+        222.66800794750452
+      ],
+      "character-compare": [
+        43.894,
+        200.6797749781981
+      ],
+      "rounding-operators": [
+        60.531000000000006,
+        216.94847499020398
+      ],
+      "power-operator": [
+        62.254999999999995,
+        220.56743397843093
+      ],
+      "float-comparison-as-a-condition": [
+        40.45700000000001,
+        197.48427195008844
+      ],
+      "narrow-integers": [
+        53.539,
+        212.69027201924473
+      ],
+      "lifting": [
+        34.475,
+        189.29378793109208
+      ],
+      "enumerate": [
+        57.599,
+        211.32916200440377
+      ],
+      "divides": [
+        66.47500000000001,
+        225.03769595641643
+      ],
+      "failure-written-out": [
+        43.839,
+        199.6866490226239
+      ],
+      "named-arguments": [
+        43.975,
+        187.90628900751472
+      ],
+      "line-breaks-inside-brackets": [
+        33.827,
+        175.19375402480364
+      ],
+      "references": [
+        56.916000000000004,
+        196.005564997904
+      ],
+      "type-reaches-itself-through-a-reference": [
+        24.949000000000005,
+        164.28476595319808
+      ],
+      "units": [
+        37.673,
+        180.0659109139815
+      ],
+      "one-element-says-the-type": [
+        49.77900000000001,
+        189.35993791092187
+      ],
+      "narrow": [
+        43.42999999999999,
+        184.1566109796986
+      ],
+      "lambda": [
+        74.552,
+        233.27365005388856
+      ],
+      "generic-functions": [
+        44.705999999999996,
+        200.3497169353068
+      ],
+      "lifetimes": [
+        40.892,
+        198.73191206716
+      ],
+      "named-lifetimes": [
+        37.32599999999999,
+        193.59152007382363
+      ],
+      "listable-lambda": [
+        73.96,
+        231.35840496979654
+      ],
+      "function-as-a-value": [
+        45.553999999999995,
+        201.53255900368094
+      ],
+      "block-on-one-line": [
+        39.269999999999996,
+        196.02319202385843
+      ],
+      "tests-of-three-kinds": [
+        32.119,
+        202.70250097382814
+      ],
+      "syscall": [
+        32.394,
+        185.1033680140972
+      ],
+      "record-values": [
+        42.821,
+        200.2282850444317
+      ],
+      "record-in-a-record": [
+        37.53,
+        192.44571402668953
+      ],
+      "record-through-a-call": [
+        51.520999999999994,
+        208.32032908219844
+      ],
+      "record-of-one-field": [
+        42.578,
+        196.0244330111891
+      ],
+      "std-init": [
+        68.295,
+        226.0007429867983
+      ],
+      "ordered-access": [
+        33.715,
+        188.52012301795185
+      ],
+      "place-at-an-address": [
+        35.599999999999994,
+        188.5228770552203
+      ],
+      "assign-a-field": [
+        34.062000000000005,
+        188.3075030054897
+      ],
+      "record-at-the-top-level": [
+        35.564,
+        192.24572298116982
+      ],
+      "widening": [
+        33.41300000000001,
+        185.6197559973225
+      ],
+      "std-read-write": [
+        102.38000000000001,
+        262.4102709814906
+      ],
+      "address-of-a-place": [
+        34.277,
+        185.8414689777419
+      ],
+      "tests-that-fail": [
+        32.01700000000001,
+        183.9099209755659
+      ],
+      "external-function": [
+        34.306,
+        186.07437110040337
+      ],
+      "narrow-to-an-enum": [
+        33.076,
+        185.4969710111618
+      ],
+      "write-text": [
+        69.27699999999999,
+        223.60867098905146
+      ],
+      "write-and-flush": [
+        81.778,
+        237.63920995406806
+      ],
+      "arguments": [
+        40.1,
+        194.08495293464512
+      ],
+      "stack-overflow": [
+        31.842000000000006,
+        187.4549899948761
+      ],
+      "collection-string-keys": [
+        113.58799999999998,
+        271.9700870802626
+      ],
+      "environment": [
+        71.257,
+        227.5969770271331
+      ],
+      "collection-take": [
+        112.37599999999999,
+        269.7657869430259
+      ],
+      "collection-at-the-top-level": [
+        67.529,
+        223.33377704489976
+      ],
+      "list-take": [
+        57.49399999999999,
+        212.08693098742515
+      ],
+      "list-cursor": [
+        57.568,
+        214.86201998777688
+      ],
+      "match-on-a-sum": [
+        38.773999999999994,
+        193.774705985561
+      ],
+      "sum-through-a-call": [
+        36.433,
+        188.96361102815717
+      ],
+      "spill-around-a-loop": [
+        44.758,
+        201.12905104178935
+      ],
+      "saturating-widest-multiplication": [
+        33.534,
+        189.82147297356278
+      ],
+      "fault-says-who-called": [
+        32.471,
+        184.2717760009691
+      ],
+      "answer-in-storage-not-read": [
+        31.224999999999998,
+        184.84685197472572
+      ],
+      "count-bits": [
+        36.473000000000006,
+        191.79277995135635
+      ],
+      "tuple-holding-a-result": [
+        38.97200000000001,
+        191.52982300147414
+      ],
+      "conditions-pre-and-post": [
+        30.801,
+        184.15207706857473
+      ],
+      "requirements-bundle": [
+        30.158999999999995,
+        183.71732300147414
+      ],
+      "requirements-settle-a-type": [
+        29.708,
+        182.37225792836398
+      ],
+      "conditions-entry-value": [
+        31.049,
+        184.66634105425328
+      ],
+      "conditions-observed": [
+        30.901999999999997,
+        183.77611099276692
+      ],
+      "bundle-imported": [
+        30.620999999999995,
+        183.06460010353476
+      ],
+      "operator-defined": [
+        32.957,
+        185.6273279991001
+      ],
+      "operator-fresh": [
+        34.385,
+        188.83472599554807
+      ],
+      "operator-pair": [
+        39.48800000000001,
+        195.73719706386328
+      ],
+      "macro-rules": [
+        30.964000000000002,
+        183.48745594266802
+      ],
+      "macro-statements-and-hygiene": [
+        30.557999999999996,
+        181.18664307985455
+      ],
+      "macro-function-form": [
+        109.72699999999999,
+        275.07508895359933
+      ],
+      "macro-reflection": [
+        109.59399999999998,
+        271.56613708939403
+      ],
+      "macro-comptime-fn": [
+        110.02800000000002,
+        273.29699299298227
+      ],
+      "generic-imported": [
+        57.102999999999994,
+        215.74056195095181
+      ],
+      "reflect-record": [
+        97.955,
+        257.7422250760719
+      ],
+      "print-and-println": [
+        131.907,
+        290.5831260140985
+      ],
+      "named-inside-a-type": [
+        35.33,
+        188.97881405428052
+      ],
+      "std-text": [
+        203.67,
+        362.50250902958214
+      ],
+      "std-format": [
+        228.803,
+        397.37490902189165
+      ],
+      "std-print-macro": [
+        291.48900000000003,
+        461.16234897635877
+      ],
+      "std-io-objects": [
+        202.666,
+        370.4782970016822
+      ],
+      "startup-takes-the-record": [
+        33.839999999999996,
+        186.20077101513743
+      ],
+      "io-is-a-capability": [
+        63.49800000000001,
+        219.80196703225374
+      ],
+      "arena-in-hand": [
+        46.927,
+        201.55887305736542
+      ],
+      "format-in-a-pool": [
+        252.98700000000002,
+        418.22712193243206
+      ],
+      "defer-every-way-out": [
+        47.998999999999995,
+        203.3707849914208
+      ],
+      "macro-statements-as-a-value": [
+        121.03699999999998,
+        284.74276699125767
+      ],
+      "answer-made-in": [
+        80.061,
+        234.82152295764536
+      ],
+      "container-owns-its-elements": [
+        87.56299999999999,
+        244.76428097113967
+      ],
+      "heap-allocates": [
+        43.864999999999995,
+        198.24203406460583
+      ],
+      "container-pool-and-heap": [
+        83.604,
+        238.8270830269903
+      ],
+      "answer-copied-into-its-allocator": [
+        75.848,
+        230.70253210607916
+      ],
+      "answer-in-heap": [
+        84.988,
+        241.00473104044795
+      ],
+      "lean-values": [
+        55.681,
+        207.84486108459532
+      ],
+      "tail-call-is-a-loop": [
+        51.913000000000004,
+        208.0392639618367
+      ],
+      "arena-handed-out": [
+        86.504,
+        241.38720706105232
+      ],
+      "format-into-an-arena": [
+        176.784,
+        341.16904297843575
+      ],
+      "lambda-answered": [
+        82.239,
+        238.8410239946097
+      ],
+      "static-data": [
+        110.54400000000001,
+        271.44438796676695
+      ],
+      "lambda-handed-on": [
+        60.04500000000001,
+        212.9218849586323
+      ],
+      "generic-requirements-suffice": [
+        45.254,
+        198.93965497612953
+      ],
+      "static-parameter": [
+        79.617,
+        233.50668395869434
+      ],
+      "generic-calls-itself": [
+        45.275999999999996,
+        201.67645497713238
+      ],
+      "generic-types": [
+        57.21600000000001,
+        214.1823209822178
+      ],
+      "reference-at-the-top-level": [
+        33.594,
+        186.05013005435467
+      ],
+      "pure-calls": [
+        37.586,
+        190.99709705915302
+      ],
+      "array-mask-walked": [
+        56.274,
+        210.7313059968874
+      ],
+      "each-read": [
+        70.53999999999999,
+        226.4200949575752
+      ],
+      "each-mask-in-a-loop": [
+        43.82599999999999,
+        198.1242970796302
+      ],
+      "constant-expressions": [
+        39.904,
+        193.76410311087966
+      ],
+      "iterator-handed-on": [
+        74.578,
+        231.9662239169702
+      ],
+      "generator-written-in": [
+        67.61300000000001,
+        223.44257892109454
+      ],
+      "generator-through-calls": [
+        89.76599999999999,
+        244.83040103223175
+      ],
+      "tasks-interleave": [
+        168.101,
+        328.1760870013386
+      ],
+      "read-lines-from-a-pipe": [
+        181.406,
+        341.5843880502507
+      ],
+      "closed-by-moves": [
+        44.808,
+        200.43870597146451
+      ],
+      "type-argument": [
+        35.85300000000001,
+        189.87434497103095
+      ],
+      "fields-of-an-enum": [
+        65.159,
+        217.73934504017234
+      ],
+      "error-name": [
+        160.23600000000002,
+        318.4654409997165
+      ],
+      "lambda-answers-a-reference": [
+        46.755,
+        203.57779099140316
+      ],
+      "array-assigned-whole": [
+        72.884,
+        231.50052793789655
+      ],
+      "table-sliced": [
+        88.485,
+        244.893076014705
+      ],
+      "padded": [
+        304.548,
+        475.85408098530024
+      ],
+      "template-names": [
+        249.263,
+        414.60540401749313
+      ],
+      "each-walks-a-type": [
+        100.884,
+        260.91650302987546
+      ],
+      "range-step-computed": [
+        48.19499999999999,
+        204.10080708097667
+      ],
+      "list-grows": [
+        63.120999999999995,
+        218.61743705812842
+      ],
+      "array-answered": [
+        73.66600000000003,
+        231.56249104067683
+      ],
+      "table-view-walked-in-order": [
+        101.299,
+        257.7012430410832
+      ],
+      "defer-on-every-early-exit": [
+        51.068,
+        203.32482003141195
+      ],
+      "list-moved-into-a-call": [
+        69.331,
+        226.2570159509778
+      ]
     }
   },
   "steps": {
@@ -204509,6 +205399,232 @@
         "table-view-walked-in-order": 1.0030873448834003,
         "defer-on-every-early-exit": 0.9991261692451294,
         "list-moved-into-a-call": 0.9998849698764865
+      }
+    },
+    "5d12611": {
+      "against": "0475331",
+      "ratios": {
+        "exit0": 1.015224763691464,
+        "global-variable": 1.019656729900632,
+        "assign-widths": 1.0347238967928623,
+        "many-values-at-once": 1.0157373028579213,
+        "unreached-function": 1.0059827863690434,
+        "export-visibility": 0.9561785319070458,
+        "digit-separators": 1.0035577449370554,
+        "boolean-values": 0.9987465235614398,
+        "bitwise-operators": 0.9902711812471275,
+        "bitwise-precedence": 1.0394933236516197,
+        "spill-to-the-frame": 0.9990441076061725,
+        "boolean-in-memory": 1.1643463627323491,
+        "comparison-operators": 1.0213546880213549,
+        "logic-operators": 1.0120001329654622,
+        "logic-short-circuit": 1.0003687810111304,
+        "saturating-precedence": 1.016942091376198,
+        "arithmetic-operators": 1.0257127267767017,
+        "semicolon-separates-statements": 1.0096924008884702,
+        "call-nested": 1.015272022456891,
+        "arithmetic-division": 1.0090322148998092,
+        "shift-operators": 1.0032760845825475,
+        "float-arithmetic": 1.0034023169497244,
+        "float-approximate": 1.0043547791856318,
+        "result-type": 1.013519287109375,
+        "type-definitions": 1.0232375232375233,
+        "result-as-an-argument": 1.0238456706104073,
+        "match-a-result": 0.9979537725517321,
+        "enum-values": 1.0342850133398753,
+        "enum-flag": 1.0044279741543138,
+        "if-statement": 1.0192800409941072,
+        "tuple-values": 1.0039253559300914,
+        "while-loop": 1.0108219359978756,
+        "while-loop-nested": 1.0147734524569239,
+        "foreach-over-a-range": 0.9985216544031179,
+        "foreach-range-step": 1.0173288118719475,
+        "collection-syntax": 0.9947258677787317,
+        "collection-operators": 1.0049077929803687,
+        "collection-grows": 1.0143500783994603,
+        "collection-arena": 1.0136116152450092,
+        "cdecl-attribute": 1.0175845410628017,
+        "array-fixed": 1.0107912611367578,
+        "array-slice": 0.9897976979420998,
+        "array-global": 1.0013908205841444,
+        "array-table": 1.009268501354627,
+        "array-row": 1.0252771348519913,
+        "foreach-over-an-array": 1.0295709423645596,
+        "foreach-over-a-collection": 1.0143110983047592,
+        "tuple-element": 1.0197782345978945,
+        "parameter-mut": 1.0198133748055989,
+        "call-spread": 0.9993306754357884,
+        "call-spread-an-array": 1.0030903419593344,
+        "tuple-spread": 1.012229406803486,
+        "array-written-with-no-length": 1.0131327932760097,
+        "array-written-on-its-own": 0.9596296049563655,
+        "loop-break": 1.0180174299050169,
+        "loop-break-nested": 1.0086898598116691,
+        "loop-continue": 1.0143173159641146,
+        "order-left-to-right": 0.9245670062239214,
+        "loop-break-value": 1.0184928767038985,
+        "loop-else": 0.9936001828519182,
+        "loop-break-value-nested": 1.0219379538756042,
+        "result-from-a-plain-value": 1.002297782883962,
+        "tuple-answered-through-storage": 1.0041388012618297,
+        "assign-to-the-wildcard": 1.0086726166072724,
+        "pure-by-default": 1.010824072737769,
+        "pure-call-is-dropped": 1.0095903548431293,
+        "listable-over-an-array": 1.0026771733090871,
+        "listable-operators": 1.005276697751922,
+        "array-masked-pick": 0.9988869874925219,
+        "array-masked-write": 0.9888415707792473,
+        "arithmetic-at-each-width": 1.0088161956779864,
+        "operators-over-a-run": 1.006660243081968,
+        "run-of-each-width": 1.0080983204539622,
+        "run-arithmetic": 0.9979457407614155,
+        "run-longer-than-a-register": 1.0073788412486333,
+        "wrap-arithmetic": 1.0187541439080603,
+        "wrap-over-a-run": 1.0108049535603711,
+        "concatenate-arrays": 1.002373605506765,
+        "concatenate-tables": 1.008968214296216,
+        "character-values": 1.0404332129963898,
+        "string-walk": 1.0147966147966145,
+        "string-join": 0.9994643161508683,
+        "length-operator": 1.004197631336603,
+        "shape-operator": 1.0010761205852903,
+        "list-values": 1.0536224976167778,
+        "list-join": 1.0030077780757887,
+        "foreach-declares-the-turn": 0.9982942430703625,
+        "comptime-tuple-loop": 1.0066472573622238,
+        "extremum-operators": 0.9894739894449922,
+        "extremum-of-floats": 1.0103155803469093,
+        "string-compare": 1.0039003422749344,
+        "character-compare": 1.0093823299452698,
+        "rounding-operators": 0.9997027201109846,
+        "power-operator": 1.000642931768866,
+        "float-comparison-as-a-condition": 1.0017580349626107,
+        "narrow-integers": 1.011352903396426,
+        "lifting": 0.9981759221726797,
+        "enumerate": 1.011182893859064,
+        "divides": 0.9964922274355787,
+        "failure-written-out": 1.0191324158452668,
+        "named-arguments": 1.0219614222635371,
+        "line-breaks-inside-brackets": 0.9969643383436486,
+        "references": 1.016375292415936,
+        "type-reaches-itself-through-a-reference": 1.0105310057110457,
+        "units": 0.9961658469511874,
+        "one-element-says-the-type": 0.9975351689311052,
+        "narrow": 1.014293054322948,
+        "lambda": 1.0186369350166695,
+        "generic-functions": 0.9951916655536263,
+        "lifetimes": 0.9948907595737434,
+        "named-lifetimes": 0.9970616518858852,
+        "listable-lambda": 1.0005952703068348,
+        "function-as-a-value": 1.002751546369059,
+        "block-on-one-line": 1.0186241958912634,
+        "tests-of-three-kinds": 1.0201041732833642,
+        "syscall": 1.0152312899586309,
+        "record-values": 1.0075292346062443,
+        "record-in-a-record": 1.0206135102795608,
+        "record-through-a-call": 1.0041318287240055,
+        "record-of-one-field": 1.0312939010802693,
+        "std-init": 1.0108044105676017,
+        "ordered-access": 1.006447953670259,
+        "place-at-an-address": 1.0106745400863046,
+        "assign-a-field": 0.9988563385237971,
+        "record-at-the-top-level": 1.0096811742327456,
+        "widening": 1.0044793169793171,
+        "std-read-write": 1.0058950677932796,
+        "address-of-a-place": 1.0121360656705842,
+        "tests-that-fail": 1.0045179305368181,
+        "external-function": 1.0048328988606072,
+        "narrow-to-an-enum": 1.0058998844352534,
+        "write-text": 1.0112544886579276,
+        "write-and-flush": 1.0117032858273953,
+        "arguments": 0.9995513235953936,
+        "stack-overflow": 1.015305146355462,
+        "collection-string-keys": 1.0007576958996316,
+        "environment": 1.0089201013776603,
+        "collection-take": 0.9999822029222801,
+        "collection-at-the-top-level": 1.0150615539555368,
+        "list-take": 1.0054210968102966,
+        "list-cursor": 0.9998784194528875,
+        "match-on-a-sum": 1.0122174071946954,
+        "sum-through-a-call": 1.010287837613,
+        "spill-around-a-loop": 1.0123495883470552,
+        "saturating-widest-multiplication": 1.0077230519578086,
+        "fault-says-who-called": 1.0045787829100024,
+        "answer-in-storage-not-read": 1.02059159993463,
+        "count-bits": 1.0175482647026004,
+        "tuple-holding-a-result": 1.0123649210307566,
+        "conditions-pre-and-post": 1.0069635151039624,
+        "requirements-bundle": 1.0082238491625715,
+        "requirements-settle-a-type": 1.0080076004343106,
+        "conditions-entry-value": 1.0154364391536121,
+        "conditions-observed": 1.0072688158023404,
+        "bundle-imported": 1.0064420706655708,
+        "operator-defined": 1.008321860180511,
+        "operator-fresh": 1.0120081231421256,
+        "operator-pair": 1.00652528548124,
+        "macro-rules": 1.0071558678116055,
+        "macro-statements-and-hygiene": 1.0059915722939161,
+        "macro-function-form": 1.0199667221297837,
+        "macro-reflection": 1.0168683194774346,
+        "macro-comptime-fn": 1.003529701480286,
+        "generic-imported": 1.0058480562258898,
+        "reflect-record": 0.990204601512272,
+        "print-and-println": 1.009126795905565,
+        "named-inside-a-type": 1.0301192524127474,
+        "std-text": 1.000407688113681,
+        "std-format": 0.998172077723779,
+        "std-print-macro": 1.0149373779156616,
+        "std-io-objects": 1.0139586543657069,
+        "startup-takes-the-record": 0.99914375978033,
+        "io-is-a-capability": 1.002399520095981,
+        "arena-in-hand": 1.016616117850953,
+        "format-in-a-pool": 1.0069655345351203,
+        "defer-every-way-out": 1.0047938036424533,
+        "macro-statements-as-a-value": 1.0217541786256963,
+        "answer-made-in": 0.9973962875295878,
+        "container-owns-its-elements": 1.0049695856765752,
+        "heap-allocates": 0.9965015107112837,
+        "container-pool-and-heap": 1.008066558147947,
+        "answer-copied-into-its-allocator": 0.9985518312751784,
+        "answer-in-heap": 1.0066447937271252,
+        "lean-values": 1.0025748136411106,
+        "tail-call-is-a-loop": 1.0006167961296044,
+        "arena-handed-out": 1.001493487698987,
+        "format-into-an-arena": 1.0126361855445702,
+        "lambda-answered": 1.0103691872965173,
+        "static-data": 1.0174695801041918,
+        "lambda-handed-on": 1.0028559975949494,
+        "generic-requirements-suffice": 1.0106527904951201,
+        "static-parameter": 1.0041114376158706,
+        "generic-calls-itself": 1.0043032695976222,
+        "generic-types": 1.0266826966211489,
+        "reference-at-the-top-level": 1.0073465471228524,
+        "pure-calls": 1.011600053828556,
+        "array-mask-walked": 1.0085669223600258,
+        "each-read": 1.001988636363636,
+        "each-mask-in-a-loop": 1.01280273618044,
+        "constant-expressions": 1.0175179131499097,
+        "iterator-handed-on": 0.995103075588765,
+        "generator-written-in": 1.0038453543961754,
+        "generator-through-calls": 1.0090829380156927,
+        "tasks-interleave": 1.0079931401707762,
+        "read-lines-from-a-pipe": 1.0025255735041367,
+        "closed-by-moves": 1.0221036063778828,
+        "type-argument": 1.0093181690220145,
+        "fields-of-an-enum": 1.0086220240859416,
+        "error-name": 1.0181730378202523,
+        "lambda-answers-a-reference": 1.0087813929403642,
+        "array-assigned-whole": 1.0089705963785371,
+        "table-sliced": 0.9968006849237909,
+        "padded": 1.005155353712713,
+        "template-names": 1.0082353464629672,
+        "each-walks-a-type": 1.0052512530266948,
+        "range-step-computed": 1.0012672954668216,
+        "list-grows": 1.0067466266866565,
+        "array-answered": 1.0069438749008996,
+        "table-view-walked-in-order": 1.0082712903611102,
+        "defer-on-every-early-exit": 1.0079741039002053,
+        "list-moved-into-a-call": 0.9905277595222448
       }
     }
   }
