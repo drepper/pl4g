@@ -65,6 +65,17 @@ namespace pl4g::unicode {
   }
 
 
+  bool is_space(char32_t cp) noexcept
+  {
+    if (cp == end_of_text)
+      return false;
+    if (::uc_is_general_category(::ucs4_t(cp), UC_CATEGORY_Zs))
+      return true;
+    int bidi = ::uc_bidi_category(::ucs4_t(cp));
+    return bidi == UC_BIDI_WS || bidi == UC_BIDI_B || bidi == UC_BIDI_S;
+  }
+
+
   bool is_symbol(char32_t cp) noexcept
   {
     return cp != end_of_text && ::uc_is_general_category(::ucs4_t(cp), ::uc_general_category_or(UC_CATEGORY_Sm, UC_CATEGORY_So));

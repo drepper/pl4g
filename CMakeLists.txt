@@ -33,6 +33,9 @@ option(PL4G_FUZZ "Build the fuzzing entry points (with AFL++ as the compiler)" O
 find_package(simdjson REQUIRED)
 find_library(UNISTRING_LIBRARY unistring REQUIRED)
 
+# The fuzzing entry points, each src/fuzz/NAME.cc with a corpus in src/fuzz/corpus/NAME.
+set(PL4G_FUZZ_TARGETS lexer parser)
+
 set(PL4G_COMMON_FLAGS -fcontracts -freflection -Wall -Wextra -Wno-unused-parameter -Wno-trigraphs)
 
 # The diagnostic catalog, generated from the shared JSON file.
@@ -58,6 +61,9 @@ set(PL4G_LIB_SOURCES
   src/lib/diag/render.cc
   src/lib/front/token.cc
   src/lib/front/lexer.cc
+  src/lib/front/ast.cc
+  src/lib/front/parser.cc
+  src/lib/front/dump.cc
   ${PL4G_GENERATED}/diag/catalog_data.cc
 )
 
@@ -72,20 +78,24 @@ function(pl4g_variant suffix)
   target_link_options(pl4g${suffix} PUBLIC ${flags})
   target_link_libraries(pl4g${suffix} PUBLIC simdjson::simdjson ${UNISTRING_LIBRARY})
 
-  add_executable(pl4g-lexdump${suffix} src/tools/lexdump.cc)
-  target_link_libraries(pl4g-lexdump${suffix} PRIVATE pl4g${suffix})
+  foreach(tool lexdump astdump)
+    add_executable(pl4g-${tool}${suffix} src/tools/${tool}.cc)
+    target_link_libraries(pl4g-${tool}${suffix} PRIVATE pl4g${suffix})
+  endforeach()
 
   # The fuzzing entry points, driven here by a main of our own that replays
   # the inputs it is given -- the corpus in ctest, a crash being reproduced.
-  add_executable(pl4g-fuzz-lexer-replay${suffix} src/fuzz/lexer.cc src/fuzz/replay.cc)
-  target_link_libraries(pl4g-fuzz-lexer-replay${suffix} PRIVATE pl4g${suffix})
+  foreach(target ${PL4G_FUZZ_TARGETS})
+    add_executable(pl4g-fuzz-${target}-replay${suffix} src/fuzz/${target}.cc src/fuzz/replay.cc)
+    target_link_libraries(pl4g-fuzz-${target}-replay${suffix} PRIVATE pl4g${suffix})
+  endforeach()
 endfunction()
 
 if(PL4G_FUZZ)
   # Built with afl-g++-fast: the library instrumented, driven by AFL++'s
   # driver of libFuzzer-style entry points.
   pl4g_variant("")
-  foreach(target lexer)
+  foreach(target ${PL4G_FUZZ_TARGETS})
     add_executable(pl4g-fuzz-${target} src/fuzz/${target}.cc)
     target_link_libraries(pl4g-fuzz-${target} PRIVATE pl4g /usr/lib64/afl/libAFLDriver.a)
   endforeach()
@@ -113,20 +123,33 @@ set(PL4G_TESTS ${CMAKE_SOURCE_DIR}/tests/language)
 add_test(NAME lexer-agrees
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/lexer_agrees.py
           $<TARGET_FILE:pl4g-lexdump> ${CMAKE_SOURCE_DIR})
-# The fuzzing entry points replayed over the test programs, sanitized.
+# Every test program parses to the tree pypl4g makes of it.
+add_test(NAME parser-agrees
+  COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/parser_agrees.py
+          $<TARGET_FILE:pl4g-astdump> ${CMAKE_SOURCE_DIR})
+# The same, sanitized, and the fuzzing entry points replayed over the test
+# programs and the corpora under the sanitizers.
 if(PL4G_SANITIZERS)
-  add_test(NAME lexer-agrees-asan
-    COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/lexer_agrees.py
-            $<TARGET_FILE:pl4g-lexdump-asan> ${CMAKE_SOURCE_DIR})
-  add_test(NAME fuzz-lexer-replay-asan
-    COMMAND pl4g-fuzz-lexer-replay-asan ${PL4G_TESTS} ${CMAKE_SOURCE_DIR}/src/fuzz/corpus/lexer)
+  foreach(stage lexer parser)
+    set(tool lexdump)
+    if(stage STREQUAL "parser")
+      set(tool astdump)
+    endif()
+    add_test(NAME ${stage}-agrees-asan
+      COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/${stage}_agrees.py
+              $<TARGET_FILE:pl4g-${tool}-asan> ${CMAKE_SOURCE_DIR})
+  endforeach()
+  foreach(target ${PL4G_FUZZ_TARGETS})
+    add_test(NAME fuzz-${target}-replay-asan
+      COMMAND pl4g-fuzz-${target}-replay-asan ${PL4G_TESTS} ${CMAKE_SOURCE_DIR}/src/fuzz/corpus/${target})
+  endforeach()
 endif()
 
 # Fuzzing, for PL4G_FUZZ_SECONDS each entry point, after the AFL++ build.
 set(PL4G_FUZZ_SECONDS 30 CACHE STRING "How long ctest fuzzes each entry point")
 add_test(NAME fuzz-build COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target fuzz)
 set_tests_properties(fuzz-build PROPERTIES FIXTURES_SETUP fuzzers LABELS fuzz)
-foreach(target lexer)
+foreach(target ${PL4G_FUZZ_TARGETS})
   add_test(NAME fuzz-${target}
     COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/run_fuzz.py ${CMAKE_BINARY_DIR}/fuzz/pl4g-fuzz-${target}
             ${PL4G_FUZZ_SECONDS} ${CMAKE_BINARY_DIR}/fuzz-runs/${target}

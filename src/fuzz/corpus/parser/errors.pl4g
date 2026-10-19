@@ -1,0 +1,10 @@
+fn f(a: u8, a: u8) → u8:
+    a ⊼ b ⊼ c
+    1 = 2 = 3
+    x ← 1…2…3…4
+    break
+    ⁂x
+    if a: if b: c
+
+fn g() { a
+ b }

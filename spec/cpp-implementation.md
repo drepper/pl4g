@@ -78,7 +78,7 @@ Each phase is committed when its own checks pass; the status column is kept curr
 | Phase | What | Checked by | Status |
 |---|---|---|---|
 | 1 | CMake, sources, diagnostics, tokens, lexer | every test program lexes; fuzzed | done: all 980 files and the edge corpus lex as `pypl4g` lexes them, plainly and lazily; AFL++ in ctest |
-| 2 | Syntax tree and parser | every test program parses as `pypl4g` parses it | |
+| 2 | Syntax tree and parser | every test program parses as `pypl4g` parses it | done: every file's tree, compared field by field (a dumper written by reflection), as a program's file and as a module's; no difference on 3527 inputs AFL++ found |
 | 3 | IR: types, values, instructions, builder, verifier, printer | unit tests | |
 | 4 | Interpreter of the IR, and the runtime: heap, io_uring | IR read from `pypl4g --emit=ir` runs | |
 | 5 | Checker, part one: definitions, types, expressions, statements, calls | the first test programs run | |

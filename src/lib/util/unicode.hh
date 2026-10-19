@@ -50,6 +50,10 @@ namespace pl4g::unicode {
   // Python's `str.isdigit` for one character: a decimal digit or a digit.
   bool is_digit(char32_t cp) noexcept;
 
+  // Python's `str.isspace` for one character: a space separator, or what the
+  // bidirectional algorithm treats as white space or a separator.
+  bool is_space(char32_t cp) noexcept;
+
   // The general categories the lexer asks about.
   bool is_symbol(char32_t cp) noexcept;            // Sm or So
   bool is_open_punctuation(char32_t cp) noexcept;  // Ps

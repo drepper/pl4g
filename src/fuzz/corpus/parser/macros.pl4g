@@ -1,0 +1,12 @@
+macro m:
+    ⌜$a + $b⌝ → ⌜$b + $a⌝
+comptime fn q(x: syntax) → syntax:
+    ⌜+⌝
+fn r():
+    m⌜1, 2⌝
+    std.m⌜1⌝
+    λ x: u8 [=] → u8: x
+    λ [&a, b] in k → u8 in p: 0
+    l ⧺← ⟦1⟧
+    ⸨a: 1, b: 2⸩ in heap
+    ⸨⁂x⸩

@@ -1,3 +1,5 @@
 let e := '\q'
 let s := "\u12
 let n := ٣
+let c := '\U00110000'
+let f := 0x1p99999
