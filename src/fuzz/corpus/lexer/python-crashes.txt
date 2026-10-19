@@ -1,0 +1,3 @@
+let e := '\q'
+let s := "\u12
+let n := ٣

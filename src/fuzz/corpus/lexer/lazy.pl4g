@@ -1,0 +1,10 @@
+fn f():
+    let s := "(" ※ (
+    let c := '('
+    g(1,
+2)
+※ next
+fn h():
+    [1
+]
+let z := 1 -> 2 <= 3 >= 4 ?? 5 @[x] ⎕sc@write a@b ↯ ¤

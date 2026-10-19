@@ -38,6 +38,10 @@ Requirements the user gave
 Toolchain
 ---------
 
+Building: `cmake -S . -B build/cpp -G Ninja && cmake --build build/cpp && (cd build/cpp && ctest)`.  `ctest -L fuzz` runs only the
+fuzzing, for `PL4G_FUZZ_SECONDS` (30 by default) per entry point; `ctest -LE fuzz` everything else.  The characters' classes are
+libunistring's (1.1, Unicode 15; Python has 16, which differs only in the letters of the scripts 16 added).
+
 GCC 16.2 is the compiler: it has contracts, reflection and the sanitizers.  Clang 22 has neither contracts nor reflection, so its
 libFuzzer is not used; fuzzing is AFL++ with its GCC plugin (`afl-g++-fast`), over entry points written as libFuzzer's
 `LLVMFuzzerTestOneInput`, so either can drive them.  tree-sitter 0.26 is installed as a library, and the grammar's generated parser is
@@ -60,7 +64,9 @@ src/lib/                    the library, libpl4g.a
     ts/                     the tree-sitter service
     lsp/                    the LSP service
 src/repl/main.cc            the driver: the stand-alone REPL program
-src/fuzz/                   fuzzing entry points
+src/fuzz/                   fuzzing entry points, a replay driver, and the seed corpora
+src/tools/                  pl4g-gen-diag (the catalog from share/diagnostics.json), pl4g-lexdump
+src/test/                   the checks ctest runs that compare with pypl4g, and the fuzzing run
 bin/pl4g-interp-tests       runs tests/language through the interpreter
 ```
 
@@ -71,7 +77,7 @@ Each phase is committed when its own checks pass; the status column is kept curr
 
 | Phase | What | Checked by | Status |
 |---|---|---|---|
-| 1 | CMake, sources, diagnostics, tokens, lexer | every test program lexes; fuzzed | |
+| 1 | CMake, sources, diagnostics, tokens, lexer | every test program lexes; fuzzed | done: all 980 files and the edge corpus lex as `pypl4g` lexes them, plainly and lazily; AFL++ in ctest |
 | 2 | Syntax tree and parser | every test program parses as `pypl4g` parses it | |
 | 3 | IR: types, values, instructions, builder, verifier, printer | unit tests | |
 | 4 | Interpreter of the IR, and the runtime: heap, io_uring | IR read from `pypl4g --emit=ir` runs | |

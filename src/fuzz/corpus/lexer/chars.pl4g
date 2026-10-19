@@ -1,0 +1,4 @@
+let a := 'x'
+let b := '\n'
+let c := 'xy'
+let d := '

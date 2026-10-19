@@ -1,0 +1,10 @@
+fn f():
+	x
+  y
+    z
+   w
+@[impure]
+
+fn g()
+    pre(true)
+    : 1

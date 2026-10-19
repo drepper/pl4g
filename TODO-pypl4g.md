@@ -707,3 +707,11 @@ Optimizations
     local of a function's name -- `let run` in `std` beside `std.run`, `let done` beside `std.done` -- lowers that function for
     every program reaching the definition, the whole of `std.run` once.  Leaving out the names a definition binds itself has to
     respect where each binding begins: a name read before a `let` of it is still the function.
+
+[ ] the lexer fails on two inputs the C++ lexer found while being checked against it.  A character literal holding one escape
+    that denotes nothing, `'\q'`, reports the bad escape and then raises `TypeError` from `ord("")`, which the driver turns
+    into an internal error.  A `\u` or `\U` escape the file ends in the middle of, `"\u12` and nothing after it, never stops:
+    `_lex_escape` asks whether `""` is among the hexadecimal digits, which `in` says it is, and steps past the end for ever.
+    A digit of another script, `٣`, also loops: `_lex_number` consumes nothing and emits an empty token at the same place.
+    The C++ lexer reports the first as an empty character, the second as a bad escape and the third as an unexpected
+    character; the inputs are in `src/fuzz/corpus/lexer/python-crashes.txt`.

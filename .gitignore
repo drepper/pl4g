@@ -12,6 +12,7 @@
 !/TODO-pypl4g.md
 !/TODO-editors.md
 !/pyproject.toml
+!/CMakeLists.txt
 
 # What a build leaves, anywhere.  These come after the rule above because the
 # last one that matches is the one that holds, and the directories among them
