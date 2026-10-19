@@ -10492,6 +10492,27 @@ dropped.  Taken without asking: a lambda's writable table parameters are asked o
 in the frame, its address taken, is still taken to be somebody else's.  Compare Rust's `&mut` parameters, D's weakly pure functions
 and Haskell's `ST`.
 
+## 2026-10-20T16:00+02:00 — compiler
+
+**`v ← f(v, x)` moves `v` into the call**
+
+The user asked that a call like `v = fct(v, other, args)`, where `v` is a value of some size taken by value, hand `v` over the
+way C++'s `std::move` does rather than copy it.  What was copied was a list handed to a `mut` parameter the callee changes in
+place: the callee copied it on the way in, every call, so building a list a call at a time was quadratic.  Taken without asking:
+
+- **The copy moves to the caller**, which knows what it hands over: a function records which parameters it takes as its own, and
+  a caller copies for those -- or hands over the room where the argument is a `mut` variable of its own, named once in the
+  statement, its address never taken, and either assigned by the statement or not read after it.  A function value of such a
+  function copies in its shim; a lambda keeps copying on the way in.
+- **The answer moves back.**  Answering such a parameter copied it into the heap, nothing saying where it was made; it is now
+  answered as it is where its allocator is the heap, asked while running, and copied only where it is an arena's.  Without this
+  half the call would still copy once.
+- **Only a list, or what holds one**, is copied this way at all; a string is never changed in place, and a record or a tuple is
+  moved as its parts are, the answer's hand-over being for a plain list.
+
+Building a list of 50,000 a call at a time ran out of memory under the suite's limits before, and takes a hundredth of a second
+now.  Compare C++'s `std::move`, Rust's move of a value used once, Swift's copy-on-write.
+
 Open questions
 --------------
 

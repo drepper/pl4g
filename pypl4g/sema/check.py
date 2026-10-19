@@ -3090,6 +3090,30 @@ def _shape_written(expr: ast.ArrayLit) -> tuple[int, ...] | None:
     return (len(rows), *shape)
 
 
+def _takes_owned(node: ast.FuncDef, params: Sequence[Type]) -> tuple[int, ...]:
+    """Which parameters of a definition its body takes as its own: `mut` ones
+    holding a list that the body changes in place."""
+    if node.body is None:
+        return ()
+    return tuple(at for at, (param, ty) in enumerate(zip(node.params, params))
+                 if param.mutable and _holds_a_list(ty) and owned.can_own(ty)
+                 and _changed_in_place(param.name, node.body))
+
+
+def _mentions(node: object, name: str) -> int:
+    """How many times *name* is read in *node*."""
+    if isinstance(node, ast.NameRef):
+        return 1 if node.name == name else 0
+    found = 0
+    if isinstance(node, ast.Node):
+        for field_ in fields_of(node):
+            found += _mentions(getattr(node, field_.name), name)
+    elif isinstance(node, (tuple, list)):
+        for item in node:
+            found += _mentions(item, name)
+    return found
+
+
 def _fills(ty: Type) -> bool:
     """Whether a parameter of *ty* is a table the function may fill: a set or a
     dictionary whose type says it may be written."""
@@ -6526,6 +6550,7 @@ class Checker:
                             attrs=func_attrs, linkage=linkage,
                             param_names=tuple(p.name for p in node.params),
                             writes_arrays=_writes_arrays(node, params),
+                            takes_owned=_takes_owned(node, params),
                             defaults=self._defaults_of(node, params),
                             borrows_from=borrows[-1].params if -1 in borrows else (),
                             leaf_borrows={leaf: one.params
@@ -9981,6 +10006,13 @@ class Checker:
                              found=", ".join(found), said=named,
                              type=ty.written())
             return UndefConst(ERROR)
+        if target == _HEAP and isinstance(ty, ListType) \
+                and self._owned_parameter(written, func):
+            # A parameter taken as this call's own is nobody else's room and
+            # goes when the call does: where it is the heap's already it is
+            # answered as it is, which is how `v ← f(v)` moves both ways.
+            self._answer_kinds.append("heap")
+            return self._heaps_or_copied(builder, value, ty, span)
         copied = builder.call(owned.own_function(self._module, ty),
                               (self._owner_place(builder, target, span), value),
                               ty, span)
@@ -10505,7 +10537,9 @@ class Checker:
                                  is_parameter=True, builder=builder,
                                  placed_as=held)
                 continue
-            value = self._own_when_changed(builder, param, value, node.body)
+            if index not in func.takes_owned:
+                # Where it is taken as its own, the caller has seen to it.
+                value = self._own_when_changed(builder, param, value, node.body)
             self._bind_local(param.name, value, param.span,
                              param.mutable, is_parameter=True, builder=builder)
         outer_lifetimes = self._enter_lifetimes(
@@ -13066,6 +13100,7 @@ class Checker:
                 source_path=written.path,
                 param_names=tuple(one.name for one in node.params),
                 writes_arrays=_writes_arrays(node, params),
+                takes_owned=_takes_owned(node, params),
                 defaults=self._defaults_of(node, params),
                 borrows_from=borrows[-1].params if -1 in borrows else (),
                 leaf_borrows={leaf: one.params for leaf, one in borrows.items()
@@ -13161,9 +13196,10 @@ class Checker:
             self._whole_here = _used_whole(node.body)
             arriving = [block.add_param(one, param.name)
                         for one, param in zip(func.ty.params, node.params)]
-            for param, value in zip(node.params, arriving):
+            for index, (param, value) in enumerate(zip(node.params, arriving)):
                 self._at_entry[param.name] = value
-                value = self._own_when_changed(inner, param, value, node.body)
+                if index not in func.takes_owned:
+                    value = self._own_when_changed(inner, param, value, node.body)
                 self._bind_local(param.name, value, param.span, param.mutable,
                                  is_parameter=True, builder=inner)
             if func.hands_out is not None:
@@ -13596,7 +13632,7 @@ class Checker:
             if place is None:
                 return UndefConst(ERROR)
             made.append(place)
-        args = made
+        args = self._owned_arguments(builder, expr, func, made)
         self._what_it_changes(func, expr.span)
         self._tables_handed(func.ty.params, args, func.name, expr.span)
         self._kept_alike(func, args, expr.span)
@@ -13945,7 +13981,7 @@ class Checker:
         # value points at the function itself.  One of another convention is
         # called the way the system calls, so something has to stand between.
         shim = func if func.cconv == DEFAULT_CCONV and not func.attrs.chained \
-            else self._shim_for(func, ref.span)
+            and not func.takes_owned else self._shim_for(func, ref.span)
         if shim is None:
             return UndefConst(ERROR)
         # It brought nothing in, so it carries no environment and no allocator,
@@ -13999,7 +14035,12 @@ class Checker:
         inner = IRBuilder(self._module, shim)
         arriving = [block.add_param(one, "")
                     for one in (_ENVIRONMENT, *func.ty.params)]
-        answer = inner.call(func, tuple(arriving[1:]), func.ty.ret, func.span)
+        handed = arriving[1:]
+        for at in func.takes_owned:
+            # Called through a value, nothing knows to copy what the function
+            # takes as its own: the shim does.
+            handed[at] = self._copy_into_heap(inner, handed[at], func.span)
+        answer = inner.call(func, tuple(handed), func.ty.ret, func.span)
         inner.ret(None if func.ty.ret is VOID else answer, func.span)
         self._shims[id(func)] = shim
         self._module.reports.record(
@@ -16276,6 +16317,97 @@ class Checker:
         may_change = through_a_reference or local is None or local.mutable
         if changes or may_change:
             self._copying.add(id(written))
+
+    def _owned_arguments(self, builder: IRBuilder, expr: ast.Call, func: Function,
+                         args: Sequence[Value]) -> list[Value]:
+        """What a call hands the parameters *func* takes as its own: a copy, or
+        -- where the argument is room the caller is done with -- that room."""
+        given = list(args)
+        if not func.takes_owned:
+            return given
+        written = self._written_for(expr, func)
+        for at in func.takes_owned:
+            if at >= len(given):
+                continue
+            one = written.get(at)
+            if one is not None and self._movable(one):
+                self._module.reports.record(
+                    ReportKind.COPY_INTO_ALLOCATOR, func.name,
+                    "".join(("'", _written_as(one), "' is handed to '", func.name,
+                             "' as it is: nothing reads it again, and the callee ",
+                             "changes it in place")), one.span)
+                continue
+            given[at] = self._copy_into_heap(builder, given[at], expr.span)
+        return given
+
+    def _movable(self, written: ast.Expr) -> bool:
+        """Whether *written*, handed to a parameter that is taken as the callee's
+        own, may be handed over as it is rather than copied: `std::move`.
+
+        It may where it is a variable of this function that owns its room -- a
+        `mut` one, not a parameter, its address never taken -- named nowhere
+        else in the statement, and not read again: not used after it, or given
+        something new by it, as `v ← f(v, x)` gives `v` what the call answers.
+        """
+        if not isinstance(written, ast.NameRef):
+            return False
+        local = self._find_local(written.name)
+        stmt = self._current_stmt
+        if local is None or local.is_parameter or not local.mutable \
+                or written.name in self._addressed or stmt is None \
+                or _mentions(stmt, written.name) != 1:
+            return False
+        if isinstance(stmt, ast.AssignStmt) and stmt.name == written.name \
+                and not stmt.more:
+            return True
+        return not self._used_after(local)
+
+    def _owned_parameter(self, written: ast.Expr, func: Function) -> bool:
+        """Whether *written* is a parameter *func* takes as its own."""
+        if not isinstance(written, ast.NameRef):
+            return False
+        local = self._find_local(written.name)
+        return local is not None and local.is_parameter \
+            and written.name in func.param_names \
+            and func.param_names.index(written.name) in func.takes_owned
+
+    def _heaps_or_copied(self, builder: IRBuilder, value: Value, ty: ListType,
+                         span: Span) -> Value:
+        """*value* as it is where its allocator is `⎕heap`, and a copy in the heap
+        where it is anything else -- an arena of the caller's -- asked while
+        running, since which it is was the caller's to know."""
+        heap = self._owner_place(builder, _HEAP, span)
+        held = builder.extract(value, 2, parts_of(ty)[2], span)
+        same = builder.compare(
+            CmpPred.EQ, builder.cast(CastKind.BITCAST, held, U64, span),
+            builder.cast(CastKind.BITCAST, heap, U64, span), span)
+        kept = builder.new_block("owned.heaps")
+        copying = builder.new_block("owned.copy")
+        done = builder.new_block("owned")
+        before = builder.memory()
+        builder.condbr(same, kept, copying, span=span)
+        builder.position_at(kept)
+        builder.br(done, (value, before), span)
+        builder.position_at(copying)
+        builder.set_memory(before)
+        copied = builder.call(owned.own_function(self._module, ty), (heap, value),
+                              ty, span)
+        builder.br(done, (copied, builder.memory()), span)
+        builder.position_at(done)
+        answer = done.add_param(ty, "answer")
+        builder.set_memory(done.add_param(MEM, "mem"))
+        return answer
+
+    def _copy_into_heap(self, builder: IRBuilder, value: Value, span: Span) -> Value:
+        """A list of elements of its own, deep, in `⎕heap`, as a body copying
+        what it takes as its own on the way in made it."""
+        ty = self._value_type_of(value)
+        if not _holds_a_list(ty) or not owned.can_own(ty):
+            return value
+        heap = self._provided(HEAP_NAME)
+        assert isinstance(heap, GlobalVar)
+        return builder.call(owned.own_function(self._module, ty),
+                            (builder.address(heap, span), value), ty, span)
 
     def _own_when_changed(self, builder: IRBuilder, param: ast.Param, value: Value,
                           body: object) -> Value:
@@ -24670,6 +24802,7 @@ class Checker:
             return UndefConst(ERROR)
         # Asked before the walk and not after, a walked call being as much a call as
         # any other: what the callee does, it does once for every element.
+        args = self._owned_arguments(builder, expr, func, args)
         self._what_it_changes(func, expr.span)
         self._tables_handed(wanted, args, func.name, expr.span)
         if func.attrs.listable \

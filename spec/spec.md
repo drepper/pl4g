@@ -4087,6 +4087,16 @@ share what nobody can see them share.  A record or a tuple holding a list is cop
 in the function's own room is therefore no effect: nothing anyone else holds changes.  One reached through a reference is
 somebody's, and changing it is (4479).
 
+**Handing a list to a `mut` parameter the callee changes in place follows the same rule.**  The parameter is the callee's own
+room, and it is the caller that sees to it: it hands over a copy, or -- where what it hands over is a `mut` variable of its own,
+named once in the statement and not read again, as in `v ← pushed(v, x)` -- the room itself, the way C++'s `std::move` does.  A
+callee answering such a parameter answers it as it is where it is the heap's, so the list goes into the call and comes back out
+without a copy either way, and building one up a call at a time costs no more than building it in place.  One of an arena's is
+answered as a copy in the heap, as anything else of an arena's is.  Called through a function value, where the caller knows
+nothing of the callee, the value's code copies.  Compare **C++**, where `v = f(std::move(v))` says it and a moved-from `v` may
+still be read; **Rust**, where `v = f(v)` moves and reading the old `v` is refused; **Swift**, whose copy-on-write would copy here
+if a second reference were alive, and does not when none is.
+
 ```
 let l: mut [u8] = [1u8, 2u8, 3u8]
 let m: [u8] = l                       ※ l is used below: m gets a copy

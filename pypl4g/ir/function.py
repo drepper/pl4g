@@ -247,6 +247,11 @@ class Function:
     #: their `mut` says: a caller may hand those only an array that may be
     #: written.
     writes_arrays: tuple[int, ...] = ()
+    #: Which parameters the body takes as its own: `mut` ones holding a list it
+    #: changes in place.  What arrives there has to be room nobody else names,
+    #: and it is the caller that sees to it -- copying what it hands over, or
+    #: handing over room it is done with, which is what makes `v ← f(v)` move.
+    takes_owned: tuple[int, ...] = ()
     #: What each parameter is given where a call gives it nothing, and nothing
     #: where it must be given something.  Settled where the function is defined
     #: rather than at the call, so that every call of it -- in this file or any

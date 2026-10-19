@@ -1,0 +1,47 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A `mut` list parameter the body changes in place is the body's own room, so
+※ what is handed to it is a copy -- unless the caller is done with what it
+※ hands over, which then goes as it is, as C++'s `std::move` hands it: in
+※ `v ← pushed(v, i)` nothing reads the old `v` again, `pushed` changes that
+※ room and answers it, and building the list costs no copy per turn.  Every
+※ other way a value is handed over keeps what the caller holds as it was: a
+※ list read again afterwards, one named twice in the call, one called through
+※ a function value, and one whose room is an arena's rather than the heap's,
+※ which is answered as a copy in the heap.
+
+let std := ⎕import("std")
+
+fn pushed(l: mut [u8], x: u8) → [u8]:
+    l ⧺← [x]
+    l
+
+fn both(l: mut [u8], r: [u8]) → [u8]:
+    l ⧺← r
+    l
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let v: mut [u8] = []
+    foreach i := 0u8…100u8:
+        v ← pushed(v, i)
+    if #v ≠ 100 ∨ v⟦99⟧ ≠ 99u8: return 1u6
+    ※ read again afterwards: copied, and v is as it was
+    let w: [u8] = pushed(v, 7u8)
+    if #v ≠ 100 ∨ #w ≠ 101 ∨ w⟦100⟧ ≠ 7u8: return 2u6
+    ※ named twice: the second is what v was, not what the first became
+    v ← both(v, v)
+    if #v ≠ 200 ∨ v⟦150⟧ ≠ 50u8: return 3u6
+    ※ through a value: the shim copies
+    let f: fn([u8], u8) → [u8] = pushed
+    let u: [u8] = f(v, 1u8)
+    if #v ≠ 200 ∨ #u ≠ 201: return 4u6
+    ※ in an arena: handed over, and answered as a copy in the heap
+    let kept: mut [u8] = []
+    if true:
+        let scratch: mut arena = ⎕arena
+        let a: mut [u8] = [0u8, 2u8] in scratch
+        a⟦0⟧ ← 1u8
+        kept ← pushed(a, 3u8)
+    if #kept ≠ 3 ∨ kept⟦2⟧ ≠ 3u8: return 5u6
+    0u6

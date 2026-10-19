@@ -2053,6 +2053,14 @@ yes for it, which is the one question every pass that would fold, merge, move or
 answering through storage asks it as well; the attribute sets `inline(never)`.  A function making a call to one is set `opaque`
 in turn, in `_what_it_changes`, without `inline(never)`.  Nothing in the checker reads it as `impure`.
 
+**A list handed to a parameter the callee changes in place is copied by the caller.**  `Function.takes_owned` lists the `mut`
+parameters holding a list that the body changes in place (`_takes_owned`); the body binds those as they arrive, and every direct
+call runs its arguments through `_owned_arguments`, which copies into `⎕heap` (`_copy_into_heap`) unless `_movable` says the caller
+is done with the variable -- not a parameter, `mut`, not in `_addressed`, named once in the statement (`_mentions`), and either the
+name the statement assigns or not live after it.  A function value of such a function always goes through its shim, which copies.
+`_answered` hands such a parameter back as it is where its allocator is the heap (`_heaps_or_copied`, a comparison while running)
+and copies it otherwise.  A lambda still copies on the way in, being called only through values.
+
 **Whether a mark is needed (4933) is a `_Marks` record per definition**, which `_lower_body` and `_lower_instance` make current in
 `_marking`.  `_an_effect` notes every effect there before deciding whether to report it -- as the body's own, or, given `through`,
 as a call to a marked callee -- and `_what_it_changes` notes every call to a function that does input or output.  `_check_marks`
