@@ -4352,6 +4352,29 @@ its own (below), so a lookup finds every key and a walk meets every key -- in it
 while running would have.  A table made out of one -- a union, say -- comes out of `⎕heap`, there being no allocator to come out of
 the same one.
 
+**A call in the initializer is run while compiling.**  `let names: ⸨Colour: str⸩ = named() in ⎕static` calls a pure function of the
+program before the program runs, and what it answers is laid out as the literal it comes to would be -- a set, a dictionary, a list
+or text, of numbers, truth values, characters, text and values of enumerations.  The function may build what it answers the way any
+does: from a table written empty, entries put in one at a time, `comptime foreach` over `⎕fields(⌜E⌝)`, loops, set operators.  So a
+table of an enumeration's names is read off the enumeration rather than written out beside it.  The function is not in the
+program for that: nothing of it runs while the program does.  A function marked `@[impure]` or `@[io]` is refused (4665), as is a
+generic one, and what the compiler cannot work out yet is named where it is (7000).
+
+```
+fn named() → ⸨Colour: str⸩:
+    let d: mut ⸨Colour: str⸩ = ⸨⸩
+    comptime foreach m := ⎕fields(⌜Colour⌝):
+        d⸨m⟦1⟧⸩ ← m⟦0⟧
+    d
+
+let names: ⸨Colour: str⸩ = named() in ⎕static
+```
+
+Compare **Zig**, whose `std.StaticStringMap.initComptime` builds a lookup table from a list worked out by comptime code; **D**, whose
+compile-time function evaluation builds the value of a `static immutable` associative array; **C++**'s `constexpr` functions, which
+can build a `std::array` of pairs for a lookup but not a `std::map` that outlives the evaluation; **Rust**'s `phf` crate, which
+does it with a macro.
+
 **A definition that never changes and holds only what the compiler knows says `in ⎕static`** (4638).  It is what C++ makes of a
 `static const` table, and saying it is what tells a reader the table is not built every time the line runs -- a stronger rule than
 C++'s, where the reader has to look for the keyword.  A container written with an arena of its own, or a value worked out from

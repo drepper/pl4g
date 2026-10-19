@@ -102,23 +102,18 @@ enum Error:
 fn as_error(n: i32) → Error:
     ⎕narrow(n, ⌜Error⌝) ?? Error.other
 
-※※ The name of each `Error`, in the image.
+※※ Each `Error` with its name, as the enumeration writes it.
 ※
-※ Written out rather than read off the enumeration with `⎕fields`: a table in
-※ the image holds only what is written down, and nothing yet works one out
-※ while compiling.  A test walks `⎕fields(⌜std.Error⌝)` and asks `error_name_of`
-※ of every value, so a value added to `Error` and not here is caught.
-let error_names: ⸨Error: str⸩ = ⸨
-    Error.other: "other", Error.not_found: "not_found", Error.interrupted: "interrupted",
-    Error.device: "device", Error.not_a_device: "not_a_device", Error.would_block: "would_block",
-    Error.no_memory: "no_memory", Error.not_allowed: "not_allowed",
-    Error.bad_address: "bad_address", Error.not_a_directory: "not_a_directory",
-    Error.is_a_directory: "is_a_directory", Error.invalid: "invalid",
-    Error.too_many_open: "too_many_open", Error.too_big: "too_big", Error.no_room: "no_room",
-    Error.read_only: "read_only", Error.broken_pipe: "broken_pipe",
-    Error.name_too_long: "name_too_long", Error.link_loop: "link_loop", Error.reset: "reset",
-    Error.no_buffer: "no_buffer"
-⸩ in ⎕static
+※ Run while compiling to lay out `error_names`: the names are read off the
+※ enumeration, so a value added to `Error` is named with nothing else to write.
+fn named_errors() → ⸨Error: str⸩:
+    let names: mut ⸨Error: str⸩ = ⸨⸩
+    comptime foreach one := ⎕fields(⌜Error⌝):
+        names⸨one⟦1⟧⸩ ← one⟦0⟧
+    names
+
+※※ The name of each `Error`, in the image.
+let error_names: ⸨Error: str⸩ = named_errors() in ⎕static
 
 ※※ The name of an `Error`, as the enumeration writes it.
 ※※

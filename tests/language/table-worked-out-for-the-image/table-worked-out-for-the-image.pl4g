@@ -1,0 +1,36 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A table in the image may be worked out while compiling: an initializer `in
+※ ⎕static` that calls a pure function of the program runs it then, and what it
+※ answers is laid out as the literal it comes to would be.  So a table of an
+※ enumeration's names is read off the enumeration with `⎕fields` rather than
+※ written out beside it, and a set may be built by a loop -- and neither
+※ function is in the program, nothing of it running while the program does.
+
+let std := ⎕import("std")
+
+enum Colour:
+    red = 1 ;
+    green = 4 ;
+    blue = 9
+
+fn named() → ⸨Colour: str⸩:
+    let d: mut ⸨Colour: str⸩ = ⸨⸩
+    comptime foreach m := ⎕fields(⌜Colour⌝):
+        d⸨m⟦1⟧⸩ ← m⟦0⟧
+    d
+
+fn squares(n: u8) → ⸨u8⸩:
+    let s: mut ⸨u8⸩ = ⸨⸩
+    foreach i := 0u8…n:
+        s ← s | ⸨i × i⸩
+    s
+
+let names: ⸨Colour: str⸩ = named() in ⎕static
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let sq: ⸨u8⸩ = squares(5u8) in ⎕static
+    if (names⸨Colour.green⸩ ?? "") ≠ "green" ∨ #names ≠ 3: return 1u6
+    if ¬sq⸨16u8⸩ ∨ sq⸨5u8⸩ ∨ #sq ≠ 5: return 2u6
+    0u6

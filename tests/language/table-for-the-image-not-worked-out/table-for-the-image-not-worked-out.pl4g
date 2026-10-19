@@ -1,0 +1,18 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 7000 LANG_COMPTIME_CANNOT
+
+※ The compiler works out what it can before the program runs, and says what it
+※ cannot: here a lambda, which nothing yet evaluates while compiling.  The
+※ refusal names the construct, so what is missing is something to act on.
+
+let std := ⎕import("std")
+
+fn sizes() → ⸨u8⸩:
+    let twice := λ x: u8 → u8 { x + x }
+    ⸨twice(3u8)⸩
+
+let known: ⸨u8⸩ = sizes() in ⎕static
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if known⸨6u8⸩: 0u6 else: 1u6

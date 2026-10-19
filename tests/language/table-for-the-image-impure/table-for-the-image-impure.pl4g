@@ -1,0 +1,22 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4665 LANG_CONSTANT_CALL_IMPURE
+
+※ What is laid out in the image is worked out while compiling, so the function
+※ an initializer `in ⎕static` calls has to be one whose answer depends on what
+※ it is handed and nothing else.  One marked `@[impure]` may change, or read,
+※ what the program holds while it runs, and is refused.
+
+let std := ⎕import("std")
+
+let calls: mut u8 = 0u8
+
+@[impure]
+fn counted() → ⸨u8⸩:
+    calls ← calls + 1u8
+    ⸨calls⸩
+
+let seen: ⸨u8⸩ = counted() in ⎕static
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if seen⸨1u8⸩: 0u6 else: 1u6

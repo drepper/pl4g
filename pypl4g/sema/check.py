@@ -18,7 +18,7 @@ from ..diag.ids import DiagID
 from ..target import statuses
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
-from ..comptime.evaluate import CannotEvaluate, Evaluator, power
+from ..comptime.evaluate import CannotEvaluate, Evaluator, Reflect, Table, power
 from ..front.expand import only_for_macros
 from ..front.doccomment import Part as DocPart, parse as parse_doc
 from ..front.lexer import is_operator_glyph, is_operator_name
@@ -3445,6 +3445,44 @@ def _holds_opaque(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
     return False
 
 
+@dataclass(frozen=True, slots=True)
+class _Known(ast.Expr):
+    """A value the compiler worked out, standing where the literal it is would
+    be written: what a function run for the image answered, taken apart into
+    entries that are then laid out as a literal's are."""
+
+    const: Const | None = None
+
+
+class _ReflectHere(Reflect):
+    """What the checker answers the evaluator about this program's types."""
+
+    def __init__(self, checker: "Checker") -> None:
+        self._checker = checker
+
+    def fields(self, written: ast.Expr) -> list[object] | None:
+        """`⎕fields(⌜E⌝)`: each value of the enumeration with its name."""
+        if not isinstance(written, ast.Lifted) or written.written is None:
+            return None
+        ty = self._checker._resolve_type(written.written)
+        if not isinstance(ty, EnumType):
+            return None
+        module = self._checker._module
+        return [[name, module.enum_const(ty, at)]
+                for at, name in enumerate(ty.members)]
+
+    def enum_value(self, written: ast.Member) -> object | None:
+        """`TYPE.NAME`, where TYPE is an enumeration this unit knows."""
+        base = written.base
+        held = self._checker._top.get(base.name) \
+            if isinstance(base, ast.NameRef) else None
+        if not isinstance(held, _NamedType) \
+                or not isinstance(self._checker._resolved(held), EnumType):
+            return None
+        found = self._checker._enum_value(held, written)
+        return found if isinstance(found, EnumConst) else None
+
+
 @dataclass(slots=True, eq=False)
 class _Marks:
     """What one function's body did that `@[impure]` or `@[io]` is written for.
@@ -4310,6 +4348,10 @@ class Checker:
             self._waiting_generics = list(self._generics_here)
             roots: set[str] = set()
             for item in self._top_written.values():
+                if _in_the_image(item.value):
+                    # Worked out while compiling: what it calls is run there,
+                    # and nothing of it is in the program.
+                    continue
                 _mentioned(item.value, roots)
             for entry in collected:
                 if entry.func.attrs.special is not None \
@@ -5437,9 +5479,24 @@ class Checker:
                     return self._wrong_initializer(node, ty, named.written())
                 return self._module.float_const(ty, node.value.value)
             case ast.Allocated() if _in_the_image(node.value):
-                # Said outright, which changes nothing about what it comes to.
-                return self._constant_value(replace(node, value=node.value.value),
-                                            ty)
+                # Said outright, which changes nothing about what it comes to --
+                # but that it is for the image, which a call asks.
+                outer, self._for_the_image = self._for_the_image, True
+                try:
+                    return self._constant_value(
+                        replace(node, value=node.value.value), ty)
+                finally:
+                    self._for_the_image = outer
+            case _Known():
+                return node.value.const
+            case ast.Call() if self._for_the_image \
+                    and isinstance(ty, (SetType, DictType, ListType, StrType)) \
+                    and isinstance(node.value.callee, ast.NameRef) \
+                    and self._find_local(node.value.callee.name) is None:
+                literal = self._worked_out_for_the_image(node.value, ty)
+                if literal is None:
+                    return None
+                return self._constant_value(replace(node, value=literal), ty)
             case ast.StringLit() if isinstance(ty, StrType):
                 return self._text_constant(node.value.value)
             case ast.ListLit() if isinstance(ty, ListType):
@@ -5519,6 +5576,84 @@ class Checker:
                     D.IMPL_UNIMPLEMENTED_FEATURE, node.value.span,
                     feature="a top-level variable whose value is not a literal")
                 return None
+
+    def _worked_out_for_the_image(self, call: ast.Call, ty: Type) -> ast.Expr | None:
+        """Run a call while compiling, for what it answers to be laid out in the
+        image, and answer that as the literal it would have been written as.
+
+        The function is the program's own and pure, its arguments known while
+        compiling; what it answers is a set, a dictionary, a list or text made of
+        numbers, truth values, characters, text and values of enumerations.  What
+        cannot be worked out is said (4635, 4636), as for any constant.
+        """
+        assert isinstance(call.callee, ast.NameRef)
+        evaluator = Evaluator(self._units, reflect=_ReflectHere(self))
+        func = evaluator.function(call.callee.name)
+        if func is None:
+            self._diags.emit(D.LANG_STATIC_NOT_KNOWN, call.span)
+            return None
+        if any(attr.name in ("impure", "io") for attr in func.attrs):
+            self._diags.emit(D.LANG_CONSTANT_CALL_IMPURE, call.callee.span,
+                             name=func.name)
+            return None
+        generic: list[str] = []
+        for param in func.params:
+            _parameters_in(param.type, generic)
+        try:
+            if generic:
+                raise CannotEvaluate(call.span, "a call to a generic function")
+            arguments = [evaluator.evaluate(one) for one in call.args]
+            answer = evaluator.call(func, arguments)
+        except CannotEvaluate as exc:
+            if exc.ran_out:
+                self._diags.emit(D.LANG_COMPTIME_ENDLESS, exc.span,
+                                 detail=exc.detail)
+            else:
+                self._diags.emit(D.LANG_COMPTIME_CANNOT, exc.span,
+                                 construct=exc.detail)
+            return None
+        literal = self._as_literal(answer, call.span, ty)
+        if literal is None:
+            self._diags.emit(D.LANG_COMPTIME_CANNOT, call.span,
+                             construct="".join(("what '", func.name,
+                                                "' answers, in the image")))
+        return literal
+
+    def _as_literal(self, value: object, span: Span,
+                    ty: Type | None = None) -> ast.Expr | None:
+        """*value*, worked out while compiling, as the literal it would be written
+        where *ty* is wanted -- which says what a table written empty is."""
+        match value:
+            case bool():
+                return ast.BoolLit(span=span, value=value)
+            case int():
+                return ast.IntLit(span=span, value=value)
+            case str():
+                return ast.StringLit(span=span, value=value)
+            case EnumConst():
+                return _Known(span=span, const=value)
+            case Table() if value.is_set or (value.is_set is None
+                                             and isinstance(ty, SetType)):
+                elements = [self._as_literal(one, span) for one in value]
+                if any(one is None for one in elements):
+                    return None
+                return ast.SetLit(span=span, elements=tuple(
+                    one for one in elements if one is not None))
+            case Table():
+                entries = [(self._as_literal(key, span), self._as_literal(one, span))
+                           for key, one in value.items()]
+                if any(key is None or one is None for key, one in entries):
+                    return None
+                return ast.DictLit(span=span, entries=tuple(
+                    (key, one) for key, one in entries
+                    if key is not None and one is not None))
+            case list():
+                elements = [self._as_literal(one, span) for one in value]
+                if any(one is None for one in elements):
+                    return None
+                return ast.ListLit(span=span, elements=tuple(
+                    one for one in elements if one is not None))
+        return None
 
     def _image_definition(self, node: ast.VarDef, declared: Type | None) -> bool:
         """Check what a definition says of the image (4637, 4638).

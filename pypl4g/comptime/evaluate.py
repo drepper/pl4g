@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Final, Mapping, Sequence
 
 from ..front import ast
-from ..front.token import ENVIRON_NAME, STATIC_NAME
+from ..front.token import ENVIRON_NAME, FIELDS_NAME, STATIC_NAME
 from ..source.location import INVALID_SPAN, Span
 
 #: How many steps one evaluation may take before it is called an endless one.
@@ -43,6 +43,38 @@ STEPS: Final[int] = 100_000
 #: And how deep a call may go, for the same reason: a recursion with no end is a
 #: Python stack overflow otherwise, which reports nothing a reader can use.
 DEPTH: Final[int] = 128
+
+
+class Table(dict[object, object]):
+    """A set or a dictionary while the compiler works one out: the keys in the
+    order they were put in -- which is the order a table in the image is laid
+    out in, so that two builds of one program lay out the same table.
+
+    Which of the two it is, is said by what is done to it: a set written down,
+    or one an operator answers, is a set, and one an entry is put in is a
+    dictionary.  `⸨⸩` written empty says neither, which is the type's business,
+    and is settled where the table is laid out.
+    """
+
+    def __init__(self, is_set: bool | None) -> None:
+        super().__init__()
+        self.is_set = is_set
+
+
+
+class Reflect:
+    """What the evaluator asks of the checker about the program's types, which
+    it does not know: the values of an enumeration and what `⎕fields` answers.
+    Each answers nothing where it has nothing to say, which the evaluator then
+    refuses as something it cannot work out."""
+
+    def fields(self, written: ast.Expr) -> list[object] | None:
+        """What `⎕fields` of *written* answers: a pair of each name and value."""
+        return None
+
+    def enum_value(self, written: ast.Member) -> object | None:
+        """The value `TYPE.NAME` stands for, where it names one."""
+        return None
 
 
 class CannotEvaluate(Exception):
@@ -159,7 +191,10 @@ class Evaluator:
 
     def __init__(self, units: Sequence[ast.SourceUnit],
                  builtins: Mapping[str, Mapping[str, Builtin]] | None = None,
-                 environ: Mapping[str, str] | None = None) -> None:
+                 environ: Mapping[str, str] | None = None,
+                 reflect: Reflect | None = None) -> None:
+        #: What the checker answers about the program's types.
+        self._reflect = reflect or Reflect()
         #: Every function the program defines, by the name it was defined under.
         self._functions: dict[str, ast.FuncDef] = {}
         #: The top-level variables, and what they came to once anything asked.
@@ -194,6 +229,19 @@ class Evaluator:
     def call(self, func: ast.FuncDef, arguments: Sequence[object]) -> object:
         """Run *func* over *arguments* and answer with what it answered."""
         return self._call(func, list(arguments), func.name_span)
+
+    def function(self, name: str) -> ast.FuncDef | None:
+        """The function the program defines under *name*, where it defines one."""
+        return self._functions.get(name)
+
+    def evaluate(self, expr: ast.Expr) -> object:
+        """What *expr* comes to, worked out with nothing bound but the program's
+        own variables."""
+        self._scopes.append({})
+        try:
+            return self._expr(expr)
+        finally:
+            self._scopes.pop()
 
     # -- functions -------------------------------------------------------------
 
@@ -279,6 +327,9 @@ class Evaluator:
             case ast.ElementAssign():
                 self._assign_element(stmt)
                 return None
+            case ast.EntryAssign():
+                self._assign_entry(stmt)
+                return None
             case ast.Break():
                 raise _Break(stmt.label,
                              None if stmt.value is None else self._expr(stmt.value))
@@ -331,6 +382,15 @@ class Evaluator:
         held[index] = self._expr(stmt.value)
 
     # -- control flow, which is written where a value is wanted ---------------
+
+    def _assign_entry(self, stmt: ast.EntryAssign) -> None:
+        """`d⸨k⸩ ← v`: an entry put in a dictionary being worked out."""
+        held = self._value(stmt.base)
+        if not isinstance(held, Table) or held.is_set:
+            raise CannotEvaluate(stmt.span, "putting an entry in this")
+        held.is_set = False
+        key = self._value(stmt.key)
+        held[_hashable(key, stmt.key.span)] = self._value(stmt.value)
 
     def _if(self, stmt: ast.If) -> object:
         """The first arm whose condition holds, or the one with none."""
@@ -443,6 +503,16 @@ class Evaluator:
                 return self._expr(expr.value)
             case ast.TupleLit():
                 return [self._expr(one) for one in expr.members]
+            case ast.SetLit() if expr.arena is None or _in_the_image(expr.arena):
+                found = Table(True if expr.elements else None)
+                for one in expr.elements:
+                    found[_hashable(self._value(one), one.span)] = True
+                return found
+            case ast.DictLit() if expr.arena is None or _in_the_image(expr.arena):
+                made = Table(False)
+                for key, value in expr.entries:
+                    made[_hashable(self._value(key), key.span)] = self._value(value)
+                return made
             case ast.AddressOf():
                 return self._address_of(expr)
             case ast.Deref():
@@ -459,6 +529,11 @@ class Evaluator:
                 return self._foreach(expr)
             case _:
                 raise self._refuse(expr.span, expr)
+
+    def _bound(self, name: str) -> bool:
+        """Whether *name* is a local or a variable of the program."""
+        return any(name in scope for scope in self._scopes) \
+            or name in self._globals or name in self._modules
 
     def _name(self, expr: ast.NameRef) -> object:
         """What a name stands for: a local, then a variable of the program."""
@@ -547,6 +622,13 @@ class Evaluator:
 
     def _call_expr(self, expr: ast.Call) -> object:
         """A call: to something the compiler provides, or to the program's own."""
+        if isinstance(expr.callee, ast.NameRef) and expr.callee.name == FIELDS_NAME \
+                and len(expr.args) == 1:
+            # What the program's types are is the checker's to say.
+            found = self._reflect.fields(expr.args[0])
+            if found is None:
+                raise CannotEvaluate(expr.span, "'⎕fields' of this")
+            return found
         arguments = [self._expr(one) for one in expr.args]
         match expr.callee:
             case ast.Member(base=ast.NameRef() as base, name=name):
@@ -573,7 +655,12 @@ class Evaluator:
         return found
 
     def _member(self, expr: ast.Member) -> object:
-        """A field of a record, read through a name or through a reference."""
+        """A field of a record, read through a name or through a reference --
+        or a value of an enumeration, which the checker names."""
+        if isinstance(expr.base, ast.NameRef) and not self._bound(expr.base.name):
+            named = self._reflect.enum_value(expr)
+            if named is not None:
+                return named
         held = self._record_of(expr.base)
         if expr.name not in held.fields:
             raise CannotEvaluate(expr.span, "".join((
@@ -596,10 +683,10 @@ class Evaluator:
         refuses -- so a value that was not there cannot be used as one.
         """
         held = self._value(expr.base)
-        key = self._value(expr.key)
+        key = _hashable(self._value(expr.key), expr.key.span)
+        if isinstance(held, Table) and held.is_set:
+            return key in held
         if isinstance(held, dict):
-            if not isinstance(key, (str, int, bool)):
-                raise CannotEvaluate(expr.span, "a key of this kind")
             return held.get(key, MISSING)
         if isinstance(held, (set, frozenset)):
             return key in held
@@ -691,6 +778,26 @@ def _apply(op: ast.BinaryOp, left: object, right: object) -> object:
         return left == right
     if op is ast.BinaryOp.NOT_EQUAL:
         return left != right
+    if isinstance(left, Table) and isinstance(right, Table) \
+            and left.is_set is not False and right.is_set is not False:
+        # The four a set has: in either, in both, in one only, in the first only.
+        keys: list[object]
+        match op:
+            case ast.BinaryOp.BIT_OR:
+                keys = [*left, *(one for one in right if one not in left)]
+            case ast.BinaryOp.BIT_AND:
+                keys = [one for one in left if one in right]
+            case ast.BinaryOp.BIT_XOR:
+                keys = [*(one for one in left if one not in right),
+                        *(one for one in right if one not in left)]
+            case ast.BinaryOp.SUBTRACT:
+                keys = [one for one in left if one not in right]
+            case _:
+                raise _NotForThis
+        made = Table(True)
+        for one in keys:
+            made[one] = True
+        return made
     if op is ast.BinaryOp.CONCAT:
         # A string joined to a string, and a run joined to a run.
         if isinstance(left, str) and isinstance(right, str):
@@ -765,6 +872,19 @@ def _apply(op: ast.BinaryOp, left: object, right: object) -> object:
             return right % left != 0
         case _:
             raise _NotForThis
+
+
+def _in_the_image(arena: ast.Expr) -> bool:
+    """Whether an `in` names `⎕static`."""
+    return isinstance(arena, ast.NameRef) and arena.name == STATIC_NAME
+
+
+def _hashable(key: object, span: Span) -> object:
+    """*key* as something a table worked out here may hold it under: a number,
+    a truth value, text, or a value the checker named."""
+    if isinstance(key, (list, dict, Record, Reference)):
+        raise CannotEvaluate(span, "a key of this kind")
+    return key
 
 
 def power(base: int | float, exponent: int) -> int | float:
