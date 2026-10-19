@@ -3701,6 +3701,22 @@ room the new value was made in: that room belongs to a place in the program and
 not to a turn of a loop, so a value kept from one turn to the next would
 otherwise read what the next turn made.
 
+A choice without a branch
+-------------------------
+
+**`select.T c, a, b` is `a` where the truth value `c` holds and `b` where it does not**, both worked out either way, of a type one
+register holds: a whole number, a truth value, a code point, an address, a floating-point number (the verifier holds it to that,
+and `c` to being a truth value).  `constfold` takes a choice made by a known truth value, and between a value and itself.  The
+masked write (`_assign_picked`) is what makes one, an element at a time, where it used to spread the mask over the element's bits
+itself -- which only a whole number has to spread over.
+
+Each selector lowers it (`select_select`): **AArch64** compares the truth value with nought and selects, `csel` for an ordinary
+register and `fcsel` for a floating-point one; **x86-64** puts the second in and moves the first over it with `cmovne`, and having
+no conditional move of an XMM register, chooses between two floating-point values in ordinary registers, through `movq` and
+`movd`, and moves the one chosen back; **RISC-V**, with no select of either kind in the base, makes the truth value a mask --
+taken from nought -- and lets the difference of the two through it onto the second, `fmv` carrying a floating-point value's bits
+across and back.
+
 A lifetime name at a call
 -------------------------
 

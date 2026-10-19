@@ -10319,6 +10319,18 @@ through; a lambda that inherits may answer only a reference or a variable it bro
 parameters carrying the name are handed (4930); its own copy of a value is no answer at all (4561).  Only a call of a definition
 does this; a call through a value, and one of a generic function, still compare the names as written.
 
+## 2026-10-19T19:00+02:00 — compiler
+
+**A choice without a branch is an instruction of the representation**
+
+The user asked for a write through a mask into an array of floating-point numbers, which spread the mask over the element's bits
+and so wanted an integer.  Asked how to lower it, the user chose **a `select` instruction**, with the note that a machine that has
+one uses it and one that does not falls back on the bits -- against reading the elements' places as integers through memory, and
+against a branch per element.  So AArch64 selects with `csel` and `fcsel`, x86-64 with `cmov` and, having none for an XMM register,
+through the bits in ordinary registers; RISC-V, with no select in the base, through a mask made of the truth value, as its clamp
+already did.  Taken without asking: the bits are carried in registers rather than through memory, which every target can do with
+one instruction each way, and a choice whose truth value is known folds.
+
 Open questions
 --------------
 

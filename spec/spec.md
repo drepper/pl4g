@@ -3753,7 +3753,12 @@ rows, by the same rule:
 ```
 v⟦v > 25u8⟧ ← 1u8                ※ 10, 20, 1, 1
 m⟦⟦false, true, false⟧⟧ ← 9u8    ※ the middle row, both of it
+x⟦x > 2.0f64⟧ ← 0.5f64           ※ and the same of floating-point numbers
 ```
+
+An element of any type that is one value is written so -- a whole number, a truth value, a code point, a floating-point number --
+and **nothing branches**: each element is given the old value or the new one by a choice made without a jump, a conditional select
+where the machine has one and the bits chosen through a mask where it does not.
 
 **Where a loop takes its turns from, picking is an iterator** and not an array: the loop walks everything the mask could pick,
 asks the mask at each place, and steps past a place it does not pick without running the body.  Nothing is copied and no room is

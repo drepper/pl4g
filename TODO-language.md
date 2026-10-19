@@ -988,9 +988,11 @@ removed or decided otherwise, which its last paragraph says.
     enough for all of it, and that is what the shape says.  It wants the room taken while the program runs, which is the same
     allocation a dynamic array wants and would make picking impure.
 
-[ ] write through a mask into an array of floating-point elements.  Refused today: the mask is spread to all ones or all zeros
-    and combined with bitwise operations, which wants an integer.  A select instruction in the representation would do it for
-    every element type at once, and would shorten a `match` over two constants as well.
+[x] write through a mask into an array of floating-point elements.  Done on 2026-10-19 at the user's direction: a `select`
+    instruction in the representation, lowered as `csel`/`fcsel` on AArch64 and `cmov` on x86-64, and through the bits with a
+    mask where the machine has no select for the register -- a floating-point one on x86-64, either on RISC-V.  Every element
+    type that is one value is written through a mask now.
+    Left over: **a `match` over two constants**, and an `if` whose arms are plain values, as a `select` rather than a branch.
 
 [ ] walk an array whose type does not say its length.  Refused today (4482): the answer's shape is the shape walked, and the room
     for it is taken before the calls are written.  It wants what a dynamic array wants anyway -- storage worked out while the
