@@ -35,7 +35,7 @@ fn here(n: u64) \N{RIGHTWARDS ARROW} u64:
 
 let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     if here(10u64) + total(evens(10u64)) = 40u64: 0u6 else: 1u6
 """

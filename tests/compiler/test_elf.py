@@ -21,7 +21,7 @@ from conftest import (ARCH_TOOLS, ELFLINT, architecture_of, check_conformance,
 SOURCE = """\N{REFERENCE MARK} A program that exits with status 0.
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     0
 """

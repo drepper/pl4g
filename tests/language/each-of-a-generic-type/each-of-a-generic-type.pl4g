@@ -29,7 +29,7 @@ fn wide(s: ⇉u16) → u16:
         t ← t + x
     t
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let pool: mut arena = ⎕arena
     let t: Two(u8) = Two(.first ← 2u8, .second ← 3u8)

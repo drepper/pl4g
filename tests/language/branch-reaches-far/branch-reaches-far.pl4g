@@ -6,7 +6,6 @@
 ※ what the GNU assembler does with the same instruction.  The other two machines
 ※ branch further than any function here is long, so this asks nothing of them.
 
-@[impure]
 fn sum(go: bool, step: u64) → u64:
     let x: mut u64 = 0u64
     if go:
@@ -614,6 +613,6 @@ fn sum(go: bool, step: u64) → u64:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     if sum(true, 1u64) = 600u64 ∧ sum(false, 1u64) = 0u64: 0u6 else: 1u6

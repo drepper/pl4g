@@ -11,7 +11,7 @@ let d := ⎕import("digits")
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let s: str = "n=" ⧺ ⍎1234u64
     ⎕narrow(⎕drop(#s), ⌜u6⌝) ?? 1u6

@@ -41,7 +41,7 @@ fn either(f: fn(&⧖x u32, &⧖x u32) → &⧖x u32) → u32:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let x: u32 = 1u32
     let y: u32 = 2u32

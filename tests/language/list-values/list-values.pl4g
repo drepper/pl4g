@@ -13,7 +13,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let a: [u8] = [1u8, 2u8, 3u8] in ⎕static
     let wide: [u32] = [100u32, 200u32] in ⎕static
@@ -48,6 +48,5 @@ fn widest(l: [u32]) → u32:
         found ← found + x
     found
 
-@[impure]
 fn made() → [u8]:
     [10u8, 20u8]

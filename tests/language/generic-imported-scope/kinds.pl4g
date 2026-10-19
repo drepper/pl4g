@@ -6,7 +6,7 @@ fn secret() → str:
     "here"
 
 ※※ The text of a value, made where this file's names are what is in force.
-@[export, impure]
+@[export]
 fn describe(v: T') → str:
     comptime if ⎕typeof(⌜v⌝) = ⌜bool⌝:
         secret()

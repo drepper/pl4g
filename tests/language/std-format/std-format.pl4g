@@ -20,7 +20,7 @@ let std := ⎕import("std")
 
 type Point = x: u8 ; y: i16
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     if std.format⌜"plain"⌝ ≠ "plain":
         return 1u6

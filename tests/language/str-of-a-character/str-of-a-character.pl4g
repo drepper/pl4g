@@ -9,11 +9,11 @@
 ※ checked.
 ※
 ※ It allocates, since how many bytes a code point takes is not known until it is looked at,
-※ so a function using it says `impure` -- as one joining two strings does.
+※ which is no effect -- as joining two strings is not -- so a function using it stays pure.
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     if ⎕str('x') ≠ "x":
         1u6

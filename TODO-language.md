@@ -1297,3 +1297,7 @@ Runtime
 [ ] hand a table a pure function made to a function that fills it.  The callee writes a table it was handed, so it is
     `@[impure]` and so is every caller -- even one whose table nobody else can reach.  It is the same question the TODO entry on
     a pure function writing through an array it was handed asks, of a table.
+
+[ ] ask a lambda's and a function type's `@[impure]` whether anything needs it.  4933 asks it of a definition's body; one written
+    before `λ` or in a parameter's type says what a value may do rather than what a body does, and nothing checks that the value
+    handed over ever does it.

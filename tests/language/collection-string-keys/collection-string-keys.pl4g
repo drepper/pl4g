@@ -31,7 +31,7 @@ fn named(d: ⸨str: str⸩, k: str) → str:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     ※ text as the key and text as what it stands for
     let d: mut ⸨str: str⸩ = ⸨"one": "first", "two": "second"⸩
@@ -52,7 +52,6 @@ fn main(init: std.Init) → u6:
         keys_alone()
 
 ※ A set of text, which is the same table with nothing under the key.
-@[impure]
 fn keys_alone() → u6:
     ※ enough of them that the table grows while it is built and every key is
     ※ hashed again into the bigger one

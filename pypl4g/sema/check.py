@@ -3415,6 +3415,35 @@ def _holds_opaque(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
     return False
 
 
+@dataclass(slots=True, eq=False)
+class _Marks:
+    """What one function's body did that `@[impure]` or `@[io]` is written for.
+
+    Kept for every function lowered, marked or not, since a marked one may be
+    justified by nothing but what it calls -- which is a question for once
+    every body has been lowered (4933).  A generic function's instances all
+    add to the one record its definition has.
+    """
+
+    node: ast.FuncDef
+    #: Where `@[impure]` and `@[io]` are written, where they are.
+    impure_at: Span | None = None
+    io_at: Span | None = None
+    #: Whether a parameter carries a device: permission for input and output
+    #: with nothing written.
+    holds_device: bool = False
+    #: Whether the body itself changes something of the program's -- writes a
+    #: variable at the top level or memory it did not make, calls through a
+    #: value whose type says `impure` -- and whether it does input or output
+    #: through a function whose body is not here to ask.
+    changes: bool = False
+    does_io: bool = False
+    #: What it calls that says it changes things, or does input or output:
+    #: functions, or a generator's definition.
+    changes_through: list[object] = field(default_factory=list)
+    io_through: list[object] = field(default_factory=list)
+
+
 @dataclass(slots=True)
 class _Deferred:
     """A statement put off until its block is left, and where it was written.
@@ -3844,6 +3873,11 @@ class Checker:
         #: The `⎕empty` calls the compiler put off itself, one for each arena a
         #: body made, which are the only ones there are.
         self._implicit_empties: set[int] = set()
+        #: What each function lowered here did that a mark is written for, by
+        #: its definition, and the record of each function the IR has.
+        self._marks: dict[int, _Marks] = {}
+        self._marks_of: dict[int, _Marks] = {}
+        self._marking: _Marks | None = None
         self._mut_told: set[int] = set()
         #: The type a function value had before it was read as one promising
         #: less, by the identity of what it was read as.
@@ -4216,6 +4250,11 @@ class Checker:
                 self._lower_function(entry)
             for one in self._generics_here:
                 self._check_generic(one)
+            if (whole_program or self._whole_modules) \
+                    and self._diags.error_count == 0:
+                # Only of a program that is otherwise right: a body an error
+                # stopped part way has not said all it does.
+                self._check_marks()
         else:
             # A module read by something else is lowered as far as something
             # names it, and no further: a program that uses one function of a
@@ -10400,6 +10439,8 @@ class Checker:
         outer_did, self._did_io = self._did_io, False
         outer_demanding = self._demanding
         self._demanding = (node, func)
+        outer_marking = self._marking
+        self._marking = self._marks_for(node, func, walked)
         self._push_scope()
         outer_addressed = self._addressed
         self._addressed = set()
@@ -10510,6 +10551,7 @@ class Checker:
         self._handed_out_made(func, node)
         self._hands_out, self._hands_out_local = outer_hands
         self._demanding = outer_demanding
+        self._marking = outer_marking
         self._unscanned = outer_unscanned
         self._changed_here, self._whole_here = outer_changed
         self._at_entry = outer_entry
@@ -13087,6 +13129,8 @@ class Checker:
         # This body's own conditions, at its entry and at its every `return`, and
         # not those of the body whose call made it.
         outer_demanding, self._demanding = self._demanding, (node, func)
+        outer_marking, self._marking = self._marking, self._marks_for(node, func,
+                                                                      None)
         outer_entry, self._at_entry = self._at_entry, {}
         # What the caller has lent out is the caller's: a statement ending in
         # here ends none of its, and nothing in here is lent from its names.
@@ -13139,6 +13183,7 @@ class Checker:
              self._yield_answer, self._hands_out, self._hands_out_local,
              self._receiving, self._unscanned) = outer
             self._demanding, self._at_entry = outer_demanding, outer_entry
+            self._marking = outer_marking
             self._borrows = outer_borrows
             self._changed_here, self._whole_here = outer_changed
 
@@ -19056,7 +19101,7 @@ class Checker:
             return True
         if found.impure:
             self._an_effect(D.LANG_PURE_CALLS_IMPURE, stmt.value.span,
-                            name=found.node.name)
+                            through=found.node, name=found.node.name)
         place, offsets = self._description_made(builder, walk, stmt.span)
         assert found.func is not None
         frame = self._inside(builder, place, offsets[4], U8, stmt.span)
@@ -19470,7 +19515,8 @@ class Checker:
             self._walks_itself_said(found, span)
             return UndefConst(ERROR)
         if found.impure:
-            self._an_effect(D.LANG_PURE_CALLS_IMPURE, span, name=found.node.name)
+            self._an_effect(D.LANG_PURE_CALLS_IMPURE, span, through=found.node,
+                            name=found.node.name)
         place, offsets = self._description_made(builder, walk, span)
         record, _ = self._description_of(found)
         step = self._generator_next(found, record, offsets, span)
@@ -19844,7 +19890,7 @@ class Checker:
                            alternative=stmt.alternative)
         if found.impure:
             self._an_effect(D.LANG_PURE_CALLS_IMPURE, stmt.iterable.span,
-                            name=node.name)
+                            through=found.node, name=node.name)
         self._report_iterator(node.name, "".join((
             "'", node.name, "' is written into this loop: each 'yield' is where "
             "the loop's body runs, and no coroutine is made")), stmt.iterable.span)
@@ -27611,6 +27657,77 @@ class Checker:
             return True
         return isinstance(expected, ResultType) and found is expected.ok
 
+    def _marks_for(self, node: ast.FuncDef, func: Function,
+                   walked: _Generator | None) -> _Marks:
+        """The record of what *node*'s body does, for *func* being lowered.
+
+        One per definition, so that every instance of a generic function adds
+        to it; whether a device is handed over is asked of each, a generator's
+        of what the generator takes rather than of its frame.
+        """
+        found = self._marks.get(id(node))
+        if found is None:
+            found = _Marks(
+                node=node,
+                impure_at=next((one.name_span for one in node.attrs
+                                if one.name == "impure"), None),
+                io_at=next((one.name_span for one in node.attrs
+                            if one.name == "io"), None))
+            self._marks[id(node)] = found
+        params = walked.params if walked is not None else func.ty.params
+        if any(_reaches_a_device(one) for one in params):
+            found.holds_device = True
+        self._marks_of[id(func)] = found
+        return found
+
+    def _check_marks(self) -> None:
+        """Refuse `@[impure]` and `@[io]` written where nothing needs them (4933).
+
+        Worked out once every body is lowered, and over all of them at once: a
+        function needs `@[impure]` where its body changes something itself or
+        calls something that does, and `@[io]` where it does input or output
+        and was handed no device to carry the permission.  What is asked of a
+        callee is what it does, not what it says -- so functions that only call
+        each other, marked, justify nothing between them, and every one of them
+        is reported in the one build.  A callee whose body is not here, one of
+        another module or defined somewhere else, is taken at its word.
+        """
+        def record(target: object) -> _Marks | None:
+            if isinstance(target, ast.FuncDef):
+                return self._marks.get(id(target))
+            return self._marks_of.get(id(target))
+
+        marks = list(self._marks.values())
+        changes = {id(one) for one in marks if one.changes}
+        io = {id(one) for one in marks if one.does_io}
+        grew = True
+        while grew:
+            grew = False
+            for one in marks:
+                if id(one) not in changes and any(
+                        (found := record(target)) is None
+                        or found.impure_at is None or id(found) in changes
+                        for target in one.changes_through):
+                    changes.add(id(one))
+                    grew = True
+                if id(one) not in io and any(
+                        (found := record(target)) is None or id(found) in io
+                        for target in one.io_through):
+                    io.add(id(one))
+                    grew = True
+        for one in marks:
+            if one.impure_at is not None and id(one) not in changes:
+                self._diags.emit(D.LANG_MARK_NOT_NEEDED, one.impure_at,
+                                 name=one.node.name, mark="impure",
+                                 why="nothing it does changes anything outside "
+                                     "the call")
+            if one.io_at is not None and (id(one) not in io or one.holds_device):
+                self._diags.emit(
+                    D.LANG_MARK_NOT_NEEDED, one.io_at, name=one.node.name,
+                    mark="io",
+                    why="the device it is handed is what lets it" if id(one) in io
+                    else "it does no input or output")
+
     def _what_it_changes(self, func: Function, span: Span) -> None:
         """Report a call whose callee changes more than this function may.
 
@@ -27620,9 +27737,18 @@ class Checker:
         for `@[impure]`, which is what that attribute is left meaning: something
         global, rather than the device somebody handed over.
         """
+        if func.attrs.opaque and self._demanding is not None:
+            # A call that has to stay is one its caller's callers may not drop
+            # either, by dropping the caller: in the IR the caller is kept as
+            # the callee is, and to the checker it stays what it was.
+            owner = self._demanding[1]
+            if owner is not None and not owner.attrs.opaque:
+                owner.attrs = replace(owner.attrs, opaque=True)
         if not func.attrs.impure:
             return
         if func.attrs.io:
+            if self._marking is not None and self._observing is None:
+                self._marking.io_through.append(func)
             if not self._may_do_io:
                 self._an_effect(D.LANG_IO_WITHOUT_A_DEVICE, span, name=func.name)
             # It did it, so this function does it: what a caller may not drop or
@@ -27631,9 +27757,10 @@ class Checker:
             # device and never touches it stays a function a caller may drop.
             self._did_io = True
             return
-        self._an_effect(D.LANG_PURE_CALLS_IMPURE, span, name=func.name)
+        self._an_effect(D.LANG_PURE_CALLS_IMPURE, span, through=func, name=func.name)
 
-    def _an_effect(self, which: int, span: Span, **args: object) -> None:
+    def _an_effect(self, which: int, span: Span, through: object | None = None,
+                   **args: object) -> None:
         """Report a change that outlives the call, where the function is pure.
 
         Everything that makes such a change comes through here, so that what
@@ -27650,6 +27777,15 @@ class Checker:
         of any other: that attribute is about the program's own state, and says
         nothing about devices.
         """
+        if self._marking is not None and self._observing is None \
+                and which != D.LANG_IO_WITHOUT_A_DEVICE:
+            # Written down whether or not it is allowed here: what a marked
+            # function did is what says its mark is needed.  A call to a
+            # function that is marked is the callee's to justify.
+            if through is not None:
+                self._marking.changes_through.append(through)
+            else:
+                self._marking.changes = True
         if self._impure and which != D.LANG_IO_WITHOUT_A_DEVICE:
             return
         if self._observing is not None:

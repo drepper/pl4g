@@ -12,6 +12,9 @@ fn main(init: std.Init) → u6:
     let a: u8 = t⟦counted(0)⟧
     0u6
 
+let calls: mut u64 = 0u64
+
 @[impure]
 fn counted(n: u64) → u64:
+    calls ← calls + 1u64
     n

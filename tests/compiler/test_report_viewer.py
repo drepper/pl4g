@@ -25,7 +25,7 @@ fn unreached() \N{RIGHTWARDS ARROW} u6:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     @[ignore(4006)]
     let unread: u6 = used ⊞ 1u6
@@ -76,7 +76,7 @@ def test_the_whole_source_is_shown_not_only_the_lines_with_records(compiled) -> 
     _, log = compiled
     out = view(log).stdout
     assert "A program with things to decide about" in out, "the comment is missing"
-    assert "@[startup, impure]" in out, "a line with no report on it is missing"
+    assert "@[startup]" in out, "a line with no report on it is missing"
 
 
 def test_a_pattern_chooses_which_files_are_shown(compiled) -> None:  # noqa: ANN001

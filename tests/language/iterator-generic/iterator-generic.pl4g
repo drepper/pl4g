@@ -12,7 +12,7 @@ fn count(s: ⇉T') → u64:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let arr: u8⟦4⟧ = ⟦0u8, 1u8, 2u8, 3u8⟧ in ⎕static
     let q: ⇉ = arr⟦arr > 1⟧

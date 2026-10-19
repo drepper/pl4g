@@ -8,7 +8,7 @@
 ※ what says a different thing for each type inside that one meaning.  Which is also
 ※ why nothing here needs to know the width of an integer: the arithmetic is written
 ※ once and the type it is compiled for settles it.
-@[export, impure]
+@[export]
 fn text(v: T') → str:
     comptime if ⎕typeof(⌜v⌝) = ⌜bool⌝:
         if v: "true" else: "false"
@@ -25,6 +25,6 @@ fn text(v: T') → str:
             rest ⧺ digits⟦⎕unit(low, ⌜idx⌝)⟧
 
 ※※ And the operator, which is the same thing written where a reader expects it.
-@[export, impure]
+@[export]
 fn `⍎`(v: T') → str:
     text(v)

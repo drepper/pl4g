@@ -16,6 +16,6 @@ fn twice(a: u8) → u8 pre(a > 0u8):
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     ⎕narrow(twice(zero), ⌜u6⌝) ?? 1u6

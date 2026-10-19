@@ -17,7 +17,7 @@ fn total(s: ⇉u8) → u8:
         t ← t + x
     t
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let pool: mut arena = ⎕arena
     let w: Walk = Walk(.at ← 0u8, .last ← 4u8)

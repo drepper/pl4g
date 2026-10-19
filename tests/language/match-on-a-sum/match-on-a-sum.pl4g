@@ -33,7 +33,7 @@ type Shape = dot : Point | line : u32 | empty : void
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let a: Shape = Shape(.dot ← Point(.x ← 2u8, .y ← 3u8))
     if size(a) ≠ 5u32:
@@ -41,7 +41,6 @@ fn main(init: std.Init) → u6:
     else:
         rest()
 
-@[impure]
 fn rest() → u6:
     ※ a part that is a number, and one that carries nothing
     let b: Shape = Shape(.line ← 7u32)

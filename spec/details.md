@@ -2043,8 +2043,15 @@ own scope is lowered with that pointer as its place instead of a `frame` slot, a
 not give it back.
 
 **`@[opaque]` is a flag of its own**, `FuncAttrs.opaque`, printed and read back as `opaque` in the IR.  `CallInst.has_effects` answers
-yes for it, which is the one question every pass that would fold, merge, move or drop a call asks; the attribute sets
-`inline(never)` as well.  Nothing in the checker reads it as `impure`.
+yes for it, which is the one question every pass that would fold, merge, move or drop a call asks, and the sweep's rule for a call
+answering through storage asks it as well; the attribute sets `inline(never)`.  A function making a call to one is set `opaque`
+in turn, in `_what_it_changes`, without `inline(never)`.  Nothing in the checker reads it as `impure`.
+
+**Whether a mark is needed (4933) is a `_Marks` record per definition**, which `_lower_body` and `_lower_instance` make current in
+`_marking`.  `_an_effect` notes every effect there before deciding whether to report it -- as the body's own, or, given `through`,
+as a call to a marked callee -- and `_what_it_changes` notes every call to a function that does input or output.  `_check_marks`
+runs once every body of the unit is lowered and nothing else was reported: a least fixpoint over the calls, a callee with no
+record taken to need what it says.
 
 **An arena a body made is given back by a `defer` the compiler writes.**  `_give_back_on_leaving` appends a `_Deferred` holding
 `⎕empty(a)` right after `let a: mut arena = ⎕arena` is lowered -- also for the arena `let v: T in kept = f(…)` makes, and not for one

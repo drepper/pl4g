@@ -25,7 +25,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let m: mut u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
     let at: u64 = ⎕address(&m⟦0⟧)

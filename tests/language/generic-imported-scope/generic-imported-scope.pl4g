@@ -16,6 +16,6 @@ fn secret() → u8:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     ⎕narrow(⎕drop(#(k.describe(true))), ⌜u6⌝) ?? 1u6

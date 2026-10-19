@@ -9,7 +9,6 @@
 
 let std := ⎕import("std")
 
-@[impure]
 fn many(dir: &std.fs.Dir, what: u8⟦⟧) → u6:
     match std.fs.Dir.open(dir, "/dev/null", ⌜std.io.Writer⌝):
         std.io.Writer(w):
@@ -27,7 +26,7 @@ fn many(dir: &std.fs.Dir, what: u8⟦⟧) → u6:
         ⊥:
             3u6
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let bytes: mut u8⟦1024⟧ = 1024 ⍴ 0u8
     bytes⟦1⟧ ← 1u8

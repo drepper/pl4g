@@ -19,7 +19,7 @@ fn upto(n: u8) ⇉ u8:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let c := ⎕start(running_total(10u64))
     let a := ⎕resume(c, 0u64) ?? 0u64

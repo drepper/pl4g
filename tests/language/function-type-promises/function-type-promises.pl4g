@@ -38,7 +38,6 @@ fn apply(f: fn(u8) → u8, x: u8) → u8:
 fn each(f: @[impure] fn(u8) → u8, x: u8) → u8:
     f(x)
 
-@[impure]
 fn quietly(f: @[can_ignore] fn(u8) → u8):
     f(1u8)
 

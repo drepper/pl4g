@@ -12,7 +12,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let total: u16 = 12u16
     if std.format⌜"[{total}]"⌝ ≠ "[12]":

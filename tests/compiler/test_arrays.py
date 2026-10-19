@@ -114,7 +114,7 @@ def test_an_index_is_multiplied_by_the_width_of_an_element(
         triple: str, tmp_path) -> None:  # noqa: ANN001
     """Four arrays of four widths, each read at the same index."""
     source = "".join((
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    let a: u6", OPEN, "3", CLOSE, " = ", OPEN, "1u6, 2u6, 4u6", CLOSE, STATIC, "\n",
         "    let b: u16", OPEN, "3", CLOSE, " = ", OPEN, "1u16, 2u16, 8u16", CLOSE, STATIC, "\n",
         "    let c: u32", OPEN, "3", CLOSE, " = ", OPEN, "1u32, 2u32, 16u32", CLOSE, STATIC, "\n",
@@ -130,7 +130,7 @@ def test_an_index_outside_the_array_stops_the_program(
     """Where the index is not written down the check is one comparison and a
     branch that does not come back, which is the shape every fault here has."""
     source = "".join((
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    let a: u6", OPEN, "4", CLOSE, " = ", OPEN, "1u6, 2u6, 4u6, 8u6", CLOSE, STATIC, "\n",
         "    let at: u6 \u00a4idx = 9\n",
         "    a", OPEN, "at", CLOSE, "\n"))
@@ -147,7 +147,7 @@ def test_a_table_is_read_in_row_major_order(triple: str, tmp_path) -> None:  # n
     different is enough to see it.
     """
     source = "".join((
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    let m: u6", OPEN, "2,3", CLOSE, " = ",
         OPEN, OPEN, "1u6,2u6,4u6", CLOSE, ",", OPEN, "8u6,16u6,32u6", CLOSE, CLOSE, STATIC, "\n",
         "    let r: u6 \u00a4idx = 1\n    let c: u6 \u00a4idx = 2\n",
@@ -165,7 +165,7 @@ def test_every_dimension_is_checked_against_its_own(triple: str,
     single check would amount to.
     """
     source = "".join((
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    let m: u6", OPEN, "2,3", CLOSE, " = ",
         OPEN, OPEN, "1u6,2u6,4u6", CLOSE, ",", OPEN, "8u6,16u6,32u6", CLOSE, CLOSE, STATIC, "\n",
         "    let c: u6 \u00a4idx = 5\n",

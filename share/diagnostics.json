@@ -11430,6 +11430,37 @@
       },
       "since": "0.1",
       "default_enabled": true
+    },
+    {
+      "number": 4933,
+      "name": "LANG_MARK_NOT_NEEDED",
+      "severity": "error",
+      "message": "'{name}' is marked '@[{mark}]', and {why}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        },
+        {
+          "name": "mark",
+          "type": "string",
+          "description": "'impure' or 'io'"
+        },
+        {
+          "name": "why",
+          "type": "string",
+          "description": "what the body does instead"
+        }
+      ],
+      "cause": "`@[impure]` says a function changes something of the program's that outlives the call, and `@[io]` that it does input or output without being handed a device; each is a warning to whoever reads or calls the function, and one that is not true teaches them to stop reading it.  So a mark is written only where the body needs it: `@[impure]` where it writes a variable at the top level or memory it did not make, or calls something that does, and `@[io]` where it does input or output with no device among its parameters.  What a callee is asked is what it does rather than what it says, so a chain of marked functions none of which does anything is reported whole.  Take the mark away; a function whose calls are to be kept as written, though they change nothing, says `@[opaque]`.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A function is marked '@[impure]' or '@[io]' only where its body needs it."
+      },
+      "since": "0.1",
+      "default_enabled": true
     }
   ]
 }

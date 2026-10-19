@@ -8,7 +8,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let a: char = 'a'
     let b: char = 'b'

@@ -41,7 +41,7 @@ unit ¤size → ¤idx
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let d: u32 ¤meter = 100
     let t: u32 ¤second = 5

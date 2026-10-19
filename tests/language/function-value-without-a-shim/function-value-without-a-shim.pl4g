@@ -24,11 +24,10 @@ fn sum(a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64) → u64:
 fn half(x: f64) → f64:
     x ÷ 2.0f64 ?? 0.0f64
 
-@[impure]
 fn apply(f: fn(u64) → u64, x: u64) → u64:
     f(x)
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let n: u64 = 10u64
     let d: fn(u64) → u64 = double

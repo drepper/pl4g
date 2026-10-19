@@ -10,7 +10,7 @@ let std := ⎕import("std")
 fn tripled(x: u64) → u64:
     x × 3u64
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let f: fn(u64) → u64 = tripled
     if f(2u64) = 6u64: 0u6 else: 1u6

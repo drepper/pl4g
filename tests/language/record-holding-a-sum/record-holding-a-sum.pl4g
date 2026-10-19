@@ -106,7 +106,6 @@ fn changed() → u6:
     else:
         held(m)
 
-@[impure]
 fn held(m: Tagged) → u6:
     let b: Box(Shape) = Box(.held ← Shape(.line ← 12u32), .count ← 1u8)
     let r: Row = row(10u16)
@@ -119,7 +118,6 @@ fn held(m: Tagged) → u6:
     else:
         later(m)
 
-@[impure]
 fn later(m: Tagged) → u6:
     let got: u32 = match maybe(4u32):
         Tagged(t):

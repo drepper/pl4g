@@ -28,7 +28,7 @@ let HALF: i8 = halved(⁻7i8)
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let t: 〈u8, u16, u6〉 = 〈1u8, 2u16, 3u6〉
     let v: u8⟦square(2)⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧ in ⎕static

@@ -88,7 +88,7 @@ def test_a_seed_changes_where_a_key_goes() -> None:
 #: folded into six bits.
 WALKED = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let s: mut \N{LEFT DOUBLE PARENTHESIS}u64: u64\N{RIGHT DOUBLE PARENTHESIS} = \N{LEFT DOUBLE PARENTHESIS}0u64: 0u64\N{RIGHT DOUBLE PARENTHESIS}
     let n: mut u64 = 1u64

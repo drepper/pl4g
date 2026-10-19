@@ -14,14 +14,13 @@ let std := ⎕import("std")
 
 type Secret = held: u8
 
-@[impure]
 fn `⍕`(v: T') → str:
     comptime if ⎕typeof(⌜v⌝) = ⌜Secret⌝:
         "hidden"
     else:
         std.text(v, &mut ⎕heap)
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     if ⍕Secret(.held ← 3u8) ≠ "hidden":
         return 1u6

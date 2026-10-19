@@ -55,7 +55,7 @@ def checked(body: str, around: str = "") -> tuple[Module, list]:
     one log holding what was said beside what was chosen, in the order the two
     happened.
     """
-    source = "".join((around, "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW,
+    source = "".join((around, "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW,
                       " u6:\n", body))
     sources = SourceManager()
     unit_source = sources.add(Path("t.pl4g"), source)
@@ -74,7 +74,7 @@ def compiled(body: str) -> Module:
     The optimizer is not run: what is being asked about is what the checker
     decided, and a pass that dropped something would only add to it.
     """
-    source = "".join(("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n", body))
+    source = "".join(("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n", body))
     sources = SourceManager()
     unit_source = sources.add(Path("t.pl4g"), source)
     engine, collected = collecting_engine(None)
@@ -158,7 +158,7 @@ def test_a_lifetime_worked_out_at_a_call_is_recorded() -> None:
         "let total: mut u8 = 3u8\n\n",
         "fn first(v: &", LIFETIME, "a u8) ", ARROW, " &", LIFETIME,
         "a u8:\n    v\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    let g: &static u8 = first(&total)\n",
         "    let n: u8 = 1u8\n",
         "    let s: &u8 = first(&n)\n",

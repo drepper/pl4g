@@ -186,7 +186,7 @@ def test_more_than_one_value_at_a_time_now_works(triple: str, tmp_path) -> None:
     """
     source = tmp_path / "t.pl4g"
     source.write_text("let a: u6 = 1u6\nlet b: u6 = 2u6\n"
-                      "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+                      "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
                       "    @[ignore(4006)]\n    let first: u6 = a\n"
                       "    @[ignore(4006)]\n    let second: u6 = b\n    first\n",
                       encoding="utf-8")
@@ -275,7 +275,7 @@ def test_the_largest_value_of_a_type_is_accepted(compile_source, declared: str, 
     """The boundary is where the type says, not one short of it."""
     proc, _ = compile_source("".join((
         "let v: ", declared, " = ", value,
-        "\nlet std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\x22std\x22)\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    1u6\n")))
+        "\nlet std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\x22std\x22)\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    1u6\n")))
     assert proc.returncode == 0, describe(proc)
 
 
@@ -298,7 +298,7 @@ def test_a_local_assignment_writes_nothing(compile_source, tmp_path) -> None:  #
     Nothing reaches memory, and the whole function folds to its result.
     """
     proc, output = compile_source(
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    let x: mut u6 = 3u6\n    x \N{LEFTWARDS ARROW} 5u6\n    x\n",
         "--emit=ir")
     assert proc.returncode == 0, describe(proc)
@@ -390,7 +390,7 @@ def test_a_discarded_assignment_reads_nothing_back(compile_source) -> None:  # n
 def test_a_local_assignment_as_the_result_touches_no_memory(compile_source) -> None:  # noqa: ANN001
     """A local is a value, so there is nothing to read back."""
     proc, output = compile_source(
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    let status: mut u6 = 3u6\n    status \N{LEFTWARDS ARROW} 9u6\n",
         "--emit=ir")
     assert proc.returncode == 0, describe(proc)
@@ -467,7 +467,7 @@ def test_a_variable_nothing_writes_either_is_not_reported(compile_source) -> Non
     """It is dropped rather than reported: there is no write to call pointless."""
     proc, output = compile_source(
         "let unused: u6 = 1u6\n\n"
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    3u6\n", "--emit=ir")
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    3u6\n", "--emit=ir")
     assert proc.returncode == 0, describe(proc)
     assert "[PL4G-4007]" not in proc.stderr, proc.stderr
     assert "@unused" not in output.read_text(encoding="utf-8")
@@ -563,7 +563,7 @@ def test_the_memory_chain_starts_in_the_entry_block(compile_source,  # noqa: ANN
     into a loop among them, would be reading something that does not dominate it.
     """
     proc, output = compile_source(
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    let k: u6 = if true { 5u6 } else { 6u6 }\n"
         "    let a: u6? = while \N{SECTION SIGN}x true:\n"
         "        break \N{SECTION SIGN}x 1u6\n"
@@ -586,7 +586,7 @@ def test_an_answer_of_four_parts_goes_through_the_callers_storage(  # noqa: ANN0
     proc, output = compile_source(
         "fn three() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8, u8, u8\N{RIGHT ANGLE BRACKET}:\n"
         "    \N{LEFT ANGLE BRACKET}1u8, 2u8, 3u8, 4u8\N{RIGHT ANGLE BRACKET}\n\n"
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    let t: \N{LEFT ANGLE BRACKET}u8, u8, u8, u8\N{RIGHT ANGLE BRACKET} = three()\n"
         "    if t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = 1u8:\n        0u6\n    else:\n        1u6\n",
         "--emit=ir", "-O0")
@@ -612,7 +612,7 @@ def test_an_answer_of_two_parts_stays_in_registers(compile_source,  # noqa: ANN0
     proc, output = compile_source(
         "fn two() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8\N{RIGHT ANGLE BRACKET}:\n"
         "    \N{LEFT ANGLE BRACKET}1u8, 2u8\N{RIGHT ANGLE BRACKET}\n\n"
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
         "    let t: \N{LEFT ANGLE BRACKET}u8, u8\N{RIGHT ANGLE BRACKET} = two()\n"
         "    if t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = 1u8:\n        0u6\n    else:\n        1u6\n",
         "--emit=ir", "-O0")
@@ -693,16 +693,12 @@ def test_and_stays_where_something_does(compile_source) -> None:  # noqa: ANN001
     assert "fn @three" in text, text
 
 
-def test_a_function_the_program_called_impure_keeps_its_call(
+def test_a_function_the_program_called_opaque_keeps_its_call(
         compile_source) -> None:  # noqa: ANN001
     """The rewrite says what the function does with the place it was handed; it
-    says nothing about what the program already said the function does."""
+    says nothing about what the program already said of the function's calls."""
     source = UNREAD.format("false").replace(
-        "@[inline(never)]\nfn three", "@[inline(never), impure]\nfn three")
-    # A pure function may not call one that changes what outlives it, so the
-    # two that call this one say so as well.
-    source = source.replace("fn pick(", "@[impure]\nfn pick(")
-    source = source.replace("@[startup]", "@[startup, impure]")
+        "@[inline(never)]\nfn three", "@[opaque]\nfn three")
     proc, output = compile_source(source, "--emit=ir", "-O1")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")

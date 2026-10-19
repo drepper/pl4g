@@ -5,7 +5,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let base: u8 = ⎕narrow(⎕drop(#init.args), ⌜u8⌝) ?? 0u8
     if std.text(7u8, .base ← base) = "7": 0u6 else: 1u6

@@ -9,7 +9,7 @@ let std := ⎕import("std")
 
 let fixed: [u8] = [5u8, 6u8, 7u8] in ⎕static
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let pool: mut arena = ⎕arena
     let words: mut [str] = [] in pool

@@ -219,7 +219,7 @@ def test_what_the_compiler_provides_is_not_in_a_program(tmp_path: Path) -> None:
     source.write_text("""\
 let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let b: mut std.Build = std.Build(.output_dir \N{LEFTWARDS ARROW} "", .target \N{LEFTWARDS ARROW} "",
                                      .opt_level \N{LEFTWARDS ARROW} 0u8, .mclevel \N{LEFTWARDS ARROW} "",

@@ -12,7 +12,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let a: str = "abc"
     let b: str = "abd"

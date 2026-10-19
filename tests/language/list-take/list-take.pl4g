@@ -28,7 +28,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let l: mut [u8] = [1u8, 2u8, 3u8, 4u8, 5u8]
     ※ what was there comes back
@@ -47,7 +47,6 @@ fn main(init: std.Init) → u6:
             ends()
 
 ※ The first and the last, which are the two the move has nothing to do.
-@[impure]
 fn ends() → u6:
     let l: mut [u8] = [1u8, 2u8, 3u8]
     if †l⟦2⟧ ≠ 3u8:
@@ -64,7 +63,6 @@ fn ends() → u6:
         wider()
 
 ※ Elements of more than one word move the same way, a byte at a time.
-@[impure]
 fn wider() → u6:
     let l: mut [〈u32, u32〉] = [〈1u32, 10u32〉, 〈2u32, 20u32〉, 〈3u32, 30u32〉]
     let a, b := †l⟦0⟧

@@ -464,7 +464,7 @@ type Pair = first : u8 ; second : u8
 fn total(p: Pair) \N{RIGHTWARDS ARROW} u8:
     p.first
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let both: Pair = Pair(.first \N{LEFTWARDS ARROW} 1u8, .second \N{LEFTWARDS ARROW} 2u8)
     let sum: u8 = total(both)

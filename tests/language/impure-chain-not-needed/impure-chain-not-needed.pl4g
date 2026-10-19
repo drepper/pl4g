@@ -1,0 +1,33 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4933 LANG_MARK_NOT_NEEDED
+
+※ What a callee is asked is what it does, not what it says.  `even` and `odd`
+※ call only each other, and each is marked `@[impure]` because the other is --
+※ which justifies nothing: neither changes anything, so both are reported, in
+※ one build rather than one at a time.  `counted` writes a variable at the top
+※ level, so its mark and that of `tally`, which calls it, are needed.
+
+let std := ⎕import("std")
+
+let calls: mut u8 = 0u8
+
+@[impure]
+fn counted():
+    calls ← calls + 1u8
+
+@[impure]
+fn tally():
+    counted()
+
+@[impure]
+fn even(n: u8) → bool:
+    if n = 0u8: true else: odd(n - 1u8)
+
+@[impure]
+fn odd(n: u8) → bool:
+    if n = 0u8: false else: even(n - 1u8)
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    tally()
+    if even(4u8) ∧ calls = 1u8: 0u6 else: 1u6

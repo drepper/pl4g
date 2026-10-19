@@ -18,7 +18,7 @@ let std := ⎕import("std")
 fn doubled(x: u64) \N{RIGHTWARDS ARROW} u64:
     x \N{MULTIPLICATION SIGN} 2u64
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let f: fn(u64) \N{RIGHTWARDS ARROW} u64 = doubled
     if f(2u64) = 4u64: 0u6 else: 1u6

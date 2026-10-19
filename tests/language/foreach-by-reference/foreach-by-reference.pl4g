@@ -26,7 +26,7 @@ fn total(l: [P]) → i32:
         sum ← sum + p⌖.two
     sum
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let v: mut ⟦⟧ = ⟦P(.one ← 1i32, .two ← 2i32), P(.one ← 3i32, .two ← 4i32)⟧
     ※ a copy each turn: changing it changes nothing in the array

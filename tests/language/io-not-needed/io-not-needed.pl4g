@@ -1,0 +1,16 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4933 LANG_MARK_NOT_NEEDED
+
+※ `@[io]` says a function does input or output without being handed a device
+※ to do it with.  One that does none -- here it adds two numbers -- says what is
+※ not so, and is refused as a needless `@[impure]` is.
+
+let std := ⎕import("std")
+
+@[io]
+fn sum(a: u8, b: u8) → u8:
+    a + b
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if sum(1u8, 2u8) = 3u8: 0u6 else: 1u6

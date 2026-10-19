@@ -29,12 +29,12 @@ STOPPED = statuses.OVERFLOW
 
 OVERFLOWS = "".join((
     "let fifty: u6 = 50u6\nlet forty: u6 = 40u6\n\n",
-    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n",
     "    fifty + forty\n"))
 
 FITS = "".join((
     "let twenty: u6 = 20u6\nlet three: u6 = 3u6\n\n",
-    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n",
     "    twenty ", TIMES, " three\n"))
 
 
@@ -82,7 +82,7 @@ def test_a_program_that_cannot_fault_carries_nothing(triple: str, tmp_path) -> N
     """The helper and the messages are emitted only where something asked for
     them, so a program with no arithmetic in it is the size it always was."""
     path = tmp_path / "t.pl4g"
-    path.write_text("".join(("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    0u6\n")),
+    path.write_text("".join(("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    0u6\n")),
                     encoding="utf-8")
     output = tmp_path / "out"
     proc = run_compiler(["-o", str(output), "".join(("--target=", triple)), str(path)])

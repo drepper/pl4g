@@ -23,7 +23,7 @@ enum Colour:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let a: u32 = 5u32
     let c: Colour = Colour.green

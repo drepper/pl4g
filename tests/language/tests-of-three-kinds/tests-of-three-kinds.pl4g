@@ -38,7 +38,7 @@ let counted: mut u8 = 0u8
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     3u6
 

@@ -32,7 +32,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     ※ started, waited for, and the count read back
     match std.write(&mut init.io.error, ⎕bytes("one\n")):
@@ -48,7 +48,6 @@ fn main(init: std.Init) → u6:
         ⊥:
             3u6
 
-@[impure]
 fn rest(err: &mut std.io.Writer) → u6:
     ※ the two in one
     match std.write_sync(err, ⎕bytes("two\n")):
@@ -60,7 +59,6 @@ fn rest(err: &mut std.io.Writer) → u6:
         ⊥:
             5u6
 
-@[impure]
 fn refused(err: &mut std.io.Writer) → u6:
     ※ a descriptor nothing opened: the number comes back as the kernel gave it
     let nowhere: mut std.io.Writer = std.io.Writer(.fd ← 77i32, .ring ← err⌖.ring)

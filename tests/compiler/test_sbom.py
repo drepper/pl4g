@@ -21,7 +21,7 @@ from pypl4g.sbom import ROW_SIZE, Tag
 
 LAYOUT = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let n: u8 = twice(2u8)
     if n = 4u8:
@@ -39,7 +39,7 @@ fn twice(of: u8) \N{RIGHTWARDS ARROW} u8:
 #: another base.
 BRACED = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6 { let n: u8 = twice(0x2u8) ;
       \N{REFERENCE MARK} a remark, which says nothing about the program
       if n = 4u8 { 0 } else { 1 } }
@@ -192,7 +192,7 @@ def test_the_hash_of_the_whole_is_the_hash_of_the_parts(tmp_path: Path) -> None:
 
 USES_STD = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     if std.error_name(2i32) = "not_found": 0u6 else: 1u6
 """

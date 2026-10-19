@@ -103,7 +103,7 @@ def test_the_verifier_catches_two_functions_under_one_symbol() -> None:
 
 SOURCE = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     0
 """

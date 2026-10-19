@@ -34,6 +34,6 @@ fn outer(a: u64) → u64:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     ⎕narrow(outer(factor), ⌜u6⌝) ?? 1u6

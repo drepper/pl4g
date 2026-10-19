@@ -10439,7 +10439,33 @@ implies `inline(never)` and makes every call one the optimizer leaves be: in the
 has effects.  To the checker it is pure, so callers stay pure.  Compare GCC's `noipa`, Rust's `black_box`, Zig's
 `doNotOptimizeAway`.
 
-The rest of what was decided for the `@[impure]` error is recorded with it.
+## 2026-10-20T12:00+02:00 — language
+
+**A mark nothing needs is an error**
+
+The user asked for an error where a function is marked `@[impure]` and does not need to be, the goal being to make the attribute
+signal something that has to be handled with care.  It is 4933, for `@[impure]` and -- asked, the user wanted it -- for `@[io]` as
+well.  Decided with the user:
+
+- **An error, not a warning, and with no way to keep a mark that is not needed.**  What a mark was used for besides its meaning --
+  keeping a call the optimizer would have worked out -- is said with `@[opaque]` instead.
+- **Worked out over every body at once.**  A callee is asked what it does, not what it says, so functions that only call each
+  other justify nothing between them and are all reported in one build -- the answer the user chose over reporting one layer per
+  build, as a warning about an unused function in C++ does.
+- **`@[io]` is needed where a function does input or output and holds no device**; one handed a device is told its `@[io]` is not
+  needed, the device already saying it may.
+
+Taken without asking: a callee whose body is not here -- external, or of a module lowered only as far as a program names it -- is
+taken at its word; the question is asked only of a program with no other error, since a body an error stopped part way has not
+said everything it does; a lambda's or a function type's `@[impure]` is not asked, being about a value's type rather than a body.
+A call to an opaque function makes its caller opaque in the IR, so that dropping the caller does not drop the call; the checker
+still takes the caller as pure.
+
+Compare Rust's `unused_unsafe`, refusing an `unsafe` block nothing in needs; Koka, whose effect rows are inferred.
+
+Some 120 functions in the suite lose a mark nothing needed, most of them startup functions; two tests that used `@[impure]` to keep
+a call the optimizer would work out use `@[opaque]`, and one that marked a function `@[impure]` to show what a constant may not
+call gives it something to change.
 
 Open questions
 --------------

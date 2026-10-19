@@ -13,14 +13,13 @@ import re
 from conftest import describe
 
 PROGRAM = """\
-@[impure]
 fn apply(g: fn(u8) \N{RIGHTWARDS ARROW} u8, x: u8) \N{RIGHTWARDS ARROW} u8:
     g(x)
 
 fn adding(n: u8) \N{RIGHTWARDS ARROW} fn(u8) \N{RIGHTWARDS ARROW} u8:
     \N{GREEK SMALL LETTER LAMDA} a: u8 [n] \N{RIGHTWARDS ARROW} u8 { a + n }
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let n: u8 = 3u8
     let called: fn(u8) \N{RIGHTWARDS ARROW} u8 = \N{GREEK SMALL LETTER LAMDA} a: u8 [n] \N{RIGHTWARDS ARROW} u8 { a + n }
@@ -60,12 +59,12 @@ def test_the_report_log_says_where_each_environment_is(compile_source, tmp_path)
     """Called or handed to a call: the frame.  Bound on, or answered: the heap."""
     _, reports = _compiled(compile_source, tmp_path)
     kept = _kept(reports)
-    assert kept[6].startswith("keeps what it brought in in \N{APL FUNCTIONAL SYMBOL QUAD}heap"), kept
-    assert kept[11].startswith("keeps what it brought in in this call's frame"), kept
-    assert kept[12].startswith("keeps what it brought in in \N{APL FUNCTIONAL SYMBOL QUAD}heap"), kept
-    assert kept[15].startswith("keeps what it brought in in the arena"), kept
-    assert kept[16].startswith("brings nothing in"), kept
-    assert kept[18].startswith("keeps what it brought in in this call's frame"), kept
+    assert kept[5].startswith("keeps what it brought in in \N{APL FUNCTIONAL SYMBOL QUAD}heap"), kept
+    assert kept[10].startswith("keeps what it brought in in this call's frame"), kept
+    assert kept[11].startswith("keeps what it brought in in \N{APL FUNCTIONAL SYMBOL QUAD}heap"), kept
+    assert kept[14].startswith("keeps what it brought in in the arena"), kept
+    assert kept[15].startswith("brings nothing in"), kept
+    assert kept[17].startswith("keeps what it brought in in this call's frame"), kept
 
 
 def test_only_a_lambda_that_may_leave_takes_room_from_the_heap(compile_source, tmp_path) -> None:  # noqa: ANN001

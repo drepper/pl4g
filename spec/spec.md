@@ -6491,10 +6491,22 @@ effect once it cannot escape.
 **`@[opaque]` keeps every call without claiming an effect.**  A pure function's calls may be worked out once, moved out of a
 loop, folded while compiling or dropped when nothing reads them, which is what purity is for -- and what a program watching the
 optimizer, or timing a call, does not want.  `@[opaque]` says every call to the function is a black box: never inlined, folded,
-merged, moved or dropped.  It changes nothing about what the function may do, so it stays pure, its callers do too, and it is
-not a way to say `@[impure]` without meaning it.  Compare GCC's `noipa`, which keeps a call from being inlined or reasoned about;
+merged, moved or dropped -- nor dropped by dropping a call to a function that makes one, which the optimizer then keeps as well.
+It changes nothing about what the function may do, so it stays pure, its callers do too, and it is not a way to say `@[impure]`
+without meaning it.  Compare GCC's `noipa`, which keeps a call from being inlined or reasoned about;
 Rust's `std::hint::black_box` and Google Benchmark's `DoNotOptimize`, which do it for a value rather than a function; Zig's
 `std.mem.doNotOptimizeAway`.
+
+**A mark is written only where it is needed** (4933).  `@[impure]` and `@[io]` are warnings to whoever reads or calls a function,
+and one that is not true teaches them to stop heeding it.  So `@[impure]` is refused on a function whose body changes nothing of
+the program's -- writes no variable at the top level and no memory it did not make, and calls nothing that does -- and `@[io]` on
+one that does no input or output, or that is handed a device, which already says it may.  What a callee is asked is what it does
+rather than what it says: two functions marked `@[impure]` that only call each other justify nothing between them, and both are
+reported in the one build.  A function whose body is not here -- defined somewhere else, or in a module lowered only as far as the
+program names it -- is taken at its word.  The question is asked of a program that is otherwise right, a body an error stopped
+part way not having said all it does.  Compare **Rust**'s `unused_unsafe`, which refuses an `unsafe` block nothing in needs, for the
+same reason; **D**, whose `pure` is inferred for templates and checked where written, though nothing reports `@system` that could
+be `@safe`; **Koka**, whose inferred effect rows make a declared row that is too wide a type the compiler is free to narrow.
 
 **Every one of them names the function that is pure, and points at it** (4511).  That is not always the function the message is
 about or even in the same file: a call a macro wrote is reported where the macro wrote it, which is wherever that macro lives, and

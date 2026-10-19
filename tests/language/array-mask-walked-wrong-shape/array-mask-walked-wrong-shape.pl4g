@@ -12,7 +12,7 @@ fn total(a: u8⟦⟧, m: bool⟦⟧) → u8:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let v: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧ in ⎕static
     let w: bool⟦3⟧ = ⟦true, true, true⟧ in ⎕static

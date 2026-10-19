@@ -13,7 +13,6 @@
 
 let std := ⎕import("std")
 
-@[impure]
 fn said(init: &std.Init) → u64 ¤size:
     #init⌖.args
 

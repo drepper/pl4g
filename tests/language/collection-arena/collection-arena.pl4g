@@ -17,7 +17,7 @@ let scratch: mut arena = ⎕arena
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let a: ⸨u6⸩ = ⸨1u6, 2u6⸩ in scratch
     let b: ⸨u6⸩ = ⸨2u6, 3u6⸩ in ⎕heap

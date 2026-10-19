@@ -39,7 +39,7 @@ fn told(env: ⸨str: str⸩, name: str) → str:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     if told(⎕environ, "PL4G_TEST_NAME") ≠ "a value with spaces":
         1u6

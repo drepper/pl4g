@@ -27,7 +27,7 @@ macro twice(t: syntax) → syntax:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     ※ "abc" once for every character of it that is not a 'b', which is twice -- and the
     ※ macro read the characters to know that.

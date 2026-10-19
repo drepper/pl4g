@@ -15,7 +15,6 @@ type Point = x: u8 ; y: u8
 
 let t := ⎕import("text")
 
-@[impure]
 fn `⍎`(v: T') → str:
     comptime if ⎕typeof(⌜v⌝) = ⌜Point⌝:
         "a point"
@@ -24,7 +23,7 @@ fn `⍎`(v: T') → str:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let s: str = ⍎Point(.x ← 1u8, .y ← 2u8) ⧺ ⍎true
     ⎕narrow(⎕drop(#s), ⌜u6⌝) ?? 1u6

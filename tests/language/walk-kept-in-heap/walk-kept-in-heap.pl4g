@@ -21,7 +21,6 @@ type Job = walk : ⌖⇉u64 ⇇ u64 in ⎕heap ; n : u8
 
 let jobs: mut [Job] = []
 
-@[impure]
 fn started(from: u64) → ⌖⇉u64 ⇇ u64 in ⎕heap:
     ⎕start(running_total(from) in ⎕heap)
 

@@ -10,7 +10,7 @@ fn clamped(v: T', most: u8) → T' pre(most ≥ 1u8):
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let most: u8 = (⎕narrow(⎕drop(#init.args), ⌜u8⌝) ?? 1u8) - 1u8
     if clamped(3u16, most) = 3u16: 0u6 else: 1u6

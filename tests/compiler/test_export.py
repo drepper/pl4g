@@ -47,7 +47,7 @@ fn unreached() \N{RIGHTWARDS ARROW} u6:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     shared
 """
@@ -145,7 +145,7 @@ def test_visible_is_the_only_thing_that_changes_it(compile_source) -> None:  # n
         "let g: mut u6 = 0u6\n\n",
         "@[align(16), constructor, impure]\nfn helper():\n",
         "    g \N{LEFTWARDS ARROW} 1u6\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    1u6\n")))
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    1u6\n")))
     assert proc.returncode == 0, describe(proc)
     parsed = elfcheck.parse(output.read_bytes())
     symbol = parsed.symbol("helper()void")
@@ -165,7 +165,7 @@ let offered: u6 = 2u6
 @[export, visible]
 let both: u6 = 3u6
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     lent
 """
@@ -190,7 +190,7 @@ def test_offering_a_symbol_does_not_export_the_definition(tmp_path) -> None:  # 
                                        encoding="utf-8")
     source = tmp_path / "main.pl4g"
     source.write_text("".join((
-        'let l := ⎕import("lib")\n\nlet std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\x22std\x22)\n@[startup, impure]\nfn main(init: std.Init) ', ARROW,
+        'let l := ⎕import("lib")\n\nlet std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\x22std\x22)\n@[startup]\nfn main(init: std.Init) ', ARROW,
         " u6:\n    l.v\n")), encoding="utf-8")
     proc = run_compiler(["-o", str(tmp_path / "out"), str(source)])
     assert proc.returncode != 0

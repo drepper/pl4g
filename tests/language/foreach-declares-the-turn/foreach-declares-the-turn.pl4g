@@ -13,7 +13,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     ※ a list, whose elements the declared type settles
     let summed: mut u8 = 0u8

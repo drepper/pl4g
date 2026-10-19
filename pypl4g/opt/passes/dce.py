@@ -169,8 +169,10 @@ def _writes_only_its_place(inst: CallInst) -> bool:
 
     Which is what the pass that rewrites an answer too large for registers
     leaves behind, and only that: a function the program itself marked as
-    changing something that outlives the call changes whatever it likes.
+    changing something that outlives the call changes whatever it likes, and
+    one marked opaque is to be called whether or not anything reads it.
     """
     attrs = getattr(inst.callee, "attrs", None)
     return (getattr(attrs, "answer_in_storage", False)
-            and not getattr(attrs, "impure", True))
+            and not getattr(attrs, "impure", True)
+            and not getattr(attrs, "opaque", False))

@@ -19,7 +19,7 @@ fn total(v: u8⟦3⟧) → u8:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let ps: Person⟦3⟧ = ⟦Person(.age ← 12u8, .height ← 150u8, .pos ← Pos(.x ← 1u8, .y ← 2u8)),
                          Person(.age ← 30u8, .height ← 180u8, .pos ← Pos(.x ← 3u8, .y ← 4u8)),

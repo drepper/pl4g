@@ -13,7 +13,7 @@ fn g(to: W, v: V) ⇉ i32:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let t: mut i32 = 0i32
     foreach x := g(W(.fd ← 3i32), V(.fd ← 1i32, .x ← 2i32)):

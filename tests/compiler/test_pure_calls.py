@@ -16,11 +16,11 @@ PROGRAM = """\
 fn square(x: u32) \N{RIGHTWARDS ARROW} u32:
     x \N{MULTIPLICATION SIGN} x
 
-@[impure, inline(never)]
+@[opaque]
 fn seed() \N{RIGHTWARDS ARROW} u32:
     3u32
 
-@[impure, inline(never)]
+@[opaque]
 fn looped(a: u32, k: u32) \N{RIGHTWARDS ARROW} u32:
     let n: mut u32 = 0u32
     let total: mut u32 = 0u32
@@ -31,7 +31,7 @@ fn looped(a: u32, k: u32) \N{RIGHTWARDS ARROW} u32:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let s: u32 = seed()
     let twice: u32 = square(s) + square(s)

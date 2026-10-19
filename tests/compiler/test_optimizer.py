@@ -129,7 +129,7 @@ UNREAD = """let g: u6 = 3u6
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     @[ignore(4006)]
     let unread: u6 = g
@@ -342,7 +342,7 @@ fn prepare():
 fn unreached() \N{RIGHTWARDS ARROW} u6:
     2u6
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     g
 """
@@ -455,7 +455,7 @@ let only_by_dropped: u6 = 9u6
 fn unreached() \N{RIGHTWARDS ARROW} u6:
     only_by_dropped
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     used
 """

@@ -14,7 +14,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     if std.padded(42u8, .width ← 5u64) ≠ "   42":
         return 1u6

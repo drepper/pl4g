@@ -13,7 +13,6 @@
 
 let std := ⎕import("std")
 
-@[impure]
 fn filled(out: std.io.Writer) → u6:
     let w: mut std.io.Writer = out
     defer std.io.Writer.close(w)
@@ -23,7 +22,6 @@ fn filled(out: std.io.Writer) → u6:
         ⊥:
             2u6
 
-@[impure]
 fn counted(from: std.io.Reader) → u6:
     let r: mut std.io.Reader = from
     defer std.io.Reader.close(r)

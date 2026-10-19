@@ -11,7 +11,7 @@ fn tagged(n: u8, a: &mut arena) → str in a:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let scratch: mut arena = ⎕arena
     let here: str = tagged(4u8) in scratch

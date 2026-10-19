@@ -12,7 +12,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     if std.text(255u8, .base ← 16u8) ≠ "ff":
         return 1u6

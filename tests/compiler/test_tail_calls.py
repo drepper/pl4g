@@ -19,7 +19,6 @@ fn deferred(n: u64, c: &mut u64) \N{RIGHTWARDS ARROW} u64:
 fn checked(n: u64) \N{RIGHTWARDS ARROW} u64 post(\N{APL FUNCTIONAL SYMBOL QUAD}answer \N{GREATER-THAN OR EQUAL TO} 0u64):
     if n = 0u64: 0u64 else: checked(n - 1u64)
 
-@[impure]
 fn framed(n: u64, p: &mut u64) \N{RIGHTWARDS ARROW} u64:
     let mine: mut u64 = n
     if n = 0u64: p\N{POSITION INDICATOR} else: framed(n - 1u64, &mut mine)

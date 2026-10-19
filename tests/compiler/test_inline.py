@@ -151,7 +151,7 @@ def test_nothing_is_inlined_where_nothing_was_asked_for(compile_source) -> None:
 #: An answer the optimizer cannot know, so that a pure function handed it is not
 #: worked out while compiling -- which would leave no call to inline or keep.
 SEED = """\
-@[impure, inline(never)]
+@[opaque]
 fn seed() \N{RIGHTWARDS ARROW} u8:
     1u8
 
@@ -167,7 +167,7 @@ let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 fn add(a: u8, b: u8) \N{RIGHTWARDS ARROW} u8:
     a + b
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(add(seed(), 2u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """, "-O1")
@@ -224,7 +224,7 @@ fn wide(a: u8) \N{RIGHTWARDS ARROW} u8:
 
 let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(wide(seed()) + wide(seed()), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """)), "-O1")
@@ -242,7 +242,7 @@ let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 fn down(n: u8) \N{RIGHTWARDS ARROW} u8:
     if n = 0u8: 0u8 else: n + down(n - 1u8)
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(down(seed()), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """, "-O1")

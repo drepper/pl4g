@@ -1,0 +1,20 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4933 LANG_MARK_NOT_NEEDED
+
+※ `@[impure]` warns whoever reads or calls a function that it changes something
+※ of the program's that outlives the call.  Written where the body changes
+※ nothing -- it only works out an answer -- the warning is false, and a reader
+※ who learns that stops heeding it, so it is refused.  `main` is marked only
+※ because it calls `next`, which justifies nothing, so it is refused as well.
+※ A function whose calls are to be kept though they change nothing says
+※ `@[opaque]`.
+
+let std := ⎕import("std")
+
+@[impure]
+fn next(a: u8) → u8:
+    a + 1u8
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    if next(1u8) = 2u8: 0u6 else: 1u6

@@ -34,7 +34,7 @@ fn seconds(n: u32 ¤second) → u64 ¤second:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let a: u32 = 3u32
     let b: i32 = ⁻3i32

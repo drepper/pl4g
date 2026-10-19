@@ -79,7 +79,7 @@ def _is_byte(word: str) -> bool:
 
 #: The function the whole arrangement is for: it answers with what it was given.
 IDENTITY = "".join(("fn f(p: u6) ", ARROW, " u6:\n    p\n\n",
-                    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    f(42u6)\n"))
+                    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    f(42u6)\n"))
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
@@ -107,7 +107,7 @@ def test_and_it_runs(triple: str, tmp_path) -> None:  # noqa: ANN001
 TWO_CONVENTIONS = "".join((
     "@[cdecl]\nfn theirs(a: u6, b: u6) ", ARROW, " u6:\n    a | b\n\n",
     "fn ours(a: u6, b: u6) ", ARROW, " u6:\n    a | b\n\n",
-    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n",
     "    theirs(32u6, 8u6) | ours(2u6, 0u6)\n"))
 
 
@@ -135,7 +135,7 @@ ACROSS_A_CALL = "".join((
     "".join("".join(("let v", str(n), ": u6 = ", str(1 << n), "u6\n"))
             for n in range(5)),
     "\nfn twice(p: u6) ", ARROW, " u6:\n    p | p\n\n",
-    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n",
     "    let a: u6 = v0\n    let b: u6 = v1\n    let c: u6 = v2\n",
     "    let d: u6 = v3\n    let e: u6 = v4\n",
     "    let got: u6 = twice(32u6)\n",
@@ -204,7 +204,7 @@ fn elsewhere(n: u64) """, ARROW, """ u64:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) """, ARROW, """ u6:
     0u6
 """))
@@ -263,7 +263,7 @@ let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 @[abi("cdecl")]
 type Ring = state : u64 ; fd : u64
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) """ + ARROW + """ u6:
     0u6
 """)

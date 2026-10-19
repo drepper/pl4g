@@ -11,7 +11,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let empty: [u6] = [] in ⎕static
     ⌈empty

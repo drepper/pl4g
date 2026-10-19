@@ -22,7 +22,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let plain: u8? = nothing()
     let carried: u8?u16 = saying(700u16)

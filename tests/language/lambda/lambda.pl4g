@@ -123,12 +123,10 @@ fn main(init: std.Init) → u6:
                 else:
                     0u6
 
-@[impure]
 fn twice(g: fn(u8) → u8, x: u8) → u8:
     g(g(x))
 
 ※ A lambda may bring in a lambda, which is a value like any other.
-@[impure]
 fn through(g: fn(u8) → u8, x: u8) → u8:
     let once: fn(u8) → u8 = λ a: u8 [g] → u8 { g(a) }
     once(x)

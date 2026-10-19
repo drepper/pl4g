@@ -21,7 +21,7 @@ ARROW = "\N{RIGHTWARDS ARROW}"
 
 def expression(text: str) -> ast.Expr:
     """Parse *text* as the body of a startup function and return the expression."""
-    source = "".join(("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    ", text, "\n"))
+    source = "".join(("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    ", text, "\n"))
     sources = SourceManager()
     unit_source = sources.add(Path("t.pl4g"), source)
     engine, collected = collecting_engine(None)
@@ -97,7 +97,7 @@ def compile_expression(text: str, *extra: str,
     source = tmp_path / "t.pl4g"
     source.write_text("".join((
         "let a: u6 = 0b11_0011u6\nlet b: u6 = 0b01_0101u6\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    ", text, "\n")), encoding="utf-8")
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    ", text, "\n")), encoding="utf-8")
     output = tmp_path / "out"
     proc = run_compiler(["-o", str(output), "--emit=ir", *extra, str(source)])
     if proc.returncode != 0:
@@ -192,7 +192,7 @@ def test_the_program_computes_it(triple: str, written: str, expected: int,
     source = tmp_path / "t.pl4g"
     source.write_text("".join((
         "let a: u6 = 0b11_0011u6\nlet b: u6 = 0b01_0101u6\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    ", written, "\n")),
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    ", written, "\n")),
         encoding="utf-8")
     output = tmp_path / "out"
     proc = run_compiler(["-o", str(output), "".join(("--target=", triple)),

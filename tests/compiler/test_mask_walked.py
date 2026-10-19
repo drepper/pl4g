@@ -14,7 +14,7 @@ from conftest import describe
 WALKED = """\
 let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let v: u8\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}4\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = \N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}10u8, 20u8, 30u8, 40u8\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} in \N{APL FUNCTIONAL SYMBOL QUAD}static
     let s: mut u8 = 0u8
@@ -54,7 +54,7 @@ let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
 type Person = { age : u8 ; height : u8 }
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let ps: Person\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}2\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = \N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}Person(.age \N{LEFTWARDS ARROW} 12u8, .height \N{LEFTWARDS ARROW} 150u8), Person(.age \N{LEFTWARDS ARROW} 30u8, .height \N{LEFTWARDS ARROW} 180u8)\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} in \N{APL FUNCTIONAL SYMBOL QUAD}static
     let n: mut u8 = 0u8

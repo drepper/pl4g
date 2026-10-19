@@ -34,7 +34,7 @@ fn pick(a: u8, b: u8) → u8:
 let std := ⎕import("std")
 
 @[startup,
-  impure]
+  inline(never)]
 fn main(init: std.Init) → u6:
     ※ a call down the page
     let sum: u8 = wide(1u8,
@@ -65,7 +65,6 @@ fn main(init: std.Init) → u6:
         blocks()
 
 ※ A block written on one line, inside brackets.
-@[impure]
 fn blocks() → u6:
     ※ closed by the bracket that closes the call
     let one: u8 = pick(if 1u8 = 1u8: 1u8 else: 2u8,
@@ -84,6 +83,5 @@ fn blocks() → u6:
     else:
         0u6
 
-@[impure]
 fn calling(f: fn(u8) → u8) → u8:
     f(1u8)

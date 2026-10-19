@@ -117,7 +117,7 @@ def test_a_function_named_as_a_value_has_callers_nobody_sees() -> None:
 
 GOES_STRAIGHT_OUT = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     let went: u64 \N{CURRENCY SIGN}size = std.write_sync(&mut init.io.error, \N{APL FUNCTIONAL SYMBOL QUAD}bytes("text\\n")) ?? 0
     if went = 5: 0u6 else: 1u6

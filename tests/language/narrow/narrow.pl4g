@@ -29,7 +29,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     ※ it fits
     if (⎕narrow(given(42u32), ⌜u8⌝) ?? 0u8) ≠ 42u8:
@@ -65,15 +65,12 @@ fn main(init: std.Init) → u6:
 
 ※ A value the compiler cannot see, so that the checks are made while the
 ※ program runs and not before it.
-@[impure]
 fn given(n: u32) → u32:
     n
 
-@[impure]
 fn negative(n: i32) → i32:
     n
 
-@[impure]
 fn length() → u8 ¤meter?⎕narrowing:
     let far: u32 ¤meter = 9
     ⎕narrow(far, ⌜u8⌝)

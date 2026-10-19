@@ -22,7 +22,7 @@ from pypl4g.driver.options import ExitCode, load_option_table
 
 GOOD = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     0
 """
@@ -163,7 +163,7 @@ def test_unknown_warning_name_is_reported(source: Path, tmp_path: Path) -> None:
 def test_warnings_can_be_turned_off_and_made_errors(tmp_path: Path) -> None:
     """A warning is controlled by the option its catalog entry declares."""
     source = tmp_path / "t.pl4g"
-    source.write_text("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    return 0\n",
+    source.write_text("let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    return 0\n",
                       encoding="utf-8")
     output = tmp_path / "out"
     plain = run_compiler(["-o", str(output), str(source)])
@@ -236,7 +236,7 @@ fn unreached() \N{RIGHTWARDS ARROW} u6:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     used
 """
@@ -287,7 +287,7 @@ def test_nothing_the_image_offers_is_ever_logged_as_dropped(tmp_path: Path) -> N
     source.write_text("".join((
         "@[visible]\nlet shared: u6 = 1u6\n\n",
         "@[visible]\nfn reachable() \N{RIGHTWARDS ARROW} u6:\n    1u6\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    1u6\n")),
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n    1u6\n")),
         encoding="utf-8")
     log = tmp_path / "reports.json"
     proc = run_compiler(["-o", str(tmp_path / "out"),
@@ -306,7 +306,7 @@ def test_time_report(source: Path, tmp_path: Path) -> None:
 
 DROPPED_LOCAL = """let g: u6 = 3u6
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     @[ignore(4006)]
     let unread: u6 = g ⊞ 1u6

@@ -19,7 +19,6 @@
 type Point = x: u8 ; y: u16
 type Line = from: Point ; to: Point
 
-@[impure]
 fn `⍕`(v: T') → str:
     comptime if ⎕typeof(⌜v⌝) = ⌜bool⌝:
         if v: "true" else: "false"
@@ -47,7 +46,7 @@ fn `⍕`(v: T') → str:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let l: Line = Line(.from ← Point(.x ← 1u8, .y ← 234u16),
                        .to ← Point(.x ← 56u8, .y ← 7u16))

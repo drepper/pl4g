@@ -30,7 +30,7 @@ fn all(b: u16⟦,⟧) → u16:
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let k: u16 = 1u16
     let m: mut u16⟦3, 4⟧ = ⟦⟦k, 2u16, 3u16, 4u16⟧, ⟦5u16, 6u16, 7u16, 8u16⟧,

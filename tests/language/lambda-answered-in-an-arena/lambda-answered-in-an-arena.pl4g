@@ -18,7 +18,7 @@ fn adder(n: u8, a: &mut arena) → fn(u8) in a → u8:
 fn apply(g: fn(u8) in a → u8, a: &mut arena, x: u8) → u8:
     g(x)
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let pool: mut arena = ⎕arena
     let add5: fn(u8) → u8 = adder(5u8, &mut pool)

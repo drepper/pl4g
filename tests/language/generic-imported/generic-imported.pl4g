@@ -12,7 +12,7 @@ let t := ⎕import("text")
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let a: str = ⍎true ⧺ ⍎"x"                    ※ the operator
     let b: str = t.text(1234u64) ⧺ t.text(7u16)  ※ and the name

@@ -25,7 +25,7 @@ BUILDER = "__pl4g_environ_make"
 READS = """\
 let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     if \N{APL FUNCTIONAL SYMBOL QUAD}environ\N{LEFT DOUBLE PARENTHESIS}"PL4G_TEST_NAME"\N{RIGHT DOUBLE PARENTHESIS} ?? "nothing" = "said": 0u6 else: 1u6
 """

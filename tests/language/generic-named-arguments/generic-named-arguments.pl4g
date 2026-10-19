@@ -10,7 +10,7 @@ fn picked(one: T', other: T', first: bool ← true) → T':
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     if picked(3u8, 2u8) ≠ 3u8:
         return 1u6

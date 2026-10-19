@@ -21,7 +21,7 @@ let std := ⎕import("std")
 type Point = x: u8 ; y: i16
 type Line = from: Point ; to: Point
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     if ⍕0u8 ≠ "0":
         return 1u6

@@ -44,7 +44,7 @@ def test_an_argument_arrives_where_the_callee_looks_for_it(triple: str, tmp_path
     it, and both take its width from the type, which is what makes them agree."""
     assert run_it(tmp_path, triple, "".join((
         "fn twice(n: u6) ", ARROW, " u6:\n    n ", SAT_ADD, " n\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    twice(21u6)\n"))) == 42
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    twice(21u6)\n"))) == 42
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
@@ -53,7 +53,7 @@ def test_several_arguments_keep_their_order(triple: str, tmp_path) -> None:  # n
     symmetric is what shows the order arrived intact."""
     assert run_it(tmp_path, triple, "".join((
         "fn difference(a: u6, b: u6) ", ARROW, " u6:\n    a ", SAT_SUB, " b\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    difference(50u6, 8u6)\n"))) == 42
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    difference(50u6, 8u6)\n"))) == 42
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
@@ -63,7 +63,7 @@ def test_a_value_survives_a_call(triple: str, tmp_path) -> None:  # noqa: ANN001
     those are, this runs and gives the wrong number."""
     assert run_it(tmp_path, triple, "".join((
         "fn twice(n: u6) ", ARROW, " u6:\n    n ", SAT_ADD, " n\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    twice(20u6) ", SAT_ADD, " twice(1u6)\n"))) == 42
 
 
@@ -74,7 +74,7 @@ def test_a_callee_hands_back_what_it_was_lent(triple: str, tmp_path) -> None:  #
     assert run_it(tmp_path, triple, "".join((
         "fn one(n: u6) ", ARROW, " u6:\n    n ", SAT_ADD, " 1u6\n\n",
         "fn two(n: u6) ", ARROW, " u6:\n    one(n) ", SAT_ADD, " one(n)\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n",
         "    two(10u6) ", SAT_ADD, " two(9u6)\n"))) == 42
 
 
@@ -87,7 +87,7 @@ def test_a_caller_keeps_its_own_way_back(triple: str, tmp_path) -> None:  # noqa
         "fn inner(n: u6) ", ARROW, " u6:\n    n ", SAT_ADD, " 1u6\n\n",
         "fn middle(n: u6) ", ARROW, " u6:\n    inner(n)\n\n",
         "fn outer(n: u6) ", ARROW, " u6:\n    middle(n)\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    outer(41u6)\n"))) == 42
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    outer(41u6)\n"))) == 42
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
@@ -114,7 +114,7 @@ def test_the_arguments_have_to_match_in_number(tmp_path) -> None:  # noqa: ANN00
     """Nothing is variadic and nothing has a default."""
     refuses(tmp_path, "".join((
         "fn twice(n: u6) ", ARROW, " u6:\n    n ", SAT_ADD, " n\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    twice()\n")), 4211)
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    twice()\n")), 4211)
 
 
 def test_the_arguments_have_to_match_in_type(tmp_path) -> None:  # noqa: ANN001
@@ -122,14 +122,14 @@ def test_the_arguments_have_to_match_in_type(tmp_path) -> None:  # noqa: ANN001
     a variable's declared type checks its initializer."""
     refuses(tmp_path, "".join((
         "fn twice(n: u6) ", ARROW, " u6:\n    n ", SAT_ADD, " n\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    twice(1u16)\n")), 4213)
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    twice(1u16)\n")), 4213)
 
 
 def test_only_a_function_can_be_called(tmp_path) -> None:  # noqa: ANN001
     """A variable holds a value, which is not something to hand arguments to."""
     refuses(tmp_path, "".join((
         "let counter: u6 = 3u6\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    counter(1u6)\n")), 4210)
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    counter(1u6)\n")), 4210)
 
 
 def test_a_pure_call_nothing_reads_is_not_made(compile_source) -> None:  # noqa: ANN001

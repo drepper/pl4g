@@ -14,7 +14,7 @@
 let std := ⎕import("std")
 
 @[startup,
-  impure]
+  inline(never)]
 fn main(init: std.Init) → u6:
     ※ an array written down the page
     let v: u8⟦4⟧ = ⟦10u8,

@@ -12,7 +12,7 @@ from conftest import describe
 
 PROGRAM = """let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     if std.format\N{TOP LEFT CORNER}"ab {totl}"\N{TOP RIGHT CORNER} = "": 1u6 else: 0u6
 """

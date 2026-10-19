@@ -20,7 +20,6 @@ let shared: Counter = Counter(.hits ← 0u8, .inner ← In(.a ← 0u8, .b ← 0u
 fn bump(n: &mut u8):
     n⌖ ← n⌖ + 1u8
 
-@[impure]
 fn counted(c: Counter) → u8:
     c.hits ← c.hits + 1u8
     c.hits

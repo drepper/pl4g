@@ -19,7 +19,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     ※ the first element says it
     let a := ⟦1u8, 2⟧ in ⎕static

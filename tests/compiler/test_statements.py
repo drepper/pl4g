@@ -39,7 +39,7 @@ def test_a_header_without_an_arrow_answers_with_nothing(tmp_path) -> None:  # no
     proc = compile_source(tmp_path, "".join((
         "let counter: mut u6 = 0u6\n\n@[constructor, impure]\nfn prepare():\n",
         "    counter ", ASSIGN, " 7u6\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    counter\n")))
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    counter\n")))
     assert proc.returncode == 0, describe(proc)
     assert proc.stderr.strip() == "", proc.stderr
 
@@ -108,7 +108,7 @@ def test_a_trailing_semicolon_asks_for_nothing_where_nothing_is_wanted(tmp_path)
     proc = compile_source(tmp_path, "".join((
         "let counter: mut u6 = 0u6\n\n@[constructor, impure]\nfn prepare():\n",
         "    counter ", ASSIGN, " 7u6;\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup, impure]\nfn main(init: std.Init) ", ARROW, " u6:\n    counter\n")))
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    counter\n")))
     assert proc.returncode == 0, describe(proc)
     assert proc.stderr.strip() == "", proc.stderr
 

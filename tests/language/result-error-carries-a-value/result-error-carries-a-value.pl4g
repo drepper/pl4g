@@ -17,7 +17,7 @@
 
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     let three: u8 = 3u8
     let zero: u8 = 0u8
