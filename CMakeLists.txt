@@ -74,6 +74,8 @@ set(PL4G_LIB_SOURCES
   src/lib/ir/printer.cc
   src/lib/ir/json.cc
   src/lib/ir/layout.cc
+  src/lib/ir/builder.cc
+  src/lib/opt/passes.cc
   src/lib/rt/arena.cc
   src/lib/interp/interp.cc
   runtime/io.c
@@ -146,6 +148,16 @@ add_test(NAME ir-agrees
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/ir_agrees.py
           $<TARGET_FILE:pl4g-irdump> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/ir-agrees)
 set_tests_properties(ir-agrees PROPERTIES TIMEOUT 900)
+# The passes of level nought make of what pypl4g's checker made exactly what
+# pypl4g's passes make of it.
+add_test(NAME passes-agree
+  COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/passes_agree.py
+          $<TARGET_FILE:pl4g-irdump> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/passes-agree)
+set_tests_properties(passes-agree PROPERTIES TIMEOUT 900)
+add_test(NAME runs-agree-after-the-passes
+  COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/run_agrees.py --passes
+          $<TARGET_FILE:pl4g-runjson> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/runs-agree-after-the-passes)
+set_tests_properties(runs-agree-after-the-passes PROPERTIES TIMEOUT 1800)
 # Every program that runs, compiled by pypl4g and interpreted here, exits as its
 # test says.
 add_test(NAME runs-agree

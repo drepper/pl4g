@@ -434,6 +434,17 @@ namespace pl4g::ir {
 
 
   // -- making types -----------------------------------------------------------
+  //
+  // Two types are the same type when they are the same object (pypl4g's
+  // `is`), and equal when `same` says so (pypl4g's `==`): every factory below
+  // answers the one interned object of a structure, as pypl4g's TypeContext
+  // does, but pypl4g also makes objects of its own outside it -- the pointers
+  // `parts_of` answers with first among them -- which are equal and not the
+  // same, and the comparisons that ask `is` tell them apart.  So do these.
+
+  // Whether two types are equal, by structure; nominal ones only as themselves.
+  bool same(const Type* a, const Type* b);
+  std::size_t structural_hash(const Type* ty);
 
   const VoidType* void_type();
   const BoolType* bool_type();
@@ -468,6 +479,16 @@ namespace pl4g::ir {
   SumType* new_sum();
   CoroutineFrame* new_frame(std::string name);
   OpaqueType* new_opaque(std::string name);
+
+  // The pointer to `element` `parts_of` answers with: one per element, apart
+  // from the interned one.
+  const PtrType* element_pointer(const Type* element);
+
+  // Types of their own, equal perhaps to an interned one and not it.
+  const PtrType* stray_ptr_type(const Type* pointee, bool is_mutable = false, bool lasting = false);
+  const ListType* stray_list_type(const Type* element);
+  // A copy of `ty` of its own, for a structural type; `ty` itself otherwise.
+  const Type* stray_copy(const Type* ty);
 
   // The record the textual form of the IR calls `name`: one per name, fields
   // unknown, for reading that form back.

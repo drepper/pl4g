@@ -1,9 +1,11 @@
 """Write the IR pypl4g makes of a program as JSON, which the C++ side reads.
 
-Run as ``irjson.py [--text=OUT.ir] [PYPL4G-OPTION...] SOURCE.pl4g -o OUT.json``:
+Run as ``irjson.py [--text=OUT.ir] [--before=OUT.json] [PYPL4G-OPTION...] SOURCE.pl4g -o OUT.json``:
 the command line is pypl4g's own, run with ``--emit ir``, and what would have
 been the IR's text is this instead -- and with ``--text``, the text as well, in
-a file of its own, for comparing with what the C++ side prints of the JSON.  The text leaves out what it does not need to show a reader --
+a file of its own, for comparing with what the C++ side prints of the JSON; and
+with ``--before``, the module as the checker left it, before any pass ran, for
+the C++ passes to be held to what pypl4g's made of it.  The text leaves out what it does not need to show a reader --
 which function a call calls, what a constant holds, how large a generator's
 frame came to -- and an interpreter needs all of it.
 
@@ -79,7 +81,49 @@ class Writer:
         self.types.append(entry)
         entry.update(self._describe(ty))
         self.types[number]["layout"] = self._layout(ty)
+        made = self._made(ty)
+        if made is not None:
+            self.types[number]["made"] = made
         return number
+
+    def _made(self, ty: T.Type) -> str | None:
+        """Where an object of a structural type came from: the module's
+        context, which holds one per structure; the cache of pointers
+        `parts_of` answers with; or neither.  Equal objects from two of these
+        are two objects, and an `is` tells them apart."""
+        c = self.module.types
+        key: object
+        match ty:
+            case T.PtrType():
+                if T._ELEMENT_POINTERS.get(ty.pointee) is ty:
+                    return "element"
+                table, key = c._pointers, (ty.pointee, ty.mutable, ty.lasting)
+            case T.ResultType():
+                table, key = c._results, (ty.ok, ty.err)
+            case T.TupleType():
+                table, key = c._tuples, ty.members
+            case T.ArrayType():
+                table, key = c._arrays, (ty.element, ty.shape)
+            case T.VecType():
+                table, key = c._vectors, (ty.element, ty.lanes)
+            case T.ListType():
+                table, key = c._lists, ty.element
+            case T.CursorType():
+                table, key = c._cursors, ty.element
+            case T.SetType():
+                table, key = c._sets, (ty.element, ty.mutable)
+            case T.DictType():
+                table, key = c._dicts, (ty.key, ty.value, ty.mutable)
+            case T.FuncType():
+                table, key = c._functions, (ty.params, ty.ret, ty.listable, ty.hands_out, ty.lasting, ty.impure,
+                                            ty.can_ignore, ty.borrows)
+            case T.IterType():
+                table, key = c._iterators, ty.element
+            case T.RunningType():
+                table, key = c._running, (ty.element, ty.given, ty.lasting)
+            case _:
+                return None
+        return "context" if table.get(key) is ty else "stray"
 
     def _layout(self, ty: T.Type) -> Any:
         """How *ty* is laid out on a target of eight-byte pointers, for the
@@ -283,8 +327,8 @@ class Writer:
                 out["targets"] = [self.target(inst.true_target, labels, numbers),
                                   self.target(inst.false_target, labels, numbers)]
             case I.SwitchInst():
-                out["targets"] = [self.target(inst.default, labels, numbers),
-                                  *(self.target(t, labels, numbers) for _, t in inst.cases)]
+                out["targets"] = [*(self.target(t, labels, numbers) for _, t in inst.cases),
+                                  self.target(inst.default, labels, numbers)]
                 out["cases"] = [str(v) for v, _ in inst.cases]
             case I.YieldInst():
                 out["targets"] = [self.target(inst.target, labels, numbers)]
@@ -319,6 +363,11 @@ class Writer:
         }
         if func.span.is_valid:
             out["span"] = [func.span.start, func.span.end]
+        if func.name_span.is_valid:
+            out["name_span"] = [func.name_span.start, func.name_span.end]
+        out["answer_from"] = None if func.answer_from is None else list(func.answer_from)
+        frame = func.attrs.extra.get("coroutine")
+        out["coroutine"] = self.type(frame) if isinstance(frame, T.CoroutineFrame) else None
         return out
 
     def block(self, block: BasicBlock, labels: dict[int, int], numbers: dict[int, int]) -> dict[str, Any]:
@@ -368,9 +417,23 @@ def main() -> int:
     import pypl4g.driver.main as driver
     args = sys.argv[1:]
     text: Path | None = None
-    if args and args[0].startswith("--text="):
-        text = Path(args.pop(0)[len("--text="):])
+    before: Path | None = None
+    while args and args[0].startswith(("--text=", "--before=")):
+        one = args.pop(0)
+        if one.startswith("--text="):
+            text = Path(one[len("--text="):])
+        else:
+            before = Path(one[len("--before="):])
     original = driver.render_module
+    if before is not None:
+        from pypl4g.opt import pass_
+        running = pass_.PassManager.run
+
+        def first_written(self: pass_.PassManager, module: Module) -> None:
+            before.write_text(render(module), encoding="utf-8")
+            running(self, module)
+
+        pass_.PassManager.run = first_written  # type: ignore[method-assign]
 
     def both(module: Module) -> str:
         if text is not None:

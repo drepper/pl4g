@@ -111,9 +111,9 @@ namespace pl4g::ir {
         for (std::size_t i = 0; i < inst.cases.size(); ++i) {
           if (i > 0)
             cases += ", ";
-          cases += decimal(inst.cases[i]) + " \N{RIGHTWARDS ARROW} " + target(inst.targets[i + 1], numbers);
+          cases += decimal(inst.cases[i]) + " \N{RIGHTWARDS ARROW} " + target(inst.targets[i], numbers);
         }
-        return "switch " + operands + ", default " + target(inst.targets[0], numbers) + " [" + cases + "]";
+        return "switch " + operands + ", default " + target(inst.targets.back(), numbers) + " [" + cases + "]";
       }
       case InstKind::CmpInst:
         return inst.opcode() + "." + (inst.operands.empty() ? std::string("void") : inst.operands[0]->ty->render())

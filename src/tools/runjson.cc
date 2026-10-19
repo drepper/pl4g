@@ -11,6 +11,7 @@
 
 #include "interp/interp.hh"
 #include "ir/json.hh"
+#include "opt/passes.hh"
 #include "source/manager.hh"
 #include "util/fdio.hh"
 
@@ -22,12 +23,14 @@ namespace {
 
   struct Arguments {
     bool trace = false;
+    bool passes = false;
     std::string file;
     std::vector<std::string> rest;
   };
 
   constexpr ::argp_option options[] = {
     { "trace", 't', nullptr, 0, "Say on standard error which function is entered", 0 },
+    { "passes", 'p', nullptr, 0, "Run the passes of level nought first: the file is the module before them", 0 },
     {},
   };
 
@@ -37,6 +40,9 @@ namespace {
     switch (key) {
     case 't':
       args.trace = true;
+      return 0;
+    case 'p':
+      args.passes = true;
       return 0;
     case ARGP_KEY_ARG:
       if (args.file.empty())
@@ -74,6 +80,8 @@ int main(int argc, char* argv[])
     pl4g::write_all(2, args.file + ": " + module.error() + "\n");
     return 1;
   }
+  if (args.passes)
+    pl4g::opt::run_pipeline(**module);
   pl4g::interp::Options options;
   options.args.push_back(args.file);
   options.args.insert(options.args.end(), args.rest.begin(), args.rest.end());

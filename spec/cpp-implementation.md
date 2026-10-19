@@ -83,6 +83,16 @@ not the interpreter's.  `runtime/io.c` is compiled into the library and called a
 through the same ring; the arena allocator the back ends emit as machine code is the same few lines of C++.  The record the
 startup function is handed carries the descriptors the embedder chose (`interp::Devices`).
 
+Which type is which
+-------------------
+
+pypl4g compares types both ways: `==`, by structure, and `is`, by identity, and the two differ where it made equal objects in two
+places -- its TypeContext holds one object per structure, and `parts_of` answers with pointers of a cache of its own, equal to the
+context's and not them.  Some answers depend on which question was asked (whether `leanvalues` folds an extract, whether the
+checker inserts a cast), so the C++ types keep the same distinction: the factories intern by structure as the context does,
+`element_pointer` is the other cache, `same` is `==` and pointer equality is `is`.  The JSON says for every type which of them
+made it, so that a module read back has the same objects pypl4g's had.
+
 Phases and status
 -----------------
 
@@ -94,7 +104,7 @@ Each phase is committed when its own checks pass; the status column is kept curr
 | 2 | Syntax tree and parser | every test program parses as `pypl4g` parses it | done: every file's tree, compared field by field (a dumper written by reflection), as a program's file and as a module's; no difference on 3527 inputs AFL++ found |
 | 3 | IR: types, values, instructions, layout, printer, the JSON exchange | every program's IR, read from what pypl4g compiled, prints as pypl4g prints it and is laid out alike | done; the builder and the verifier go with the checker, which is what uses them |
 | 4 | Interpreter of the IR, and the runtime: heap, io_uring | IR pypl4g compiled, read as JSON, runs and exits as the test says | done: 464 of 464, and under the address and undefined-behaviour sanitizers all but the one test that needs a data limit |
-| 5 | Checker, part one: definitions, types, expressions, statements, calls | the first test programs run | |
+| 5 | Checker, part one: definitions, types, expressions, statements, calls | the first test programs run | the IR builder and the passes of level nought are done: from what pypl4g's checker made they make exactly what pypl4g's passes make, 464 of 464, and what they make runs as the tests say |
 | 6 | Checker, part two: everything else the language has | every test program runs or is refused as it should | |
 | 7 | Macro expander | the macro tests | |
 | 8 | REPL, tree-sitter service, LSP service | their own tests | |

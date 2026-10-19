@@ -1235,10 +1235,10 @@ namespace pl4g::interp {
             jump = &op.jumps[in(0)[0] != 0 ? 0 : 1];
           else {
             Cell value = in(0)[0];
-            jump = &op.jumps[0];
+            jump = &op.jumps.back();
             for (std::size_t i = 0; i < op.cases.size(); ++i)
               if (op.cases[i] == value) {
-                jump = &op.jumps[i + 1];
+                jump = &op.jumps[i];
                 break;
               }
           }

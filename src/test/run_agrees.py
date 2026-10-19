@@ -1,11 +1,13 @@
 """Check that every test program, interpreted, exits as its test says.
 
-Run as ``run_agrees.py PL4G-RUNJSON ROOT WORK [NAME...]``.  Each test program
+Run as ``run_agrees.py [--passes] PL4G-RUNJSON ROOT WORK [NAME...]``.  Each test program
 that runs is compiled by pypl4g to its IR, written as JSON by ``irjson.py``; the
 C++ interpreter reads that and runs it, under the limits every program the
 tests run is held to, with the arguments and the environment the test asks for;
 and the status it exits with is held to the one the test names.  Names after
-WORK pick the tests to run, by the name of their directory.
+WORK pick the tests to run, by the name of their directory.  With ``--passes``
+what is written is the module before pypl4g's passes ran, and the C++ passes
+run over it before it is interpreted.
 """
 
 from __future__ import annotations
@@ -70,14 +72,18 @@ def directives(path: Path) -> Expected:
     return found
 
 
+PASSES = False
+
+
 def one(path: Path, run: str, work: Path) -> str | None:
     """Compile and run *path*; what went wrong, or nothing."""
     expected = directives(path)
     stem = "".join((path.parent.name, "--", path.stem))
     out = work / "".join((stem, ".json"))
     env = {**os.environ, "PL4G_HASH_SEED": "1"}
-    proc = subprocess.run([sys.executable, "-I", str(HERE / "irjson.py"), *expected.args, "-o", str(out),
-                           str(path)], capture_output=True, text=True, check=False, env=env)
+    written = ["".join(("--before=", str(out))), "-o", os.devnull] if PASSES else ["-o", str(out)]
+    proc = subprocess.run([sys.executable, "-I", str(HERE / "irjson.py"), *written, *expected.args, str(path)],
+                          capture_output=True, text=True, check=False, env=env)
     if proc.returncode != 0:
         return "".join(("pypl4g did not compile it:\n", proc.stderr[-1500:]))
     # A sanitized interpreter reserves its shadow memory beyond any data limit,
@@ -88,7 +94,8 @@ def one(path: Path, run: str, work: Path) -> str | None:
     else:
         limited = ["prlimit", "--data=536870912", "--cpu=120", "--"]
     try:
-        ran = subprocess.run([*limited, run, str(out), *expected.run_args], capture_output=True, timeout=1000,
+        ran = subprocess.run([*limited, run, *(["--passes"] if PASSES else []), str(out), *expected.run_args],
+                             capture_output=True, timeout=1000,
                              check=False, env={**env, **expected.environment}, cwd=str(path.parent))
     except subprocess.TimeoutExpired:
         return "it did not finish"
@@ -99,6 +106,10 @@ def one(path: Path, run: str, work: Path) -> str | None:
 
 
 def main() -> int:
+    global PASSES
+    if sys.argv[1] == "--passes":
+        PASSES = True
+        del sys.argv[1]
     run, root, work = str(Path(sys.argv[1]).resolve()), Path(sys.argv[2]).resolve(), Path(sys.argv[3]).resolve()
     picked = set(sys.argv[4:])
     work.mkdir(parents=True, exist_ok=True)

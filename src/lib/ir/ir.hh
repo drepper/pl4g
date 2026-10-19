@@ -198,8 +198,9 @@ namespace pl4g::ir {
     std::string what;
     int status = 0;
     bool observing = false;
-    // A terminator's destinations: a branch's one, a conditional branch's
-    // true and false, a switch's default and then its cases, a yield's one.
+    // A terminator's destinations, in the order pypl4g's `successors` gives
+    // them: a branch's one, a conditional branch's true and false, a switch's
+    // cases and then its default, a yield's one.
     std::vector<BlockTarget> targets;
     std::vector<__int128> cases;
     bool delegates = false;
@@ -277,13 +278,39 @@ namespace pl4g::ir {
     bool exported = false;
     std::vector<std::string> param_names;
     std::optional<ReturnStyle> answering;
+    Span name_span;
+    // Where a string or a list it answers with is made: `heap`, `static`, or
+    // `param` and which one -- what lets its answer travel without its
+    // allocator.
+    std::optional<std::pair<std::string, int>> answer_from;
+    // The frame of a generator, which the pass splitting it measures.
+    const CoroutineFrame* coroutine = nullptr;
+    // Block parameters a pass replaced, kept while anything may still name them.
+    std::vector<std::unique_ptr<BlockParam>> retired;
 
     Function(std::string name, const FuncType* ty) : Value(ValueKind::function, ty), name(std::move(name)), fty(ty) {}
 
     bool is_declaration() const noexcept { return blocks.empty(); }
     BasicBlock* entry() const noexcept { return blocks.empty() ? nullptr : blocks.front().get(); }
+    // The style it answers in: what it says, or what its convention does.
+    ReturnStyle answer_style() const noexcept
+    {
+      if (answering)
+        return *answering;
+      return cconv == default_cconv ? ReturnStyle::three_in_registers : ReturnStyle::two_in_registers;
+    }
     // A new block at the end, its label made unique.
     BasicBlock* add_block(std::optional<std::string> label = std::nullopt);
+    // The label a new block would be given.
+    std::string unique_label(std::optional<std::string> label) const;
+    // A block not yet in the function, for a pass to put where it wants.
+    std::unique_ptr<BasicBlock> detached_block(std::string label);
+    // Give it another type, which a pass changing how it answers does.
+    void set_type(const FuncType* t) noexcept
+    {
+      fty = t;
+      ty = t;
+    }
     // A new instruction, kept by the function, not yet in any block.
     Instruction* make(InstKind kind, const Type* ty);
 
@@ -309,8 +336,23 @@ namespace pl4g::ir {
   };
 
 
+  // What the compiler chose about the program, written down beside what it
+  // said, for a reader to see why: pypl4g's ir/reports.py.
+  struct Report {
+    std::string kind;
+    std::string subject;
+    std::string reason;
+    Span span;
+  };
+
+
   struct Module {
     std::string name;
+    std::vector<Report> reports;
+    void record(std::string kind, std::string subject, std::string reason, Span span = invalid_span)
+    {
+      reports.push_back({ std::move(kind), std::move(subject), std::move(reason), span });
+    }
     std::string triple = "x86_64-linux-none";
     // In the order they were added, under the key they were added with.
     std::vector<std::pair<std::string, std::unique_ptr<Function>>> functions;
@@ -318,6 +360,8 @@ namespace pl4g::ir {
     // files two overloads of an operator under one key, the second replacing
     // the first, and the back end reaches the first through the call.
     std::vector<std::unique_ptr<Function>> unlisted;
+    // Variables a pass dropped, kept while a constant may still name them.
+    std::vector<std::unique_ptr<GlobalVar>> retired_globals;
     std::vector<std::pair<std::string, std::unique_ptr<GlobalVar>>> globals;
     // The texts of the program: globals kept apart from its variables.
     std::vector<GlobalVar*> texts;

@@ -3,7 +3,7 @@
 // --check-layout it says instead where its layout of a type differs from the
 // one pypl4g wrote beside it.
 //
-// Usage: pl4g-irdump [--check-layout] FILE.json...
+// Usage: pl4g-irdump [--check-layout] [--passes] FILE.json...
 #include <argp.h>
 
 #include <format>
@@ -15,6 +15,7 @@
 #include "ir/json.hh"
 #include "ir/layout.hh"
 #include "ir/printer.hh"
+#include "opt/passes.hh"
 #include "source/manager.hh"
 #include "util/fdio.hh"
 
@@ -23,11 +24,13 @@ namespace {
 
   struct Arguments {
     bool check_layout = false;
+    bool passes = false;
     std::vector<std::string> files;
   };
 
   constexpr ::argp_option options[] = {
     { "check-layout", 'l', nullptr, 0, "Compare the layout of every type with the one the file records", 0 },
+    { "passes", 'p', nullptr, 0, "Run the passes of optimization level nought before printing", 0 },
     {},
   };
 
@@ -37,6 +40,9 @@ namespace {
     switch (key) {
     case 'l':
       args.check_layout = true;
+      return 0;
+    case 'p':
+      args.passes = true;
       return 0;
     case ARGP_KEY_ARG:
       args.files.emplace_back(arg);
@@ -128,6 +134,8 @@ int main(int argc, char* argv[])
       status = 1;
       continue;
     }
+    if (args.passes)
+      pl4g::opt::run_pipeline(**module);
     if (args.check_layout) {
       if (check_layout(**module, types, (*read)->text, path, out) > 0)
         status = 1;

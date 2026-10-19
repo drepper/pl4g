@@ -6,6 +6,7 @@
 #include <mutex>
 #include <numeric>
 #include <tuple>
+#include <unordered_map>
 #include <unordered_set>
 
 
@@ -17,27 +18,17 @@ namespace pl4g::ir {
     // guards making them: a language server checks on more than one thread.
     struct Store {
       std::recursive_mutex lock;
-      std::vector<std::unique_ptr<Type>> nominal;
+      // Every type made, kept for the life of the process.
+      std::vector<std::unique_ptr<Type>> kept;
       std::map<std::pair<std::vector<std::pair<std::string, std::int64_t>>, Rational>, std::unique_ptr<Unit>> units;
       std::map<std::tuple<unsigned, bool, const Unit*>, std::unique_ptr<IntType>> ints;
       std::map<std::pair<unsigned, const Unit*>, std::unique_ptr<FloatType>> floats;
-      std::map<std::tuple<const Type*, bool, bool>, std::unique_ptr<PtrType>> pointers;
-      std::map<std::tuple<const Type*, const Type*, bool>, std::unique_ptr<RunningType>> running;
-      std::map<const Type*, std::unique_ptr<IterType>> iterators;
-      std::map<std::pair<const Type*, const Type*>, std::unique_ptr<ResultType>> results;
-      std::map<std::vector<const Type*>, std::unique_ptr<TupleType>> tuples;
-      std::map<std::pair<const Type*, std::vector<std::optional<std::uint64_t>>>, std::unique_ptr<ArrayType>> arrays;
-      std::map<std::pair<const Type*, unsigned>, std::unique_ptr<VecType>> vectors;
-      std::map<const Type*, std::unique_ptr<ListType>> lists;
-      std::map<const Type*, std::unique_ptr<CursorType>> cursors;
-      std::map<std::pair<const Type*, bool>, std::unique_ptr<SetType>> sets;
-      std::map<std::tuple<const Type*, const Type*, bool>, std::unique_ptr<DictType>> dicts;
-      using FuncKey = std::tuple<std::vector<const Type*>, const Type*, bool, bool, bool, bool, bool,
-                                 std::vector<std::pair<int, Borrowed>>>;
-      std::map<FuncKey, std::unique_ptr<FuncType>> functions;
-      using EnumKey = std::tuple<std::vector<std::string>, std::vector<std::int64_t>, const IntType*, bool, std::string,
-                                 std::string>;
-      std::map<EnumKey, std::unique_ptr<EnumType>> enums;
+      // The types built of others, by their structure: what pypl4g's
+      // TypeContext asks its dictionaries, which compare by structure too.
+      std::unordered_multimap<std::size_t, const Type*> interned;
+      // The pointers to an element `parts_of` answers with, by the element:
+      // pypl4g keeps these apart from the context's, as objects of their own.
+      std::unordered_multimap<std::size_t, const PtrType*> element_pointers;
       std::map<std::string, ProductType*> named;
     };
 
@@ -45,17 +36,6 @@ namespace pl4g::ir {
     {
       static Store* the = new Store;
       return *the;
-    }
-
-    // The interned one under `key` in `table`, made by `make` the first time.
-    template<typename Map, typename Key, typename Make>
-    auto* interned(Map& table, Key&& key, Make&& make)
-    {
-      std::lock_guard guard(store().lock);
-      auto it = table.find(key);
-      if (it == table.end())
-        it = table.emplace(std::forward<Key>(key), make()).first;
-      return it->second.get();
     }
 
     __int128 gcd128(__int128 a, __int128 b)
@@ -207,10 +187,11 @@ namespace pl4g::ir {
 
   const Unit* Unit::make(std::vector<std::pair<std::string, std::int64_t>> powers, Rational scale)
   {
-    auto key = std::pair(powers, scale);
-    return interned(store().units, std::move(key), [&] {
-      return std::make_unique<Unit>(Unit{ std::move(powers), scale });
-    });
+    std::lock_guard guard(store().lock);
+    auto& found = store().units[std::pair(powers, scale)];
+    if (found == nullptr)
+      found = std::make_unique<Unit>(Unit{ std::move(powers), scale });
+    return found.get();
   }
 
 
@@ -591,88 +572,278 @@ namespace pl4g::ir {
   const StrType* str_type() { static const StrType the; return &the; }
 
 
+  namespace {
+
+    std::size_t mix(std::size_t seed, std::size_t value) noexcept
+    {
+      return seed ^ (value + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2));
+    }
+
+    // The interned type equal to `probe`, which becomes it where there is none.
+    template<typename T>
+    const T* intern(std::unique_ptr<T> probe)
+    {
+      std::lock_guard guard(store().lock);
+      auto hash = structural_hash(probe.get());
+      auto [first, last] = store().interned.equal_range(hash);
+      for (; first != last; ++first)
+        if (same(first->second, probe.get()))
+          return static_cast<const T*>(first->second);
+      const T* raw = probe.get();
+      store().kept.push_back(std::move(probe));
+      store().interned.emplace(hash, raw);
+      return raw;
+    }
+
+    // A type of its own, equal perhaps to an interned one and not it.
+    template<typename T>
+    const T* keep(std::unique_ptr<T> made)
+    {
+      std::lock_guard guard(store().lock);
+      const T* raw = made.get();
+      store().kept.push_back(std::move(made));
+      return raw;
+    }
+
+  } // anonymous namespace
+
+
+  std::size_t structural_hash(const Type* ty)
+  {
+    if (ty == nullptr)
+      return 0;
+    std::size_t h = std::size_t(ty->kind) * 0x100000001b3ull;
+    switch (ty->kind) {
+    case TypeKind::int_: {
+      auto i = static_cast<const IntType*>(ty);
+      return mix(mix(mix(h, i->bits), i->is_signed), std::hash<const void*>()(i->unit));
+    }
+    case TypeKind::float_: {
+      auto f = static_cast<const FloatType*>(ty);
+      return mix(mix(h, f->bits), std::hash<const void*>()(f->unit));
+    }
+    case TypeKind::ptr: {
+      auto p = static_cast<const PtrType*>(ty);
+      return mix(mix(mix(h, structural_hash(p->pointee)), p->is_mutable), p->lasting);
+    }
+    case TypeKind::frame:
+    case TypeKind::opaque:
+    case TypeKind::product:
+    case TypeKind::sum:
+      return mix(h, std::hash<const void*>()(ty));
+    case TypeKind::running: {
+      auto r = static_cast<const RunningType*>(ty);
+      return mix(mix(mix(h, structural_hash(r->element)), structural_hash(r->given)), r->lasting);
+    }
+    case TypeKind::iter:
+      return mix(h, structural_hash(static_cast<const IterType*>(ty)->element));
+    case TypeKind::func: {
+      auto f = static_cast<const FuncType*>(ty);
+      for (auto p : f->params)
+        h = mix(h, structural_hash(p));
+      return mix(mix(h, structural_hash(f->ret)), f->listable + 2 * f->hands_out + 4 * f->lasting + 8 * f->impure);
+    }
+    case TypeKind::result: {
+      auto r = static_cast<const ResultType*>(ty);
+      return mix(mix(h, structural_hash(r->ok)), structural_hash(r->err));
+    }
+    case TypeKind::tuple:
+      for (auto m : static_cast<const TupleType*>(ty)->members)
+        h = mix(h, structural_hash(m));
+      return h;
+    case TypeKind::array: {
+      auto a = static_cast<const ArrayType*>(ty);
+      h = mix(h, structural_hash(a->element));
+      for (const auto& along : a->shape)
+        h = mix(h, along ? *along + 1 : 0);
+      return h;
+    }
+    case TypeKind::vec: {
+      auto v = static_cast<const VecType*>(ty);
+      return mix(mix(h, structural_hash(v->element)), v->lanes);
+    }
+    case TypeKind::list:
+      return mix(h, structural_hash(static_cast<const ListType*>(ty)->element));
+    case TypeKind::cursor:
+      return mix(h, structural_hash(static_cast<const CursorType*>(ty)->element));
+    case TypeKind::set: {
+      auto s = static_cast<const SetType*>(ty);
+      return mix(mix(h, structural_hash(s->element)), s->is_mutable);
+    }
+    case TypeKind::dict: {
+      auto d = static_cast<const DictType*>(ty);
+      return mix(mix(mix(h, structural_hash(d->key)), structural_hash(d->value)), d->is_mutable);
+    }
+    case TypeKind::enum_: {
+      auto e = static_cast<const EnumType*>(ty);
+      return mix(h, std::hash<std::string>()(e->name));
+    }
+    default:
+      return h;
+    }
+  }
+
+
+  bool same(const Type* a, const Type* b)
+  {
+    if (a == b)
+      return true;
+    if (a == nullptr || b == nullptr || a->kind != b->kind)
+      return false;
+    switch (a->kind) {
+    case TypeKind::int_: {
+      auto x = static_cast<const IntType*>(a), y = static_cast<const IntType*>(b);
+      return x->bits == y->bits && x->is_signed == y->is_signed && x->unit == y->unit;
+    }
+    case TypeKind::float_: {
+      auto x = static_cast<const FloatType*>(a), y = static_cast<const FloatType*>(b);
+      return x->bits == y->bits && x->unit == y->unit;
+    }
+    case TypeKind::ptr: {
+      auto x = static_cast<const PtrType*>(a), y = static_cast<const PtrType*>(b);
+      return x->is_mutable == y->is_mutable && x->lasting == y->lasting && same(x->pointee, y->pointee);
+    }
+    case TypeKind::frame:
+    case TypeKind::opaque:
+    case TypeKind::product:
+    case TypeKind::sum:
+      return false;
+    case TypeKind::running: {
+      auto x = static_cast<const RunningType*>(a), y = static_cast<const RunningType*>(b);
+      return x->lasting == y->lasting && same(x->element, y->element) && same(x->given, y->given);
+    }
+    case TypeKind::iter:
+      return same(static_cast<const IterType*>(a)->element, static_cast<const IterType*>(b)->element);
+    case TypeKind::func: {
+      auto x = static_cast<const FuncType*>(a), y = static_cast<const FuncType*>(b);
+      return x->params.size() == y->params.size()
+             && std::ranges::equal(x->params, y->params, [](auto p, auto q) { return same(p, q); })
+             && same(x->ret, y->ret) && x->listable == y->listable && x->hands_out == y->hands_out
+             && x->lasting == y->lasting && x->impure == y->impure && x->can_ignore == y->can_ignore
+             && x->borrows == y->borrows;
+    }
+    case TypeKind::result: {
+      auto x = static_cast<const ResultType*>(a), y = static_cast<const ResultType*>(b);
+      return same(x->ok, y->ok) && same(x->err, y->err);
+    }
+    case TypeKind::tuple: {
+      const auto& x = static_cast<const TupleType*>(a)->members;
+      const auto& y = static_cast<const TupleType*>(b)->members;
+      return x.size() == y.size() && std::ranges::equal(x, y, [](auto p, auto q) { return same(p, q); });
+    }
+    case TypeKind::array: {
+      auto x = static_cast<const ArrayType*>(a), y = static_cast<const ArrayType*>(b);
+      return x->shape == y->shape && same(x->element, y->element);
+    }
+    case TypeKind::vec: {
+      auto x = static_cast<const VecType*>(a), y = static_cast<const VecType*>(b);
+      return x->lanes == y->lanes && same(x->element, y->element);
+    }
+    case TypeKind::list:
+      return same(static_cast<const ListType*>(a)->element, static_cast<const ListType*>(b)->element);
+    case TypeKind::cursor:
+      return same(static_cast<const CursorType*>(a)->element, static_cast<const CursorType*>(b)->element);
+    case TypeKind::set: {
+      auto x = static_cast<const SetType*>(a), y = static_cast<const SetType*>(b);
+      return x->is_mutable == y->is_mutable && same(x->element, y->element);
+    }
+    case TypeKind::dict: {
+      auto x = static_cast<const DictType*>(a), y = static_cast<const DictType*>(b);
+      return x->is_mutable == y->is_mutable && same(x->key, y->key) && same(x->value, y->value);
+    }
+    case TypeKind::enum_: {
+      auto x = static_cast<const EnumType*>(a), y = static_cast<const EnumType*>(b);
+      return x->members == y->members && x->values == y->values && same(x->holder, y->holder) && x->flag == y->flag
+             && x->name == y->name && x->origin == y->origin;
+    }
+    default:
+      // The ones with nothing in them: one of a kind is any of that kind.
+      return true;
+    }
+  }
+
+
   const IntType* int_type(unsigned bits, bool is_signed, const Unit* unit)
   {
     if (unit == nullptr)
       unit = Unit::none();
-    return interned(store().ints, std::tuple(bits, is_signed, unit),
-                    [&] { return std::make_unique<IntType>(bits, is_signed, unit); });
+    std::lock_guard guard(store().lock);
+    auto& found = store().ints[std::tuple(bits, is_signed, unit)];
+    if (found == nullptr)
+      found = std::make_unique<IntType>(bits, is_signed, unit);
+    return found.get();
   }
 
   const FloatType* float_type(unsigned bits, const Unit* unit)
   {
     if (unit == nullptr)
       unit = Unit::none();
-    return interned(store().floats, std::pair(bits, unit), [&] { return std::make_unique<FloatType>(bits, unit); });
+    std::lock_guard guard(store().lock);
+    auto& found = store().floats[std::pair(bits, unit)];
+    if (found == nullptr)
+      found = std::make_unique<FloatType>(bits, unit);
+    return found.get();
   }
 
   const PtrType* ptr_type(const Type* pointee, bool is_mutable, bool lasting)
   {
-    return interned(store().pointers, std::tuple(pointee, is_mutable, lasting),
-                    [&] { return std::make_unique<PtrType>(pointee, is_mutable, lasting); });
+    return intern(std::make_unique<PtrType>(pointee, is_mutable, lasting));
   }
 
   const RunningType* running_type(const Type* element, const Type* given, bool lasting)
   {
-    return interned(store().running, std::tuple(element, given, lasting),
-                    [&] { return std::make_unique<RunningType>(element, given, lasting); });
+    return intern(std::make_unique<RunningType>(element, given, lasting));
   }
 
   const IterType* iter_type(const Type* element)
   {
-    return interned(store().iterators, element, [&] { return std::make_unique<IterType>(element); });
+    return intern(std::make_unique<IterType>(element));
   }
 
   const ResultType* result_type(const Type* ok, const Type* err)
   {
-    return interned(store().results, std::pair(ok, err), [&] { return std::make_unique<ResultType>(ok, err); });
+    return intern(std::make_unique<ResultType>(ok, err));
   }
 
   const TupleType* tuple_type(std::vector<const Type*> members)
   {
-    auto key = members;
-    return interned(store().tuples, std::move(key), [&] { return std::make_unique<TupleType>(std::move(members)); });
+    return intern(std::make_unique<TupleType>(std::move(members)));
   }
 
   const ArrayType* array_type(const Type* element, std::vector<std::optional<std::uint64_t>> shape)
   {
-    auto key = std::pair(element, shape);
-    return interned(store().arrays, std::move(key),
-                    [&] { return std::make_unique<ArrayType>(element, std::move(shape)); });
+    return intern(std::make_unique<ArrayType>(element, std::move(shape)));
   }
 
   const VecType* vec_type(const Type* element, unsigned lanes)
   {
-    return interned(store().vectors, std::pair(element, lanes), [&] { return std::make_unique<VecType>(element, lanes); });
+    return intern(std::make_unique<VecType>(element, lanes));
   }
 
   const ListType* list_type(const Type* element)
   {
-    return interned(store().lists, element, [&] { return std::make_unique<ListType>(element); });
+    return intern(std::make_unique<ListType>(element));
   }
 
   const CursorType* cursor_type(const Type* element)
   {
-    return interned(store().cursors, element, [&] { return std::make_unique<CursorType>(element); });
+    return intern(std::make_unique<CursorType>(element));
   }
 
   const SetType* set_type(const Type* element, bool is_mutable)
   {
-    return interned(store().sets, std::pair(element, is_mutable),
-                    [&] { return std::make_unique<SetType>(element, is_mutable); });
+    return intern(std::make_unique<SetType>(element, is_mutable));
   }
 
   const DictType* dict_type(const Type* key, const Type* value, bool is_mutable)
   {
-    return interned(store().dicts, std::tuple(key, value, is_mutable),
-                    [&] { return std::make_unique<DictType>(key, value, is_mutable); });
+    return intern(std::make_unique<DictType>(key, value, is_mutable));
   }
 
-  const FuncType* func_type(std::vector<const Type*> params, const Type* ret, const FuncType& shape)
-  {
-    Store::FuncKey key{ params,        ret,           shape.listable,  shape.hands_out,
-                        shape.lasting, shape.impure, shape.can_ignore, shape.borrows };
-    return interned(store().functions, std::move(key), [&] {
+  namespace {
+
+    std::unique_ptr<FuncType> function_of(std::vector<const Type*> params, const Type* ret, const FuncType& shape)
+    {
       auto made = std::make_unique<FuncType>();
       made->params = std::move(params);
       made->ret = ret;
@@ -683,7 +854,13 @@ namespace pl4g::ir {
       made->can_ignore = shape.can_ignore;
       made->borrows = shape.borrows;
       return made;
-    });
+    }
+
+  } // anonymous namespace
+
+  const FuncType* func_type(std::vector<const Type*> params, const Type* ret, const FuncType& shape)
+  {
+    return intern(function_of(std::move(params), ret, shape));
   }
 
   const FuncType* func_type(std::vector<const Type*> params, const Type* ret)
@@ -692,20 +869,90 @@ namespace pl4g::ir {
     return func_type(std::move(params), ret, plain);
   }
 
+
+  const PtrType* element_pointer(const Type* element)
+  {
+    std::lock_guard guard(store().lock);
+    auto hash = structural_hash(element);
+    auto [first, last] = store().element_pointers.equal_range(hash);
+    for (; first != last; ++first)
+      if (same(first->second->pointee, element))
+        return first->second;
+    auto made = keep(std::make_unique<PtrType>(element, true, false));
+    store().element_pointers.emplace(hash, made);
+    return made;
+  }
+
+
+  const PtrType* stray_ptr_type(const Type* pointee, bool is_mutable, bool lasting)
+  {
+    return keep(std::make_unique<PtrType>(pointee, is_mutable, lasting));
+  }
+
+  const ListType* stray_list_type(const Type* element)
+  {
+    return keep(std::make_unique<ListType>(element));
+  }
+
+  const Type* stray_copy(const Type* ty)
+  {
+    switch (ty->kind) {
+    case TypeKind::ptr: {
+      auto p = static_cast<const PtrType*>(ty);
+      return keep(std::make_unique<PtrType>(p->pointee, p->is_mutable, p->lasting));
+    }
+    case TypeKind::running: {
+      auto r = static_cast<const RunningType*>(ty);
+      return keep(std::make_unique<RunningType>(r->element, r->given, r->lasting));
+    }
+    case TypeKind::iter:
+      return keep(std::make_unique<IterType>(static_cast<const IterType*>(ty)->element));
+    case TypeKind::func: {
+      auto f = static_cast<const FuncType*>(ty);
+      return keep(function_of(f->params, f->ret, *f));
+    }
+    case TypeKind::result: {
+      auto r = static_cast<const ResultType*>(ty);
+      return keep(std::make_unique<ResultType>(r->ok, r->err));
+    }
+    case TypeKind::tuple:
+      return keep(std::make_unique<TupleType>(static_cast<const TupleType*>(ty)->members));
+    case TypeKind::array: {
+      auto a = static_cast<const ArrayType*>(ty);
+      return keep(std::make_unique<ArrayType>(a->element, a->shape));
+    }
+    case TypeKind::vec: {
+      auto v = static_cast<const VecType*>(ty);
+      return keep(std::make_unique<VecType>(v->element, v->lanes));
+    }
+    case TypeKind::list:
+      return keep(std::make_unique<ListType>(static_cast<const ListType*>(ty)->element));
+    case TypeKind::cursor:
+      return keep(std::make_unique<CursorType>(static_cast<const CursorType*>(ty)->element));
+    case TypeKind::set: {
+      auto s = static_cast<const SetType*>(ty);
+      return keep(std::make_unique<SetType>(s->element, s->is_mutable));
+    }
+    case TypeKind::dict: {
+      auto d = static_cast<const DictType*>(ty);
+      return keep(std::make_unique<DictType>(d->key, d->value, d->is_mutable));
+    }
+    default:
+      return ty;
+    }
+  }
+
   const EnumType* enum_type(std::vector<std::string> members, std::vector<std::int64_t> values, const IntType* holder,
                             bool flag, std::string name, std::string origin)
   {
-    Store::EnumKey key{ members, values, holder, flag, name, origin };
-    return interned(store().enums, std::move(key), [&] {
-      auto made = std::make_unique<EnumType>();
-      made->members = std::move(members);
-      made->values = std::move(values);
-      made->holder = holder;
-      made->flag = flag;
-      made->name = std::move(name);
-      made->origin = std::move(origin);
-      return made;
-    });
+    auto made = std::make_unique<EnumType>();
+    made->members = std::move(members);
+    made->values = std::move(values);
+    made->holder = holder;
+    made->flag = flag;
+    made->name = std::move(name);
+    made->origin = std::move(origin);
+    return intern(std::move(made));
   }
 
 
@@ -717,7 +964,7 @@ namespace pl4g::ir {
       std::lock_guard guard(store().lock);
       auto made = std::make_unique<T>(std::forward<Args>(args)...);
       T* raw = made.get();
-      store().nominal.push_back(std::move(made));
+      store().kept.push_back(std::move(made));
       return raw;
     }
 
@@ -877,23 +1124,25 @@ namespace pl4g::ir {
       return out;
     }
     if (auto array = as<ArrayType>(ty); array != nullptr && ! array->fixed()) {
-      out.push_back(ptr_type(array->element, true));
+      out.push_back(element_pointer(array->element));
       for (std::size_t i = 0; i < 2 * array->rank(); ++i)
         out.push_back(u64());
       return out;
     }
+    // What pypl4g answers these with are pointers of a cache of its own,
+    // equal to the context's and not them, and so they are here.
     if (auto list = as<ListType>(ty))
-      return { ptr_type(list->element, true), u64(), ptr_type(arena_type(), true) };
+      return { element_pointer(list->element), u64(), element_pointer(arena_type()) };
     if (auto cursor = as<CursorType>(ty))
-      return { ptr_type(list_type(cursor->element), true), u64() };
+      return { element_pointer(stray_list_type(cursor->element)), u64() };
     if (is<IterType>(ty))
-      return { ptr_type(u8(), true), ptr_type(u8(), true), u64() };
+      return { element_pointer(u8()), element_pointer(u8()), u64() };
     if (is<RunningType>(ty))
-      return { ptr_type(u8(), true), ptr_type(u8(), true), ptr_type(u64(), true), ptr_type(u8(), true) };
+      return { element_pointer(u8()), element_pointer(u8()), element_pointer(u64()), element_pointer(u8()) };
     if (is<FuncType>(ty))
-      return { ptr_type(u8(), true), ptr_type(u8(), true), ptr_type(arena_type(), true) };
+      return { element_pointer(u8()), element_pointer(u8()), element_pointer(arena_type()) };
     if (is<StrType>(ty))
-      return { ptr_type(u8(), true), u64(), ptr_type(arena_type(), true) };
+      return { element_pointer(u8()), u64(), element_pointer(arena_type()) };
     return { ty };
   }
 
@@ -901,7 +1150,7 @@ namespace pl4g::ir {
   bool made_of_parts(const Type* ty)
   {
     auto parts = parts_of(ty);
-    return ! (parts.size() == 1 && parts[0] == ty);
+    return ! (parts.size() == 1 && same(parts[0], ty));
   }
 
 

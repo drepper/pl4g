@@ -294,6 +294,16 @@ namespace pl4g::ir {
                           std::string(string_of(t["name"])), std::string(string_of(t["origin"])));
       } else [[unlikely]]
         malformed("an unknown kind of type: " + std::string(k));
+      // Where pypl4g made it: its context's one of the structure, the cache of
+      // pointers `parts_of` answers with, or neither -- equal objects that an
+      // `is` tells apart, as it does here.
+      std::string_view where;
+      if (t["made"].get(where) == ::simdjson::SUCCESS) {
+        if (where == "element")
+          found = element_pointer(static_cast<const PtrType*>(found)->pointee);
+        else if (where == "stray")
+          found = stray_copy(found);
+      }
       return made[id] = found;
     }
 
@@ -537,15 +547,23 @@ namespace pl4g::ir {
         globals[var->name] = var.get();
         out->add_global(std::move(var), std::string(string_of(keys.at(at++))));
       }
-      // The texts are globals the module keeps apart, written where they are
-      // wanted rather than among the program's variables.
+      // The texts are globals the module also keeps by what they say; one
+      // already among the globals is that one.
+      std::vector<bool> fresh_text;
       for (Element g : doc["texts"].get_array()) {
-        auto var = std::make_unique<GlobalVar>(std::string(string_of(g["name"])), type(g["t"]), type(g["pt"]));
+        std::string name(string_of(g["name"]));
+        if (auto it = globals.find(name); it != globals.end()) {
+          out->texts.push_back(it->second);
+          fresh_text.push_back(false);
+          continue;
+        }
+        auto var = std::make_unique<GlobalVar>(name, type(g["t"]), type(g["pt"]));
         var->linkage = linkage_of(g["linkage"]);
         var->module = string_of(g["module"]);
         globals[var->name] = var.get();
         out->texts.push_back(var.get());
         out->text_store.push_back(std::move(var));
+        fresh_text.push_back(true);
       }
       keys = doc["function_keys"].get_array();
       std::int64_t listed = std::numeric_limits<std::int64_t>::max();
@@ -585,6 +603,14 @@ namespace pl4g::ir {
         Array span;
         if (f["span"].get(span) == ::simdjson::SUCCESS)
           func->span = { int_of(span.at(0)), int_of(span.at(1)) };
+        if (f["name_span"].get(span) == ::simdjson::SUCCESS)
+          func->name_span = { int_of(span.at(0)), int_of(span.at(1)) };
+        Array from;
+        if (f["answer_from"].get(from) == ::simdjson::SUCCESS)
+          func->answer_from = std::pair(std::string(string_of(from.at(0))), int(int_of(from.at(1))));
+        Element frame;
+        if (f["coroutine"].get(frame) == ::simdjson::SUCCESS && ! is_null(frame))
+          func->coroutine = as<CoroutineFrame>(type(frame));
         // Filed, and referred to, under the module's key: a name may be
         // overloaded and a key is not.
         std::string key(string_of(keys.at(at)));
@@ -601,8 +627,11 @@ namespace pl4g::ir {
       for (Element g : doc["globals"].get_array())
         out->globals[at++].second->initializer = constant(g["init"]);
       at = 0;
-      for (Element g : doc["texts"].get_array())
-        out->texts[at++]->initializer = constant(g["init"]);
+      for (Element g : doc["texts"].get_array()) {
+        if (fresh_text[at])
+          out->texts[at]->initializer = constant(g["init"]);
+        ++at;
+      }
       at = 0;
       for (Element f : doc["functions"].get_array())
         fill(*all[at++], f.get_object());

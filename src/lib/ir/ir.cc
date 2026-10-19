@@ -55,24 +55,35 @@ namespace pl4g::ir {
   }
 
 
+  std::string Function::unique_label(std::optional<std::string> label) const
+  {
+    if (! label)
+      return "block" + std::to_string(blocks.size());
+    auto taken = [&](const std::string& l) {
+      return std::ranges::any_of(blocks, [&](const auto& b) { return b->label == l; });
+    };
+    if (! taken(*label))
+      return *label;
+    unsigned count = 1;
+    while (taken(*label + std::to_string(count)))
+      ++count;
+    return *label + std::to_string(count);
+  }
+
+
   BasicBlock* Function::add_block(std::optional<std::string> label)
   {
-    std::string unique;
-    if (! label)
-      unique = "block" + std::to_string(blocks.size());
-    else {
-      auto taken = [&](const std::string& l) {
-        return std::ranges::any_of(blocks, [&](const auto& b) { return b->label == l; });
-      };
-      unique = *label;
-      for (unsigned count = 1; taken(unique); ++count)
-        unique = *label + std::to_string(count);
-    }
-    auto block = std::make_unique<BasicBlock>();
-    block->label = std::move(unique);
-    block->parent = this;
-    blocks.push_back(std::move(block));
+    blocks.push_back(detached_block(unique_label(std::move(label))));
     return blocks.back().get();
+  }
+
+
+  std::unique_ptr<BasicBlock> Function::detached_block(std::string label)
+  {
+    auto block = std::make_unique<BasicBlock>();
+    block->label = std::move(label);
+    block->parent = this;
+    return block;
   }
 
 
