@@ -2048,6 +2048,14 @@ element replacement kills.
 own scope is lowered with that pointer as its place instead of a `frame` slot, and the local is marked `handed_out`, so the body does
 not give it back.
 
+**A task's read keeps its bytes in the ring.**  `pl4g_io_read_kept` takes room of the heap's laid out as a list's -- the sixteen
+bytes `sema/lists.py` writes before the elements, holding how many there is room for -- submits the read into it, and marks the
+slot `handed`, which `give_back` leaves alone.  `std.run`, right after reading a slot's answer and before anything can take the
+slot again, asks `pl4g_io_taken` for where the bytes are (nought for any other request, and the room given back where the kernel
+refused) and hands it to the task in `io.Answer.at`; `std.received` adopts the room as a `[u8]` with `⎕span(at, n, ⌜[u8]⌝)`, which
+makes the three words of a list of the heap's.  A RISC-V call the C compiler did not inline is `R_RISCV_CALL_PLT`, patched as one
+fixup of two words (`fixups.CALL`).
+
 **`@[opaque]` is a flag of its own**, `FuncAttrs.opaque`, printed and read back as `opaque` in the IR.  `CallInst.has_effects` answers
 yes for it, which is the one question every pass that would fold, merge, move or drop a call asks, and the sweep's rule for a call
 answering through storage asks it as well; the attribute sets `inline(never)`.  A function making a call to one is set `opaque`

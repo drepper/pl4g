@@ -10538,7 +10538,7 @@
         ]
       },
       "error": {
-        "multiple": false,
+        "multiple": true,
         "required": false,
         "types": [
           {

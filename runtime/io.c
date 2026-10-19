@@ -154,7 +154,9 @@ struct cqe {
  *
  * `kept_at` and `kept_len` are room of the heap's a request's bytes were copied
  * into -- a view that was not one run, made into one -- which the kernel reads
- * until it answers and which is given back the moment it has. */
+ * until it answers and which is given back the moment it has.  Where `handed`
+ * says so it is room a read fills instead, laid out as a list's, which is not
+ * given back but handed to whoever takes the answer (`pl4g_io_taken`). */
 struct pl4g_ring {
   u64 state;                    /* 0 untried, 1 ready, 2 no ring here */
   u64 fd;
@@ -164,9 +166,16 @@ struct pl4g_ring {
   i64 answer[ENTRIES];
   u64 kept_at[ENTRIES];
   u64 kept_len[ENTRIES];
+  u64 handed[ENTRIES];
 };
 
 void pl4g_heap_free(void *at, u64 size);
+void *pl4g_heap_alloc(u64 size);
+
+/* How far before a list's elements its header is, which holds how many there is
+ * room for: what `sema/lists.py` writes, and what a list the runtime makes has
+ * to have for the program to give it back. */
+#define LIST_HEADER 16
 
 #define FREE 0
 #define SUBMITTED 1
@@ -194,7 +203,7 @@ const u64 pl4g_io_shape[] = {
   FIELD(sq_head), FIELD(sq_tail), FIELD(sq_mask), FIELD(sq_array),
   FIELD(sqes),
   FIELD(cq_head), FIELD(cq_tail), FIELD(cq_mask), FIELD(cqes),
-  FIELD(held), FIELD(answer), FIELD(kept_at), FIELD(kept_len),
+  FIELD(held), FIELD(answer), FIELD(kept_at), FIELD(kept_len), FIELD(handed),
 };
 
 #define UNTRIED 0
@@ -231,6 +240,7 @@ static const struct way ways[3] = {
 
 /* The one refusal this file makes up rather than passes on. */
 #define EINVAL 22
+#define ENOMEM 12
 #define OFF_SQ_RING 0UL
 #define OFF_CQ_RING 0x8000000UL
 #define OFF_SQES 0x10000000UL
@@ -295,7 +305,7 @@ static int started(struct pl4g_ring *r)
 /* Give back what the request in `slot` kept until the kernel had answered it. */
 static void give_back(struct pl4g_ring *r, long slot)
 {
-  if (r->kept_at[slot] != 0) {
+  if (r->kept_at[slot] != 0 && !r->handed[slot]) {
     pl4g_heap_free((void *) r->kept_at[slot], r->kept_len[slot]);
     r->kept_at[slot] = 0;
     r->kept_len[slot] = 0;
@@ -749,6 +759,48 @@ i64 pl4g_io_submit(struct pl4g_ring *r, i32 which, i32 fd, u64 at, u64 len,
     r->kept_len[slot] = len;
   }
   return slot;
+}
+
+/* Start reading up to `len` bytes from `fd` into room the ring keeps: of the
+ * heap's, laid out as a list of bytes is -- the header saying how much there is
+ * room for -- so that whoever takes the answer may hold it as a list of its
+ * own.  What a task reads with, its own frame being no place the kernel may
+ * still be writing into once the task has moved on. */
+i64 pl4g_io_read_kept(struct pl4g_ring *r, i32 fd, u64 len)
+{
+  unsigned char *base = pl4g_heap_alloc(LIST_HEADER + len);
+  if (base == 0)
+    return -ENOMEM;
+  *(u64 *) base = len;
+  i64 slot = pl4g_io_submit(r, READING, fd, (u64) (base + LIST_HEADER), len, 0);
+  if (slot < 0) {
+    pl4g_heap_free(base, LIST_HEADER + len);
+    return slot;
+  }
+  r->kept_at[slot] = (u64) (base + LIST_HEADER);
+  r->kept_len[slot] = len;
+  r->handed[slot] = 1;
+  return slot;
+}
+
+/* Where the bytes a read into kept room put are, handed over once: nought where
+ * the request was no such read, and nought -- the room given back -- where the
+ * kernel refused it.  Asked right after the answer was read out of the slot,
+ * before anything can take the slot again. */
+u64 pl4g_io_taken(struct pl4g_ring *r, i64 slot)
+{
+  if (slot < 0 || slot >= ENTRIES || !r->handed[slot])
+    return 0;
+  u64 at = r->kept_at[slot];
+  u64 len = r->kept_len[slot];
+  r->handed[slot] = 0;
+  r->kept_at[slot] = 0;
+  r->kept_len[slot] = 0;
+  if (r->answer[slot] < 0) {
+    pl4g_heap_free((void *) (at - LIST_HEADER), LIST_HEADER + len);
+    return 0;
+  }
+  return at;
 }
 
 

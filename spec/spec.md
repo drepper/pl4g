@@ -1858,6 +1858,8 @@ the fact that there is none and a `u8` saying something about why.
 **The mark after an array's brackets makes a result of the array**: `u8⟦⟧ ? i32` is a run of bytes or an `i32` saying why there is
 none, and `u8?⟦4⟧` is four results -- the mark belongs to what it is written after, as a unit does.  Its answer's arm is matched by
 the type as written, `u8⟦⟧(bytes):`.  What a walk hands out is the commonest place for one: `std.read_lines` gives `u8⟦⟧ ? i32`.
+**A list's bracket takes the mark the same way**: `[u8] ? i32` is a list of bytes or an `i32`, matched by `[u8](bytes):` --
+what `std.received` answers.
 Compare **Rust**'s `Result<&[u8], E>`, **Zig**'s `E![]const u8`, **Swift**'s `[UInt8]?`, all of which wrap the whole type the
 same way; C and Go answer two values instead.
 
@@ -2775,9 +2777,14 @@ what `mmap` answered, what a device said -- and being the only way is what keeps
 that wanted one.
 
 **The lifted type is what the answer is**, not what is pointed at, so the words on the definition and the words in the brackets are
-the same words.  `⎕at` answers a reference (4585); `⎕span` answers an array whose length is not in its type (4586), which is already a
+the same words.  `⎕at` answers a reference (4585); `⎕span` answers an array whose length is not in its type (4586), or a list, which is already a
 place and a count -- its elements one run -- and so represents nothing new -- how many there are is the argument, and a type that also said would be a second
 statement of one thing.  How many is a whole number (4587).
+
+**`⎕span(ADDRESS, COUNT, ⌜[T]⌝)` adopts room as a list**: a list of `COUNT` elements whose room is at the address, of `⎕heap`'s and
+laid out as a list's -- its header before the elements, which is what something else made it -- and the list owns it from then on,
+giving it back as any list does.  It is how `std` hands a task the bytes the ring read for it; like **Rust**'s `Vec::from_raw_parts`,
+what is there is what the program says is there.
 
 **What may be given as the address** is a machine word -- which is what a request to the kernel answers with, signed or unsigned --
 or a reference, which is a place being read as a place of another type.  A narrower number is refused (4584): half of an address is
@@ -5777,6 +5784,34 @@ waits for the kernel to answer something -- anything -- and that is the only wai
 is taken on in the round after.  The tasks share the one thread: none runs while another does, so nothing they share needs a lock,
 and none holds up the others while it waits.  A task that stops without handing out a request -- one whose `write` was refused,
 say -- has run to its end.
+
+**A task reads with `std.read_start`**, which starts a read of up to so many bytes and answers the request without waiting, as
+`write` does; the task `⎕await`s it, and `std.received(answer)` hands it the bytes as a list of its own -- none where there is no more
+to read -- or the error.  The bytes go into room the ring keeps until the answer is taken, not into the task: the kernel writes them
+while the task may be doing something else, and nothing would keep a buffer of the task's own where it was until then.  `std.read`
+still waits where it is called, and is for code that is not a task.
+
+```
+fn drained(from: std.io.Reader) ⇉ std.io.Pending ⇇ std.io.Answer:
+    let r: mut std.io.Reader = from
+    defer std.io.Reader.close(r)
+    while true:
+        match std.read_start(&mut r, 4096u64):
+            std.io.Pending(p):
+                match std.received(⎕await(p)):
+                    [u8](bytes):
+                        if #bytes = 0:
+                            return
+                        …                    ※ the bytes are the task's
+                    ⊥:
+                        return
+            ⊥:
+                return
+```
+
+Compare **io_uring**'s provided buffers, room the ring owns and hands out with the answer, which this is; **Go**'s `Read`, which
+fills a slice the caller holds and parks the goroutine; **Rust**'s tokio `read`, into a buffer the future borrows, which the borrow
+checker keeps alive.
 
 Compare: **Python**'s `asyncio.create_task` and `asyncio.run`, the same shape over an event loop; **Rust**'s `spawn` and an
 executor's `block_on` (tokio's current-thread runtime), where a future is polled rather than resumed and a waker says which to poll

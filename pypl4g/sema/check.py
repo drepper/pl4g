@@ -8296,7 +8296,7 @@ class Checker:
 
     def _resolve_type(self, ref: ast.TypeExpr) -> Type:
         """Resolve a type written down, collection or name."""
-        if isinstance(ref, ast.ArrayTypeRef) and ref.result:
+        if isinstance(ref, (ast.ArrayTypeRef, ast.ListTypeRef)) and ref.result:
             array = self._resolve_type(replace(ref, result=False, error=None))
             if array is ERROR:
                 return ERROR
@@ -25696,8 +25696,9 @@ class Checker:
             self._diags.emit(D.LANG_ADDRESS_NOT_A_TYPE, written.span, name=name)
             return UndefConst(ERROR)
         if several:
-            if not isinstance(answer, ArrayType) or answer.fixed \
-                    or answer.rank != 1:
+            if not isinstance(answer, ListType) and (
+                    not isinstance(answer, ArrayType) or answer.fixed
+                    or answer.rank != 1):
                 self._diags.emit(D.LANG_SPAN_NOT_AN_ARRAY, written.span,
                                  found=answer.written())
                 return UndefConst(ERROR)
@@ -25725,9 +25726,24 @@ class Checker:
             self._diags.emit(D.LANG_SPAN_NOT_A_COUNT, expr.args[1].span,
                              found=counting.written())
             return UndefConst(ERROR)
-        made = self._dense_view(
-            builder, place, (self._as_count(builder, count, counting, expr.span),),
-            answer, expr.span)
+        if isinstance(answer, ListType):
+            # A list of the heap's whose room is there, laid out as a list's --
+            # its header before the elements -- which is what something else
+            # made it: the list owns it from here on, and gives it back as any.
+            pieces = parts_of(answer)
+            heap = self._provided(HEAP_NAME)
+            assert isinstance(heap, GlobalVar)
+            made = builder.make_tuple(
+                (builder.cast(CastKind.BITCAST, place, pieces[0], expr.span),
+                 self._as_count(builder, count, counting, expr.span),
+                 builder.cast(CastKind.BITCAST, builder.address(heap, expr.span),
+                              pieces[2], expr.span)), answer, expr.span)
+            self._made_from[id(expr)] = (expr, frozenset({_HEAP}))
+        else:
+            made = self._dense_view(
+                builder, place,
+                (self._as_count(builder, count, counting, expr.span),),
+                answer, expr.span)
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)

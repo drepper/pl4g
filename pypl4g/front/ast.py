@@ -141,6 +141,10 @@ class ListTypeRef(Node):
     """
 
     element: TypeExpr
+    #: Whether a mark after the bracket makes it a result whose answer is the
+    #: list, as after an array's, and what its error carries.
+    result: bool = False
+    error: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

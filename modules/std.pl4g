@@ -198,6 +198,34 @@ fn done(of: io.Answer) → u64 ¤size ? i32:
     else:
         ⎕unit(⎕narrow(of.got, ⌜u64⌝) ?? 0u64, ⌜size⌝)
 
+※※ Start reading up to `len` bytes from `from`, for a task to wait for.
+※※
+※※ \param from the device to read
+※※ \param len how many bytes to ask for at most
+※※ \return the request, which the task hands `⎕await`
+※※ \raises the number the kernel gave, or `EAGAIN` where every slot is taken
+※
+※ The bytes go into room the ring keeps rather than into the task, whose frame
+※ the kernel would otherwise be writing into while the task does something else;
+※ `received` hands them over as a list of the task's own once it has the answer.
+@[export]
+fn read_start(from: &mut io.Reader, len: u64) → io.Pending ? i32:
+    io.Reader.start_kept(from, len)
+
+※※ What a read for a task brought: the bytes, as a list of the task's own.
+※※
+※※ \param of what `⎕await` answered for the request `read_start` started
+※※ \return the bytes that came, none where there is no more to come
+※※ \raises the number the kernel gave
+@[export]
+fn received(of: io.Answer) → [u8] ? i32:
+    if of.got < 0i64:
+        ⊥ refusal(of.got)
+    elif of.at = 0u64:
+        []
+    else:
+        ⎕span(of.at, ⎕narrow(of.got, ⌜u64⌝) ?? 0u64, ⌜[u8]⌝)
+
 ※※ Hand a task to `run`.
 ※※
 ※※ \param s what the program does its I/O with, which keeps the tasks: `&mut init.fs`
@@ -236,7 +264,10 @@ fn run(s: &mut fs.State) → u64:
             if first ∨ io.Pending.ready(one.waiting):
                 moved ← true
                 let got: i64 = if first: 0i64 else: io.Pending.wait(one.waiting)
-                match ⎕resume(one.walk, io.Answer(.got ← got)):
+                ※ what a read into kept room put there, handed to the task with
+                ※ the answer -- now, before anything can take the slot again
+                let at: u64 = if first: 0u64 else: io.Pending.taken(one.waiting)
+                match ⎕resume(one.walk, io.Answer(.got ← got, .at ← at)):
                     io.Pending(p):
                         s⌖.tasks ← s⌖.tasks ⧺ [fs.Task(.walk ← one.walk, .waiting ← p)]
                     ⊥:

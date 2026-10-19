@@ -26,10 +26,16 @@ type Ring =
     sqes : u64 ;
     cq_head : u64 ; cq_tail : u64 ; cq_mask : u64 ; cqes : u64 ;
     held : u64⟦8⟧ ; answer : i64⟦8⟧ ;
-    kept_at : u64⟦8⟧ ; kept_len : u64⟦8⟧
+    kept_at : u64⟦8⟧ ; kept_len : u64⟦8⟧ ; handed : u64⟦8⟧
 
 @[external("pl4g_io_submit"), io]
 fn io_submit(r: &mut Ring, which: i32, fd: i32, at: u64, len: u64, keep: u64) → i64
+
+@[external("pl4g_io_read_kept"), io]
+fn io_read_kept(r: &mut Ring, fd: i32, len: u64) → i64
+
+@[external("pl4g_io_taken"), io]
+fn io_taken(r: &mut Ring, slot: i64) → u64
 
 @[external("pl4g_io_wait"), io]
 fn io_wait(r: &mut Ring, slot: i64) → i64
@@ -53,7 +59,7 @@ type Pending = slot : i64 ; ring : u64
 ※※ What a task is handed back when it is resumed: what the kernel said about the
 ※※ request it waited for, as the kernel said it.  `std.done` reads it.
 @[export]
-type Answer = got : i64
+type Answer = got : i64 ; at : u64
 
 ※※ A device that can be read.
 ※
@@ -100,6 +106,16 @@ fn Reader.start(r: &mut Reader, at: u64, len: u64) → Pending ? i32:
 ※※ Start writing the `len` bytes at `at`, answering the request.
 ※※
 ※※ \raises `EAGAIN` where every slot holds an answer nobody has read
+※※ Start reading up to `len` bytes into room the ring keeps until the answer is
+※※ taken, which is what a task reads with: the bytes are not in the task's own
+※※ frame while the kernel may still be writing them.  `std.received` hands them
+※※ over once the task has the answer.
+※※
+※※ \raises `EAGAIN` where every slot holds an answer nobody has read
+@[export]
+fn Reader.start_kept(r: &mut Reader, len: u64) → Pending ? i32:
+    started(io_read_kept(⎕at(r⌖.ring, ⌜&mut Ring⌝), r⌖.fd, len), r⌖.ring)
+
 @[export]
 fn Writer.start(w: &mut Writer, at: u64, len: u64) → Pending ? i32:
     ※ 1 is writing
@@ -132,6 +148,12 @@ fn started(slot: i64, ring: u64) → Pending ? i32:
 @[export]
 fn Pending.wait(p: Pending) → i64:
     io_wait(⎕at(p.ring, ⌜&mut Ring⌝), p.slot)
+
+※※ Where the bytes a read into kept room put are, once its answer has been read:
+※※ handed over once, and nought for any other request.
+@[export]
+fn Pending.taken(p: Pending) → u64:
+    io_taken(⎕at(p.ring, ⌜&mut Ring⌝), p.slot)
 
 ※※ Whether a request has been answered, asked without waiting.
 @[export]

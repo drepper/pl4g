@@ -488,8 +488,10 @@ module.exports = grammar({
       // And a tuple likewise.
       seq('\u3008', sepBy1(',', field('member', $.type)), '\u3009',
           optional($.unit_suffix)),
-      // And a list, whose type is written the way a value of one is.
-      seq('[', field('element', $.type), ']', optional($.unit_suffix)),
+      // And a list, whose type is written the way a value of one is -- and a
+      // result whose answer is one, the mark after the bracket.
+      seq('[', field('element', $.type), ']', optional($.unit_suffix),
+          optional(seq('?', optional(field('error', $.identifier))))),
     ),
 
     // -- attributes --------------------------------------------------------

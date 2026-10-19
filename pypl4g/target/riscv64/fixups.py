@@ -44,6 +44,13 @@ PCREL_LO12_S: Final[FixupKind] = FixupKind("riscv_pcrel_lo12_s", INSTRUCTION_SIZ
 #: How far the second instruction of the pair sits after the first.
 PCREL_PAIR_DISTANCE: Final[int] = INSTRUCTION_SIZE
 
+#: A call too far for one `jal`, or to a function the C compiler would not
+#: assume is near: an `auipc` and the `jalr` after it, the pair as one patch of
+#: two words, both measured from the `auipc`.  What the C compiler writes for a
+#: call it did not inline, so the runtime may hold one.
+CALL: Final[FixupKind] = FixupKind("riscv_call", 2 * INSTRUCTION_SIZE,
+                                   FixupBase.FIELD_START)
+
 
 def _apply_jal(data: bytearray, offset: int, fixup: MCFixup, value: int) -> None:
     """Store a jump offset, which the instruction keeps in four pieces."""
@@ -90,6 +97,14 @@ def _apply_pcrel_lo12(data: bytearray, offset: int, fixup: MCFixup,
     insert_bits(data, offset, INSTRUCTION_SIZE, value & 0xFFF, 20, 12)
 
 
+def _apply_call(data: bytearray, offset: int, fixup: MCFixup, value: int) -> None:
+    """Store a call's offset into the `auipc` and the `jalr` after it."""
+    if not signed_fits(value, 32):
+        raise FixupRangeError(fixup.kind, value)
+    _apply_pcrel_hi20(data, offset, fixup, value)
+    _apply_pcrel_lo12(data, offset + INSTRUCTION_SIZE, fixup, value)
+
+
 def _apply_pcrel_lo12_s(data: bytearray, offset: int, fixup: MCFixup,
                         value: int) -> None:
     """Store the lower twelve bits of an address into a store: the top seven
@@ -111,6 +126,7 @@ APPLIERS: Final[dict[FixupKind, Callable[[bytearray, int, MCFixup, int], None]]]
     PCREL_HI20: _apply_pcrel_hi20,
     PCREL_LO12_I: _apply_pcrel_lo12,
     PCREL_LO12_S: _apply_pcrel_lo12_s,
+    CALL: _apply_call,
 }
 
 
@@ -125,14 +141,15 @@ def apply_fixup(data: bytearray, offset: int, fixup: MCFixup, value: int) -> Non
 #: Which of these kinds the object format's relocation types come to.  A number
 #: here is a promise about what `bin/pl4g-runtime` may find in the runtime's
 #: object; one it finds and this does not have stops the extraction rather than
-#: being filled in wrongly.  The runtime as it stands needs none of them: this
-#: architecture reaches what it needs without a relocation, which is what
-#: `-mno-relax` and a small runtime between them come to.
+#: being filled in wrongly.  `-mno-relax` keeps the runtime to these: a call
+#: the C compiler did not inline is an `auipc` and a `jalr`, one patch of two
+#: words (`CALL`), and everything else reaches what it needs in one or a pair.
 FROM_ELF: Final[dict[int, str]] = {
     1: ABS32.name,             # R_RISCV_32
     2: ABS64.name,             # R_RISCV_64
     16: BRANCH.name,           # R_RISCV_BRANCH
     17: JAL.name,              # R_RISCV_JAL
+    19: CALL.name,             # R_RISCV_CALL_PLT
     23: PCREL_HI20.name,       # R_RISCV_PCREL_HI20
     24: PCREL_LO12_I.name,     # R_RISCV_PCREL_LO12_I
     25: PCREL_LO12_S.name,     # R_RISCV_PCREL_LO12_S
@@ -143,7 +160,8 @@ FROM_ELF: Final[dict[int, str]] = {
 #: same field every target does.
 BY_NAME: Final[dict[str, FixupKind]] = {
     one.name: one for one in
-    (ABS32, ABS64, PCREL32, JAL, BRANCH, PCREL_HI20, PCREL_LO12_I, PCREL_LO12_S)}
+    (ABS32, ABS64, PCREL32, JAL, BRANCH, PCREL_HI20, PCREL_LO12_I, PCREL_LO12_S,
+     CALL)}
 
 
 #: Which relocation types name another relocation rather than what they reach.

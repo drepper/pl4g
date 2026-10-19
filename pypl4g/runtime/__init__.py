@@ -121,7 +121,7 @@ def shape_of(blob: Blob) -> tuple[int, ...]:
 _RING_FIELDS: tuple[str, ...] = (
     "state", "fd", "sq_head", "sq_tail", "sq_mask", "sq_array", "sqes",
     "cq_head", "cq_tail", "cq_mask", "cqes", "held", "answer", "kept_at",
-    "kept_len")
+    "kept_len", "handed")
 
 
 def ring_fields() -> Sequence[str]:
@@ -145,5 +145,6 @@ def names() -> Sequence[str]:
 _NAMES: tuple[str, ...] = ("pl4g_args", "pl4g_env", "pl4g_hash", "pl4g_hash_seed",
                           "pl4g_hash_word", "pl4g_heap_alloc",
                           "pl4g_heap_free", "pl4g_io_close", "pl4g_io_drain",
-                          "pl4g_io_open", "pl4g_io_ready",
-                          "pl4g_io_step", "pl4g_io_submit", "pl4g_io_wait")
+                          "pl4g_io_open", "pl4g_io_read_kept", "pl4g_io_ready",
+                          "pl4g_io_step", "pl4g_io_submit", "pl4g_io_taken",
+                          "pl4g_io_wait")

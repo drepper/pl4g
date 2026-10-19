@@ -10558,6 +10558,23 @@ entry named over either alone.
 The grammar admits `⁂` before an element of an array, a list and a set written out, and a type is not tried where `⸨`, `[` or `〈`
 is followed by one.
 
+## 2026-10-20T23:00+02:00 — language
+
+**A task reads into room the ring keeps**
+
+The user asked whether the entry in TODO-language.md on letting a task read could be resolved.  Starting a read without waiting was
+there; what was missing was where the bytes go while the kernel has not answered, the task's own frame being no place it may still
+be writing once the task has moved on, and a `Pending` saying nothing of a buffer.  Asked, the user chose **room the ring keeps**:
+`std.read_start(from, len)` reads into room of the heap's the ring holds for the slot, and `std.received(answer)` hands the task
+the bytes as a list of its own -- over reading into the task's array, which the compiler could not keep safe outside a task's
+body.  And, asked how the room becomes a list, **`⎕span(at, n, ⌜[u8]⌝)`**: the one door `⎕at` and `⎕span` already are for memory
+something else made, here adopting room laid out as a list's -- over copying it out, which needs nothing new and costs a copy.
+Compare io_uring's provided buffers, Go's `Read`, tokio's `read`, Rust's `Vec::from_raw_parts`.
+
+Taken without asking: a list type may now carry the mark of a result, `[u8] ? i32`, as an array's does, which `received` answers;
+`io.Answer` carries where the bytes are; the RISC-V runtime may hold a call the C compiler did not inline, which the packager now
+patches.
+
 Open questions
 --------------
 

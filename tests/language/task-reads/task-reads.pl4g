@@ -1,0 +1,74 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A task reads with `std.read_start`, which starts the read and answers the
+※ request without waiting, and `⎕await`s it as it awaits a write -- so a task
+※ reading holds up no other.  The bytes go into room the ring keeps while the
+※ kernel may still be writing them, which the task's frame is not, and
+※ `std.received` hands them over as a list of the task's own once the answer
+※ is in: nought bytes is the end of what there is to read.
+※
+※ Compare: **Go**'s `Read`, which fills a slice and parks the goroutine;
+※ **Rust**'s tokio `read`, which reads into a buffer the future borrows;
+※ **io_uring**'s provided buffers, room the ring owns and hands out with the
+※ answer, which this is.
+
+let std := ⎕import("std")
+
+let seen: mut [u8] = []
+let reads: mut u8 = 0u8
+let others: mut u8 = 0u8
+
+@[impure]
+fn drained(from: std.io.Reader) ⇉ std.io.Pending ⇇ std.io.Answer:
+    let r: mut std.io.Reader = from
+    defer std.io.Reader.close(r)
+    while true:
+        match std.read_start(&mut r, 4u64):
+            std.io.Pending(p):
+                match std.received(⎕await(p)):
+                    [u8](bytes):
+                        if #bytes = 0:
+                            return
+                        reads ← reads + 1u8
+                        seen ← seen ⧺ bytes
+                    ⊥:
+                        return
+            ⊥:
+                return
+
+@[impure, io]
+fn elsewhere() ⇉ std.io.Pending ⇇ std.io.Answer:
+    match std.fs.cwd().open("/dev/null", ⌜std.io.Writer⌝):
+        std.io.Writer(to):
+            let out: mut std.io.Writer = to
+            defer out.close()
+            foreach _ := 0u8…3u8:
+                match std.write(&mut out, ⎕bytes("x")):
+                    std.io.Pending(p):
+                        _ ← std.done(⎕await(p))
+                        others ← others + 1u8
+                    ⊥:
+                        return
+        ⊥:
+            return
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
+    if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
+        return 1u6
+    let w: mut std.io.Writer = std.io.Writer(.fd ← ends⟦1⟧, .ring ← init.io.error.ring)
+    let wrote: u64 ¤size = std.write_sync(&mut w, ⎕bytes("one two three")) ?? 0
+    std.io.Writer.close(w)
+    if wrote ≠ 13:
+        std.io.Reader.close(std.io.Reader(.fd ← ends⟦0⟧, .ring ← init.io.error.ring))
+        return 2u6
+    std.spawn(&mut init.fs, ⎕start(drained(std.io.Reader(.fd ← ends⟦0⟧,
+                                                          .ring ← init.io.error.ring))
+                                   in ⎕heap))
+    std.spawn(&mut init.fs, ⎕start(elsewhere() in ⎕heap))
+    if std.run(&mut init.fs) ≠ 2u64:
+        return 3u6
+    if #seen ≠ 13 ∨ seen⟦4⟧ ≠ 116u8 ∨ reads ≠ 4u8 ∨ others ≠ 3u8:
+        return 4u6
+    0u6

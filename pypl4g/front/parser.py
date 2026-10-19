@@ -1449,6 +1449,16 @@ class Parser:
         element = self._parse_type_ref()
         end = self._expect(TokKind.RBRACKET,
                            D.LANG_SYNTAX_EXPECTED_CLOSING_LIST).span
+        if self._check(TokKind.QUESTION):
+            # A result whose answer is the list, written as an array's is.
+            mark = self._advance()
+            error: str | None = None
+            last = mark
+            if self._check(TokKind.IDENT):
+                last = self._advance()
+                error = last.text
+            return ast.ListTypeRef(span=start.to(last.span), element=element,
+                                   result=True, error=error)
         return ast.ListTypeRef(span=start.to(end), element=element)
 
     def _parse_named_type(self) -> ast.TypeRef:
