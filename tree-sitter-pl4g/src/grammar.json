@@ -831,6 +831,31 @@
                           "type": "BLANK"
                         }
                       ]
+                    },
+                    {
+                      "type": "CHOICE",
+                      "members": [
+                        {
+                          "type": "SEQ",
+                          "members": [
+                            {
+                              "type": "SYMBOL",
+                              "name": "_return_arrow"
+                            },
+                            {
+                              "type": "FIELD",
+                              "name": "finishes",
+                              "content": {
+                                "type": "SYMBOL",
+                                "name": "type"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "BLANK"
+                        }
+                      ]
                     }
                   ]
                 }

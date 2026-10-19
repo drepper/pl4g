@@ -5628,6 +5628,16 @@ more, so a turn from the bottom of a recursion is one resume and not one per lev
 Python's `yield from` and C#'s nested `foreach` pass every value up through every level.  **`return`, written alone, is having nothing more** (4672 for a value
 after it); so is reaching the end of the body.  A finished walk stays finished.  `yield` stands only in a generator (4673).
 
+**A generator may answer something when it ends**, said with `→ T` after the rest of its signature -- after what it hands out and
+what it takes back: `fn twice(…) ⇉ std.io.Pending ⇇ std.io.Answer → u64`.  Its last expression is the answer, or `return v`, and an
+end that answers nothing is refused as a function's is.  **`yield ⇉ g(…)` written where a value is wanted comes to that answer**:
+the walk is handed to `g`, its turns go straight through as they do for the statement, and when it has nothing more the body goes
+on with what it answered (4938 where what follows `⇉` is no call of a generator, 4939 where it answers nothing).  What the walk is
+resumed with reaches the generator it was handed to, so a coroutine's helper takes back what its caller would have.  Such a
+generator, and a body taking its answer, are walked through calls and never written into a loop.  Compare **Python**'s `x =
+yield from g()`, whose value is what `g` returned; **JavaScript**'s `yield*`, likewise; **Lua**, where a coroutine's helper yields
+from inside an ordinary call because coroutines there have stacks of their own.
+
 **`?` in a generator hands the failure out as the last thing it gives**, so what it gives is a result with that error: the
 walk's turns are results, and the loop over it decides about each.  Compare: Rust's iterators of `Result`, which is this; Python
 and C#, where an exception thrown inside the generator leaves through the loop instead.
@@ -5784,6 +5794,13 @@ waits for the kernel to answer something -- anything -- and that is the only wai
 is taken on in the round after.  The tasks share the one thread: none runs while another does, so nothing they share needs a lock,
 and none holds up the others while it waits.  A task that stops without handing out a request -- one whose `write` was refused,
 say -- has run to its end.
+
+**A task waits in a function it calls by handing it the walk**: the helper is a generator of the task's own type, `⇉ std.io.Pending
+⇇ std.io.Answer`, handing out the requests it starts and taking back what the kernel said, and the task writes `yield ⇉ helper(…)` --
+as a statement, or where a value is wanted, taking what the helper answers when it ends.  A helper may call another the same way,
+and nothing is told twice: each answer reaches the body waiting for it.  So the language has no second kind of function for waiting
+-- **Kotlin**'s `suspend` and **Rust**'s `async fn` mark the function, and a call of one waits without saying so; here the call says
+it, as Python's `await` and `yield from` do, and the function is the generator it already was.
 
 **A task reads with `std.read_start`**, which starts a read of up to so many bytes and answers the request without waiting, as
 `write` does; the task `⎕await`s it, and `std.received(answer)` hands it the bytes as a list of its own -- none where there is no more

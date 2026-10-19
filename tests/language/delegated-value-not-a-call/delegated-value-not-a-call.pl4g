@@ -1,0 +1,25 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4938 LANG_DELEGATED_VALUE_NOT_A_CALL
+
+※ What `yield ⇉` comes to is what the generator it is handed answers when it
+※ ends, and only a call of one hands it the walk in one step, with an answer to
+※ read.  A walk held in a name is walked through calls, and gives its turns and
+※ nothing else.
+
+let std := ⎕import("std")
+
+fn counted() ⇉ u8 → u8:
+    yield 1u8
+    7u8
+
+fn summed() ⇉ u8:
+    let walk := counted()
+    let n: u8 = yield ⇉ walk
+    yield n
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let total: mut u8 = 0u8
+    foreach one := summed():
+        total ← total + one
+    if total = 8u8: 0u6 else: 1u6

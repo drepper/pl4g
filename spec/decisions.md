@@ -10575,6 +10575,21 @@ Taken without asking: a list type may now carry the mark of a result, `[u8] ? i3
 `io.Answer` carries where the bytes are; the RISC-V runtime may hold a call the C compiler did not inline, which the packager now
 patches.
 
+## 2026-10-21T09:00+02:00 — language
+
+**A task waits in a function it calls by handing it the walk**
+
+The user asked for the entry in TODO-language.md on letting a task wait in a function it calls.  Trying it found that `yield ⇉`
+did not pass what the walk is resumed with on to the delegate, so a helper's `⎕await` never saw the kernel's answer -- fixed.
+Asked whether delegation is enough or the language wants a function that may wait without being a generator, the user chose
+**delegation, with an answer**: a generator may say what it answers when it ends, `→ T` after the rest of its signature, its last
+expression or `return v`; and `yield ⇉ g(…)` written where a value is wanted comes to that -- over a new kind of function marked as
+waiting, Kotlin's `suspend` and Rust's `async fn`, and over delegation alone with the helper writing into a place it is handed.
+Compare Python's `x = yield from g()` and JavaScript's `yield*`.  Taken without asking: only a call of a generator, handed the walk
+in one step, has an answer to take (4938); one saying nothing answers nothing (4939); such generators, and bodies taking their
+answers, are walked through calls rather than written into loops; a delegate must hand out and take back what the delegating body
+does.
+
 Open questions
 --------------
 

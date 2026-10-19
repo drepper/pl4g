@@ -4535,6 +4535,16 @@
           }
         ]
       },
+      "finishes": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "type",
+            "named": true
+          }
+        ]
+      },
       "gives": {
         "multiple": false,
         "required": false,

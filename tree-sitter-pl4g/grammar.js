@@ -236,7 +236,9 @@ module.exports = grammar({
         // A generator: the arrow doubled, and what each turn of a walk gives --
         // and with the arrow the other way, what it takes back when resumed.
         seq('\u21c9', field('gives', $.type),
-            optional(seq('\u21c7', field('takes', $.type)))))),
+            optional(seq('\u21c7', field('takes', $.type))),
+            // and what it answers when it ends, for `yield ⇉` to take
+            optional(seq($._return_arrow, field('finishes', $.type)))))),
       repeat($.clause),
       optional(field('body', $._block)),
     ),

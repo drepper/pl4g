@@ -712,6 +712,7 @@ class Parser:
             writable = self._accept(TokKind.KW_MUT) is not None
             ret_type = _writable(self._parse_type_ref(), writable)
         takes: ast.TypeExpr | None = None
+        finishes: ast.TypeExpr | None = None
         if ret_type is None and self._accept(TokKind.ITER) is not None:
             # The arrow doubled: what follows is given out more than once, and
             # the function is a generator -- and with the arrow the other way
@@ -720,6 +721,10 @@ class Parser:
             ret_type = self._parse_type_ref()
             if self._accept(TokKind.TAKES) is not None:
                 takes = self._parse_type_ref()
+            if self._accept(TokKind.ARROW) is not None:
+                # And what it answers when it ends, which a body handing it the
+                # walk with `yield ⇉` takes.
+                finishes = self._parse_type_ref()
         # `in a, b` after the answer says which arenas it was made in: the `in` an
         # expression is written with, said of what the call comes to.
         made_in: tuple[tuple[str, Span], ...] = ()
@@ -746,7 +751,7 @@ class Parser:
                                made_in=made_in, attrs=attrs, doc=doc, doc_lines=doc_lines,
                                at_compile_time=at_compile_time,
                                is_macro=is_macro, generates=generates,
-                               takes=takes,
+                               takes=takes, finishes=finishes,
                                held=None if held is None else held.text,
                                held_span=None if held is None else held.span)
         # A body that runs while the compiler does may quote, which is what the marks
@@ -763,7 +768,7 @@ class Parser:
                            made_in=made_in, attrs=attrs, doc=doc,
                            doc_lines=doc_lines,
                            at_compile_time=at_compile_time, is_macro=is_macro,
-                           generates=generates, takes=takes,
+                           generates=generates, takes=takes, finishes=finishes,
                            held=None if held is None else held.text,
                            held_span=None if held is None else held.span)
 
@@ -2844,8 +2849,10 @@ class Parser:
             # A value handed out of a coroutine where what it takes back is
             # wanted: it takes the whole expression after it, as `return` does.
             start = self._advance().span
+            delegates = self._accept(TokKind.ITER) is not None
             value = self._parse_expression()
-            return ast.YieldValue(span=start.to(value.span), value=value)
+            return ast.YieldValue(span=start.to(value.span), value=value,
+                                  delegates=delegates)
         if token.kind is TokKind.DOLLAR:
             # A hole, which stands where an expression stands and is written only
             # inside a macro's pattern or template.  It is read here rather than by

@@ -782,6 +782,8 @@ class _Generator:
     #: What it takes back each time it is resumed, where it was written with
     #: `⇇`: a coroutine driven by `⎕resume`, never walked by a loop.
     given: Type | None = None
+    #: What it answers when it ends, where it says: `→ T` after the rest.
+    finishes: Type | None = None
 
 
 @dataclass(slots=True)
@@ -3114,6 +3116,18 @@ def _mentions(node: object, name: str) -> int:
     return found
 
 
+def _takes_an_answer(node: object) -> bool:
+    """Whether *node* holds a `yield ⇉` written where a value is wanted."""
+    if isinstance(node, ast.YieldValue) and node.delegates:
+        return True
+    if isinstance(node, ast.Node):
+        return any(_takes_an_answer(getattr(node, one.name))
+                   for one in fields_of(node))
+    if isinstance(node, (tuple, list)):
+        return any(_takes_an_answer(one) for one in node)
+    return False
+
+
 def _fills(ty: Type) -> bool:
     """Whether a parameter of *ty* is a table the function may fill: a set or a
     dictionary whose type says it may be written."""
@@ -3959,6 +3973,9 @@ class Checker:
         #: The tables written in the body being lowered whose handle arrives
         #: where branches meet, and where, asked once the body is complete.
         self._unsettled_tables: list[tuple[Value, Span, str]] = []
+        #: The generator the last `yield ⇉` handed the walk to, and where its
+        #: arguments are -- which is where what it answers when it ends is.
+        self._last_delegation: tuple[_Generator, Value] | None = None
         self._mut_told: set[int] = set()
         #: The type a function value had before it was read as one promising
         #: less, by the identity of what it was read as.
@@ -6823,6 +6840,10 @@ class Checker:
         given = self._resolve_type(node.takes) if node.takes is not None else None
         if given is ERROR:
             return None
+        finishes = self._resolve_type(node.finishes) \
+            if node.finishes is not None else None
+        if finishes is ERROR:
+            return None
         short = _short_lived(element)
         if short is not None:
             self._diags.emit(D.LANG_ITERATOR_DOES_NOT_LEAVE,
@@ -6851,7 +6872,8 @@ class Checker:
         self._owned.append(func)
         found = _Generator(node=node, func=func, params=params, element=element,
                            impure=func_attrs.impure or func_attrs.io,
-                           frame=frame, path=path, bound=dict(bound), given=given)
+                           frame=frame, path=path, bound=dict(bound), given=given,
+                           finishes=finishes)
         self._generator_bodies[id(func)] = found
         return found
 
@@ -10731,8 +10753,16 @@ class Checker:
         # Before the first statement: a condition is about what the function was
         # called with, so it is checked where nothing of the body has run yet.
         self._lower_conditions(builder, node, func)
-        self._lower_block(builder, node.body, func,
-                          as_result=generating is None)
+        body = node.body
+        if generating is not None and generating.finishes is not None \
+                and body.stmts and isinstance(body.stmts[-1], ast.ExprStmt):
+            # What a generator answers when it ends is its last expression, as
+            # a function's answer is: the same as a `return` of it.
+            last = body.stmts[-1]
+            assert isinstance(last, ast.ExprStmt)
+            body = replace(body, stmts=(*body.stmts[:-1], ast.ReturnStmt(
+                span=last.span, value=last.value, explicit=False)))
+        self._lower_block(builder, body, func, as_result=generating is None)
         # Before the scope goes: a parameter a reference was taken of lives in
         # the frame, and the name is what still knows where.
         self._answered_as_said(func, func.ty.borrowed(),
@@ -10754,7 +10784,12 @@ class Checker:
         self._did_io = outer_did
         if not builder.is_terminated:
             if generating is not None:
-                # The end of a generator's body is where it has nothing more.
+                # The end of a generator's body is where it has nothing more --
+                # and no answer, which one saying it answers something lacks.
+                if generating.finishes is not None:
+                    self._diags.emit(D.LANG_FUNCDEF_RETURN_MISSING, node.name_span,
+                                     name=node.name,
+                                     type=generating.finishes.written())
                 self._returning(builder, builder.int_const(U8, 0), node.span)
             elif func.ty.ret is VOID:
                 self._returning(builder, None, node.span)
@@ -19285,14 +19320,25 @@ class Checker:
 
     def _record_types(self, found: _Generator) -> tuple[Type, ...]:
         """What a generator's argument record holds: its arguments, and after
-        them room for what a resume hands in, where it takes something back."""
-        return found.params if found.given is None \
-            else (*found.params, found.given)
+        them room for what a resume hands in, where it takes something back, and
+        for what it answers when it ends, where it answers something."""
+        return (*found.params,
+                *((found.given,) if found.given is not None else ()),
+                *((found.finishes,) if found.finishes is not None else ()))
 
     def _given_place(self, builder: IRBuilder, args: Value, found: _Generator,
                      span: Span) -> Value:
         """Where in the argument record at *args* what a resume hands in is."""
         assert found.given is not None
+        record, first = self._argument_record(self._record_types(found))
+        at = -2 if found.finishes is not None else -1
+        return self._inside(builder, args,
+                            member_offsets_of(record, _LAYOUT)[first[at]], U8, span)
+
+    def _finish_place(self, builder: IRBuilder, args: Value, found: _Generator,
+                      span: Span) -> Value:
+        """Where in the argument record at *args* what it answers when it ends is."""
+        assert found.finishes is not None
         record, first = self._argument_record(self._record_types(found))
         return self._inside(builder, args,
                             member_offsets_of(record, _LAYOUT)[first[-1]], U8, span)
@@ -19373,6 +19419,8 @@ class Checker:
         if found is None:
             self._diags.emit(D.LANG_YIELD_OUTSIDE_A_GENERATOR, expr.span)
             return UndefConst(ERROR)
+        if expr.delegates:
+            return self._lower_delegated_value(builder, expr, expected)
         if found.given is None or self._generating_args is None:
             self._diags.emit(D.LANG_YIELD_TAKES_NOTHING, expr.span,
                              name=found.node.name)
@@ -19391,6 +19439,35 @@ class Checker:
             return UndefConst(ERROR)
         return given
 
+    def _lower_delegated_value(self, builder: IRBuilder, expr: ast.YieldValue,
+                               expected: Type | None) -> Value:
+        """`yield ⇉ g(…)` where a value is wanted: hand the walk to `g` and,
+        once it has nothing more, answer what it answered when it ended -- read
+        from its argument record, where its `return` wrote it."""
+        outer, self._last_delegation = self._last_delegation, None
+        try:
+            stmt = ast.Yield(span=expr.span, value=expr.value, delegates=True)
+            if not self._delegated(builder, stmt):
+                self._diags.emit(D.LANG_DELEGATED_VALUE_NOT_A_CALL, expr.value.span)
+                return UndefConst(ERROR)
+            done = self._last_delegation
+        finally:
+            self._last_delegation = outer
+        if done is None or builder.is_terminated:
+            return UndefConst(ERROR)
+        found, arguments = done
+        if found.finishes is None:
+            self._diags.emit(D.LANG_DELEGATE_ANSWERS_NOTHING, expr.value.span,
+                             name=found.node.name)
+            return UndefConst(ERROR)
+        answer = self._words_from(
+            builder, self._finish_place(builder, arguments, found, expr.span),
+            found.finishes, expr.span)
+        if not self._accepts(expected, found.finishes):
+            self._report_mismatch(expr.span, found.finishes, expected)
+            return UndefConst(ERROR)
+        return answer
+
     def _stopped(self, builder: IRBuilder, delegates: bool, span: Span) -> None:
         """Stop the generator's body here, and go on after it when resumed --
         or, resumed with nowhere to write to, finish: what was put off up to
@@ -19408,10 +19485,11 @@ class Checker:
         builder.position_at(resumed)
 
     #: How a delegation is described to the walk's driver: where the body that
-    #: takes the turns is, where its frame is, where its arguments are, and the
-    #: delegation it was made from.
+    #: takes the turns is, where its frame is, where its arguments are, the
+    #: delegation it was made from, and where in its arguments what a resume
+    #: hands in goes -- nowhere, for a body that takes nothing.
     def _delegation(self) -> TupleType:
-        return self._module.types.tuple_type((_ENVIRONMENT,) * 4)
+        return self._module.types.tuple_type((_ENVIRONMENT,) * 5)
 
     def _delegated(self, builder: IRBuilder, stmt: ast.Yield) -> bool:
         """`yield ⇉ g(…)` in a body split at its stops: hand the walk to `g` in
@@ -19441,10 +19519,14 @@ class Checker:
         found = walk.generator
         current = self._generating
         assert current is not None and self._generating_frame is not None
-        if found.element != current.element:
+        if found.element != current.element or found.given != current.given:
+            # What the delegate hands out and takes back is what this body does:
+            # the driver hands it what the walk is resumed with.
             self._report_mismatch(stmt.value.span,
-                                  self._module.types.iter_type(found.element),
-                                  self._module.types.iter_type(current.element))
+                                  self._module.types.running_type(
+                                      found.element, found.given, False),
+                                  self._module.types.running_type(
+                                      current.element, current.given, False))
             return True
         if walk.arena is None and self._walks_itself(found):
             self._walks_itself_said(found, stmt.value.span)
@@ -19461,12 +19543,15 @@ class Checker:
                       builder.int_const(U64, 0), stmt.span)
         record = builder.frame(self._delegation(), stmt.span)
         offsets_of_record = member_offsets_of(self._delegation(), _LAYOUT)
+        arguments = self._inside(builder, place, offsets[3], U8, stmt.span)
+        nowhere = builder.cast(CastKind.BITCAST, builder.int_const(U64, 0),
+                               _ENVIRONMENT, stmt.span)
         for at, word in enumerate((
                 builder.code_address(found.func, stmt.span),
                 builder.cast(CastKind.BITCAST, frame, _ENVIRONMENT, stmt.span),
-                self._inside(builder, place, offsets[3], U8, stmt.span),
-                builder.cast(CastKind.BITCAST, builder.int_const(U64, 0),
-                             _ENVIRONMENT, stmt.span))):
+                arguments, nowhere,
+                nowhere if found.given is None
+                else self._given_place(builder, arguments, found, stmt.span))):
             builder.store(self._inside(builder, record, offsets_of_record[at],
                                        _ENVIRONMENT, stmt.span),
                           builder.cast(CastKind.BITCAST, word, _ENVIRONMENT,
@@ -19479,6 +19564,7 @@ class Checker:
             "'", found.node.name, "' is handed the walk in one step: its turns are "
             "taken straight from its body, not through '", current.node.name,
             "'")), stmt.span)
+        self._last_delegation = (found, arguments)
         self._stopped(builder, True, stmt.span)
         return True
 
@@ -19996,9 +20082,17 @@ class Checker:
                                  inner.int_const(U64, 0), span)
 
         def body(of: Value | None, told: Value) -> Value:
-            """Resume the generator's own body, or the one *of* says."""
+            """Resume the generator's own body, or the one *of* says -- handing a
+            delegate what the walk was resumed with, which `⎕resume` wrote where
+            the generator's own body reads it."""
             if of is None:
                 return inner.call(found.func, (own, told, given), U8, span)
+            if found.given is not None and told is not nowhere:
+                handed = self._words_from(
+                    inner, self._given_place(inner, arguments, found, span),
+                    found.given, span)
+                self._words_into(inner, inner.load(part(of, 4), span), handed,
+                                 found.given, span)
             return inner.call(inner.load(part(of, 0), span),
                               (inner.load(part(of, 1), span), told,
                                inner.load(part(of, 2), span)), U8, span)
@@ -20135,6 +20229,10 @@ class Checker:
         assert body is not None
         if found.given is not None:
             return "since it takes something back each time it is resumed"
+        if found.finishes is not None:
+            return "since it answers something when it ends"
+        if _takes_an_answer(body):
+            return "since it takes what a generator it hands the walk to answers"
         if found.scope is not None and found.scope is not self._top:
             return "since it is written in another file, whose names its body means"
         if id(found) in self._writing_in:
@@ -21669,10 +21767,25 @@ class Checker:
         """Lower a return statement."""
         if self._generating is not None:
             # A generator gives what it gives by `yield`; returning is having
-            # nothing more.
-            if stmt.value is not None:
+            # nothing more -- and, where it says what it answers when it ends,
+            # that answer written where the body that handed it the walk reads.
+            found = self._generating
+            if found.finishes is not None:
+                if stmt.value is None:
+                    self._diags.emit(D.LANG_FUNCDEF_RETURN_MISSING, stmt.span,
+                                     name=found.node.name,
+                                     type=found.finishes.written())
+                else:
+                    value = self._lower_into(builder, stmt.value, found.finishes,
+                                             stmt.value.span)
+                    if self._value_type_of(value) is not ERROR \
+                            and self._generating_args is not None:
+                        self._words_into(builder, self._finish_place(
+                            builder, self._generating_args, found, stmt.span),
+                                         value, found.finishes, stmt.span)
+            elif stmt.value is not None:
                 self._diags.emit(D.LANG_GENERATOR_RETURNS_A_VALUE, stmt.span,
-                                 name=self._generating.node.name)
+                                 name=found.node.name)
             self._returning(builder, builder.int_const(U8, 0), stmt.span)
             return
         if stmt.value is None:

@@ -1266,9 +1266,11 @@ Runtime
     Done 2026-10-20: `std.read_start` reads into room the ring keeps, and `std.received` hands the bytes to the task as a list
     of its own once it has the answer -- the ring's room, adopted with `⎕span(at, n, ⌜[u8]⌝)`.
 
-[ ] let a task wait in a function it calls.  `⎕await` is a `yield`, so only a task's own body waits; a helper that waits is a
+[x] let a task wait in a function it calls.  `⎕await` is a `yield`, so only a task's own body waits; a helper that waits is a
     generator delegated to with `yield ⇉`.  Whether that is enough, or the language wants a function that may wait without being
     a generator -- Kotlin's `suspend`, Rust's `async fn` -- is open.
+    Done 2026-10-20: delegation, as the user chose.  `yield ⇉` now passes what the walk is resumed with on to the delegate,
+    which it did not, and a generator may answer something when it ends (`→ T`), which `yield ⇉` written as a value takes.
 
 
 [ ] open a directory.  `std.fs.Dir` is made only by `std.fs.State.cwd`, which answers `AT_FDCWD`; a `Dir.open_dir` answering a

@@ -1,0 +1,69 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A task waits in a function it calls by handing that function the walk with
+※ `yield ⇉`: the helper is a generator handing out the requests it starts and
+※ taking back what the kernel said, as the task does, and what the task is
+※ resumed with reaches it.  `→ T` after the rest of its signature says what it
+※ answers when it ends -- its last expression, or `return v` -- and `yield ⇉`
+※ written where a value is wanted comes to that.  A helper may call another the
+※ same way, and while either waits the other task goes on.
+※
+※ Compare: **Python**'s `x = yield from g()` and `await` of a coroutine, whose
+※ value is what the delegate returned; **JavaScript**'s `yield*`; **Kotlin**'s
+※ `suspend` functions and **Rust**'s `async fn`, which say the same with a mark
+※ on the function rather than on the call.
+
+let std := ⎕import("std")
+
+let seen: mut u64 = 0u64
+let others: mut u8 = 0u8
+
+fn written(out: &mut std.io.Writer, what: u8⟦⟧) ⇉ std.io.Pending ⇇ std.io.Answer → u64:
+    match std.write(out, what):
+        std.io.Pending(p):
+            match std.done(⎕await(p)):
+                u64 ¤size(n): ⎕drop(n)
+                ⊥: 0u64
+        ⊥:
+            0u64
+
+fn twice(out: &mut std.io.Writer, what: u8⟦⟧) ⇉ std.io.Pending ⇇ std.io.Answer → u64:
+    let first: u64 = yield ⇉ written(out, what)
+    let second: u64 = yield ⇉ written(out, what)
+    first + second
+
+@[impure, io]
+fn task() ⇉ std.io.Pending ⇇ std.io.Answer:
+    match std.fs.cwd().open("/dev/null", ⌜std.io.Writer⌝):
+        std.io.Writer(to):
+            let out: mut std.io.Writer = to
+            defer out.close()
+            let a: u64 = yield ⇉ twice(&mut out, ⎕bytes("abc"))
+            let b: u64 = yield ⇉ written(&mut out, ⎕bytes("de"))
+            seen ← a × 100u64 + b
+        ⊥:
+            return
+
+@[impure, io]
+fn other() ⇉ std.io.Pending ⇇ std.io.Answer:
+    match std.fs.cwd().open("/dev/null", ⌜std.io.Writer⌝):
+        std.io.Writer(to):
+            let out: mut std.io.Writer = to
+            defer out.close()
+            foreach _ := 0u8…3u8:
+                match std.write(&mut out, ⎕bytes("x")):
+                    std.io.Pending(p):
+                        _ ← std.done(⎕await(p))
+                        others ← others + 1u8
+                    ⊥:
+                        return
+        ⊥:
+            return
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    std.spawn(&mut init.fs, ⎕start(task() in ⎕heap))
+    std.spawn(&mut init.fs, ⎕start(other() in ⎕heap))
+    if std.run(&mut init.fs) ≠ 2u64: return 1u6
+    if seen ≠ 602u64 ∨ others ≠ 3u8: return 2u6
+    0u6

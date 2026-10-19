@@ -2048,6 +2048,13 @@ element replacement kills.
 own scope is lowered with that pointer as its place instead of a `frame` slot, and the local is marked `handed_out`, so the body does
 not give it back.
 
+**A delegate is handed what the walk is resumed with.**  `⎕resume` writes it where the generator's own body reads it; a delegation
+record has a fifth word, where the delegate reads it in its own argument record, and the driver (`_generator_next`) copies the
+words there before resuming a delegate.  **What a generator answers when it ends** has room after that in its argument record
+(`_finish_place`); `return v` writes it, and `yield ⇉` lowered as a value (`_lower_delegated_value`) reads it out of the record the
+delegation was made with, which `_delegated` leaves in `_last_delegation`, once the delegate has nothing more.  A body's last
+expression is that `return`.
+
 **A task's read keeps its bytes in the ring.**  `pl4g_io_read_kept` takes room of the heap's laid out as a list's -- the sixteen
 bytes `sema/lists.py` writes before the elements, holding how many there is room for -- submits the read into it, and marks the
 slot `handed`, which `give_back` leaves alone.  `std.run`, right after reading a slot's answer and before anything can take the

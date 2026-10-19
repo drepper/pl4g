@@ -11539,6 +11539,42 @@
       },
       "since": "0.1",
       "default_enabled": true
+    },
+    {
+      "number": 4938,
+      "name": "LANG_DELEGATED_VALUE_NOT_A_CALL",
+      "severity": "error",
+      "message": "what `yield ⇉` comes to is what a generator answers when it ends, and this is not a call of one",
+      "args": [],
+      "cause": "`yield ⇉ g(…)` written where a value is wanted hands the walk to the generator `g` and comes to what `g` answers when it ends -- `return v` in a generator whose signature says `→ T` after the rest.  Only a call of a generator, handed the walk in one step, has such an answer: a walk under way or one made some other way is walked through calls, and gives its turns and nothing else.  Write the call, or use `yield ⇉` as a statement.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "What `yield ⇉` comes to is a generator call's answer."
+      },
+      "since": "0.1",
+      "default_enabled": true
+    },
+    {
+      "number": 4939,
+      "name": "LANG_DELEGATE_ANSWERS_NOTHING",
+      "severity": "error",
+      "message": "'{name}' answers nothing when it ends, so `yield ⇉` of it comes to nothing",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the generator"
+        }
+      ],
+      "cause": "A generator answers something when it ends only where its signature says so: `→ T` after what it hands out and takes back, and `return v` in its body.  One that says nothing has nothing more and no answer, so `yield ⇉` of it is a statement and not a value.  Say what it answers, or use `yield ⇉` as a statement.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A generator `yield ⇉` takes a value from says what it answers."
+      },
+      "since": "0.1",
+      "default_enabled": true
     }
   ]
 }

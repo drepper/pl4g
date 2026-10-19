@@ -1,0 +1,22 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4939 LANG_DELEGATE_ANSWERS_NOTHING
+
+※ `yield ⇉` comes to a value only where the generator it hands the walk to says
+※ what it answers when it ends, `→ T` after the rest of its signature.  One that
+※ says nothing has nothing more and no answer.
+
+let std := ⎕import("std")
+
+fn counted() ⇉ u8:
+    yield 1u8
+
+fn summed() ⇉ u8:
+    let n: u8 = yield ⇉ counted()
+    yield n
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let total: mut u8 = 0u8
+    foreach one := summed():
+        total ← total + one
+    if total = 1u8: 0u6 else: 1u6
