@@ -1,0 +1,47 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `Dir.open` with `⌜std.fs.Dir⌝` opens a directory, as it opens a file for the
+※ kind it is handed: what comes back is a `Dir` of its own descriptor, files are
+※ opened in it relative to it -- which is what `openat` is for -- and it is
+※ closed, as the devices are, `defer` saying so where it is opened.  A name that is no
+※ directory is refused with what the kernel said, `ENOTDIR`.  The directory the
+※ process is in stays the one `std.fs.cwd()` answers, and is never closed.
+※
+※ Compare: **Zig**'s `Dir.openDir` and `Dir.close`, which this is with the
+※ kind as the argument; **Rust**'s `cap-std` `Dir::open_dir`; **C**'s `openat`
+※ with `O_DIRECTORY`, and the `close` a program has to remember.
+
+let std := ⎕import("std")
+
+@[io]
+fn wrote_in(dir: str, name: str) → u6:
+    match std.fs.cwd().open(dir, ⌜std.fs.Dir⌝):
+        std.fs.Dir(opened):
+            let d: std.fs.Dir = opened
+            defer d.close()
+            match d.open(name, ⌜std.io.Writer⌝):
+                std.io.Writer(to):
+                    let out: mut std.io.Writer = to
+                    defer out.close()
+                    if (std.write_sync(&mut out, ⎕bytes("hi\n")) ?? 0) = 3: 0u6 else: 1u6
+                ⊥:
+                    2u6
+        ⊥:
+            3u6
+
+@[io]
+fn refused(name: str) → i32:
+    match std.fs.cwd().open(name, ⌜std.fs.Dir⌝):
+        std.fs.Dir(d):
+            d.close()
+            0i32
+        ⊥(code):
+            code
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let first: u6 = wrote_in("/dev", "null")
+    if first ≠ 0u6: return first
+    if refused("/dev/null") ≠ 20i32: return 4u6
+    if refused(".") ≠ 0i32: return 5u6
+    0u6

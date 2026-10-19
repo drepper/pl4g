@@ -1273,10 +1273,12 @@ Runtime
     which it did not, and a generator may answer something when it ends (`→ T`), which `yield ⇉` written as a value takes.
 
 
-[ ] open a directory.  `std.fs.Dir` is made only by `std.fs.State.cwd`, which answers `AT_FDCWD`; a `Dir.open_dir` answering a
+[x] open a directory.  `std.fs.Dir` is made only by `std.fs.State.cwd`, which answers `AT_FDCWD`; a `Dir.open_dir` answering a
     `Dir` with a descriptor of its own, closed like the devices it opens (`@[closed_by]`), is what makes `openat` worth having
     beyond the one directory.  Zig's `Dir.openDir` and `Dir.close` are the shape.
     **Out of date (2026-10-04):** `std.fs.State.cwd` is a singleton now, reached by `std.fs.cwd()`, and `Dir.open` takes `&Dir`.
+    Done 2026-10-21: `Dir.open(d, name, ⌜std.fs.Dir⌝)`, a fourth kind, answers a `Dir` with a descriptor of its own, closed by
+    `Dir.close` (`@[closed_by]`); the runtime opens it with `O_DIRECTORY`, numbered as each architecture does.
 
 [ ] make a device out of a descriptor without spelling out the ring.  A program that has a descriptor from somewhere else -- a
     pipe made with `⎕syscall` -- writes `std.io.Writer(.fd ← n, .ring ← init.io.error.ring)`, copying the address from a device

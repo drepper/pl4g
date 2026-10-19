@@ -10590,6 +10590,17 @@ in one step, has an answer to take (4938); one saying nothing answers nothing (4
 answers, are walked through calls rather than written into loops; a delegate must hand out and take back what the delegating body
 does.
 
+## 2026-10-21T10:00+02:00 — language
+
+**A directory is opened by `Dir.open` with `⌜Dir⌝`**
+
+The user asked for the entry in TODO-language.md on opening a directory, and chose a fourth kind for `Dir.open` --
+`d.open("sub", ⌜std.fs.Dir⌝)` -- over a function of its own, Zig's `Dir.openDir`: the kind handed already says what type comes
+back, and the comment on `Dir.open` foresaw a fourth.  Taken without asking: `Dir` is `closed_by(close)` with `Dir.close`, so a
+directory opened is closed as a device is and one not closed is refused (4681), the one `std.fs.cwd()` answers staying a singleton
+never closed; the runtime opens with `O_DIRECTORY`, which AArch64 numbers 040000 and the other two 0200000.  Compare Zig's
+`Dir.openDir` and `Dir.close`, cap-std's `Dir::open_dir`, C's `openat` with `O_DIRECTORY`.
+
 Open questions
 --------------
 

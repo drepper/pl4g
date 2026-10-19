@@ -18,6 +18,9 @@ fn io_step(r: &mut io.Ring)
 @[external("pl4g_io_open"), io]
 fn io_open(how: i32, dir: i32, at: u64, len: u64) → i64
 
+@[external("pl4g_io_close"), io]
+fn io_close(r: &mut io.Ring, fd: i32) → i64
+
 ※※ A task as `std.run` holds it: the walk, and the request it is waiting on --
 ※※ one whose slot is negative, before its first turn.
 @[export]
@@ -37,12 +40,14 @@ type Task = walk : ⌖⇉io.Pending ⇇ io.Answer in ⎕heap ; waiting : io.Pend
 @[export, device]
 type State = ring : io.Ring ; tasks : [Task] ; singleton cwd : Dir
 
-※※ A directory, to open files in.
+※※ A directory, to open files in -- and other directories.
 ※※
 ※※ \details `fd` is the directory's descriptor, or `AT_FDCWD` for the one the
 ※※ process is in; `ring` is where the ring is, which every file opened in it
-※※ carries on.
-@[export, device]
+※※ carries on.  One `Dir.open` answers is closed with `Dir.close`, by whatever
+※※ holds it when its scope ends; the one the process is in is a singleton of
+※※ `State`'s, reached by reference, and never closed.
+@[export, device, closed_by(close)]
 type Dir = fd : i32 ; ring : u64
 
 ※※ What the kernel said, where it refused, as it says it: a positive number,
@@ -71,7 +76,9 @@ fn State.drain(s: &mut State):
 
 ※※ Open the file `name` in `d`, for what the type handed says: `⌜io.Reader⌝` to
 ※※ read it, `⌜io.Writer⌝` to write it, made if it is not there and emptied if it is,
-※※ and `⌜io.ReadWriter⌝` for both, made if it is not there and left as it is.
+※※ and `⌜io.ReadWriter⌝` for both, made if it is not there and left as it is --
+※※ or, for `⌜Dir⌝`, the directory `name` to open files in, refused where it is
+※※ none.
 ※※
 ※※ \param d the directory `name` is relative to, where it is relative
 ※※ \param name the file
@@ -86,7 +93,8 @@ fn State.drain(s: &mut State):
 ※ handed to the runtime are the ways it knows: reading, writing and both.
 @[export]
 fn Dir.open(d: &Dir, name: str, kind: ⌜T'⌝) → T' ? i32
-        pre(⌜T'⌝ = ⌜io.Reader⌝ ∨ ⌜T'⌝ = ⌜io.Writer⌝ ∨ ⌜T'⌝ = ⌜io.ReadWriter⌝):
+        pre(⌜T'⌝ = ⌜io.Reader⌝ ∨ ⌜T'⌝ = ⌜io.Writer⌝ ∨ ⌜T'⌝ = ⌜io.ReadWriter⌝
+            ∨ ⌜T'⌝ = ⌜Dir⌝):
     let bytes: u8⟦⟧ = ⎕bytes(name)
     let at: u64 = if #bytes = 0: 0u64 else: ⎕address(&bytes⟦0⟧)
     comptime if ⌜T'⌝ = ⌜io.Reader⌝:
@@ -95,6 +103,15 @@ fn Dir.open(d: &Dir, name: str, kind: ⌜T'⌝) → T' ? i32
     comptime elif ⌜T'⌝ = ⌜io.Writer⌝:
         let fd: i64 = io_open(1i32, d⌖.fd, at, ⎕drop(#bytes))
         if fd < 0i64: ⊥ refusal(fd) else: io.Writer(.fd ← ⎕narrow(fd, ⌜i32⌝) ?? 0i32, .ring ← d⌖.ring)
-    else:
+    comptime elif ⌜T'⌝ = ⌜io.ReadWriter⌝:
         let fd: i64 = io_open(2i32, d⌖.fd, at, ⎕drop(#bytes))
         if fd < 0i64: ⊥ refusal(fd) else: io.ReadWriter(.fd ← ⎕narrow(fd, ⌜i32⌝) ?? 0i32, .ring ← d⌖.ring)
+    else:
+        ※ 3 is a directory, as the runtime numbers the ways
+        let fd: i64 = io_open(3i32, d⌖.fd, at, ⎕drop(#bytes))
+        if fd < 0i64: ⊥ refusal(fd) else: Dir(.fd ← ⎕narrow(fd, ⌜i32⌝) ?? 0i32, .ring ← d⌖.ring)
+
+※※ Close a directory `Dir.open` opened, once every request in flight is answered.
+@[export]
+fn Dir.close(d: Dir):
+    _ ← io_close(⎕at(d.ring, ⌜&mut io.Ring⌝), d.fd)

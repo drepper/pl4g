@@ -247,7 +247,8 @@ def test_sections_and_symbols_are_present(built: Built) -> None:
     extra = [".riscv.attributes"] if built.arch == "riscv64" else []
     # AArch64's compiler of the runtime puts its sixteen-byte constants in a
     # section of their own, and RISC-V's its eight-byte ones -- the words the
-    # hash mixes with.
+    # hash mixes with.  All three keep the flags each way of opening a file asks
+    # the kernel for as a table of thirty-two bytes, laid out after the rest.
     constants = {"aarch64": [".pl4grt.rodata.cst16"],
                  "riscv64": [".pl4grt.rodata.cst8"]}.get(built.arch, [])
     # The bill of materials comes before the code because it is read-only and
@@ -256,7 +257,7 @@ def test_sections_and_symbols_are_present(built: Built) -> None:
     # the ring before the process ends -- so the ring is in the data, and the
     # runtime's code and data beside the program's own.
     assert [s.name for s in built.image.sections] == \
-        ["", *constants, ".pl4grt.rodata", ".sbom", ".sbomstr",
+        ["", *constants, ".pl4grt.rodata", ".pl4grt.rodata.cst32", ".sbom", ".sbomstr",
          ".text", ".pl4grt.text", ".data", ".pl4grt.bss", *extra,
          ".shstrtab", ".symtab", ".strtab"]
     start = built.image.symbol("_start")

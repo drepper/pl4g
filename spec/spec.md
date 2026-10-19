@@ -314,10 +314,12 @@ This is Zig's arrangement with the one ring a process has written into every han
 `init.io.error`, on the descriptors every system gives them.  **`Dir.open(d, name, ⌜T⌝)` opens a file in `d` for what the type
 handed says**:
 `⌜Reader⌝` to read it; `⌜Writer⌝` to write it, made if it is not there and emptied if it is; `⌜ReadWriter⌝` for both, made if it is
-not there and left as it is.  **`error_name(code)` names what the kernel refused with** as `Error` writes it -- `cat: x:
+not there and left as it is; and `⌜Dir⌝` to open the directory of that name to open files in, refused (`not_a_directory`) where it is
+none.  A `Dir` opened so has a descriptor of its own and is closed with `Dir.close`, as a device is -- `defer d.close()` where it is
+opened.  **`error_name(code)` names what the kernel refused with** as `Error` writes it -- `cat: x:
 not_found` -- read from a table in the image (`⸨…⸩ in ⎕static`), so asking is pure and nothing is filled in while the program
-runs; `error_name_of(e)` is the same for a value of `Error`.  The table is written out beside the enumeration, nothing yet working
-one out from `⎕fields` while compiling, and a test asks it of every value `⎕fields` finds.  `Error` names what reading, writing and opening by name can give, and `other` is everything else.  It answers that type, or the number the kernel refused with.  The name is relative to `d` -- the
+runs; `error_name_of(e)` is the same for a value of `Error`.  The table is worked out from `⎕fields(⌜Error⌝)` while compiling, so
+every value of the enumeration is named.  `Error` names what reading, writing and opening by name can give, and `other` is everything else.  It answers that type, or the number the kernel refused with.  The name is relative to `d` -- the
 kernel's `openat` -- unless it begins with `/`; the directory `std.fs.cwd()` answers is `AT_FDCWD`, the one the process is in, and
 is never closed.  A name with a nul inside it or longer than 4095 bytes is refused before the kernel is asked.  The type is the
 argument rather than a mode beside the name because what comes back is a different type for each: a `Reader` cannot be written to,

@@ -848,10 +848,17 @@ void pl4g_io_step(struct pl4g_ring *r)
 
 /* How `pl4g_io_open` is asked to open: the numbers the language passes, one per
  * type `std.fs.Dir.open` makes.  The flags are the kernel's, and the same on the
- * three architectures. */
+ * three architectures -- but for `O_DIRECTORY`, which AArch64 numbers its own
+ * way and the other two as the generic headers do. */
 #define OPEN_READING 0
 #define OPEN_WRITING 1
 #define OPEN_BOTH 2
+#define OPEN_DIRECTORY 3
+#if defined(__aarch64__)
+#define O_DIRECTORY 040000
+#else
+#define O_DIRECTORY 0200000
+#endif
 #define O_WRONLY 01
 #define O_RDWR 02
 #define O_CREAT 0100
@@ -869,7 +876,8 @@ void pl4g_io_step(struct pl4g_ring *r)
  * nul, so it is copied here, once, with one added -- refusing a name with a nul
  * inside it, which the kernel would read as a shorter one, and one too long for
  * any file system to have.  A file opened for writing is made if it is not
- * there and emptied if it is; one opened for both is made and left as it is. */
+ * there and emptied if it is; one opened for both is made and left as it is; a
+ * directory is opened to open files in, and is refused where it is no directory. */
 i64 pl4g_io_open(i32 how, i32 dir, u64 at, u64 len)
 {
   unsigned char name[NAME_MAX_BYTES];
@@ -887,6 +895,8 @@ i64 pl4g_io_open(i32 how, i32 dir, u64 at, u64 len)
     flags |= O_WRONLY | O_CREAT | O_TRUNC;
   else if (how == OPEN_BOTH)
     flags |= O_RDWR | O_CREAT;
+  else if (how == OPEN_DIRECTORY)
+    flags |= O_DIRECTORY;
   else if (how != OPEN_READING)
     return -EINVAL;
   return sys(NR_OPENAT, dir, (i64) name, flags, 0666, 0, 0);
