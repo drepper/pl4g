@@ -40,8 +40,8 @@ fn main(init: std.Init) → u6:
     let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
     if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
         return 6u6
-    let wrote := filled(std.io.Writer(.fd ← ends⟦1⟧, .ring ← init.io.error.ring))
+    let wrote := filled(init.fs.adopt(ends⟦1⟧, ⌜std.io.Writer⌝))
     if wrote ≠ 0u6:
-        std.io.Reader.close(std.io.Reader(.fd ← ends⟦0⟧, .ring ← init.io.error.ring))
+        std.io.Reader.close(init.fs.adopt(ends⟦0⟧, ⌜std.io.Reader⌝))
         return wrote
-    walked(std.io.Reader(.fd ← ends⟦0⟧, .ring ← init.io.error.ring))
+    walked(init.fs.adopt(ends⟦0⟧, ⌜std.io.Reader⌝))

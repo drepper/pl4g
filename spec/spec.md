@@ -316,7 +316,10 @@ handed says**:
 `⌜Reader⌝` to read it; `⌜Writer⌝` to write it, made if it is not there and emptied if it is; `⌜ReadWriter⌝` for both, made if it is
 not there and left as it is; and `⌜Dir⌝` to open the directory of that name to open files in, refused (`not_a_directory`) where it is
 none.  A `Dir` opened so has a descriptor of its own and is closed with `Dir.close`, as a device is -- `defer d.close()` where it is
-opened.  **`error_name(code)` names what the kernel refused with** as `Error` writes it -- `cat: x:
+opened.  **`State.adopt(s, fd, ⌜T⌝)` makes a device of a descriptor the program has from elsewhere** -- a pipe `⎕syscall` made, one a
+parent handed down -- of any of the four kinds, reaching the ring `s` keeps: `init.fs.adopt(ends⟦1⟧, ⌜std.io.Writer⌝)` rather than
+the record written out with an address copied from some device.  Nothing is asked of the kernel, the descriptor being the program's
+word, and the device is closed as one opened is.  **`error_name(code)` names what the kernel refused with** as `Error` writes it -- `cat: x:
 not_found` -- read from a table in the image (`⸨…⸩ in ⎕static`), so asking is pure and nothing is filled in while the program
 runs; `error_name_of(e)` is the same for a value of `Error`.  The table is worked out from `⎕fields(⌜Error⌝)` while compiling, so
 every value of the enumeration is named.  `Error` names what reading, writing and opening by name can give, and `other` is everything else.  It answers that type, or the number the kernel refused with.  The name is relative to `d` -- the

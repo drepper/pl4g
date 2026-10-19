@@ -63,6 +63,33 @@ fn refusal(of: i64) → i32:
 fn cwd() → &static Dir:
     &State.cwd
 
+※※ A device made of a descriptor the program has from somewhere else -- a pipe
+※※ `⎕syscall` made, one a parent handed down -- which reaches the ring `s` keeps.
+※※
+※※ \param s what the program does its I/O with: `&init.fs`
+※※ \param fd the descriptor
+※※ \param kind which device to make: `⌜io.Reader⌝`, `⌜io.Writer⌝`,
+※※ `⌜io.ReadWriter⌝` or `⌜Dir⌝`
+※※ \return the device, which the caller closes
+※
+※ What a device carries besides its descriptor is where the ring is, and that is
+※ `s`'s to say: written out, it is an address copied from some device the
+※ program happens to hold.  Nothing is asked of the kernel -- the descriptor is
+※ the program's word -- so nothing can be refused here.
+@[export]
+fn State.adopt(s: &State, fd: i32, kind: ⌜T'⌝) → T'
+        pre(⌜T'⌝ = ⌜io.Reader⌝ ∨ ⌜T'⌝ = ⌜io.Writer⌝ ∨ ⌜T'⌝ = ⌜io.ReadWriter⌝
+            ∨ ⌜T'⌝ = ⌜Dir⌝):
+    let ring: u64 = ⎕address(&s⌖.ring)
+    comptime if ⌜T'⌝ = ⌜io.Reader⌝:
+        io.Reader(.fd ← fd, .ring ← ring)
+    comptime elif ⌜T'⌝ = ⌜io.Writer⌝:
+        io.Writer(.fd ← fd, .ring ← ring)
+    comptime elif ⌜T'⌝ = ⌜io.ReadWriter⌝:
+        io.ReadWriter(.fd ← fd, .ring ← ring)
+    else:
+        Dir(.fd ← fd, .ring ← ring)
+
 ※※ Wait for the kernel to answer something -- anything.
 @[export]
 fn State.step(s: &mut State):

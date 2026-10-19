@@ -1280,9 +1280,10 @@ Runtime
     Done 2026-10-21: `Dir.open(d, name, ⌜std.fs.Dir⌝)`, a fourth kind, answers a `Dir` with a descriptor of its own, closed by
     `Dir.close` (`@[closed_by]`); the runtime opens it with `O_DIRECTORY`, numbered as each architecture does.
 
-[ ] make a device out of a descriptor without spelling out the ring.  A program that has a descriptor from somewhere else -- a
+[x] make a device out of a descriptor without spelling out the ring.  A program that has a descriptor from somewhere else -- a
     pipe made with `⎕syscall` -- writes `std.io.Writer(.fd ← n, .ring ← init.io.error.ring)`, copying the address from a device
     it holds.  A `State.adopt(&init.fs, n, ⌜Writer⌝)` would say it once.
+    Done 2026-10-21: `std.fs.State.adopt(s, fd, ⌜T⌝)`, the shape this entry gave, for the four kinds `Dir.open` makes.
 
 [x] work out a table in the image while compiling.  `std.error_names` is written out beside `Error` because neither way of building
     it from `⎕fields(⌜Error⌝)` works: an initializer `in ⎕static` that calls a function is refused (4636), there being no

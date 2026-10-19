@@ -10601,6 +10601,16 @@ directory opened is closed as a device is and one not closed is refused (4681), 
 never closed; the runtime opens with `O_DIRECTORY`, which AArch64 numbers 040000 and the other two 0200000.  Compare Zig's
 `Dir.openDir` and `Dir.close`, cap-std's `Dir::open_dir`, C's `openat` with `O_DIRECTORY`.
 
+## 2026-10-21T11:00+02:00 — language
+
+**A device is made of a descriptor with `State.adopt`**
+
+The user asked for the entry in TODO-language.md on making a device out of a descriptor without spelling out the ring.  It is the
+shape the entry gave, `std.fs.State.adopt(s, fd, ⌜T⌝)`, taken without asking further: the four kinds `Dir.open` makes, the ring
+the `State`'s own, nothing asked of the kernel.  The test programs that made devices of a pipe's ends now adopt them; the three
+about the record a process starts with keep writing one out, which stays the language's.  Compare Rust's
+`File::from_raw_fd`, Go's `os.NewFile`, Zig's `File{ .handle = fd }`.
+
 Open questions
 --------------
 

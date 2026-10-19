@@ -57,15 +57,14 @@ fn main(init: std.Init) → u6:
     let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
     if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
         return 1u6
-    let w: mut std.io.Writer = std.io.Writer(.fd ← ends⟦1⟧, .ring ← init.io.error.ring)
+    let w: mut std.io.Writer = init.fs.adopt(ends⟦1⟧, ⌜std.io.Writer⌝)
     let wrote: u64 ¤size = std.write_sync(&mut w, ⎕bytes("one two three")) ?? 0
     std.io.Writer.close(w)
     if wrote ≠ 13:
-        std.io.Reader.close(std.io.Reader(.fd ← ends⟦0⟧, .ring ← init.io.error.ring))
+        std.io.Reader.close(init.fs.adopt(ends⟦0⟧, ⌜std.io.Reader⌝))
         return 2u6
-    std.spawn(&mut init.fs, ⎕start(drained(std.io.Reader(.fd ← ends⟦0⟧,
-                                                          .ring ← init.io.error.ring))
-                                   in ⎕heap))
+    let source: std.io.Reader = init.fs.adopt(ends⟦0⟧, ⌜std.io.Reader⌝)
+    std.spawn(&mut init.fs, ⎕start(drained(source) in ⎕heap))
     std.spawn(&mut init.fs, ⎕start(elsewhere() in ⎕heap))
     if std.run(&mut init.fs) ≠ 2u64:
         return 3u6

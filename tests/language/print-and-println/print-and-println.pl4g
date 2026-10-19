@@ -29,9 +29,9 @@ fn main(init: std.Init) → u6:
     let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
     if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
         return 1u6
-    let out: mut std.io.Writer = std.io.Writer(.fd ← ends⟦1⟧, .ring ← init.io.error.ring)
+    let out: mut std.io.Writer = init.fs.adopt(ends⟦1⟧, ⌜std.io.Writer⌝)
     defer std.io.Writer.close(out)
-    let back: mut std.io.Reader = std.io.Reader(.fd ← ends⟦0⟧, .ring ← init.io.error.ring)
+    let back: mut std.io.Reader = init.fs.adopt(ends⟦0⟧, ⌜std.io.Reader⌝)
     defer std.io.Reader.close(back)
 
     let wrote: u64 ¤size = std.Io.println(&mut out, ⎕bytes("ab")) ?? 0
