@@ -24414,14 +24414,19 @@ class Checker:
                 failed = True
             else:
                 placed.append(one)
-        calling, self._calling_key = self._calling_key, func.lifetime_key or None
-        notes, self._lambda_notes = self._lambda_notes, {}
-        try:
+        if not func.lifetimes or not any(isinstance(one, FuncType) for one in wanted):
+            # Nothing a function type among the parameters could be held to.
             values = self._one_by_one(builder, placed, wanted, func.name)
-            if values is not None and len(values) == len(wanted):
-                self._answers_as_long(func, values, self._lambda_notes, expr.span)
-        finally:
-            self._calling_key, self._lambda_notes = calling, notes
+        else:
+            calling, self._calling_key = self._calling_key, func.lifetime_key or None
+            notes, self._lambda_notes = self._lambda_notes, {}
+            try:
+                values = self._one_by_one(builder, placed, wanted, func.name)
+                if values is not None and len(values) == len(wanted):
+                    self._answers_as_long(func, values, self._lambda_notes,
+                                          expr.span)
+            finally:
+                self._calling_key, self._lambda_notes = calling, notes
         if values is None:
             return None
         if len(values) > len(wanted):
