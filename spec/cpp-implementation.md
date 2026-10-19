@@ -66,7 +66,8 @@ src/lib/                    the library, libpl4g.a
 src/repl/main.cc            the driver: the stand-alone REPL program
 src/fuzz/                   fuzzing entry points, a replay driver, and the seed corpora
 src/tools/                  pl4g-gen-diag (the catalog from share/diagnostics.json), pl4g-lexdump
-src/test/                   the checks ctest runs that compare with pypl4g, and the fuzzing run
+src/test/                   the checks ctest runs that compare with pypl4g, and the fuzzing run;
+                            irjson.py writes the whole of what pypl4g compiled as JSON
 bin/pl4g-interp-tests       runs tests/language through the interpreter
 ```
 
@@ -79,8 +80,8 @@ Each phase is committed when its own checks pass; the status column is kept curr
 |---|---|---|---|
 | 1 | CMake, sources, diagnostics, tokens, lexer | every test program lexes; fuzzed | done: all 980 files and the edge corpus lex as `pypl4g` lexes them, plainly and lazily; AFL++ in ctest |
 | 2 | Syntax tree and parser | every test program parses as `pypl4g` parses it | done: every file's tree, compared field by field (a dumper written by reflection), as a program's file and as a module's; no difference on 3527 inputs AFL++ found |
-| 3 | IR: types, values, instructions, builder, verifier, printer | unit tests | |
-| 4 | Interpreter of the IR, and the runtime: heap, io_uring | IR read from `pypl4g --emit=ir` runs | |
+| 3 | IR: types, values, instructions, layout, printer, the JSON exchange | every program's IR, read from what pypl4g compiled, prints as pypl4g prints it and is laid out alike | done; the builder and the verifier go with the checker, which is what uses them |
+| 4 | Interpreter of the IR, and the runtime: heap, io_uring | IR pypl4g compiled, read as JSON, runs and exits as the test says | |
 | 5 | Checker, part one: definitions, types, expressions, statements, calls | the first test programs run | |
 | 6 | Checker, part two: everything else the language has | every test program runs or is refused as it should | |
 | 7 | Macro expander | the macro tests | |

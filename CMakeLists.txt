@@ -55,6 +55,7 @@ set(PL4G_LIB_SOURCES
   src/lib/util/unicode.cc
   src/lib/util/fdio.cc
   src/lib/util/contracts.cc
+  src/lib/util/pyfloat.cc
   src/lib/source/manager.cc
   src/lib/diag/catalog.cc
   src/lib/diag/engine.cc
@@ -64,6 +65,11 @@ set(PL4G_LIB_SOURCES
   src/lib/front/ast.cc
   src/lib/front/parser.cc
   src/lib/front/dump.cc
+  src/lib/ir/types.cc
+  src/lib/ir/ir.cc
+  src/lib/ir/printer.cc
+  src/lib/ir/json.cc
+  src/lib/ir/layout.cc
   ${PL4G_GENERATED}/diag/catalog_data.cc
 )
 
@@ -78,7 +84,7 @@ function(pl4g_variant suffix)
   target_link_options(pl4g${suffix} PUBLIC ${flags})
   target_link_libraries(pl4g${suffix} PUBLIC simdjson::simdjson ${UNISTRING_LIBRARY})
 
-  foreach(tool lexdump astdump)
+  foreach(tool lexdump astdump irdump)
     add_executable(pl4g-${tool}${suffix} src/tools/${tool}.cc)
     target_link_libraries(pl4g-${tool}${suffix} PRIVATE pl4g${suffix})
   endforeach()
@@ -127,6 +133,12 @@ add_test(NAME lexer-agrees
 add_test(NAME parser-agrees
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/parser_agrees.py
           $<TARGET_FILE:pl4g-astdump> ${CMAKE_SOURCE_DIR})
+# Every program pypl4g compiles has, read from JSON, the IR text pypl4g wrote
+# and the layout pypl4g computed.
+add_test(NAME ir-agrees
+  COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/ir_agrees.py
+          $<TARGET_FILE:pl4g-irdump> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/ir-agrees)
+set_tests_properties(ir-agrees PROPERTIES TIMEOUT 900)
 # The same, sanitized, and the fuzzing entry points replayed over the test
 # programs and the corpora under the sanitizers.
 if(PL4G_SANITIZERS)
