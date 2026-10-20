@@ -177,7 +177,6 @@ set(PL4G_LIB_SOURCES
   src/lib/target/saturate.cc
   src/lib/target/stack.cc
   src/lib/target/started.cc
-  src/lib/target/stubs.cc
   src/lib/target/aarch64/abi.cc
   src/lib/target/aarch64/fixups.cc
   src/lib/target/aarch64/isel.cc
@@ -185,6 +184,18 @@ set(PL4G_LIB_SOURCES
   src/lib/target/aarch64/regs.cc
   src/lib/target/aarch64/startup.cc
   src/lib/target/aarch64/target.cc
+  src/lib/target/stubs.cc
+  src/lib/target/x86_64/abi.cc
+  src/lib/target/x86_64/encoder.cc
+  src/lib/target/x86_64/isel.cc
+  src/lib/target/x86_64/levels.cc
+  src/lib/target/x86_64/lower.cc
+  src/lib/target/x86_64/opcodes.cc
+  src/lib/target/x86_64/ops.cc
+  src/lib/target/x86_64/peephole.cc
+  src/lib/target/x86_64/regs.cc
+  src/lib/target/x86_64/startup.cc
+  src/lib/target/x86_64/target.cc
   src/lib/target/syscalls.cc
   src/lib/target/target.cc
   src/lib/target/tests.cc
@@ -223,7 +234,7 @@ function(pl4g_variant suffix)
   add_executable(pl4g-lsp${suffix} src/lsp/main.cc)
   target_link_libraries(pl4g-lsp${suffix} PRIVATE pl4g${suffix})
 
-  foreach(tool lexdump astdump irdump runjson checkdump mcdump vecdump codegen)
+  foreach(tool lexdump astdump irdump runjson checkdump mcdump vecdump codegen encdump)
     add_executable(pl4g-${tool}${suffix} src/tools/${tool}.cc)
     target_link_libraries(pl4g-${tool}${suffix} PRIVATE pl4g${suffix})
   endforeach()
@@ -347,11 +358,23 @@ set_tests_properties(driver-agrees PROPERTIES TIMEOUT 1800)
 add_test(NAME repl-sessions
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/repl_sessions.py $<TARGET_FILE:pl4g-repl> ${CMAKE_SOURCE_DIR})
 # The AArch64 back end generates for every test program, at every level its
-# test asks for, what pypl4g's generates.
+# test asks for, what pypl4g's generates, and every row of its encoding table
+# encodes as pypl4g's does.
 add_test(NAME codegen-agrees-aarch64
   COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/codegen_agrees.py $<TARGET_FILE:pl4g-codegen> ${CMAKE_SOURCE_DIR}
           ${CMAKE_BINARY_DIR}/codegen-agrees-aarch64 aarch64-linux-none)
 set_tests_properties(codegen-agrees-aarch64 PROPERTIES TIMEOUT 1800)
+# The same for x86-64, at the level it is built for unless it says otherwise.
+add_test(NAME codegen-agrees-x86_64
+  COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/codegen_agrees.py $<TARGET_FILE:pl4g-codegen> ${CMAKE_SOURCE_DIR}
+          ${CMAKE_BINARY_DIR}/codegen-agrees-x86_64 x86_64-linux-none)
+set_tests_properties(codegen-agrees-x86_64 PROPERTIES TIMEOUT 1800)
+add_test(NAME encoding-agrees-x86_64
+  COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/encoding_agrees_x86_64.py $<TARGET_FILE:pl4g-encdump>
+          ${CMAKE_SOURCE_DIR})
+add_test(NAME encoding-agrees-aarch64
+  COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/encoding_agrees_aarch64.py $<TARGET_FILE:pl4g-encdump>
+          ${CMAKE_SOURCE_DIR})
 # The same, sanitized, and the fuzzing entry points replayed over the test
 # programs and the corpora under the sanitizers.
 if(PL4G_SANITIZERS)
@@ -399,6 +422,16 @@ if(PL4G_SANITIZERS)
     COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/codegen_agrees.py $<TARGET_FILE:pl4g-codegen-asan>
             ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/codegen-agrees-aarch64-asan aarch64-linux-none)
   set_tests_properties(codegen-agrees-aarch64-asan PROPERTIES TIMEOUT 3600)
+  add_test(NAME codegen-agrees-x86_64-asan
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/codegen_agrees.py $<TARGET_FILE:pl4g-codegen-asan>
+            ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/codegen-agrees-x86_64-asan x86_64-linux-none)
+  set_tests_properties(codegen-agrees-x86_64-asan PROPERTIES TIMEOUT 3600)
+  add_test(NAME encoding-agrees-x86_64-asan
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/encoding_agrees_x86_64.py $<TARGET_FILE:pl4g-encdump-asan>
+            ${CMAKE_SOURCE_DIR})
+  add_test(NAME encoding-agrees-aarch64-asan
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/encoding_agrees_aarch64.py $<TARGET_FILE:pl4g-encdump-asan>
+            ${CMAKE_SOURCE_DIR})
   foreach(target ${PL4G_FUZZ_TARGETS})
     add_test(NAME fuzz-${target}-replay-asan
       COMMAND pl4g-fuzz-${target}-replay-asan ${PL4G_TESTS} ${CMAKE_SOURCE_DIR}/src/fuzz/corpus/${target})
