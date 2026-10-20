@@ -97,6 +97,23 @@ set(PL4G_LIB_SOURCES
   src/lib/rt/blob-riscv64.cc
   src/lib/rt/blob-x86_64.cc
   src/lib/interp/interp.cc
+  src/lib/mc/asmbuilder.cc
+  src/lib/mc/desc.cc
+  src/lib/mc/dump.cc
+  src/lib/mc/fixedwidth.cc
+  src/lib/mc/fixup.cc
+  src/lib/mc/inst.cc
+  src/lib/mc/layout.cc
+  src/lib/mc/loops.cc
+  src/lib/mc/machine.cc
+  src/lib/mc/operand.cc
+  src/lib/mc/ops.cc
+  src/lib/mc/reg.cc
+  src/lib/mc/regalloc.cc
+  src/lib/mc/streamer.cc
+  src/lib/elf/strtab.cc
+  src/lib/elf/structs.cc
+  src/lib/elf/writer.cc
   src/lib/driver/compile.cc
   src/lib/repl/lines.cc
   src/lib/repl/repl.cc
@@ -165,7 +182,7 @@ function(pl4g_variant suffix)
   add_executable(pl4g-lsp${suffix} src/lsp/main.cc)
   target_link_libraries(pl4g-lsp${suffix} PRIVATE pl4g${suffix})
 
-  foreach(tool lexdump astdump irdump runjson checkdump)
+  foreach(tool lexdump astdump irdump runjson checkdump mcdump)
     add_executable(pl4g-${tool}${suffix} src/tools/${tool}.cc)
     target_link_libraries(pl4g-${tool}${suffix} PRIVATE pl4g${suffix})
   endforeach()
@@ -214,6 +231,10 @@ add_test(NAME lexer-agrees
 add_test(NAME parser-agrees
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/parser_agrees.py
           $<TARGET_FILE:pl4g-astdump> ${CMAKE_SOURCE_DIR})
+# The machine-code layer and the ELF writer make of programs of builder calls,
+# with a made-up target, exactly what pypl4g's make of them.
+add_test(NAME mc-agrees
+  COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/mc_agrees.py $<TARGET_FILE:pl4g-mcdump> 2000 1)
 # Every program pypl4g compiles has, read from JSON, the IR text pypl4g wrote
 # and the layout pypl4g computed.
 add_test(NAME ir-agrees
@@ -284,6 +305,8 @@ if(PL4G_SANITIZERS)
       COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/${stage}_agrees.py
               $<TARGET_FILE:pl4g-${tool}-asan> ${CMAKE_SOURCE_DIR})
   endforeach()
+  add_test(NAME mc-agrees-asan
+    COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/mc_agrees.py $<TARGET_FILE:pl4g-mcdump-asan> 500 2)
   add_test(NAME runs-agree-asan
     COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/run_agrees.py
             $<TARGET_FILE:pl4g-runjson-asan> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/runs-agree-asan)
