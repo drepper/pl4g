@@ -3228,18 +3228,23 @@ namespace pl4g::sema {
     auto module = std::make_unique<ir::Module>();
     module->name = "macros";
     module->triple = "";
-    std::unique_ptr<ModuleRegistry> own;
+    // The quotes are trees the checker and the modules it read hold, and the
+    // expander reads them after this returns: all of it is kept with them.
+    struct Kept {
+      std::unique_ptr<ModuleRegistry> registry;
+      std::vector<const ast::Quote*> quoted;
+      std::unique_ptr<Checker> checker;
+    };
+    auto kept = std::make_shared<Kept>();
     if (registry == nullptr) {
-      own = std::make_unique<ModuleRegistry>();
-      registry = own.get();
+      kept->registry = std::make_unique<ModuleRegistry>();
+      registry = kept->registry.get();
     }
-    std::vector<const ast::Quote*> quoted;
-    {
-      Checker found(*module, diags, registry, path.value_or(std::filesystem::path()), "", sources, nullptr, nullptr,
-                    Conditions::check, true, &quoted);
-      found.run(units, false);
-    }
-    return { std::move(module), std::move(quoted) };
+    kept->checker = std::make_unique<Checker>(*module, diags, registry, path.value_or(std::filesystem::path()), "",
+                                              sources, nullptr, nullptr, Conditions::check, true, &kept->quoted);
+    kept->checker->run(units, false);
+    auto quoted = kept->quoted;
+    return { std::move(module), std::move(quoted), std::move(kept) };
   }
 
   ir::Module& check(ir::Module& module, std::span<const ast::SourceUnit* const> units, DiagEngine& diags,

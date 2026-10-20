@@ -97,6 +97,14 @@ namespace pl4g::ir {
   Function* Module::add_function(std::unique_ptr<Function> func, std::optional<std::string> key)
   {
     auto name = key ? *key : func->name;
+    // A key already taken keeps its place and takes the new function, as a
+    // Python dict does; what it held stays alive for whatever calls it.
+    for (auto& [k, f] : functions)
+      if (k == name) {
+        unlisted.push_back(std::move(f));
+        f = std::move(func);
+        return f.get();
+      }
     functions.emplace_back(std::move(name), std::move(func));
     return functions.back().second.get();
   }
@@ -105,6 +113,12 @@ namespace pl4g::ir {
   GlobalVar* Module::add_global(std::unique_ptr<GlobalVar> var, std::optional<std::string> key)
   {
     auto name = key ? *key : var->name;
+    for (auto& [k, v] : globals)
+      if (k == name) {
+        retired_globals.push_back(std::move(v));
+        v = std::move(var);
+        return v.get();
+      }
     globals.emplace_back(std::move(name), std::move(var));
     return globals.back().second.get();
   }

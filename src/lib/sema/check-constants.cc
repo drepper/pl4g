@@ -984,7 +984,7 @@ namespace pl4g::sema {
       // `("slot", key)`, its parts joined as a slot key's are.
       auto key = slot_of_local.get(id_of(local));
       an_effect(D::LANG_PURE_CALLS_IMPURE, expr->span,
-                key == nullptr ? Held() : Held(slot_key("slot") + *key), { { "name", local->name } });
+                key == nullptr ? Held() : Held(*key), { { "name", local->name } });
     }
     tables_handed(ty->params, args, local->name, expr->span);
     // Both halves are read once, before any call is made: a walk makes one

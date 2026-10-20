@@ -723,3 +723,14 @@ Optimizations
     `Label` nodes, span and all, so the label a jump names is never the loop's, and the `_Break` or `_Continue` escapes the
     evaluator and the compiler stops with an internal error.  Comparing the labels' names is what the C++ evaluator does.
     pypl4g also evaluates a `while … until` loop as a `while` loop; the C++ evaluator does the same, saying so where it does.
+
+[ ] `⎕unit` on a value that already carries a unit crashes: `_lower_unit_call` asks `found.unit.written()`, and `Unit` has no
+    `written`, so `tests/language/unit-put-on-a-unit` ends in an `AttributeError` where it expects 4544.  The C++ checker
+    says 4544 with the unit as its textual form writes it.
+
+[ ] two diagnostics check.py names are not in the catalog: `_collect_bundle` emits `D.LANG_NAME_ALREADY_DEFINED` and
+    `_answered_by` `D.LANG_CLAUSE_BUNDLE_ANSWERS_NOTHING` (the catalog has `LANG_BUNDLE_ANSWERS_NOTHING`), so either place
+    stops the compiler with an `AttributeError`.  The C++ checker stops with an internal error at the same places.
+
+[ ] `⎕fillnumber` with a negative number names `ast.UnaryOp.NEGATE`, which does not exist, and the macro expander stops
+    with an internal error; so does the C++ expander, for now.

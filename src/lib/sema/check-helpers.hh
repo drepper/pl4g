@@ -16,6 +16,9 @@ namespace pl4g::sema {
   struct CheckedMacros {
     std::unique_ptr<ir::Module> module;
     std::vector<const ast::Quote*> quoted;
+    // What keeps the quoted trees alive: the checker that wrote them, and
+    // what it read.
+    std::shared_ptr<void> keeper;
   };
 
   // What the checker answers the evaluator about this program's types.

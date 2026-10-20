@@ -30,6 +30,8 @@ namespace pl4g {
   struct MacroModule {
     std::unique_ptr<ir::Module> module;
     std::vector<const ast::Quote*> quoted;
+    // What keeps the quoted trees alive.
+    std::shared_ptr<void> keeper;
   };
 
   // How the macros written as functions are made runnable: handed units

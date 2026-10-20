@@ -711,7 +711,12 @@ namespace pl4g::sema {
     }
     if (! declare(filed, one->name_span))
       return nullptr;
-    auto ring = module.constant<ir::AddressConst>(ty->fields[1].second, startup_record(), 0);
+    // The record the entry point lays out is no variable of the module, but
+    // the module says which it is, for whatever lays it out.
+    if (module.startup_record == nullptr)
+      module.startup_record = std::make_unique<ir::GlobalVar>(startup_record()->name, ir::u8(),
+                                                              ir::ptr_type(ir::u8(), true));
+    auto ring = module.constant<ir::AddressConst>(ty->fields[1].second, module.startup_record.get(), 0);
     module.ring_addresses.push_back(ring);
     auto made = std::make_unique<ir::GlobalVar>(std::string(filed), ty, ir::ptr_type(ty, false));
     made->initializer = module.record_const(ty, { module.int_const(ty->fields[0].second, at_fdcwd), ring });

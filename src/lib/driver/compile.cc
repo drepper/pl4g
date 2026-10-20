@@ -72,12 +72,16 @@ namespace pl4g::driver {
   std::vector<const ast::SourceUnit*> Compilation::expand(std::span<const ast::SourceUnit* const> units)
   {
     auto checked = [this](std::span<const ast::SourceUnit* const> macros) -> std::optional<MacroModule> {
-      auto found = registry();
-      auto made = sema::check_macros(macros, diags, &sources, &found,
+      // The modules the macros read are kept with what the macros quoted:
+      // their trees are what a quote of theirs is made of.
+      auto found = std::make_shared<sema::ModuleRegistry>(registry());
+      auto made = sema::check_macros(macros, diags, &sources, found.get(),
                                      options.inputs.empty() ? std::nullopt : std::optional(options.inputs.front()));
       if (made.module == nullptr)
         return std::nullopt;
-      return MacroModule{ std::move(made.module), std::move(made.quoted) };
+      auto keeper = std::make_shared<std::pair<std::shared_ptr<void>, std::shared_ptr<void>>>(std::move(made.keeper),
+                                                                                              std::move(found));
+      return MacroModule{ std::move(made.module), std::move(made.quoted), std::move(keeper) };
     };
     return pl4g::expand(arena, units, diags, checked,
                         [this](const ast::ModuleImport* node) { return imported_unit(node); });

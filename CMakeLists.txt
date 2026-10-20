@@ -79,6 +79,7 @@ set(PL4G_LIB_SOURCES
   src/lib/rt/arena.cc
   src/lib/interp/interp.cc
   src/lib/driver/compile.cc
+  src/lib/repl/repl.cc
   src/lib/sema/attributes.cc
   src/lib/sema/check-helpers.cc
   src/lib/sema/check-entry.cc
@@ -122,6 +123,10 @@ function(pl4g_variant suffix)
   target_compile_options(pl4g${suffix} PUBLIC ${PL4G_COMMON_FLAGS} ${flags})
   target_link_options(pl4g${suffix} PUBLIC ${flags})
   target_link_libraries(pl4g${suffix} PUBLIC simdjson::simdjson ${UNISTRING_LIBRARY})
+
+  # The stand-alone interpreter: the library and a small driver.
+  add_executable(pl4g-repl${suffix} src/repl/main.cc)
+  target_link_libraries(pl4g-repl${suffix} PRIVATE pl4g${suffix})
 
   foreach(tool lexdump astdump irdump runjson checkdump)
     add_executable(pl4g-${tool}${suffix} src/tools/${tool}.cc)
@@ -194,6 +199,17 @@ add_test(NAME runs-agree
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/run_agrees.py
           $<TARGET_FILE:pl4g-runjson> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/runs-agree)
 set_tests_properties(runs-agree PROPERTIES TIMEOUT 1800)
+# Every test program is checked here as pypl4g checks it: the same words on
+# standard error, the same status, and the same IR before any pass ran.
+add_test(NAME checks-agree
+  COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/check_agrees.py
+          $<TARGET_FILE:pl4g-checkdump> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/checks-agree)
+set_tests_properties(checks-agree PROPERTIES TIMEOUT 1800)
+# And every program that runs, run from its source with nothing of pypl4g's in
+# the way, exits as its test says.
+add_test(NAME runs-from-source
+  COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/interp_runs.py $<TARGET_FILE:pl4g-repl> ${CMAKE_SOURCE_DIR})
+set_tests_properties(runs-from-source PROPERTIES TIMEOUT 1800)
 # The same, sanitized, and the fuzzing entry points replayed over the test
 # programs and the corpora under the sanitizers.
 if(PL4G_SANITIZERS)
@@ -210,6 +226,13 @@ if(PL4G_SANITIZERS)
     COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/run_agrees.py
             $<TARGET_FILE:pl4g-runjson-asan> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/runs-agree-asan)
   set_tests_properties(runs-agree-asan PROPERTIES TIMEOUT 1800)
+  add_test(NAME checks-agree-asan
+    COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/check_agrees.py
+            $<TARGET_FILE:pl4g-checkdump-asan> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/checks-agree-asan)
+  set_tests_properties(checks-agree-asan PROPERTIES TIMEOUT 3600)
+  add_test(NAME runs-from-source-asan
+    COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/interp_runs.py $<TARGET_FILE:pl4g-repl-asan> ${CMAKE_SOURCE_DIR})
+  set_tests_properties(runs-from-source-asan PROPERTIES TIMEOUT 3600)
   foreach(target ${PL4G_FUZZ_TARGETS})
     add_test(NAME fuzz-${target}-replay-asan
       COMMAND pl4g-fuzz-${target}-replay-asan ${PL4G_TESTS} ${CMAKE_SOURCE_DIR}/src/fuzz/corpus/${target})
@@ -229,4 +252,4 @@ foreach(target ${PL4G_FUZZ_TARGETS})
                        TIMEOUT 600)
 endforeach()
 
-add_custom_target(checkCOMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -j 8 USES_TERMINAL)
+add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -j 8 USES_TERMINAL)

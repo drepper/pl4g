@@ -567,7 +567,9 @@ namespace pl4g::ir {
       }
       keys = doc["function_keys"].get_array();
       std::int64_t listed = std::numeric_limits<std::int64_t>::max();
-      doc["listed"].get(listed);
+      // Older files say nothing of it, and then every function is listed.
+      if (doc["listed"].get(listed) != ::simdjson::SUCCESS)
+        listed = std::numeric_limits<std::int64_t>::max();
       at = 0;
       std::vector<Function*> all;
       for (Element f : doc["functions"].get_array()) {

@@ -479,7 +479,9 @@ namespace pl4g::interp {
         return reinterpret_cast<Cell>(static_cast<const Function*>(value));
       auto it = places.find(value);
       if (it == places.end()) [[unlikely]]
-        throw InternalError("the address of something with no place");
+        throw InternalError(value->vkind == ValueKind::global
+                              ? "the address of a variable with no place: " + static_cast<const GlobalVar*>(value)->name
+                              : std::string("the address of something with no place"));
       return reinterpret_cast<Cell>(it->second);
     }
 

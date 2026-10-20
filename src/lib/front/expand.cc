@@ -568,6 +568,9 @@ namespace pl4g {
       // Collect the macros, then rewrite every unit without them.
       std::vector<const ast::SourceUnit*> run();
 
+      // What keeps the trees the macros quoted alive, where any were.
+      std::shared_ptr<void> keeper() const { return made ? made->keeper : nullptr; }
+
     private:
       void collect_written(const ast::FuncDef* node);
       void collect_imported(const ast::ModuleImport* node);
@@ -1510,7 +1513,13 @@ namespace pl4g {
   std::vector<const ast::SourceUnit*> expand(ast::SyntaxArena& arena, std::span<const ast::SourceUnit* const> units,
                                              DiagEngine& diags, CheckMacros checked, ImportedUnit imported)
   {
-    return Expander(arena, units, diags, std::move(checked), std::move(imported)).run();
+    Expander expander(arena, units, diags, std::move(checked), std::move(imported));
+    auto expanded = expander.run();
+    // What a macro wrote may share nodes with the trees it quoted, which are
+    // the macro checker's: those live as long as what was expanded.
+    if (auto kept = expander.keeper())
+      arena.hold<std::shared_ptr<void>>(std::move(kept));
+    return expanded;
   }
 
 
