@@ -1,6 +1,7 @@
 """Check that a C++ back end generates for every test program what pypl4g's does.
 
-Run as ``codegen_agrees.py PL4G-CODEGEN ROOT WORK TRIPLE [NAME...]``.  Each test
+Run as ``codegen_agrees.py [--mclevel=LEVEL] PL4G-CODEGEN ROOT WORK TRIPLE
+[NAME...]``.  Each test
 program that compiles is compiled by pypl4g for TRIPLE at every level its test
 asks for (``opt=``, both levels where it says nothing): once to the module its
 passes made, written as JSON (``irjson.py``), and once to what ``--emit asm``
@@ -59,9 +60,17 @@ def one(run: str, path: Path, work: Path, triple: str, level: int, extra: list[s
                             env={**env, "PYTHONPATH": str(HERE.parent.parent)})
     if dumped.returncode != 0:
         return None
-    mine = subprocess.run(["prlimit", "--as=8589934592", "--cpu=120", "--", run, "--target", triple,
-                           "".join(("-O", str(level))), str(json_out)],
-                          capture_output=True, text=True, check=False, cwd=path.parent)
+    # A sanitized build's shadow memory is more than any address-space limit
+    # allows, so what it may take is said to the sanitizer instead.
+    sanitized = run.endswith("-asan")
+    limit = ["prlimit", "--cpu=900", "--"] if sanitized else ["prlimit", "--as=8589934592", "--cpu=120", "--"]
+    # The level the program is built for reaches the back end itself, the
+    # module not saying it.
+    levels = [one for one in extra if one.startswith("--mclevel=")]
+    mine = subprocess.run([*limit, run, "--target", triple, "".join(("-O", str(level))), *levels, str(json_out)],
+                          capture_output=True, text=True, check=False, cwd=path.parent,
+                          env={**os.environ, "ASAN_OPTIONS": "hard_rss_limit_mb=4096:detect_leaks=0"}
+                          if sanitized else None)
     if mine.returncode != 0:
         return "".join(("the C++ back end failed (", str(mine.returncode), "): ", mine.stderr[-1500:]))
     a, b = theirs.read_text(encoding="utf-8").splitlines(), mine.stdout.splitlines()
@@ -73,9 +82,12 @@ def one(run: str, path: Path, work: Path, triple: str, level: int, extra: list[s
 
 
 def main() -> int:
-    run, root, work, triple = str(Path(sys.argv[1]).resolve()), Path(sys.argv[2]).resolve(), \
-        Path(sys.argv[3]).resolve(), sys.argv[4]
-    picked = set(sys.argv[5:])
+    # `--mclevel=LEVEL` first builds every program for that level.
+    arguments = sys.argv[1:]
+    asked = [arguments.pop(0)] if arguments and arguments[0].startswith("--mclevel=") else []
+    run, root, work, triple = str(Path(arguments[0]).resolve()), Path(arguments[1]).resolve(), \
+        Path(arguments[2]).resolve(), arguments[3]
+    picked = set(arguments[4:])
     work.mkdir(parents=True, exist_ok=True)
     jobs = []
     for path in sorted((root / "tests" / "language").rglob("*.pl4g")):
@@ -83,7 +95,7 @@ def main() -> int:
             continue
         compiles, levels, extra = directives(path)
         if compiles:
-            jobs.extend((path, level, extra) for level in levels)
+            jobs.extend((path, level, [*extra, *asked]) for level in levels)
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
         found = list(pool.map(lambda job: (job, one(run, job[0], work, triple, job[1], job[2])), jobs))
     failures = [(job, why) for job, why in found if why is not None]

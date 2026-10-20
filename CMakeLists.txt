@@ -178,6 +178,13 @@ set(PL4G_LIB_SOURCES
   src/lib/target/stack.cc
   src/lib/target/started.cc
   src/lib/target/stubs.cc
+  src/lib/target/aarch64/abi.cc
+  src/lib/target/aarch64/fixups.cc
+  src/lib/target/aarch64/isel.cc
+  src/lib/target/aarch64/opcodes.cc
+  src/lib/target/aarch64/regs.cc
+  src/lib/target/aarch64/startup.cc
+  src/lib/target/aarch64/target.cc
   src/lib/target/syscalls.cc
   src/lib/target/target.cc
   src/lib/target/tests.cc
@@ -339,6 +346,12 @@ set_tests_properties(driver-agrees PROPERTIES TIMEOUT 1800)
 # The interactive session answers typed sessions as it should.
 add_test(NAME repl-sessions
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/repl_sessions.py $<TARGET_FILE:pl4g-repl> ${CMAKE_SOURCE_DIR})
+# The AArch64 back end generates for every test program, at every level its
+# test asks for, what pypl4g's generates.
+add_test(NAME codegen-agrees-aarch64
+  COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/codegen_agrees.py $<TARGET_FILE:pl4g-codegen> ${CMAKE_SOURCE_DIR}
+          ${CMAKE_BINARY_DIR}/codegen-agrees-aarch64 aarch64-linux-none)
+set_tests_properties(codegen-agrees-aarch64 PROPERTIES TIMEOUT 1800)
 # The same, sanitized, and the fuzzing entry points replayed over the test
 # programs and the corpora under the sanitizers.
 if(PL4G_SANITIZERS)
@@ -382,6 +395,10 @@ if(PL4G_SANITIZERS)
   set_tests_properties(driver-agrees-asan PROPERTIES TIMEOUT 3600)
   add_test(NAME repl-sessions-asan
     COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/repl_sessions.py $<TARGET_FILE:pl4g-repl-asan> ${CMAKE_SOURCE_DIR})
+  add_test(NAME codegen-agrees-aarch64-asan
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/codegen_agrees.py $<TARGET_FILE:pl4g-codegen-asan>
+            ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/codegen-agrees-aarch64-asan aarch64-linux-none)
+  set_tests_properties(codegen-agrees-aarch64-asan PROPERTIES TIMEOUT 3600)
   foreach(target ${PL4G_FUZZ_TARGETS})
     add_test(NAME fuzz-${target}-replay-asan
       COMMAND pl4g-fuzz-${target}-replay-asan ${PL4G_TESTS} ${CMAKE_SOURCE_DIR}/src/fuzz/corpus/${target})
