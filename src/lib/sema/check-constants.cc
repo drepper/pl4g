@@ -1432,6 +1432,10 @@ namespace pl4g::sema {
 
   void Checker::lower_instance(ir::Function* func, const ast::FuncDef* node, Span span)
   {
+    if (node->body == nullptr) [[unlikely]]
+      // pypl4g asserts there is one; a body the parser lost on the way is
+      // what fuzzing found (TODO-pypl4g.md).
+      throw InternalError("an instance of a generic function that has no body");
     if (node->body->failed())
       // Said where its body could not be read; there is nothing to check.
       return;

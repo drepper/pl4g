@@ -83,8 +83,13 @@ namespace pl4g::driver {
                                                                                               std::move(found));
       return MacroModule{ std::move(made.module), std::move(made.quoted), std::move(keeper) };
     };
-    return pl4g::expand(arena, units, diags, checked,
-                        [this](const ast::ModuleImport* node) { return imported_unit(node); });
+    try {
+      return pl4g::expand(arena, units, diags, checked,
+                          [this](const ast::ModuleImport* node) { return imported_unit(node); });
+    } catch (const InternalError& error) {
+      diags.internal(error.what());
+      return { units.begin(), units.end() };
+    }
   }
 
 
@@ -99,8 +104,14 @@ namespace pl4g::driver {
     if (options.guard_size)
       module->guard_size = *options.guard_size;
     auto found = registry();
-    sema::check(*module, units, diags, &found, &sources, notes, options.conditions, false, options.ignore_system,
-                session);
+    try {
+      sema::check(*module, units, diags, &found, &sources, notes, options.conditions, false, options.ignore_system,
+                  session);
+    } catch (const InternalError& error) {
+      // What the checker did not expect is said, as pypl4g's driver says it,
+      // and what was made of the program is not run.
+      diags.internal(error.what());
+    }
     return module;
   }
 

@@ -734,3 +734,9 @@ Optimizations
 
 [ ] `⎕fillnumber` with a negative number names `ast.UnaryOp.NEGATE`, which does not exist, and the macro expander stops
     with an internal error; so does the C++ expander, for now.
+
+[ ] a generic function whose body the parser lost stops the checker on an assertion.  A stray glyph where a clause stands
+    -- `` fn bigger(a: T', b: T') → T' `re(shapes.number(T')) …: `` in `tests/language/bundle-imported` -- is reported, the
+    parser recovers past it with no body, and the call that instantiates the function reaches `assert node.body is not
+    None` in `_lower_instance`.  Found by fuzzing the C++ checker, which stops with an internal error there; the input is
+    `src/fuzz/corpus/check/generic-without-a-body.pl4g`.
