@@ -29,6 +29,9 @@ namespace {
     key_guard_size,
     key_ignore_system,
     key_color,
+    key_input_fd,
+    key_output_fd,
+    key_error_fd,
   };
 
   constexpr ::argp_option options[] = {
@@ -40,6 +43,9 @@ namespace {
     { "guard-size", key_guard_size, "BYTES", 0, "The size of the stack's guard", 0 },
     { "ignore-system", key_ignore_system, nullptr, 0, "Treat system modules as any other", 0 },
     { "color", key_color, "WHEN", OPTION_ARG_OPTIONAL, "Colour the diagnostics: yes, no or auto", 0 },
+    { "input-fd", key_input_fd, "FD", 0, "Read the program's or the session's input from FD (0)", 0 },
+    { "output-fd", key_output_fd, "FD", 0, "Write the output to FD (1)", 0 },
+    { "error-fd", key_error_fd, "FD", 0, "Write errors and diagnostics to FD (2)", 0 },
     {},
   };
 
@@ -84,6 +90,17 @@ namespace {
       else [[unlikely]]
         ::argp_error(state, "--color takes yes, no or auto, not %s", arg);
       return 0;
+    case key_input_fd:
+    case key_output_fd:
+    case key_error_fd: {
+      char* end = nullptr;
+      long fd = std::strtol(arg, &end, 10);
+      if (end == arg || *end != '\0' || fd < 0) [[unlikely]]
+        ::argp_error(state, "not a descriptor: %s", arg);
+      auto& devices = settings.devices;
+      (key == key_input_fd ? devices.input : key == key_output_fd ? devices.output : devices.error) = int(fd);
+      return 0;
+    }
     case ARGP_KEY_ARG:
       if (args.files.empty())
         args.files.emplace_back(arg);
