@@ -1088,9 +1088,9 @@ namespace pl4g::sema {
 
   std::string Checker::lifetime_key(const ast::Node* node)
   {
-    // Python counts the offset in characters and this in bytes; either tells
-    // one signature from every other, which is all the key is for.
-    return std::format("{}:{}", path.generic_string(), node->span.start);
+    // In characters, as pypl4g counts: the key is part of the name a lifetime
+    // carries in a function type, and so of the symbols that type is in.
+    return std::format("{}:{}", path.generic_string(), sources->character_offset(node->span.start));
   }
 
 
