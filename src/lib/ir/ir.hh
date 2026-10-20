@@ -318,6 +318,8 @@ namespace pl4g::ir {
     std::optional<std::string> hands_out;
     // Block parameters a pass replaced, kept while anything may still name them.
     std::vector<std::unique_ptr<BlockParam>> retired;
+    // Blocks a pass took out, kept as their parameters are.
+    std::vector<std::unique_ptr<BasicBlock>> retired_blocks;
 
     Function(std::string name, const FuncType* ty) : Value(ValueKind::function, ty), name(std::move(name)), fty(ty) {}
 

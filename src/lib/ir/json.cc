@@ -104,6 +104,8 @@ namespace pl4g::ir {
       std::vector<bool> making;
       std::unordered_map<std::string, GlobalVar*> globals;
       std::unordered_map<std::string, Function*> functions;
+      // The constants made of their own, by the number the file gives each.
+      std::unordered_map<std::int64_t, const Value*> fresh_ones;
     };
 
 
@@ -315,6 +317,32 @@ namespace pl4g::ir {
       Object c = e.get_object();
       auto kind = string_of(c["c"]);
       const Type* ty = type(c["t"]);
+      // A constant pypl4g made of its own rather than asked the module for --
+      // every undef is one -- is a value of its own, told apart from an equal
+      // one by identity as pypl4g tells them; the file numbers each.
+      std::int64_t fresh = -1;
+      if (c["fresh"].get(fresh) == ::simdjson::SUCCESS) {
+        if (auto it = fresh_ones.find(fresh); it != fresh_ones.end())
+          return it->second;
+        const Value* made = nullptr;
+        if (kind == "int")
+          made = module->constant<IntConst>(ty, big_of(c["v"]));
+        else if (kind == "char")
+          made = module->constant<CharConst>(ty, std::uint32_t(int_of(c["v"])));
+        else if (kind == "float") {
+          auto bits = string_of(c["bits"]);
+          std::uint64_t raw = 0;
+          std::from_chars(bits.data(), bits.data() + bits.size(), raw, 16);
+          made = module->constant<FloatConst>(ty, std::bit_cast<double>(raw));
+        } else if (kind == "bool")
+          made = module->constant<BoolConst>(ty, bool_of(c["v"]));
+        else if (kind == "enum")
+          made = module->constant<EnumConst>(ty, std::size_t(int_of(c["index"])));
+        else if (kind == "undef")
+          made = module->constant<UndefConst>(ty);
+        if (made != nullptr)
+          return fresh_ones[fresh] = made;
+      }
       if (kind == "int")
         return module->int_const(ty, big_of(c["v"]));
       if (kind == "char")
@@ -328,7 +356,7 @@ namespace pl4g::ir {
       if (kind == "bool")
         return module->bool_const(bool_of(c["v"]));
       if (kind == "enum")
-        return module->constant<EnumConst>(ty, std::size_t(int_of(c["index"])));
+        return module->enum_const(ty, std::size_t(int_of(c["index"])));
       if (kind == "array" || kind == "record" || kind == "parts") {
         std::vector<const Value*> items;
         for (Element one : c[kind == "array" ? "elements" : kind == "record" ? "fields" : "parts"].get_array())

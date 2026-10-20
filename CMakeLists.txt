@@ -82,7 +82,20 @@ set(PL4G_LIB_SOURCES
   src/lib/ir/layout.cc
   src/lib/ir/builder.cc
   src/lib/opt/passes.cc
+  src/lib/opt/flow.cc
+  src/lib/opt/constfold.cc
+  src/lib/opt/dce.cc
+  src/lib/opt/facts.cc
+  src/lib/opt/inline.cc
+  src/lib/opt/knownargs.cc
+  src/lib/opt/purecalls.cc
+  src/lib/opt/samevalues.cc
+  src/lib/opt/simplifycfg.cc
   src/lib/rt/arena.cc
+  src/lib/rt/blob.cc
+  src/lib/rt/blob-aarch64.cc
+  src/lib/rt/blob-riscv64.cc
+  src/lib/rt/blob-x86_64.cc
   src/lib/interp/interp.cc
   src/lib/driver/compile.cc
   src/lib/repl/lines.cc
@@ -217,6 +230,17 @@ add_test(NAME runs-agree-after-the-passes
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/run_agrees.py --passes
           $<TARGET_FILE:pl4g-runjson> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/runs-agree-after-the-passes)
 set_tests_properties(runs-agree-after-the-passes PROPERTIES TIMEOUT 1800)
+# The same for the optimizations: what pypl4g's checker made, put through the
+# passes of level one, is what pypl4g's passes make of it, and runs as the
+# tests that ask for level one say.
+add_test(NAME passes-agree-at-level-1
+  COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/passes_agree.py --level=1
+          $<TARGET_FILE:pl4g-irdump> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/passes-agree-at-level-1)
+set_tests_properties(passes-agree-at-level-1 PROPERTIES TIMEOUT 900)
+add_test(NAME runs-agree-after-the-passes-at-level-1
+  COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/run_agrees.py --passes --level=1
+          $<TARGET_FILE:pl4g-runjson> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/runs-agree-after-the-passes-at-level-1)
+set_tests_properties(runs-agree-after-the-passes-at-level-1 PROPERTIES TIMEOUT 1800)
 # Every program that runs, compiled by pypl4g and interpreted here, exits as its
 # test says.
 add_test(NAME runs-agree
@@ -264,6 +288,15 @@ if(PL4G_SANITIZERS)
     COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/run_agrees.py
             $<TARGET_FILE:pl4g-runjson-asan> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/runs-agree-asan)
   set_tests_properties(runs-agree-asan PROPERTIES TIMEOUT 1800)
+  add_test(NAME passes-agree-at-level-1-asan
+    COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/passes_agree.py --level=1
+            $<TARGET_FILE:pl4g-irdump-asan> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/passes-agree-at-level-1-asan)
+  set_tests_properties(passes-agree-at-level-1-asan PROPERTIES TIMEOUT 1800)
+  add_test(NAME runs-agree-after-the-passes-at-level-1-asan
+    COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/run_agrees.py --passes --level=1
+            $<TARGET_FILE:pl4g-runjson-asan> ${CMAKE_SOURCE_DIR}
+            ${CMAKE_BINARY_DIR}/runs-agree-after-the-passes-at-level-1-asan)
+  set_tests_properties(runs-agree-after-the-passes-at-level-1-asan PROPERTIES TIMEOUT 3600)
   add_test(NAME checks-agree-asan
     COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/check_agrees.py
             $<TARGET_FILE:pl4g-checkdump-asan> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/checks-agree-asan)

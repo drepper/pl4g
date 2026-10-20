@@ -6,6 +6,8 @@
 // Usage: pl4g-irdump [--check-layout] [--passes] FILE.json...
 #include <argp.h>
 
+#include <cstdlib>
+
 #include <format>
 #include <string>
 #include <vector>
@@ -25,12 +27,14 @@ namespace {
   struct Arguments {
     bool check_layout = false;
     bool passes = false;
+    int level = 0;
     std::vector<std::string> files;
   };
 
   constexpr ::argp_option options[] = {
     { "check-layout", 'l', nullptr, 0, "Compare the layout of every type with the one the file records", 0 },
     { "passes", 'p', nullptr, 0, "Run the passes of optimization level nought before printing", 0 },
+    { "level", 'O', "N", 0, "Run the passes of optimization level N, where --passes asks for them (0)", 0 },
     {},
   };
 
@@ -43,6 +47,9 @@ namespace {
       return 0;
     case 'p':
       args.passes = true;
+      return 0;
+    case 'O':
+      args.level = std::atoi(arg);
       return 0;
     case ARGP_KEY_ARG:
       args.files.emplace_back(arg);
@@ -135,7 +142,7 @@ int main(int argc, char* argv[])
       continue;
     }
     if (args.passes)
-      pl4g::opt::run_pipeline(**module);
+      pl4g::opt::run_pipeline(**module, args.level);
     if (args.check_layout) {
       if (check_layout(**module, types, (*read)->text, path, out) > 0)
         status = 1;

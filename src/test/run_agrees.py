@@ -1,13 +1,14 @@
 """Check that every test program, interpreted, exits as its test says.
 
-Run as ``run_agrees.py [--passes] PL4G-RUNJSON ROOT WORK [NAME...]``.  Each test program
+Run as ``run_agrees.py [--passes] [--level=N] PL4G-RUNJSON ROOT WORK [NAME...]``.  Each test program
 that runs is compiled by pypl4g to its IR, written as JSON by ``irjson.py``; the
 C++ interpreter reads that and runs it, under the limits every program the
 tests run is held to, with the arguments and the environment the test asks for;
 and the status it exits with is held to the one the test names.  Names after
 WORK pick the tests to run, by the name of their directory.  With ``--passes``
 what is written is the module before pypl4g's passes ran, and the C++ passes
-run over it before it is interpreted.
+run over it before it is interpreted -- those of optimization level N with
+``--level``, pypl4g compiling at that level too.
 """
 
 from __future__ import annotations
@@ -40,6 +41,8 @@ class Expected:
     run_args: list[str] = field(default_factory=list)
     environment: dict[str, str] = field(default_factory=dict)
     xfail: str | None = None
+    #: The optimization levels the test is run at: nought where it says none.
+    levels: list[int] = field(default_factory=lambda: [0])
 
 
 def directives(path: Path) -> Expected:
@@ -69,10 +72,13 @@ def directives(path: Path) -> Expected:
                     found.runs = "native" in value or "qemu" in value
                 elif key == "xfail":
                     found.xfail = value
+                elif key == "opt":
+                    found.levels = [int(one) for one in value.split(",")]
     return found
 
 
 PASSES = False
+LEVEL = 0
 
 
 def one(path: Path, run: str, work: Path) -> str | None:
@@ -82,6 +88,7 @@ def one(path: Path, run: str, work: Path) -> str | None:
     out = work / "".join((stem, ".json"))
     env = {**os.environ, "PL4G_HASH_SEED": "1"}
     written = ["".join(("--before=", str(out))), "-o", os.devnull] if PASSES else ["-o", str(out)]
+    written.append("".join(("-O", str(LEVEL))))
     proc = subprocess.run([sys.executable, "-I", str(HERE / "irjson.py"), *written, *expected.args, str(path)],
                           capture_output=True, text=True, check=False, env=env)
     if proc.returncode != 0:
@@ -94,7 +101,8 @@ def one(path: Path, run: str, work: Path) -> str | None:
     else:
         limited = ["prlimit", "--data=536870912", "--cpu=120", "--"]
     try:
-        ran = subprocess.run([*limited, run, *(["--passes"] if PASSES else []), str(out), *expected.run_args],
+        ran = subprocess.run([*limited, run, *(["--passes", "".join(("--level=", str(LEVEL)))] if PASSES else []),
+                              str(out), *expected.run_args],
                              capture_output=True, timeout=1000,
                              check=False, env={**env, **expected.environment}, cwd=str(path.parent))
     except subprocess.TimeoutExpired:
@@ -106,10 +114,12 @@ def one(path: Path, run: str, work: Path) -> str | None:
 
 
 def main() -> int:
-    global PASSES
+    global PASSES, LEVEL
     if sys.argv[1] == "--passes":
         PASSES = True
         del sys.argv[1]
+    if sys.argv[1].startswith("--level="):
+        LEVEL = int(sys.argv.pop(1)[len("--level="):])
     run, root, work = str(Path(sys.argv[1]).resolve()), Path(sys.argv[2]).resolve(), Path(sys.argv[3]).resolve()
     picked = set(sys.argv[4:])
     work.mkdir(parents=True, exist_ok=True)
@@ -117,6 +127,9 @@ def main() -> int:
     for path in sorted((root / "tests" / "language").rglob("*.pl4g")):
         expected = directives(path)
         if expected.module or not expected.compiles or not expected.runs or expected.xfail is not None:
+            continue
+        if LEVEL not in expected.levels:
+            # Run at the levels it names and no other, as the test suite runs it.
             continue
         if picked and path.parent.name not in picked:
             continue

@@ -42,6 +42,8 @@ class Writer:
         self.types: list[dict[str, Any]] = []
         self.type_ids: dict[int, int] = {}
         self.keep: list[object] = []
+        #: The constants made of their own, numbered as they are met.
+        self.fresh: dict[int, int] = {}
         #: What each function is filed under, which is what a call names it by:
         #: a name may be overloaded, a key is the module's own and is not.  A
         #: function a call reaches that the module's table does not hold -- two
@@ -220,6 +222,39 @@ class Writer:
     # -- values ----------------------------------------------------------------
 
     def const(self, value: object) -> Any:
+        """A constant, written out whole -- and, where it is one pypl4g made of its
+        own rather than the module's interned one, numbered, so that the reader
+        tells it from an equal one by identity as pypl4g does."""
+        found = self.whole_const(value)
+        if found is not None and not self.interned(value):
+            number = self.fresh.get(id(value))
+            if number is None:
+                number = self.fresh[id(value)] = len(self.fresh)
+                self.keep.append(value)
+            found["fresh"] = number
+        return found
+
+    def interned(self, value: object) -> bool:
+        """Whether *value* is the constant the module answers for what it is."""
+        module = self.module
+        match value:
+            case V.IntConst():
+                ty = value.ty
+                return module._int_consts.get((ty.bits, ty.signed, ty.unit, value.value)) is value
+            case V.CharConst():
+                return module._char_consts.get(value.value) is value
+            case V.FloatConst():
+                key = (value.ty.bits, value.ty.unit, struct.pack("<d", value.value))
+                return module._float_consts.get(key) is value
+            case V.BoolConst():
+                return module._bool_consts.get(value.value) is value
+            case V.EnumConst():
+                return module._enum_consts.get((id(value.ty), value.index)) is value
+            case V.UndefConst():
+                return False
+        return True
+
+    def whole_const(self, value: object) -> Any:
         """A constant, written out whole."""
         match value:
             case None:

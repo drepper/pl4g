@@ -9,6 +9,9 @@
 // branch hands values over.  Ports of pypl4g's opt/passes, pass for pass.
 #pragma once
 
+#include <span>
+#include <string_view>
+
 #include "ir/ir.hh"
 
 
@@ -22,9 +25,25 @@ namespace pl4g::opt {
   bool lean_values(ir::Module& module);
   bool split_edges(ir::Module& module);
 
-  // Every pass a build at optimization level `level` runs, in order.  Only
-  // the ones of level nought are here: the rest are optimizations, which an
-  // interpreter has no use for.
+  // The optimizations, each a port of the pypl4g pass of the same name.
+  bool inlining(ir::Module& module);
+  bool constant_folding(ir::Module& module);
+  bool same_values(ir::Module& module);
+  bool pure_calls(ir::Module& module);
+  bool simplify_cfg(ir::Module& module);
+  bool facts(ir::Module& module);
+  bool known_arguments(ir::Module& module);
+  bool dead_code(ir::Module& module);
+  // Folding, simplifying and knowing the arguments in turn until none of
+  // them changes anything: each opens work for the others.
+  bool settle(ir::Module& module);
+
+  // The names of the passes optimization level `level` runs, in order: what
+  // pypl4g's `pipeline_for` answers.
+  std::span<const std::string_view> pipeline_for(int level);
+
+  // Every pass a build at optimization level `level` runs, in order, the
+  // module verified after each that changed it where PL4G_VERIFY asks.
   void run_pipeline(ir::Module& module, int level = 0);
 
 } // namespace pl4g::opt

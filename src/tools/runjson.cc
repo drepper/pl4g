@@ -5,6 +5,8 @@
 // Usage: pl4g-runjson FILE.json [ARG...]
 #include <argp.h>
 
+#include <cstdlib>
+
 #include <csignal>
 #include <string>
 #include <vector>
@@ -24,6 +26,7 @@ namespace {
   struct Arguments {
     bool trace = false;
     bool passes = false;
+    int level = 0;
     std::string file;
     std::vector<std::string> rest;
   };
@@ -31,6 +34,7 @@ namespace {
   constexpr ::argp_option options[] = {
     { "trace", 't', nullptr, 0, "Say on standard error which function is entered", 0 },
     { "passes", 'p', nullptr, 0, "Run the passes of level nought first: the file is the module before them", 0 },
+    { "level", 'O', "N", 0, "Run the passes of optimization level N, where --passes asks for them (0)", 0 },
     {},
   };
 
@@ -43,6 +47,9 @@ namespace {
       return 0;
     case 'p':
       args.passes = true;
+      return 0;
+    case 'O':
+      args.level = std::atoi(arg);
       return 0;
     case ARGP_KEY_ARG:
       if (args.file.empty())
@@ -81,7 +88,7 @@ int main(int argc, char* argv[])
     return 1;
   }
   if (args.passes)
-    pl4g::opt::run_pipeline(**module);
+    pl4g::opt::run_pipeline(**module, args.level);
   pl4g::interp::Options options;
   options.args.push_back(args.file);
   options.args.insert(options.args.end(), args.rest.begin(), args.rest.end());

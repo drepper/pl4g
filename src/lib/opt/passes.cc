@@ -4,8 +4,11 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "diag/engine.hh"
 #include "ir/builder.hh"
 #include "ir/layout.hh"
+#include "ir/verify.hh"
+#include "opt/flow.hh"
 
 
 namespace pl4g::opt {
@@ -34,15 +37,6 @@ namespace pl4g::opt {
         return true;
       const auto& attrs = call->callee->attrs;
       return attrs.answer_in_storage || attrs.impure || attrs.opaque;
-    }
-
-    // The functions an instruction names: what it calls directly, or whose
-    // code it takes.
-    Function* named_by(const Instruction* inst)
-    {
-      if (inst->kind == InstKind::CallInst || inst->kind == InstKind::CodeInst)
-        return inst->callee;
-      return nullptr;
     }
 
     // Every value read anywhere in `func`.
@@ -190,23 +184,7 @@ namespace pl4g::opt {
   bool drop_unreached(Module& module)
   {
     // The roots: what the entry point calls, and what is exported.
-    std::vector<Function*> queue;
-    if (module.startup != nullptr)
-      queue.push_back(module.startup);
-    if (module.environ != nullptr)
-      if (auto found = module.function("__pl4g_environ_make"))
-        queue.push_back(found);
-    queue.insert(queue.end(), module.ctors.begin(), module.ctors.end());
-    queue.insert(queue.end(), module.dtors.begin(), module.dtors.end());
-    if (! module.test_plan.empty())
-      queue.insert(queue.end(), module.test_plan.begin(), module.test_plan.end());
-    else
-      for (auto one : module.tests)
-        if (one->attrs.special == SpecialKind::test_always)
-          queue.push_back(one);
-    for (auto& [_, func] : module.functions)
-      if (func->linkage == Linkage::visible && ! func->is_declaration())
-        queue.push_back(func.get());
+    std::vector<Function*> queue = roots(module);
     std::unordered_set<const Function*> seen;
     while (! queue.empty()) {
       auto func = queue.back();
@@ -1398,18 +1376,80 @@ namespace pl4g::opt {
   }
 
 
+  bool settle(Module& module)
+  {
+    // How many times folding and simplifying are taken in turn at most.
+    constexpr int rounds = 8;
+    bool changed = false;
+    for (int round = 0; round < rounds; ++round) {
+      bool one = false;
+      one |= constant_folding(module);
+      one |= simplify_cfg(module);
+      one |= known_arguments(module);
+      changed |= one;
+      if (! one)
+        break;
+    }
+    return changed;
+  }
+
+
+  namespace {
+
+    constexpr std::string_view level_nought[] = {
+      "dropignored", "dropunreached", "tailcalls", "largeanswers", "coroutines", "leanvalues", "dropunreached",
+      "splitedges",
+    };
+
+    constexpr std::string_view optimizing[] = {
+      "dropignored", "dropunreached", "tailcalls", "largeanswers", "coroutines", "inline", "leanvalues",
+      "constfold", "samevalues", "purecalls", "simplifycfg", "constfold", "facts", "settle", "dce",
+      "dropunreached", "splitedges",
+    };
+
+    bool run_one(std::string_view name, Module& module)
+    {
+      if (name == "dropignored") return drop_ignored_calls(module);
+      if (name == "dropunreached") return drop_unreached(module);
+      if (name == "tailcalls") return tail_calls(module);
+      if (name == "largeanswers") return large_answers(module);
+      if (name == "coroutines") return coroutines(module);
+      if (name == "leanvalues") return lean_values(module);
+      if (name == "splitedges") return split_edges(module);
+      if (name == "inline") return inlining(module);
+      if (name == "constfold") return constant_folding(module);
+      if (name == "samevalues") return same_values(module);
+      if (name == "purecalls") return pure_calls(module);
+      if (name == "simplifycfg") return simplify_cfg(module);
+      if (name == "facts") return facts(module);
+      if (name == "settle") return settle(module);
+      if (name == "dce") return dead_code(module);
+      throw InternalError("no pass is called " + std::string(name));
+    }
+
+  } // anonymous namespace
+
+
+  std::span<const std::string_view> pipeline_for(int level)
+  {
+    if (level <= 0)
+      return level_nought;
+    return optimizing;
+  }
+
+
   void run_pipeline(Module& module, int level)
   {
-    (void) level;
     laid_out = &module;
-    drop_ignored_calls(module);
-    drop_unreached(module);
-    tail_calls(module);
-    large_answers(module);
-    coroutines(module);
-    lean_values(module);
-    drop_unreached(module);
-    split_edges(module);
+    bool verifying = verifying_asked();
+    auto names = pipeline_for(level);
+    for (std::size_t at = 0; at < names.size(); ++at) {
+      bool changed = run_one(names[at], module);
+      // After each pass that changed something, and after the last whatever
+      // it says: what reaches the back end has always been verified.
+      if (verifying && (changed || at + 1 == names.size()))
+        verify(module);
+    }
   }
 
 } // namespace pl4g::opt
