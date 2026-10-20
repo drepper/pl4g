@@ -32,6 +32,8 @@ option(PL4G_FUZZ "Build the fuzzing entry points (with AFL++ as the compiler)" O
 
 find_package(simdjson REQUIRED)
 find_library(UNISTRING_LIBRARY unistring REQUIRED)
+# Line editing for the interactive session, where its input is a terminal.
+find_library(EDIT_LIBRARY edit REQUIRED)
 
 # The fuzzing entry points, each src/fuzz/NAME.cc with a corpus in src/fuzz/corpus/NAME.
 set(PL4G_FUZZ_TARGETS lexer parser)
@@ -79,7 +81,10 @@ set(PL4G_LIB_SOURCES
   src/lib/rt/arena.cc
   src/lib/interp/interp.cc
   src/lib/driver/compile.cc
+  src/lib/repl/lines.cc
   src/lib/repl/repl.cc
+  src/lib/repl/session.cc
+  src/lib/repl/show.cc
   src/lib/sema/attributes.cc
   src/lib/sema/check-helpers.cc
   src/lib/sema/check-entry.cc
@@ -122,7 +127,7 @@ function(pl4g_variant suffix)
   target_include_directories(pl4g${suffix} PUBLIC ${CMAKE_SOURCE_DIR}/src/lib ${PL4G_GENERATED})
   target_compile_options(pl4g${suffix} PUBLIC ${PL4G_COMMON_FLAGS} ${flags})
   target_link_options(pl4g${suffix} PUBLIC ${flags})
-  target_link_libraries(pl4g${suffix} PUBLIC simdjson::simdjson ${UNISTRING_LIBRARY})
+  target_link_libraries(pl4g${suffix} PUBLIC simdjson::simdjson ${UNISTRING_LIBRARY} ${EDIT_LIBRARY})
 
   # The stand-alone interpreter: the library and a small driver.
   add_executable(pl4g-repl${suffix} src/repl/main.cc)
@@ -210,6 +215,9 @@ set_tests_properties(checks-agree PROPERTIES TIMEOUT 1800)
 add_test(NAME runs-from-source
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/interp_runs.py $<TARGET_FILE:pl4g-repl> ${CMAKE_SOURCE_DIR})
 set_tests_properties(runs-from-source PROPERTIES TIMEOUT 1800)
+# The interactive session answers typed sessions as it should.
+add_test(NAME repl-sessions
+  COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/repl_sessions.py $<TARGET_FILE:pl4g-repl> ${CMAKE_SOURCE_DIR})
 # The same, sanitized, and the fuzzing entry points replayed over the test
 # programs and the corpora under the sanitizers.
 if(PL4G_SANITIZERS)
@@ -233,6 +241,8 @@ if(PL4G_SANITIZERS)
   add_test(NAME runs-from-source-asan
     COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/interp_runs.py $<TARGET_FILE:pl4g-repl-asan> ${CMAKE_SOURCE_DIR})
   set_tests_properties(runs-from-source-asan PROPERTIES TIMEOUT 3600)
+  add_test(NAME repl-sessions-asan
+    COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/repl_sessions.py $<TARGET_FILE:pl4g-repl-asan> ${CMAKE_SOURCE_DIR})
   foreach(target ${PL4G_FUZZ_TARGETS})
     add_test(NAME fuzz-${target}-replay-asan
       COMMAND pl4g-fuzz-${target}-replay-asan ${PL4G_TESTS} ${CMAKE_SOURCE_DIR}/src/fuzz/corpus/${target})

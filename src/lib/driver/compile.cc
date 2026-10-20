@@ -88,7 +88,8 @@ namespace pl4g::driver {
   }
 
 
-  std::unique_ptr<ir::Module> Compilation::analyze(std::span<const ast::SourceUnit* const> units, sema::Notes* notes)
+  std::unique_ptr<ir::Module> Compilation::analyze(std::span<const ast::SourceUnit* const> units, sema::Notes* notes,
+                                                   sema::Session* session)
   {
     auto module = std::make_unique<ir::Module>();
     module->name = options.inputs.empty() ? "<none>" : options.inputs.front().filename().string();
@@ -98,7 +99,8 @@ namespace pl4g::driver {
     if (options.guard_size)
       module->guard_size = *options.guard_size;
     auto found = registry();
-    sema::check(*module, units, diags, &found, &sources, notes, options.conditions, false, options.ignore_system);
+    sema::check(*module, units, diags, &found, &sources, notes, options.conditions, false, options.ignore_system,
+                session);
     return module;
   }
 

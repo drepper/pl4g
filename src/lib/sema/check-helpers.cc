@@ -3249,7 +3249,7 @@ namespace pl4g::sema {
 
   ir::Module& check(ir::Module& module, std::span<const ast::SourceUnit* const> units, DiagEngine& diags,
                     ModuleRegistry* registry, SourceManager* sources, Notes* notes, Conditions conditions,
-                    bool whole_modules, bool ignore_system)
+                    bool whole_modules, bool ignore_system, Session* session)
   {
     std::unique_ptr<ModuleRegistry> own;
     if (registry == nullptr) {
@@ -3261,6 +3261,7 @@ namespace pl4g::sema {
       path = std::filesystem::path(std::string(units[0]->path));
     Checker found(module, diags, registry, path, "", sources, nullptr, notes, conditions, false, nullptr, whole_modules,
                   ignore_system);
+    found.session = session;
     auto& result = found.run(units);
     registry->settle_names();
     return result;

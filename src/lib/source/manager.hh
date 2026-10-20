@@ -26,6 +26,12 @@ namespace pl4g {
     Loc base = 0;
     // The offset within `text` of the first byte of each line.
     std::vector<std::uint32_t> line_starts;
+    // How the text is shown, where it is not the reader's as it stands: what
+    // to add to a line's number, and how many spaces were put before each of
+    // its lines that a reader did not write -- the interactive session puts
+    // what was typed into a function, indented, below a line of its own.
+    int line_shift = 0;
+    unsigned added_indent = 0;
 
     // The location just past the last byte of the file.
     Loc end() const noexcept { return base + Loc(text.size()); }
@@ -57,7 +63,7 @@ namespace pl4g {
   public:
     // Register `text` as the contents of `path` and return its record, which
     // stays where it is for the life of the manager.
-    const SourceFile& add(std::filesystem::path path, std::string text);
+    const SourceFile& add(std::filesystem::path path, std::string text, int line_shift = 0, unsigned added_indent = 0);
 
     // Read `path`, check that it is UTF-8, and register it.
     std::expected<const SourceFile*, ReadFailure> read(const std::filesystem::path& path);

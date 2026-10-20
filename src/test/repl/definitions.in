@@ -1,0 +1,13 @@
+fn twice(n: u8) → u8:
+    n × 2u8
+
+twice(4u8)
+type Point = x: i32; y: i32
+let p := Point(.x ← 1i32, .y ← 2i32)
+p
+p.x + p.y
+fn twice(n: u8) → u8:
+    n + n + 1u8
+
+twice(4u8)
+@defs

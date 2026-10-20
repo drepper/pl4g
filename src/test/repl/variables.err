@@ -1,0 +1,3 @@
+repl[8]:1:1: error: 'k' cannot be changed; it was not defined with 'mut' [PL4G-4004]
+ 1 | k ← 2u8
+   | ^

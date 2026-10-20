@@ -1,0 +1,10 @@
+let c: mut u8 = 1u8
+c ← c + 2u8
+c
+c ← c × 10u8
+@vars
+let c := "now text"
+c
+let k := 1u8
+k ← 2u8
+@type c

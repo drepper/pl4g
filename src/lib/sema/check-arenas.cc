@@ -1693,6 +1693,10 @@ namespace pl4g::sema {
       variable_slot(def);
       made_in(def->name, def->value, def->span);
       report_inferred(inferred(def), def->type);
+      if (session != nullptr && session->kept.contains(def->name_span.start))
+        for (const auto& [name, span] : inferred(def))
+          if (auto alias = session->stores.get(name))
+            kept_by_the_session(builder, *alias, name, span, func);
       break;
     }
     case ast::NodeKind::AssignStmt: {
@@ -1802,7 +1806,21 @@ namespace pl4g::sema {
         // A `match` written as a statement of its own produces no value, and
         // its arms are runs of statements like any other body.
         lower_match(builder, one, func, nullptr, false);
-      else {
+      else if (session != nullptr && stmt == session->answer) {
+        // What the session shows: lowered for what it is, and kept.
+        ir::Value* found = lower_expr(builder, value, nullptr);
+        session->answer_type = found != nullptr ? value_type_of(found) : nullptr;
+        if (found != nullptr && ! session->answer_variable.empty() && session->answer_type != ir::void_type()
+            && session->answer_type != ir::error_type()) {
+          auto ready = syntax.make<ast::Ready>(value->span);
+          ready->value = found;
+          auto assign = syntax.make<ast::AssignStmt>(value->span);
+          assign->name = syntax.text(session->answer_variable);
+          assign->name_span = value->span;
+          assign->value = ready;
+          lower_assignment(builder, assign, false);
+        }
+      } else {
         check_value_is_used(value);
         lower_expr(builder, value, nullptr);
       }
@@ -1812,6 +1830,19 @@ namespace pl4g::sema {
       diags.internal("unknown statement kind in lowering");
       break;
     }
+  }
+
+
+  void Checker::kept_by_the_session(ir::Builder& builder, std::string_view variable, std::string_view name, Span span,
+                                    ir::Function* func)
+  {
+    auto read = syntax.make<ast::NameRef>(span);
+    read->name = syntax.text(name);
+    auto assign = syntax.make<ast::AssignStmt>(span);
+    assign->name = syntax.text(variable);
+    assign->name_span = span;
+    assign->value = read;
+    lower_stmt(builder, assign, func, false);
   }
 
 

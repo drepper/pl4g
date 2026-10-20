@@ -1,0 +1,8 @@
+undefined_name + 1u8
+fn broken() → u8:
+    "text"
+
+@nonsense
+_ ← std.println⌜&mut init.io.output, "still here"⌝
+@quit
+"never reached"

@@ -12,7 +12,9 @@
 // descriptors the program's devices start on are the caller's to choose.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -56,5 +58,29 @@ namespace pl4g::interp {
   // the constructors, the tests that always run, the startup function, the
   // destructors, and the drain of what is still in flight.
   Outcome run(const ir::Module& module, const Options& options);
+
+
+  // A module placed in memory and ready to run, kept for as long as anything
+  // may still point into what it placed.  The interactive session makes one
+  // per input and keeps the earlier ones: what a variable of the session holds
+  // may point into their room, and into the heap, which nothing gives back.
+  class Program {
+  public:
+    // Place `module`, which has to outlive this, its variables given what
+    // their initializers say.
+    Program(const ir::Module& module, Options options);
+    Program(const Program&) = delete;
+    Program& operator=(const Program&) = delete;
+    ~Program();
+
+    // Where the variable `var` of the module is.
+    std::byte* place_of(const ir::GlobalVar* var) const;
+    // Run what a process of the program runs, once.
+    Outcome start();
+
+  private:
+    struct Placed;
+    std::unique_ptr<Placed> placed;
+  };
 
 } // namespace pl4g::interp

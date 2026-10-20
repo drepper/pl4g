@@ -1,0 +1,4 @@
+3 : u8
+mut c : u8 = 30
+"now text" : str
+str

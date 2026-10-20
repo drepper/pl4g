@@ -475,6 +475,10 @@ namespace pl4g::sema {
     if (! declare(node->name, node->name_span))
       return;
     auto attrs = bind_attributes(node->attrs, AttrTarget::variable);
+    if (session != nullptr && session->variables.contains(node->name)) {
+      session_variable(node);
+      return;
+    }
     auto linkage = linkage_of(attrs);
     auto pairs = expected_numbers(attrs);
     auto expectation = begin_expecting(pairs);
@@ -558,6 +562,26 @@ namespace pl4g::sema {
   }
 
 
+  void Checker::session_variable(const ast::VarDef* node)
+  {
+    // What it holds is whatever the session put there, so what is written
+    // after the `=` is not looked at.  Something this compilation cannot see
+    // reads it and writes it: the session.
+    defining_globally = true;
+    const ir::Type* ty = node->type != nullptr ? resolve_type(node->type) : nullptr;
+    defining_globally = false;
+    if (ty == nullptr)
+      ty = ir::error_type();
+    auto made = std::make_unique<ir::GlobalVar>(std::string(node->name), ty, ir::ptr_type(ty, node->mutable_));
+    made->linkage = ir::Linkage::visible;
+    made->span = node->span;
+    made->name_span = node->name_span;
+    auto var = module.add_global(std::move(made), key(node->name));
+    (*top)[std::string(node->name)] = Held(static_cast<ir::Value*>(var));
+    owned.push_back(Held(static_cast<ir::Value*>(var)));
+  }
+
+
   void Checker::mark_system(const ast::SourceUnit* unit)
   {
     if (unit->attrs.empty())
@@ -582,6 +606,8 @@ namespace pl4g::sema {
       if (local == nullptr)
         continue;
       auto held = held_by(local);
+      if (session != nullptr && held != nullptr)
+        session->types[name] = held;
       if (held != nullptr && held != ir::error_type())
         record_inferred(name, span, held, written);
     }
@@ -2278,6 +2304,8 @@ namespace pl4g::sema {
   {
     if (local->read || local->is_parameter || local->value->ty == ir::error_type())
       return;
+    if (session != nullptr && session->kept.contains(local->span.start))
+      return;
     if (local->placed && local->written)
       // A place written and not read is the reason the place is there.
       return;
@@ -2292,6 +2320,8 @@ namespace pl4g::sema {
   {
     if (! local->is_mutable || ! changed_here || changed_here->contains(local->name)
         || local->value->ty == ir::error_type())
+      return;
+    if (session != nullptr && session->kept.contains(local->span.start))
       return;
     auto held = held_by(local);
     if ((whole_here.contains(local->name) && (ir::is<ir::SetType>(held) || ir::is<ir::DictType>(held)))

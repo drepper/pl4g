@@ -33,7 +33,9 @@
     // Record a top-level name, reporting one that is already taken.
     bool declare(std::string_view name, Span span, std::string_view path = "");  // check.py:4582
     // Register one variable defined at the top level.
-    void collect_global(const ast::VarDef* node);  // check.py:4600
+    void collect_global(const ast::VarDef* node);
+    // A variable of the interactive session, declared where the session wrote it.
+    void session_variable(const ast::VarDef* node);  // check.py:4600
     // Bind what was said of the file itself, and note a system file.
     void mark_system(const ast::SourceUnit* unit);  // check.py:4701
     // Record the type of each of `names` the program did not write in full.

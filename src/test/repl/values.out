@@ -1,0 +1,4 @@
+6 : u8
+"hello" : str
+⟦true, false⟧ : bool⟦2⟧
+'é' : char

@@ -1,0 +1,7 @@
+let x := 5u8
+x + 1u8
+let s := "hello"
+s
+let flags := ⟦true, false⟧ in ⎕static
+flags
+'é'

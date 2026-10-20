@@ -100,10 +100,8 @@ int main(int argc, char* argv[])
   ::argp_parse(&parser, argc, argv, ARGP_IN_ORDER, nullptr, &args);
   for (char** e = environ; *e != nullptr; ++e)
     args.settings.environment.emplace_back(*e);
-  if (args.files.empty()) {
-    std::fputs("pl4g-repl: the interactive session is not there yet\n", stderr);
-    return 2;
-  }
+  if (args.files.empty())
+    return pl4g::repl::Session(std::move(args.settings)).interact();
   args.settings.compile.inputs.emplace_back(args.files.front());
   auto ended = pl4g::repl::run_file(args.settings);
   if (ended.signal != 0) {

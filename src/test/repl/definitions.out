@@ -1,0 +1,7 @@
+8 : u8
+Point(.x ← 1, .y ← 2) : Point
+3 : i32
+9 : u8
+type Point = x: i32; y: i32
+fn twice(n: u8) → u8:
+    n + n + 1u8

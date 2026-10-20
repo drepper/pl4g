@@ -1766,6 +1766,10 @@ namespace pl4g::sema {
       auto def = ast::as<ast::FuncDef>(one->node);
       if (def == nullptr)
         continue;
+      if (session != nullptr && def->name == session->function)
+        // What an input of the session does is whatever was typed; the mark
+        // is the session's, not the reader's.
+        continue;
       if (one->impure_at && ! changes.contains(one))
         diags.emit(D::LANG_MARK_NOT_NEEDED, *one->impure_at,
                    { { "name", def->name },

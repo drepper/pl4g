@@ -113,6 +113,10 @@
     void lower_attributed_stmt(ir::Builder& builder, const ast::Stmt* stmt, ir::Function* func, bool is_last);  // check.py:10933
     // Lower one statement.
     void lower_stmt(ir::Builder& builder, const ast::Stmt* stmt, ir::Function* func, bool is_last);  // check.py:10959
+    // Put what `name` stands for in the session's `variable`, where the
+    // interactive session keeps what an input bound.
+    void kept_by_the_session(ir::Builder& builder, std::string_view variable, std::string_view name, Span span,
+                             ir::Function* func);
 
     // -- tuples ------------------------------------------------------------------
     // Lower `〈a, b〉`: several values made into one.

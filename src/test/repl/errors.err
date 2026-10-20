@@ -1,0 +1,7 @@
+repl[1]:1:1: error: 'undefined_name' is not defined [PL4G-4003]
+ 1 | undefined_name + 1u8
+   | ^~~~~~~~~~~~~~
+repl[2]:2:5: error: returning 'str' from a function declared to return 'u8' [PL4G-4202]
+ 2 |     "text"
+   |     ^~~~~~
+there is no command @nonsense; @help lists them

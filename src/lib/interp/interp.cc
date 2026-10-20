@@ -221,6 +221,12 @@ namespace pl4g::interp {
       Machine& operator=(const Machine&) = delete;
       ~Machine() { ::munmap(stack, stack_size + 4096); }
       Outcome start();
+      // Where a variable was placed.
+      std::byte* place_of(const GlobalVar* var) const
+      {
+        auto it = places.find(var);
+        return it == places.end() ? nullptr : it->second;
+      }
 
       // What a native callee needs.
       [[noreturn]] void fault(std::string_view message, int status);
@@ -1419,6 +1425,35 @@ namespace pl4g::interp {
   {
     Machine machine(module, options);
     return machine.start();
+  }
+
+
+  struct Program::Placed {
+    Options options;
+    Machine machine;
+
+    Placed(const ir::Module& module, Options given) : options(std::move(given)), machine(module, options) {}
+  };
+
+
+  Program::Program(const ir::Module& module, Options options)
+    : placed(std::make_unique<Placed>(module, std::move(options)))
+  {
+  }
+
+
+  Program::~Program() = default;
+
+
+  std::byte* Program::place_of(const ir::GlobalVar* var) const
+  {
+    return placed->machine.place_of(var);
+  }
+
+
+  Outcome Program::start()
+  {
+    return placed->machine.start();
   }
 
 } // namespace pl4g::interp

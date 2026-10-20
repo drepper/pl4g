@@ -16,6 +16,7 @@
 #include <memory>
 
 #include "sema/check-types.hh"
+#include "sema/session.hh"
 #include "sema/tables.hh"
 #include "source/manager.hh"
 
@@ -579,6 +580,10 @@ namespace pl4g::sema {
     // The functions `discard` took out of the module, kept alive as Python
     // keeps an object something still refers to.
     std::vector<std::unique_ptr<ir::Function>> discarded;
+
+    // What the interactive session asks beyond what a program does, where the
+    // program is one of its inputs (sema/session.hh).
+    Session* session = nullptr;
 
 
     // -- methods ----------------------------------------------------------------

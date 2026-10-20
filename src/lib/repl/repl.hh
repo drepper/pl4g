@@ -5,7 +5,9 @@
 // by assumption: whoever embeds this may have put something else there.
 #pragma once
 
+#include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "driver/compile.hh"
@@ -37,5 +39,36 @@ namespace pl4g::repl {
   // make.  A program that does not compile ends with status 1, what was wrong
   // having been said on the error descriptor.
   Ended run_file(const Settings& settings);
+
+
+  // The interactive session: what is typed, an input at a time.
+  //
+  // A definition -- a function, a type, an import, a unit, a bundle, a macro
+  // -- is kept for the rest of the session, a later one of the same name
+  // taking its place.  Anything else is statements, run once in a function
+  // made for them, the startup function of a program made of the session so
+  // far; a variable they bind at their top is the session's from then on,
+  // holding what it held; and what the last of them comes to, where it is a
+  // value, is shown with its type.  `@help` says what the session's own
+  // commands are.
+  class Session {
+  public:
+    explicit Session(Settings settings);
+    Session(const Session&) = delete;
+    Session& operator=(const Session&) = delete;
+    ~Session();
+
+    // Take one input, all of what was typed for it.  False once the input
+    // asked the session to end.
+    bool feed(std::string_view text);
+    // Read inputs from the input descriptor, a line at a time, and take
+    // them, until the input ends or asks the session to end.  Answers the
+    // status to exit with.
+    int interact();
+
+  private:
+    struct State;
+    std::unique_ptr<State> state;
+  };
 
 } // namespace pl4g::repl

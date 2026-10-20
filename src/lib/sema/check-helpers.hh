@@ -4,6 +4,7 @@
 
 #include "front/names.hh"
 #include "sema/check-types.hh"
+#include "sema/session.hh"
 
 
 namespace pl4g::sema {
@@ -386,6 +387,6 @@ namespace pl4g::sema {
   // Check and lower the macros, answering the module and the trees they quoted.
   CheckedMacros check_macros(std::span<const ast::SourceUnit* const> units, DiagEngine& diags, SourceManager* sources = nullptr, ModuleRegistry* registry = nullptr, std::optional<std::filesystem::path> path = std::nullopt);  // check.py:28681
   // Check `units` and lower them into `module`.
-  ir::Module& check(ir::Module& module, std::span<const ast::SourceUnit* const> units, DiagEngine& diags, ModuleRegistry* registry = nullptr, SourceManager* sources = nullptr, Notes* notes = nullptr, Conditions conditions = Conditions::check, bool whole_modules = false, bool ignore_system = false);  // check.py:28702
+  ir::Module& check(ir::Module& module, std::span<const ast::SourceUnit* const> units, DiagEngine& diags, ModuleRegistry* registry = nullptr, SourceManager* sources = nullptr, Notes* notes = nullptr, Conditions conditions = Conditions::check, bool whole_modules = false, bool ignore_system = false, Session* session = nullptr);  // check.py:28702
 
 } // namespace pl4g::sema

@@ -16,6 +16,7 @@
 #include "sema/clauses.hh"
 #include "sema/modules.hh"
 #include "sema/notes.hh"
+#include "sema/session.hh"
 #include "source/manager.hh"
 
 
@@ -48,7 +49,10 @@ namespace pl4g::driver {
 
     // Check the units and lower them into a module; what was wrong with them
     // has been said.  `notes`, where given, is told what each name is.
-    std::unique_ptr<ir::Module> analyze(std::span<const ast::SourceUnit* const> units, sema::Notes* notes = nullptr);
+    // `session`, where given, is the interactive session the units are an
+    // input of.
+    std::unique_ptr<ir::Module> analyze(std::span<const ast::SourceUnit* const> units, sema::Notes* notes = nullptr,
+                                        sema::Session* session = nullptr);
 
     // All three, as `pypl4g` runs them: nothing is checked after an expansion
     // that failed.  Nothing where what was read cannot become a module.

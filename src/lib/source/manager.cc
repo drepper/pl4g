@@ -56,9 +56,12 @@ namespace pl4g {
   } // anonymous namespace
 
 
-  const SourceFile& SourceManager::add(std::filesystem::path path, std::string text)
+  const SourceFile& SourceManager::add(std::filesystem::path path, std::string text, int line_shift,
+                                       unsigned added_indent)
   {
     auto& file = all.emplace_back();
+    file.line_shift = line_shift;
+    file.added_indent = added_indent;
     file.ident = FileId(all.size() - 1);
     file.shown = path.generic_string();
     file.path = std::move(path);
@@ -103,8 +106,11 @@ namespace pl4g {
     auto offset = std::uint32_t(loc - file->base);
     auto line = std::upper_bound(file->line_starts.begin(), file->line_starts.end(), offset) - 1;
     std::string_view before = std::string_view(file->text).substr(*line, offset - *line);
-    return Position{ file->shown, unsigned(line - file->line_starts.begin()) + 1,
-                     unsigned(unicode::length(before)) + 1 };
+    auto column = unsigned(unicode::length(before)) + 1;
+    if (file->added_indent > 0 && before.size() >= file->added_indent
+        && before.substr(0, file->added_indent).find_first_not_of(' ') == std::string_view::npos)
+      column -= file->added_indent;
+    return Position{ file->shown, unsigned(int(line - file->line_starts.begin()) + 1 + file->line_shift), column };
   }
 
 
@@ -117,7 +123,11 @@ namespace pl4g {
     auto start = *(std::upper_bound(file->line_starts.begin(), file->line_starts.end(), offset) - 1);
     std::string_view text = file->text;
     auto end = text.find('\n', start);
-    return text.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start);
+    auto line = text.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start);
+    if (file->added_indent > 0 && line.size() >= file->added_indent
+        && line.substr(0, file->added_indent).find_first_not_of(' ') == std::string_view::npos)
+      line.remove_prefix(file->added_indent);
+    return line;
   }
 
 

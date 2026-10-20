@@ -10631,6 +10631,25 @@ Taken without asking: GCC 16 is the compiler, it alone having contracts and refl
 libFuzzer-style entry points; the work is on a branch, `cpp-interpreter`, and goes in the phases
 [cpp-implementation.md](cpp-implementation.md) lists, each committed when its own checks pass.
 
+## 2026-10-20T08:39+02:00 — compiler
+
+**The interactive session keeps what it is told, and its own commands start with `@`**
+
+Asked how the C++ interpreter's REPL treats what is typed, the user chose **an accumulating session**: a definition -- a function,
+a type, an import, a unit, a bundle, a macro -- stays for the rest of the session, a variable bound at the prompt stays a variable
+of the session, and a statement or an expression runs once, in a function made for it, an expression's value being shown with its
+type.  Compare Rust's evcxr and the Swift REPL, which keep definitions and variables alike, GHCi and Julia, which show the value
+as well, and Go's gore, which runs the whole program again for every input so that its effects repeat; Python's REPL is the
+accumulating kind too.
+
+The session's own commands -- help, quit, the type of an expression, reading a file, starting over -- start with **`@`**, the
+user's choice over the `:` of GHCi, evcxr, Swift and utop, the `\` of psql and the `.` of Node and SQLite: `@` is used by the
+language only as the start of `@[`, so `@help` cannot be a statement.
+
+Line editing is **libedit** where the input descriptor is a terminal and plain reading of lines otherwise -- the descriptor being
+whoever embeds the library's to choose, as every descriptor is.  libedit over GNU readline for its licence, readline being GPLv3;
+both read from a given descriptor.
+
 Open questions
 --------------
 
