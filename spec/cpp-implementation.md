@@ -1,9 +1,10 @@
 The C++ Implementation
 ======================
 
-A second implementation of the language, in C++26, that starts as an interpreter and is laid out to become the compiler.  It is
-written against the same specification and the same tests as `pypl4g`, and is held to the same answers: a program that runs exits
-as its test says, and one that must be refused is refused with the diagnostics its test names.
+A second implementation of the language, in C++26: an interpreter, a REPL and a language server, and a compiler.  It is written
+against the same specification and the same tests as `pypl4g`, and is held to the same answers: a program that runs exits as its
+test says, one that must be refused is refused with the diagnostics its test names, and the compiler writes the image pypl4g
+writes, byte for byte.
 
 Decisions
 ---------
@@ -20,6 +21,15 @@ Made with the user on 2026-10-20, recorded in [decisions.md](decisions.md):
   ring on the host, set up with the raw system calls (liburing is not installed), so requests are in flight as they are for a
   compiled program.  `⎕syscall` is a real system call.
 - **simdjson** reads what an LSP client sends, and a writer of our own answers.
+
+And for the compiler (decisions.md, 2026-10-20T10:52):
+
+- **pypl4g's back end ported faithfully**: the passes above level nought, the machine-code layer, the ELF writer, what the targets
+  share and the three architectures, so that the image is pypl4g's byte for byte.
+- **A static image at a fixed address by default, and a static position-independent one with `-fpie`**, relocated by its own
+  startup code from a table in ELF's RELR encoding (below).
+- **A library function and a command line**: `driver::compile` takes the options and the descriptor the image is written into;
+  `pl4g` is pypl4g's command line, so that `PL4G_COMPILER` runs pypl4g's test suite with it.
 
 Requirements the user gave
 --------------------------
@@ -206,3 +216,9 @@ Each phase is committed when its own checks pass; the status column is kept curr
 | 7 | Macro expander | the macro tests | done, within phase 6's numbers |
 | 8 | REPL, tree-sitter service, LSP service | their own tests | done: typed sessions, the colours of every diagnostic, and the LSP conversations of test_lsp.py |
 | 9 | Sanitizer and fuzzing builds as part of testing | `ctest` | done: the comparisons, the source runs and the sessions run sanitized as well; the lexer, the parser and the checker are fuzzed |
+| 10 | The optimizations: the passes above level nought | from pypl4g's checker's module, the IR pypl4g's passes make, every level | done: 466 of 466 at levels 0 and 1, and what they make runs as the tests say, plainly and sanitized |
+| 11 | The machine-code layer and the ELF writer | made-up programs through both, every output compared | done: 3000 of 3000, sanitized 500 of 500 |
+| 12 | What the targets share, the driver and its command line | the splitting of runs; every mode that stops before code generation | done: every program's runs split alike; 3843 of 3843 command lines and emits |
+| 13 | x86-64, AArch64, RISC-V | `--emit asm` from pypl4g's own module; encoders sample for sample | done: 929 of 929 on each, at every level and `--mclevel` the tests use, plainly and sanitized |
+| 14 | Whole images | every compiled test program, both compilers, `cmp` | done: 929 of 929 on each architecture; pypl4g's suite passes with `PL4G_COMPILER` |
+| 15 | `-fpie` | the table against `readelf -r`; pypl4g's language suite built so | done: 929 of 929 on each architecture; 2808 of 2808 run natively and under QEMU, every image read by `eu-elflint --strict` |
