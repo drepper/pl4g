@@ -35,6 +35,7 @@ namespace {
     std::optional<std::int64_t> stack_size;
     std::optional<std::int64_t> guard_size;
     bool ignore_system = false;
+    pl4g::ColourWhen colour = pl4g::ColourWhen::automatic;
     std::vector<std::string> files;
   };
 
@@ -47,6 +48,7 @@ namespace {
     key_stack_size,
     key_guard_size,
     key_ignore_system,
+    key_color,
   };
 
   constexpr ::argp_option options[] = {
@@ -59,6 +61,7 @@ namespace {
     { "stack-size", key_stack_size, "BYTES", 0, "The size of the stack", 0 },
     { "guard-size", key_guard_size, "BYTES", 0, "The size of the stack's guard", 0 },
     { "ignore-system", key_ignore_system, nullptr, 0, "Treat system modules as any other", 0 },
+    { "color", key_color, "WHEN", OPTION_ARG_OPTIONAL, "Colour the diagnostics: yes, no or auto", 0 },
     {},
   };
 
@@ -96,6 +99,12 @@ namespace {
     case key_ignore_system:
       args.ignore_system = true;
       return 0;
+    case key_color:
+      if (auto found = pl4g::colour_named(arg != nullptr ? arg : "yes"))
+        args.colour = *found;
+      else [[unlikely]]
+        ::argp_error(state, "--color takes yes, no or auto, not %s", arg);
+      return 0;
     case ARGP_KEY_ARG:
       args.files.emplace_back(arg);
       return 0;
@@ -131,6 +140,7 @@ int main(int argc, char* argv[])
       control.enabled[name] = true;
   pl4g::DiagEngine diags([&](const pl4g::Diagnostic& d) { renderer(d); }, control);
   renderer.use(diags);
+  renderer.recolour(args.colour, 1);
 
   auto conditions = pl4g::sema::conditions_named(args.conditions);
   if (! conditions) [[unlikely]] {

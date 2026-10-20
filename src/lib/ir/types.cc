@@ -49,18 +49,6 @@ namespace pl4g::ir {
       return a;
     }
 
-    std::string decimal(__int128 v)
-    {
-      if (v == 0)
-        return "0";
-      bool negative = v < 0;
-      unsigned __int128 m = negative ? -(unsigned __int128)(v) : (unsigned __int128)(v);
-      std::string out;
-      for (; m > 0; m /= 10)
-        out.insert(out.begin(), char('0' + int(m % 10)));
-      return negative ? "-" + out : out;
-    }
-
     // `value` in raised digits.
     std::string superscript(std::int64_t value)
     {

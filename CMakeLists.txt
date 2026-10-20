@@ -5,6 +5,7 @@
 # Targets:
 #   pl4g              the library, libpl4g.a
 #   pl4g-repl         the stand-alone REPL and interpreter
+#   pl4g-lsp          the stand-alone language server
 #   pl4g-lexdump      the tokens of a file, for comparing with pypl4g
 #   *-asan            the same, built with the address and undefined-behaviour
 #                     sanitizers (PL4G_SANITIZERS=ON, the default)
@@ -34,9 +35,11 @@ find_package(simdjson REQUIRED)
 find_library(UNISTRING_LIBRARY unistring REQUIRED)
 # Line editing for the interactive session, where its input is a terminal.
 find_library(EDIT_LIBRARY edit REQUIRED)
+# The tree-sitter service: the grammar's parser is built in, the core is the system's.
+find_library(TREE_SITTER_LIBRARY tree-sitter REQUIRED)
 
 # The fuzzing entry points, each src/fuzz/NAME.cc with a corpus in src/fuzz/corpus/NAME.
-set(PL4G_FUZZ_TARGETS lexer parser)
+set(PL4G_FUZZ_TARGETS lexer parser check)
 
 set(PL4G_COMMON_FLAGS $<$<COMPILE_LANGUAGE:CXX>:-fcontracts> $<$<COMPILE_LANGUAGE:CXX>:-freflection> -Wall -Wextra
   -Wno-unused-parameter $<$<COMPILE_LANGUAGE:CXX>:-Wno-trigraphs>)
@@ -66,6 +69,7 @@ set(PL4G_LIB_SOURCES
   src/lib/diag/catalog.cc
   src/lib/diag/engine.cc
   src/lib/diag/render.cc
+  src/lib/diag/style.cc
   src/lib/front/token.cc
   src/lib/front/lexer.cc
   src/lib/front/ast.cc
@@ -85,6 +89,14 @@ set(PL4G_LIB_SOURCES
   src/lib/repl/repl.cc
   src/lib/repl/session.cc
   src/lib/repl/show.cc
+  src/lib/lsp/analysis.cc
+  src/lib/lsp/json.cc
+  src/lib/lsp/places.cc
+  src/lib/lsp/server.cc
+  src/lib/lsp/wire.cc
+  src/lib/ts/highlight.cc
+  tree-sitter-pl4g/src/parser.c
+  tree-sitter-pl4g/src/scanner.c
   src/lib/sema/attributes.cc
   src/lib/sema/check-helpers.cc
   src/lib/sema/check-entry.cc
@@ -125,13 +137,20 @@ function(pl4g_variant suffix)
   add_library(pl4g${suffix} STATIC ${PL4G_LIB_SOURCES})
   set_target_properties(pl4g${suffix} PROPERTIES OUTPUT_NAME pl4g${suffix})
   target_include_directories(pl4g${suffix} PUBLIC ${CMAKE_SOURCE_DIR}/src/lib ${PL4G_GENERATED})
+  target_include_directories(pl4g${suffix} PRIVATE ${CMAKE_SOURCE_DIR}/tree-sitter-pl4g/src)
+  # Where #embed finds the grammar's queries.
+  set_source_files_properties(src/lib/ts/highlight.cc PROPERTIES
+    COMPILE_OPTIONS "--embed-dir=${CMAKE_SOURCE_DIR}/tree-sitter-pl4g/queries")
   target_compile_options(pl4g${suffix} PUBLIC ${PL4G_COMMON_FLAGS} ${flags})
   target_link_options(pl4g${suffix} PUBLIC ${flags})
-  target_link_libraries(pl4g${suffix} PUBLIC simdjson::simdjson ${UNISTRING_LIBRARY} ${EDIT_LIBRARY})
+  target_link_libraries(pl4g${suffix} PUBLIC simdjson::simdjson ${UNISTRING_LIBRARY} ${EDIT_LIBRARY} ${TREE_SITTER_LIBRARY})
 
   # The stand-alone interpreter: the library and a small driver.
   add_executable(pl4g-repl${suffix} src/repl/main.cc)
   target_link_libraries(pl4g-repl${suffix} PRIVATE pl4g${suffix})
+  # The stand-alone language server, the same way.
+  add_executable(pl4g-lsp${suffix} src/lsp/main.cc)
+  target_link_libraries(pl4g-lsp${suffix} PRIVATE pl4g${suffix})
 
   foreach(tool lexdump astdump irdump runjson checkdump)
     add_executable(pl4g-${tool}${suffix} src/tools/${tool}.cc)
@@ -210,11 +229,22 @@ add_test(NAME checks-agree
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/check_agrees.py
           $<TARGET_FILE:pl4g-checkdump> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/checks-agree)
 set_tests_properties(checks-agree PROPERTIES TIMEOUT 1800)
+# The same with colour, which is where the tree-sitter grammar colours each
+# snippet as pypl4g's binding of it does.
+add_test(NAME checks-agree-in-colour
+  COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/check_agrees.py --with=--color=yes
+          $<TARGET_FILE:pl4g-checkdump> ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/checks-agree-in-colour)
+set_tests_properties(checks-agree-in-colour PROPERTIES TIMEOUT 1800)
 # And every program that runs, run from its source with nothing of pypl4g's in
 # the way, exits as its test says.
 add_test(NAME runs-from-source
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/interp_runs.py $<TARGET_FILE:pl4g-repl> ${CMAKE_SOURCE_DIR})
 set_tests_properties(runs-from-source PROPERTIES TIMEOUT 1800)
+# The language server answers every conversation of tests/compiler/test_lsp.py
+# as pypl4g's does.
+add_test(NAME lsp-agrees
+  COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/lsp_agrees.py $<TARGET_FILE:pl4g-lsp> ${CMAKE_SOURCE_DIR})
+set_tests_properties(lsp-agrees PROPERTIES TIMEOUT 900)
 # The interactive session answers typed sessions as it should.
 add_test(NAME repl-sessions
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/repl_sessions.py $<TARGET_FILE:pl4g-repl> ${CMAKE_SOURCE_DIR})
@@ -241,6 +271,9 @@ if(PL4G_SANITIZERS)
   add_test(NAME runs-from-source-asan
     COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/interp_runs.py $<TARGET_FILE:pl4g-repl-asan> ${CMAKE_SOURCE_DIR})
   set_tests_properties(runs-from-source-asan PROPERTIES TIMEOUT 3600)
+  add_test(NAME lsp-agrees-asan
+    COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/lsp_agrees.py $<TARGET_FILE:pl4g-lsp-asan> ${CMAKE_SOURCE_DIR})
+  set_tests_properties(lsp-agrees-asan PROPERTIES TIMEOUT 1800)
   add_test(NAME repl-sessions-asan
     COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/repl_sessions.py $<TARGET_FILE:pl4g-repl-asan> ${CMAKE_SOURCE_DIR})
   foreach(target ${PL4G_FUZZ_TARGETS})

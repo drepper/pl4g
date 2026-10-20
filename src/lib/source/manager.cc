@@ -76,6 +76,14 @@ namespace pl4g {
 
   std::expected<const SourceFile*, ReadFailure> SourceManager::read(const std::filesystem::path& path)
   {
+    if (! held.empty()) {
+      std::error_code ignored;
+      auto resolved = std::filesystem::weakly_canonical(std::filesystem::absolute(path, ignored), ignored);
+      for (const auto& [where, text] : held)
+        if (where == path
+            || std::filesystem::weakly_canonical(std::filesystem::absolute(where, ignored), ignored) == resolved)
+          return &add(path, text);
+    }
     auto data = slurp(path);
     if (! data) [[unlikely]]
       return std::unexpected(ReadFailure{ ReadFailure::Kind::unreadable, std::move(data.error()) });
@@ -128,6 +136,16 @@ namespace pl4g {
         && line.substr(0, file->added_indent).find_first_not_of(' ') == std::string_view::npos)
       line.remove_prefix(file->added_indent);
     return line;
+  }
+
+
+  std::optional<std::pair<std::string_view, std::size_t>> SourceManager::line_within(Loc loc) const noexcept
+  {
+    auto file = file_of(loc);
+    auto line = line_text(loc);
+    if (file == nullptr || ! line)
+      return std::nullopt;
+    return std::pair{ std::string_view(file->text), std::size_t(line->data() - file->text.data()) };
   }
 
 

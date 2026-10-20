@@ -1,12 +1,19 @@
 // Showing diagnostics to a reader.
 #pragma once
 
+#include <memory>
+
 #include "diag/engine.hh"
+#include "diag/style.hh"
 #include "source/manager.hh"
 #include "util/fdio.hh"
 
 
 namespace pl4g {
+
+  namespace ts {
+    class Highlighter;
+  }
 
   // Renders diagnostics in the customary `file:line:column: severity:` form,
   // with the source line and the span underlined, to a descriptor the caller
@@ -15,8 +22,13 @@ namespace pl4g {
   public:
     // Render to `fd`; `engine`, where given, decides what -Werror makes of a
     // warning.
-    TextRenderer(const SourceManager& sources, int fd, const DiagEngine* engine = nullptr)
-      : sources(sources), out(fd), engine(engine) {}
+    TextRenderer(const SourceManager& sources, int fd, const DiagEngine* engine = nullptr);
+    ~TextRenderer();
+
+    // Say when to write colour, `watched` being the descriptor whose being a
+    // terminal says someone is watching -- the standard output, in a compiler.
+    // Where there is colour the snippets are coloured as the grammar says.
+    void recolour(ColourWhen when, int watched);
 
     // Say which engine decides the severity shown, the renderer having been
     // made before it.
@@ -27,10 +39,14 @@ namespace pl4g {
 
   private:
     void snippet(Span span, unsigned line, unsigned column);
+    // The source line, written as the grammar says its pieces are.
+    std::string coloured(Span span, std::string_view text);
 
     const SourceManager& sources;
     FdWriter out;
     const DiagEngine* engine;
+    Palette palette;
+    std::unique_ptr<ts::Highlighter> highlighter;
   };
 
 } // namespace pl4g

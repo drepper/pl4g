@@ -10,6 +10,7 @@
 #include <string_view>
 #include <vector>
 
+#include "diag/style.hh"
 #include "driver/compile.hh"
 #include "interp/interp.hh"
 
@@ -27,6 +28,9 @@ namespace pl4g::repl {
     interp::Devices devices;
     // Warnings asked for or turned off by name, and whether they are errors.
     WarningControl warnings;
+    // When diagnostics are coloured: where the output descriptor is a
+    // terminal, unless said otherwise.
+    ColourWhen colour = ColourWhen::automatic;
   };
 
   // How a run ended, as a process would: the status, or the signal.

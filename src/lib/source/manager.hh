@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "source/location.hh"
@@ -76,6 +77,9 @@ namespace pl4g {
 
     // The text of the line containing `loc`, without its end of line.
     std::optional<std::string_view> line_text(Loc loc) const noexcept;
+    // The text of the file `loc` is in, and where in it the line `line_text`
+    // answers begins: what a highlighter, which reads a whole file, is asked.
+    std::optional<std::pair<std::string_view, std::size_t>> line_within(Loc loc) const noexcept;
 
     // The source text `span` covers.
     std::optional<std::string_view> snippet(Span span) const noexcept;
@@ -113,7 +117,13 @@ namespace pl4g {
     }
     std::vector<ReadUnit> read_units;
 
+    // Have `read` answer `text` for `path` rather than what the disk holds:
+    // an editor's buffer with changes not yet saved, which the language
+    // server compiles, and a module imported from it with them.
+    void hold(std::filesystem::path path, std::string text) { held.emplace_back(std::move(path), std::move(text)); }
+
   private:
+    std::vector<std::pair<std::filesystem::path, std::string>> held;
     std::deque<SourceFile> all;
     Loc next_base = 0;
     std::map<std::filesystem::path, Parsed> parsed_units;

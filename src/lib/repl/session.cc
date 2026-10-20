@@ -182,7 +182,10 @@ namespace pl4g::repl {
     std::vector<std::unique_ptr<ir::Module>> modules;
     std::vector<std::unique_ptr<interp::Program>> programs;
 
-    explicit State(Settings given) : settings(std::move(given)) {}
+    explicit State(Settings given) : settings(std::move(given))
+    {
+      renderer.recolour(settings.colour, settings.devices.output);
+    }
 
     // -- making the program ---------------------------------------------------
 

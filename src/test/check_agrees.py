@@ -1,6 +1,6 @@
 """Check that the C++ checker makes of every test program what pypl4g's makes.
 
-Run as ``check_agrees.py PL4G-CHECKDUMP ROOT WORK [NAME...]``.  Every test
+Run as ``check_agrees.py [--with=OPTION]... PL4G-CHECKDUMP ROOT WORK [NAME...]``.  Every test
 program under ``tests/language`` is checked by both, with the options the test
 asks for: what each says on standard error must be the same, word for word,
 and so must its exit status and, where the program compiles, the text of the
@@ -75,12 +75,13 @@ def one(dump: str, path: Path, work: Path) -> str | None:
     own, extra = directives(path)
     if not own:
         return None
+    extra = [*WITH, *extra]
     stem = "".join((path.parent.name, "--", path.stem))
     theirs_ir, mine_ir = work / "".join((stem, ".py.ir")), work / "".join((stem, ".cc.ir"))
     for stale in (theirs_ir, mine_ir):
         stale.unlink(missing_ok=True)
     env = {**os.environ, "PL4G_HASH_SEED": "1"}
-    theirs = subprocess.run([sys.executable, "-I", str(HERE / "checkout.py"), "".join(("--ir=", str(theirs_ir))),
+    theirs = subprocess.run([sys.executable, str(HERE / "checkout.py"), "".join(("--ir=", str(theirs_ir))),
                              *extra, str(path)], capture_output=True, text=True, check=False, env=env,
                             cwd=path.parent, preexec_fn=bounded)
     sanitized = dump.endswith("-asan")
@@ -111,9 +112,16 @@ def one(dump: str, path: Path, work: Path) -> str | None:
     return None
 
 
+#: Options both sides are given beside the test's own, from `--with`.
+WITH: list[str] = []
+
+
 def main() -> int:
-    dump, root, work = sys.argv[1], Path(sys.argv[2]), Path(sys.argv[3])
-    names = set(sys.argv[4:])
+    args = sys.argv[1:]
+    while args and args[0].startswith("--with="):
+        WITH.append(args.pop(0)[len("--with="):])
+    dump, root, work = args[0], Path(args[1]), Path(args[2])
+    names = set(args[3:])
     work.mkdir(parents=True, exist_ok=True)
     files = [p for p in sorted((root / "tests" / "language").rglob("*.pl4g"))
              if not names or p.parent.name in names or p.stem in names]

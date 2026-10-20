@@ -13,6 +13,7 @@ namespace pl4g::repl {
     TextRenderer renderer(sources, settings.devices.error);
     DiagEngine diags([&](const Diagnostic& d) { renderer(d); }, settings.warnings);
     renderer.use(diags);
+    renderer.recolour(settings.colour, settings.devices.output);
     driver::Compilation compilation(settings.compile, diags, sources);
     auto module = compilation.front_end();
     if (module == nullptr || diags.failed()) [[unlikely]]
