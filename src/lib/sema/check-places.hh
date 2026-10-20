@@ -1,6 +1,44 @@
 // The checker's methods ported from check.py lines 15128 to 18052, defined in
 // check-places.cc.  Not a header of its own: included inside the class body of `Checker` (check.hh).
 
+    // Where a reference taken of something points, what is there, whether it may
+    // be written through, what to call it, and whether it lasts as long as the
+    // program: what `_place_of_a_name` and its siblings answer.
+    struct PlaceTaken {
+      ir::Value* address = nullptr;
+      const ir::Type* held = nullptr;
+      bool may_change = false;
+      std::string what;
+      bool lasting = false;
+    };
+
+    // What `_enter_lifetimes` sets aside, to be put back.
+    struct LifetimesSaved {
+      std::vector<std::tuple<std::string, NameSet>> scopes;
+      Dict<std::tuple<std::string, std::string>,
+           std::vector<std::tuple<ir::Value*, std::optional<std::int64_t>, std::string, bool>>>
+        sources;
+    };
+
+    // How long what a value refers to is there, as a call can say it
+    // (`_lifetime_of_value`): `local` with the variable, `lasting`, `names` with
+    // the lifetime names of the signatures around, or `unknown`.
+    struct Lifetime {
+      std::string kind;
+      Local* local = nullptr;
+      std::set<std::pair<std::string, std::string>> names;
+    };
+
+    // Room made in a list for more (`_room_made`): where its elements were and
+    // are now, how many there are, and the allocator it had and has.
+    struct Room {
+      ir::Value* old = nullptr;
+      ir::Value* grown = nullptr;
+      ir::Value* count = nullptr;
+      ir::Value* had = nullptr;
+      ir::Value* into = nullptr;
+    };
+
     // Whether a place reached from `value` is there as long as the program.
     bool lasting(ir::Value* value);  // check.py:15128
     // Check that what each `return` hands back really comes from there.
@@ -12,20 +50,20 @@
     // parameter given storage of its own keeps it -- with the parts of a tuple the name is on -- and what
     // a name of a signature around stands for here. With what to call them, and which of them are where a
     // parameter is kept rather than what it named.
-    std::tuple<std::string, std::vector<ir::Value*>, Dict<std::int64_t, KeySet>, KeySet> sources_for(ir::Borrowed borrowed, std::span<const std::string> names, std::span<ir::Value* const> arriving);  // check.py:15191
+    std::tuple<std::string, std::vector<ir::Value*>, Dict<std::int64_t, KeySet>, KeySet> sources_for(const ir::Borrowed& borrowed, std::span<const std::string> names, std::span<ir::Value* const> arriving);  // check.py:15191
     // What each lifetime name in reach stands for here, for a call through a lambda whose answer lives as
     // long as one of them.
-    Dict<std::tuple<std::string, std::string>, std::vector<ir::Value*>> lifetime_outer();  // check.py:15234
+    Dict<std::pair<std::string, std::string>, std::vector<ir::Value*>> lifetime_outer();  // check.py:15234
     // Make the lifetime names of a signature, `key`, ones a lambda or a function type in the body may say
     // an answer lives as long as, and write down what each stands for: what the parameters carrying it
     // arrived as.
-    std::tuple<std::vector<std::tuple<std::string, NameSet>>, Dict<std::tuple<std::string, std::string>, std::vector<std::tuple<ir::Value*, std::optional<std::int64_t>, std::string, bool>>>> enter_lifetimes(std::string_view key, std::span<const ast::Param* const> params, std::span<const ir::Type* const> types, std::span<ir::Value* const> arriving, std::span<const std::tuple<Local*, Local*, bool>> brought = {});  // check.py:15240
+    LifetimesSaved enter_lifetimes(std::string_view key, std::span<const ast::Param* const> params, std::span<const ir::Type* const> types, std::span<ir::Value* const> arriving, std::span<const std::tuple<Local*, Local*, bool>> brought = {});  // check.py:15240
     // Check, for an answer that is a tuple, that each reference in it comes from the parameters its
     // lifetime name is on -- every `return`, every way through it, member by member (4561).
     void members_answered_from(ir::Function* func, const Dict<std::int64_t, std::tuple<std::string, std::vector<ir::Value*>, Dict<std::int64_t, KeySet>, KeySet>>& sources);  // check.py:15285
     // Whether the part at `leaf` of the tuple `value` was worked out from one of `sources`, or lasts as
     // long as the program.
-    bool leaf_reached(ir::Value* value, std::int64_t leaf, std::span<ir::Value* const> sources, const Dict<std::int64_t, std::vector<Held>>& incoming, const KeySet& visited, const Dict<std::int64_t, KeySet>& only, const Dict<std::tuple<std::string, std::string>, std::vector<ir::Value*>>& outer, const KeySet& stored);  // check.py:15306
+    bool leaf_reached(ir::Value* value, std::int64_t leaf, std::span<ir::Value* const> sources, const Incoming& incoming, KeySet& visited, const Dict<std::int64_t, KeySet>& only, const Dict<std::pair<std::string, std::string>, std::vector<ir::Value*>>& outer, const KeySet& stored);  // check.py:15306
     // What a call of `func` answers with lives as long as what it borrowed from (`_lasting_as_given`).
     ir::Value* as_long_as_given(ir::Builder& builder, ir::Function* func, std::span<ir::Value* const> args, ir::Value* answer, Span span);  // check.py:15344
     // What a call answers with lives as long as what it borrowed from.
@@ -33,7 +71,7 @@
     // `_lasting_as_given` for each reference in an answer that is a tuple.
     ir::Value* members_as_long_as_given(ir::Builder& builder, std::string_view name, std::span<const std::string> param_names, const Dict<std::int64_t, ir::Borrowed>& table, std::span<ir::Value* const> args, ir::Value* answer, Span span);  // check.py:15390
     // How long the answer of one call lives, in a sentence.
-    std::string how_long(std::span<const std::string> param_names, ir::Borrowed borrowed, std::span<const std::tuple<ir::Value*, std::optional<std::int64_t>>> parts, bool lasting);  // check.py:15438
+    std::string how_long(std::span<const std::string> param_names, const ir::Borrowed& borrowed, std::span<const std::tuple<ir::Value*, std::optional<std::int64_t>>> parts, bool lasting);  // check.py:15438
     // The shortest-lived name whose place `value` reaches, where it reaches one -- of its part `leaf`,
     // where it is a tuple and one part is meant.
     Local* named_place_of(ir::Value* value, std::optional<std::int64_t> leaf = {});  // check.py:15487
@@ -51,9 +89,9 @@
     // How long what `value` refers to is there, as a call can say it: a variable of this function, with
     // its depth; one or more names of the signature around, which outlast its body; as long as the
     // program; or nothing that can be said.
-    std::tuple<std::string, Held> lifetime_of_value(ir::Value* value);  // check.py:15572
+    Lifetime lifetime_of_value(ir::Value* value);  // check.py:15572
     // Whether what `answer` says lives at least as long as `given`.
-    bool lasts_as_long(const std::tuple<std::string, Held>& given);  // check.py:15587
+    bool lasts_as_long(const Lifetime& answer, const Lifetime& given);  // check.py:15587
     // Hold a call to what a function type among its parameters says: that what a function handed for it
     // answers lives as long as what is handed for the parameters carrying the same name (4930).
     void answers_as_long(ir::Function* func, std::span<ir::Value* const> args, const Dict<std::int64_t, std::vector<std::tuple<bool, Local*>>>& notes, Span span);  // check.py:15601
@@ -62,13 +100,13 @@
     // Report a reference given to a name that outlives what it names.
     bool outlives_it(ir::Value* value, std::int64_t depth, std::string_view where, Span span);  // check.py:15670
     // Where the name `expr` is, for a reference being taken of it.
-    std::optional<std::tuple<ir::Value*, const ir::Type*, bool, std::string, bool>> place_of_a_name(ir::Builder& builder, const ast::NameRef* expr);  // check.py:15689
+    std::optional<PlaceTaken> place_of_a_name(ir::Builder& builder, const ast::NameRef* expr);  // check.py:15689
     // The variable another module exports under this path, or nothing.
     ir::GlobalVar* exported_variable(const ast::Member* expr);  // check.py:15722
     // Where one field of a record is, for a reference being taken of it.
-    std::optional<std::tuple<ir::Value*, const ir::Type*, bool, std::string, bool>> place_of_a_field(ir::Builder& builder, const ast::Member* expr);  // check.py:15740
+    std::optional<PlaceTaken> place_of_a_field(ir::Builder& builder, const ast::Member* expr);  // check.py:15740
     // Where one element of an array is, for a reference being taken of it.
-    std::optional<std::tuple<ir::Value*, const ir::Type*, bool, std::string, bool>> place_of_an_element(ir::Builder& builder, const ast::Element* expr);  // check.py:15769
+    std::optional<PlaceTaken> place_of_an_element(ir::Builder& builder, const ast::Element* expr);  // check.py:15769
     // Whether the field `name` of the record `base` is writable whatever the record is: it, or a field on
     // the way to it, is written `mut NAME`, and no `&` that only reads lies on the way -- what a `&` lends
     // is read-only however it is made.
@@ -95,17 +133,17 @@
     // Make an empty table of the shape `ty` calls for.
     ir::Value* new_table(ir::Builder& builder, const ir::Type* ty, Span span, ir::Value* arena = nullptr, ir::Value* comes_from = nullptr);  // check.py:16046
     // A key as the table holds it.
-    ir::Value* as_held(ir::Builder& builder, tables::Shape shape, ir::Value* key, Span span);  // check.py:16072
+    ir::Value* as_held(ir::Builder& builder, const tables::Shape& shape, ir::Value* key, Span span);  // check.py:16072
     // The entry for `key`, made if the table did not have it.
-    ir::Value* put_key(ir::Builder& builder, tables::Shape shape, ir::Value* table, ir::Value* key, Span span);  // check.py:16089
+    ir::Value* put_key(ir::Builder& builder, const tables::Shape& shape, ir::Value* table, ir::Value* key, Span span);  // check.py:16089
     // The entry the key is in, or the one it would go in.
-    ir::Value* find_key(ir::Builder& builder, tables::Shape shape, ir::Value* table, ir::Value* key, Span span);  // check.py:16100
+    ir::Value* find_key(ir::Builder& builder, const tables::Shape& shape, ir::Value* table, ir::Value* key, Span span);  // check.py:16100
     // Whether an entry holds a key rather than standing empty.
     ir::Value* is_live(ir::Builder& builder, ir::Value* place, Span span);  // check.py:16111
     // Where in an entry the value belonging to its key is.
-    ir::Value* value_place(ir::Builder& builder, tables::Shape shape, ir::Value* place, const ir::Type* ty);  // check.py:16116
+    ir::Value* value_place(ir::Builder& builder, const tables::Shape& shape, ir::Value* place, const ir::Type* ty);  // check.py:16116
     // Lower each of `written` and give back the one type they share.
-    const ir::Type* one_type(ir::Builder& builder, std::span<const ast::Expr* const> written, const ir::Type* wanted, std::optional<std::span<ir::Value* const>> into = {});  // check.py:16124
+    const ir::Type* one_type(ir::Builder& builder, std::span<const ast::Expr* const> written, const ir::Type* wanted, std::vector<ir::Value*>* into = nullptr);  // check.py:16124
     // The type the entries of a literal say they hold, where one says.
     const ir::Type* said_by(std::span<const ast::Expr* const> written);  // check.py:16147
     // Hand `written` back with the surrounding context put aside.
@@ -132,10 +170,10 @@
     // Check `†l⟦i⟧`, which takes one element out and answers what it was.
     ir::Value* lower_take_at(ir::Builder& builder, const ast::TakeAt* expr, const ir::Type* expected);  // check.py:16438
     // Room in the list at `place` for `more` elements after the ones it has.
-    std::tuple<ir::Value*, ir::Value*, ir::Value*, ir::Value*, ir::Value*> room_made(ir::Builder& builder, ir::Value* place, const ir::ListType* ty, ir::Value* more, Span span);  // check.py:16468
+    Room room_made(ir::Builder& builder, ir::Value* place, const ir::ListType* ty, ir::Value* more, Span span);  // check.py:16468
     // The list at `place` written back with `count` elements in the room `_room_made` made, and the room
     // it grew out of given back.
-    void room_kept(ir::Builder& builder, ir::Value* place, const ir::ListType* ty, const std::tuple<ir::Value*, ir::Value*, ir::Value*, ir::Value*, ir::Value*>& made, ir::Value* count, Span span);  // check.py:16491
+    void room_kept(ir::Builder& builder, ir::Value* place, const ir::ListType* ty, const Room& made, ir::Value* count, Span span);  // check.py:16491
     // The list at `place` in room of its own before it is written in place: a list in the image is copied
     // out, into the arena in force, and any other is as it was -- room for nought more being room it has.
     void made_writable(ir::Builder& builder, ir::Value* place, const ir::ListType* ty, Span span, const ast::Expr* written = nullptr);  // check.py:16505
@@ -230,7 +268,7 @@
     // The name a loop may take, which is the one written unless it is taken.
     const ast::Label* label_of(const ast::Label* label);  // check.py:17600
     // Put a loop's name up for the length of its body.
-    Loop* begin_loop(const ast::Label* label, ir::BasicBlock* header, ir::BasicBlock* after, std::span<Local* const> carried, std::span<ir::Value* const> state, std::function<std::vector<ir::Value*>(ir::Builder&, std::span<ir::Value* const>)> step, bool answers, bool wraps, const ir::Type* handing);  // check.py:17620
+    Loop* begin_loop(const ast::Label* label, ir::BasicBlock* header, ir::BasicBlock* after, std::span<Local* const> carried, std::span<ir::Value* const> state, const Step& step, bool answers, bool wraps, const ir::Type* handing);  // check.py:17620
     // Take it down again, and report a name nothing named.
     Loop* end_loop(const ast::Label* label);  // check.py:17637
     // Give the block after a loop the names every way out of it hands over.
@@ -250,18 +288,18 @@
     // What a `break` hands over, where the loop's own type already says.
     const ir::Type* wanted_of_a_loop(const ast::Expr* stmt, const ir::Type* expected, bool produces);  // check.py:17798
     // Fill the way out of the test, and answer what the loop comes to.
-    ir::Value* loop_answer(ir::Builder& builder, const ast::Expr* stmt, ir::Function* func, Loop* one, ir::BasicBlock* leave, ir::BasicBlock* after, std::span<Local* const> carried, std::span<ir::Value* const> params, ir::Value* token, ir::Value* exit_token, ir::Value* ran_out, std::optional<std::span<ir::Value* const>> ways, const ir::Type* expected, bool produces);  // check.py:17815
+    ir::Value* loop_answer(ir::Builder& builder, const ast::Expr* stmt, ir::Function* func, Loop* one, ir::BasicBlock* leave, ir::BasicBlock* after, std::span<Local* const> carried, std::span<ir::Value* const> params, ir::Value* token, ir::Value* exit_token, ir::Value* ran_out, const std::vector<ir::Value*>* ways, const ir::Type* expected, bool produces);  // check.py:17815
     // Branch out of the test and stand in the block the loop ends at.
-    void settle_after(ir::Builder& builder, std::span<Local* const> carried, std::optional<std::span<ir::Value* const>> ways, std::span<ir::Value* const> params, ir::BasicBlock* after, ir::Value* exit_token, ir::Value* token, const ast::Expr* stmt, ir::BasicBlock* leave, ir::Value* given);  // check.py:17893
+    void settle_after(ir::Builder& builder, std::span<Local* const> carried, const std::vector<ir::Value*>* ways, std::span<ir::Value* const> params, ir::BasicBlock* after, ir::Value* exit_token, ir::Value* token, const ast::Expr* stmt, ir::BasicBlock* leave, ir::Value* given);  // check.py:17893
     // Bind what a turn gave to the names the loop was written with.
-    void bind_turn(ir::Builder& builder, const ast::ForEach* stmt, Iteration found, std::span<ir::Value* const> state);  // check.py:17910
+    void bind_turn(ir::Builder& builder, const ast::ForEach* stmt, const Iteration& found, std::span<ir::Value* const> state);  // check.py:17910
     // Report a name a turn would copy a value that is never copied into.
     bool never_copied(const ir::Type* ty, std::string_view name, Span span);  // check.py:17949
     // Bind the names of a turn, some of them as references to the element.
-    void bind_by_reference(ir::Builder& builder, const ast::ForEach* stmt, Iteration found, std::span<ir::Value* const> state, std::span<const std::tuple<std::string, Span>> names);  // check.py:17959
+    void bind_by_reference(ir::Builder& builder, const ast::ForEach* stmt, const Iteration& found, std::span<ir::Value* const> state, std::span<const std::tuple<std::string, Span>> names);  // check.py:17959
     // What a loop walks the elements of: what `⎕enumerate` was handed, where it counts the turns, and the
     // expression itself otherwise.
-    const ast::Expr* walked_expr();  // check.py:18027
+    static const ast::Expr* walked_expr(const ast::Expr* expr);  // check.py:18027
     // The local name what a loop walks is, or under, where it is one.
     std::optional<std::string> walked_name(const ast::Expr* expr);  // check.py:18035
     // Whether what a loop walks is a place that may be written.

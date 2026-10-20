@@ -229,7 +229,7 @@ namespace pl4g::sema {
     bool deriving = false;  // check.py:3898
     // How many lambdas have been given a name, so that the next gets one
     // nothing else has.
-    std::int64_t lambdas;  // check.py:3901
+    std::int64_t lambdas = 0;  // check.py:3901
     // The generic function being checked where it is written, if one is.
     Abstract* abstract = nullptr;  // check.py:3903
     // The generic functions this file defined, checked once its bodies are.
@@ -340,7 +340,8 @@ namespace pl4g::sema {
     std::optional<KeySet> current_live;  // check.py:4009
     // Which `borrow-ended` entries were written, so that a body lowered
     // twice writes each once.
-    std::set<std::tuple<std::int64_t, std::int64_t, std::string>> borrow_ends_told;  // check.py:4012
+    // Python's `(at, keeper, name, why)`, the keeper's two parts spread out.
+    std::set<std::tuple<std::int64_t, std::int64_t, std::int64_t, std::string, std::string>> borrow_ends_told;  // check.py:4012
     // Whether what is being checked may touch a device.  A function handed one
     // may, which is what makes `@[impure]` mean "changes something global".
     bool may_do_io = false;  // check.py:4015
@@ -398,7 +399,9 @@ namespace pl4g::sema {
     KeySet walks_itself_at;  // check.py:4070
     std::int64_t each_count = 0;  // check.py:4072
     const ast::Expr* pick_in = nullptr;  // check.py:4073
-    std::optional<std::tuple<ir::Value*, const ir::ArrayType*, Mask>> pick_walked;  // check.py:4074
+    // Nothing, what picking left behind (the array, its type, the mask), or a
+    // walk described (`_Iterable`): Python's `_pick_walked` holds either.
+    std::variant<std::monostate, std::tuple<ir::Value*, const ir::ArrayType*, Mask>, Iterable*> pick_walked;  // check.py:4074
     // What the function now being lowered answers with, which is what `?`
     // has to agree with: it leaves the function carrying an error, so the
     // function must be one that can carry it.
@@ -559,7 +562,8 @@ namespace pl4g::sema {
     Dict<std::int64_t, const ir::Type*> field_types;  // check.py:4236
     // The variables already reported as never closed.
     KeySet told_unclosed;  // check.py:4238
-    std::set<std::tuple<std::int64_t, Span>> told_after_end;  // check.py:4239
+    // By the local's identity and the span's two ends.
+    std::set<std::tuple<std::int64_t, Loc, Loc>> told_after_end;  // check.py:4239
     // What each top-level definition says it raises, and where it says so.
     Dict<std::string, std::vector<Expected>> expected_pairs;  // check.py:4241
     // Every variable defined at the top level of any file, in the order it
@@ -568,6 +572,13 @@ namespace pl4g::sema {
     // this one imports, since the question is about the whole program.
     // Shared with the checkers of the modules this one imports.
     std::vector<Global*>& top_level;  // check.py:4246
+
+
+    // -- state added while porting the methods ---------------------------------
+
+    // The functions `discard` took out of the module, kept alive as Python
+    // keeps an object something still refers to.
+    std::vector<std::unique_ptr<ir::Function>> discarded;
 
 
     // -- methods ----------------------------------------------------------------

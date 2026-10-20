@@ -131,12 +131,12 @@
     // Report a call whose callee changes more than this function may.
     void what_it_changes(ir::Function* func, Span span);  // check.py:28356
     // Report a change that outlives the call, where the function is pure.
-    void an_effect(std::int64_t which, Span span, Held through = {});  // check.py:28387
+    void an_effect(DiagId which, Span span, Held through = {}, DiagArgs args = {});  // check.py:28387
     // Whether a place is storage this call made and this call will lose.
     bool made_here(ir::Value* place);  // check.py:28434
     // Whether a table is one this call made: a literal, or what a set operator answers, written in this
     // body.
-    bool table_made_here(ir::Value* table);  // check.py:28463
+    std::optional<bool> table_made_here(ir::Value* table);  // check.py:28463
     // A table written at `span` -- or, where `filler` names a function, handed to one that writes it: an
     // effect unless it is this call's own.
     void written_table(ir::Value* table, Span span, std::string_view filler = "");  // check.py:28485

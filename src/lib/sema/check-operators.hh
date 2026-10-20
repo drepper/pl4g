@@ -10,7 +10,7 @@
     // Lower an operator written between two operands.
     ir::Value* lower_binary(ir::Builder& builder, const ast::Binary* expr, const ir::Type* expected);  // check.py:23518
     // Whether a value of `ty` may stand on one side of `op`.
-    bool operand_type_stands(const ast::BinaryOp* op, const ir::Type* ty);  // check.py:23686
+    bool operand_type_stands(ast::BinaryOp op, const ir::Type* ty);  // check.py:23686
     // Report an operation that can be seen to fault, and say whether it was.
     bool answer_is_already_known(const ast::Binary* expr, const ir::Type* ty, ir::Value* left, ir::Value* right);  // check.py:23707
     // Report a floating-point operation that can be seen to fault.
@@ -40,7 +40,7 @@
     // The largest or smallest of something whose count is not known while compiling, which is a loop.
     ir::Value* extremum_walked(ir::Builder& builder, const ast::Unary* expr, ir::Value* value, const ir::Type* ty);  // check.py:24129
     // What one turn of a walk offers to be compared.
-    ir::Value* offered(ir::Builder& builder, Iteration found, std::span<ir::Value* const> state, const ir::Type* ty, const ir::Type* element, Span span);  // check.py:24197
+    ir::Value* offered(ir::Builder& builder, const Iteration& found, std::span<ir::Value* const> state, const ir::Type* ty, const ir::Type* element, Span span);  // check.py:24197
     // What one of these operators answers with, given what it is asked of.
     const ir::Type* extremum_type(const ir::Type* of);  // check.py:24205
     // Which of the four instructions one of these operators is, over this type: the two of them times
@@ -126,9 +126,9 @@
     // Copy `count` elements of `element` from one array to another, laid out as each says -- where the
     // first is, how many along each dimension and how far apart, and whether that is one run -- which may
     // overlap, `v⟦0…3⟧ ← v⟦1…4⟧`, as `memmove`'s may.
-    void move_elements(ir::Builder& builder, Laid* into_shape, Laid* from_shape, const ir::Type* element, ir::Value* count, std::optional<std::int64_t> known, Span span);  // check.py:25601
+    void move_elements(ir::Builder& builder, const Laid& into_shape, const Laid& from_shape, const ir::Type* element, ir::Value* count, std::optional<std::int64_t> known, Span span);  // check.py:25601
     // A loop copying `count` elements, from the last if `downward`.
-    void element_by_element(ir::Builder& builder, Laid* into_shape, Laid* from_shape, const ir::Type* element, ir::Value* count, bool downward, Span span);  // check.py:25647
+    void element_by_element(ir::Builder& builder, const Laid& into_shape, const Laid& from_shape, const ir::Type* element, ir::Value* count, bool downward, Span span);  // check.py:25647
     // Copy `size` bytes, in the largest pieces that fit.
     void copy_bytes(ir::Builder& builder, ir::Value* into, ir::Value* from_, std::int64_t size, Span span);  // check.py:25694
     // One piece of a copy, as a pointer to a value of `part`.

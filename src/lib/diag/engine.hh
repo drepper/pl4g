@@ -154,6 +154,25 @@ namespace pl4g {
     const WarningControl& control() const noexcept { return ctl; }
     void set_control(WarningControl control) { ctl = std::move(control); }
 
+    // What `divert` puts aside: everything that makes an engine this one
+    // rather than a fresh one with the same warning control.
+    struct Diverted {
+      Sink sink;
+      unsigned error_count = 0;
+      unsigned warning_count = 0;
+      bool errors_only = false;
+      std::vector<Expectation*> expectations;
+      // The notes hung on errors, of a type of the engine's own.
+      std::shared_ptr<void> because_stack;
+    };
+
+    // Hand what is emitted from here on to `sink`, as a fresh engine with
+    // this one's control would take it -- no expectations, nothing counted
+    // yet -- until `restore` is given what this answered: pypl4g's checker
+    // swaps in such an engine where it lowers something quietly.
+    Diverted divert(Sink sink);
+    void restore(Diverted&& kept);
+
     // Whether anything was reported that prevents a successful compilation.
     bool failed() const noexcept { return error_count > 0; }
 
@@ -161,6 +180,7 @@ namespace pl4g {
     unsigned warning_count = 0;
     // Whether warnings are left unsaid for now.
     bool errors_only = false;
+
 
   private:
     // Whether an expectation takes the diagnostic instead of its being reported.

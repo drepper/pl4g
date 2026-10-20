@@ -1,6 +1,9 @@
 // The checker's methods ported from check.py lines 18053 to 20792, defined in
 // check-loops.cc.  Not a header of its own: included inside the class body of `Checker` (check.hh).
 
+    // What `pick_walked` holds: nothing, what a pick left behind, or a walk.
+    using Picked = decltype(pick_walked);
+
     // -- what a loop can take its values from ------------------------------------
     // Lower `comptime foreach`, which is the body written out once per turn.
     ir::Value* written_out(ir::Builder& builder, const ast::ForEach* stmt, ir::Function* func, const ir::Type* expected, bool produces);  // check.py:18055
@@ -26,7 +29,7 @@
     // Walk an array along its outermost dimension.
     Iteration over_an_array(ir::Builder& builder, ir::Value* value, const ir::ArrayType* ty, Span span);  // check.py:18359
     // Walk what a mask picks out of an array, where it stands.
-    std::optional<Iteration> over_a_pick(ir::Builder& builder, const ast::Element* written, ir::Value* base, const ir::ArrayType* ty, Mask mask, bool checked = true);  // check.py:18395
+    std::optional<Iteration> over_a_pick(ir::Builder& builder, const ast::Element* written, ir::Value* base, const ir::ArrayType* ty, const Mask& mask, bool checked = true);  // check.py:18395
     // Work a loop's mask out a place at a time where it is written so.
     bool pick_per_place(ir::Builder& builder, const ast::Element* expr, ir::Value* base, const ir::ArrayType* ty);  // check.py:18500
     // Walk a value of a type a loop walks as it is, or say it is not one.
@@ -54,7 +57,7 @@
     const ast::Expr* called_each(ir::Builder& builder, const ast::Expr* written);  // check.py:18796
     // What a turn of a pick out of `ty` gives: an element where the mask covers every dimension, a row
     // where it covers the leading ones.
-    const ir::Type* picked_element(const ir::ArrayType* ty, Held mask);  // check.py:18812
+    const ir::Type* picked_element(const ir::ArrayType* ty, const Mask& mask);  // check.py:18812
     // Lower `let q: ⇉T = …` and `let q: ⇉ = …`: a name for a walk.
     void lower_iterator_definition(ir::Builder& builder, const ast::VarDef* node, const ir::IterType* declared);  // check.py:18819
     // Lower `let a: ⟦⟧ = …`: an array of whatever the value gives, built.
@@ -63,7 +66,7 @@
     // shape and the elements could otherwise change under it or through it.
     ir::Value* owned_array(ir::Builder& builder, const ast::VarDef* node, ir::Value* value);  // check.py:18919
     // Bind `node`'s name to a walk, lending it what the walk reads.
-    void bind_iterator(ir::Builder& builder, const ast::VarDef* node, Held walked, const ir::IterType* declared);  // check.py:18959
+    void bind_iterator(ir::Builder& builder, const ast::VarDef* node, const Picked& walked, const ir::IterType* declared);  // check.py:18959
     // The names of arrays and collections `expr` reads, which a walk of it goes on reading after it was
     // described.
     std::vector<std::string> names_read(const ast::Expr* expr);  // check.py:19005
@@ -191,6 +194,6 @@
     // only then says.
     std::optional<std::tuple<ir::Value*, ir::Value*, ir::Value*, std::optional<bool>, const ir::IntType*>> range_of(ir::Builder& builder, const ast::ForEach* stmt);  // check.py:20677
     // How far a range whose step is written down moves each turn, and whether it counts up.
-    std::tuple<std::optional<std::int64_t>, bool> range_step(const ast::Range* written, const ir::IntType* element);  // check.py:20739
+    std::tuple<std::optional<__int128>, bool> range_step(const ast::Range* written, const ir::IntType* element);  // check.py:20739
     // The names in scope that a turn of the loop may change.
     std::vector<Local*> loop_locals(const ast::Block* body, const ast::Block* alternative = nullptr);  // check.py:20764

@@ -267,6 +267,11 @@ namespace pl4g::ir {
     bool answer_in_storage = false;
     bool chained = false;
     bool listable = false;
+    // pypl4g's `extra`: what `@[cdecl]`/`@[abi]` say of variadic calls, and
+    // `@[align]` and `@[section]`.
+    bool variadic = false;
+    std::optional<std::int64_t> align;
+    std::optional<std::string> section;
   };
 
   inline constexpr std::string_view default_cconv = "pl4g";
@@ -292,6 +297,25 @@ namespace pl4g::ir {
     std::optional<std::pair<std::string, int>> answer_from;
     // The frame of a generator, which the pass splitting it measures.
     const CoroutineFrame* coroutine = nullptr;
+    // What the checker writes down about a function for its callers (pypl4g's
+    // `Function` fields of the same names): the documentation comment, which
+    // parameters are arrays it writes and lists it takes as its own, what each
+    // parameter defaults to, which parameters its answer (and each leaf of a
+    // tuple answer) borrows from, which pairs of parameters keep each other,
+    // its lifetime names, which arenas its answer and each parameter were
+    // made in, and the arena of its own it hands out with its answer.
+    std::string doc;
+    std::vector<int> writes_arrays;
+    std::vector<int> takes_owned;
+    std::vector<const Value*> defaults;
+    std::vector<int> borrows_from;
+    std::vector<std::pair<int, std::vector<int>>> leaf_borrows;
+    std::vector<std::pair<int, int>> keeps;
+    std::string lifetime_key;
+    std::vector<std::pair<std::string, std::vector<int>>> lifetimes;
+    std::optional<std::vector<int>> made_in;
+    std::vector<std::optional<int>> param_made_in;
+    std::optional<std::string> hands_out;
     // Block parameters a pass replaced, kept while anything may still name them.
     std::vector<std::unique_ptr<BlockParam>> retired;
 
@@ -356,9 +380,24 @@ namespace pl4g::ir {
   struct Module {
     std::string name;
     std::vector<Report> reports;
+    // Where the files marked `@[system]` are: what the compiler chose about
+    // something in one is not recorded, what it said is.
+    std::vector<std::pair<Loc, Loc>> system_files;
+    // Whether `span` begins in a system file.
+    bool in_system(Span span) const noexcept
+    {
+      if (! span.is_valid())
+        return false;
+      for (auto [a, b] : system_files)
+        if (a <= span.start && span.start <= b)
+          return true;
+      return false;
+    }
     void record(std::string kind, std::string subject, std::string reason, Span span = invalid_span)
     {
-      reports.push_back({ std::move(kind), std::move(subject), std::move(reason), span });
+      bool said = kind == "fatal" || kind == "error" || kind == "warning" || kind == "note";
+      if (said || ! in_system(span))
+        reports.push_back({ std::move(kind), std::move(subject), std::move(reason), span });
     }
     std::string triple = "x86_64-linux-none";
     // In the order they were added, under the key they were added with.
@@ -373,6 +412,9 @@ namespace pl4g::ir {
     // The texts of the program: globals kept apart from its variables.
     std::vector<GlobalVar*> texts;
     std::vector<std::unique_ptr<GlobalVar>> text_store;
+    // Each of them by the text it holds: pypl4g's `texts` is a dict so keyed,
+    // and `texts` above is its values in order.
+    std::unordered_map<std::string, GlobalVar*> text_of;
     // The record the entry point lays out and hands the startup function,
     // where an address in the image points into it; no variable of the module.
     std::unique_ptr<GlobalVar> startup_record;
@@ -402,6 +444,35 @@ namespace pl4g::ir {
     const FloatConst* float_const(const Type* ty, double value);
     const CharConst* char_const(std::uint32_t value);
     const UndefConst* undef(const Type* ty);
+    // Interned by the type's identity and the parts', as pypl4g's are.
+    const EnumConst* enum_const(const Type* ty, std::size_t index)
+    {
+      auto& found = enums[{ ty, index }];
+      if (found == nullptr)
+        found = constant<EnumConst>(ty, index);
+      return found;
+    }
+    const ResultConst* result_const(const Type* ty, const Value* answer, bool failed = false)
+    {
+      auto& found = results[{ ty, answer, failed }];
+      if (found == nullptr)
+        found = constant<ResultConst>(ty, answer, failed);
+      return found;
+    }
+    const ArrayConst* array_const(const Type* ty, std::vector<const Value*> elements)
+    {
+      auto& found = arrays[{ ty, elements }];
+      if (found == nullptr)
+        found = constant<ArrayConst>(ty, std::move(elements));
+      return found;
+    }
+    const RecordConst* record_const(const Type* ty, std::vector<const Value*> fields)
+    {
+      auto& found = records[{ ty, fields }];
+      if (found == nullptr)
+        found = constant<RecordConst>(ty, std::move(fields));
+      return found;
+    }
     // Any other constant, kept here.
     template<typename T, typename... Args>
     const T* constant(Args&&... args)
@@ -418,6 +489,10 @@ namespace pl4g::ir {
     std::map<std::pair<const Type*, std::uint64_t>, const FloatConst*> floats;
     std::map<std::uint32_t, const CharConst*> chars;
     std::map<const Type*, const UndefConst*> undefs;
+    std::map<std::pair<const Type*, std::size_t>, const EnumConst*> enums;
+    std::map<std::tuple<const Type*, const Value*, bool>, const ResultConst*> results;
+    std::map<std::pair<const Type*, std::vector<const Value*>>, const ArrayConst*> arrays;
+    std::map<std::pair<const Type*, std::vector<const Value*>>, const RecordConst*> records;
     const BoolConst* bools[2] = { nullptr, nullptr };
   };
 

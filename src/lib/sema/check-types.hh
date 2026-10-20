@@ -406,12 +406,19 @@ namespace pl4g::sema {
     const ir::IntType* ty = nullptr;
     bool failed = false;
     bool too_large = false;
+    // Whether this is Python's `_REFUSED` itself, which `is` tells apart from
+    // an equal `_Folded(0, None, failed=True)`.
+    bool refused = false;
   };
 
   // What folding answers where the expression is a constant and something about
   // it is wrong: it has been reported.  Python's `_REFUSED` (the later of the
   // two definitions, which is the one every use sees); told apart by `refused`.
   struct Refusal {};
+
+  // Python's `_REFUSED`, and `x is _REFUSED`.
+  inline Folded refused_fold() { return Folded{ .value = 0, .ty = nullptr, .failed = true, .refused = true }; }
+  inline bool is_refused(const std::optional<Folded>& found) { return found.has_value() && found->refused; }
 
   // What a loop needs of the thing it takes its values from.
   struct Iteration {

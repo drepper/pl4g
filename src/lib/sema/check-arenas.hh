@@ -33,10 +33,10 @@
     // What every name in reach was made in and whether it is dead, as it stands.
     Provenance provenance();  // check.py:9802
     // Make what `state` says of every name in it true again.
-    void put_back(Provenance state);  // check.py:9813
+    void put_back(const Provenance& state);  // check.py:9813
     // What holds where several ways through meet: the union of what a name was made in, and dead where it
     // is dead along any of them.
-    Provenance joined(Provenance before, std::span<const Provenance> ways);  // check.py:9820
+    Provenance joined(const Provenance& before, std::span<const Provenance> ways);  // check.py:9820
     // What a way out may change and the way that goes on must not see.
     std::tuple<Provenance, std::vector<KeySet>> on_the_way_out();  // check.py:9844
     // Put back what `_on_the_way_out` took.
@@ -46,10 +46,10 @@
     // What a turn of a loop may begin with, which is what any turn may end with.
     Provenance a_turn_begins(const ast::Block* body);  // check.py:9876
     // What holds after a loop: what holds where it may be left.
-    void after_the_turns(Provenance head, std::optional<Provenance> end, Loop* loop, bool goes_round = true, bool test_leaves = true);  // check.py:9901
+    void after_the_turns(const Provenance& head, const std::optional<Provenance>& end, Loop* loop, bool goes_round = true, bool test_leaves = true);  // check.py:9901
     // Refuse a turn that ends with a variable from outside the loop moved, where the turn began with it
     // holding something (4685).
-    void goes_round(Provenance head, std::optional<Span> span, std::optional<Provenance> end = {});  // check.py:9924
+    void goes_round(const Provenance& head, std::optional<Span> span, const std::optional<Provenance>& end = std::nullopt);  // check.py:9924
     // What a field, an element or an entry was given, added to the whole.
     void made_in_part(const ast::Expr* base, const ast::Expr* value, Span span, bool element = false);  // check.py:9945
     // The one allocator `made` names, where it names exactly one.
@@ -135,9 +135,9 @@
     // What type an array written down has, and what its elements came to.
     std::tuple<const ir::ArrayType*, std::optional<std::vector<ir::Value*>>> array_written(ir::Builder& builder, const ast::ArrayLit* expr, const ir::Type* expected);  // check.py:11237
     // How deep and how wide an array written down is, and what is innermost.
-    std::tuple<std::vector<std::optional<std::int64_t>>, std::vector<const ast::Expr*>> shape_written(const ast::ArrayLit* expr);  // check.py:11280
+    std::tuple<std::vector<std::optional<std::uint64_t>>, std::vector<const ast::Expr*>> shape_written(const ast::ArrayLit* expr);  // check.py:11280
     // Write what was written down into the run of elements, in order.
-    bool fill(ir::Builder& builder, const ast::ArrayLit* expr, const ir::ArrayType* ty, ir::Value* place, std::int64_t at, std::span<const std::optional<std::int64_t>> shape, std::optional<std::span<ir::Value* const>> ready = {});  // check.py:11302
+    bool fill(ir::Builder& builder, const ast::ArrayLit* expr, const ir::ArrayType* ty, ir::Value* place, std::int64_t at, std::span<const std::optional<std::uint64_t>> shape, const std::vector<ir::Value*>* ready = nullptr);  // check.py:11302
     // Lower an index, which belongs to no operator and no assignment.
     ir::Value* on_its_own(ir::Builder& builder, const ast::Expr* written);  // check.py:11357
     // Where one field of a record is, given where the record is.
@@ -181,12 +181,12 @@
     // The index along each dimension of the next place a walk in order reaches, or of the one before where
     // `downward`: the last dimension moves, and one that runs off its end starts again and moves the one
     // before it.
-    std::vector<ir::Value*> odometer(std::span<ir::Value* const> indices, std::span<ir::Value* const> lengths, bool downward, Span span);  // check.py:11652
+    static std::vector<ir::Value*> odometer(ir::Builder& builder, std::span<ir::Value* const> indices, std::span<ir::Value* const> lengths, bool downward, Span span);  // check.py:11652
     // How far from the first element the place at `indices` is, in elements: each index by its dimension's
     // stride, added up.
-    ir::Value* offset_at(std::span<ir::Value* const> indices, std::span<ir::Value* const> strides, Span span);  // check.py:11689
+    static ir::Value* offset_at(ir::Builder& builder, std::span<ir::Value* const> indices, std::span<ir::Value* const> strides, Span span);  // check.py:11689
     // Lower one index and see to it that it is one the array has.
-    ir::Value* checked_index(ir::Builder& builder, const ast::Expr* written, std::optional<std::int64_t> along, ir::Value* length, Span span, bool one_past = false);  // check.py:11699
+    ir::Value* checked_index(ir::Builder& builder, const ast::Expr* written, std::optional<std::uint64_t> along, ir::Value* length, Span span, bool one_past = false);  // check.py:11699
     // An index as the word every count is compared and multiplied as.
     ir::Value* as_count(ir::Builder& builder, ir::Value* value, const ir::IntType* found, Span span);  // check.py:11747
     // How far from the first element one place is, counted in elements.

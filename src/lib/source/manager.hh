@@ -3,6 +3,8 @@
 
 #include <deque>
 #include <expected>
+#include <map>
+#include <memory>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -75,9 +77,40 @@ namespace pl4g {
     // Every file, in the order they were added.
     const std::deque<SourceFile>& files() const noexcept { return all; }
 
+    // A module's file as it was parsed, for a second reader of it: the tree,
+    // and what keeps the tree alive.  The source layer is below the front end
+    // and does not know what a tree is.
+    struct Parsed {
+      const void* unit = nullptr;
+      std::shared_ptr<void> keeper;
+    };
+    // The tree of the module at `path`, where it was read.
+    const Parsed* parsed(const std::filesystem::path& path) const
+    {
+      auto it = parsed_units.find(path);
+      return it == parsed_units.end() ? nullptr : &it->second;
+    }
+    // Keep the tree of the module at `path` for a second reader of it.
+    void remember(const std::filesystem::path& path, Parsed found) { parsed_units[path] = std::move(found); }
+
+    // One file that was read and what came of reading it, for the bill of
+    // materials.
+    struct ReadUnit {
+      std::filesystem::path path;
+      const void* unit = nullptr;
+      bool module = false;
+    };
+    // Record that `path` was read and what came of reading it.
+    void record(const std::filesystem::path& path, const void* unit, bool module = false)
+    {
+      read_units.push_back({ path, unit, module });
+    }
+    std::vector<ReadUnit> read_units;
+
   private:
     std::deque<SourceFile> all;
     Loc next_base = 0;
+    std::map<std::filesystem::path, Parsed> parsed_units;
   };
 
 } // namespace pl4g

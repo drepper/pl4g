@@ -1,23 +1,41 @@
 // The checker's methods ported from check.py lines 12196 to 15127, defined in
 // check-constants.cc.  Not a header of its own: included inside the class body of `Checker` (check.hh).
 
+    // What the requirements of a generic function say each operation answers,
+    // by the operation, its name and its operands' types.
+    using Shapes = OrderedMap<std::tuple<std::string, std::string, Types>, const ir::Type*>;
+
+    // Defined with the methods of check-places.hh, which answer it too.
+    struct PlaceTaken;
+
+    // One name a lambda brings in, and the local it is where the lambda is
+    // written.
+    using Taken = std::pair<const ast::Capture*, Local*>;
+
+    // The arena `in` named for what a lambda brings in: its state, and what it
+    // was made in.
+    struct ArenaGiven {
+      ir::Value* place = nullptr;
+      KeySet made;
+    };
+
     // Whether `written`, or a constant at the top level it names, names `name`.
-    bool reaches_itself(std::string_view name, const ast::Node* written, const NameSet& seen);  // check.py:12196
+    bool reaches_itself(std::string_view name, const ast::Node* written, NameSet& seen);  // check.py:12196
     // A constant at the top level that has not been defined yet, worked out from what was written.
     std::optional<Folded> constant_not_yet_defined(std::string_view name);  // check.py:12217
     // Report what is wrong with a constant, where one was needed.
-    std::optional<Folded> refuse(DiagId ident, Span span);  // check.py:12248
+    std::optional<Folded> refuse(DiagId ident, Span span, DiagArgs args = {});  // check.py:12248
     // `value` as a constant of `ty`, or refused where it does not fit.
-    std::optional<Folded> fits(const ast::Expr* expr, std::int64_t value, const ir::IntType* ty);  // check.py:12261
+    std::optional<Folded> fits(const ast::Expr* expr, __int128 value, const ir::IntType* ty);  // check.py:12261
     // `#x` where what `x` is says how many: an array of a stated length, a tuple, a string written down.
     std::optional<Folded> folded_length(const ast::Unary* expr);  // check.py:12269
     // An operator over two constants, worked out as the program would.
     std::optional<Folded> folded_binary(const ast::Binary* expr);  // check.py:12281
     // A constant raised to a constant power, as the program raises it: a negative exponent is one divided
     // by the positive power, toward zero, and has no answer where what was raised is nought.
-    std::optional<Folded> folded_power(const ast::Expr* expr, std::int64_t base, std::int64_t exponent, const ir::IntType* ty);  // check.py:12338
+    std::optional<Folded> folded_power(const ast::Expr* expr, __int128 base, __int128 exponent, const ir::IntType* ty);  // check.py:12338
     // A shift or a rotation of a constant, by a constant distance.
-    std::optional<Folded> folded_shift(const ast::Binary* expr, std::int64_t a, std::int64_t b, const ir::IntType* ty);  // check.py:12348
+    std::optional<Folded> folded_shift(const ast::Binary* expr, __int128 a, __int128 b, const ir::IntType* ty);  // check.py:12348
     // A call to a pure function of this program, run while compiling.
     std::optional<Folded> folded_call(const ast::Call* expr);  // check.py:12371
     // An index as the number written down it comes to, where it is a number of no particular type known
@@ -58,10 +76,10 @@
     void check_generic(Generic* written);  // check.py:13027
     // Write down every operation the requirements name, a bundle's lines with its arguments put in,
     // settling what each arrow names.
-    void requirement_shapes(std::span<const ast::Clause* const> clauses, const Dict<std::string, const ir::Type*>& bound, const Dict<std::tuple<std::string, std::string, std::vector<const ir::Type*>>, const ir::Type*>& shapes, std::string_view name = "");  // check.py:13120
+    void requirement_shapes(std::span<const ast::Clause* const> clauses, Dict<std::string, const ir::Type*>& bound, Shapes& shapes, std::string_view name = "");  // check.py:13120
     // The type a requirement's expression stands for, writing down every operation in it on the way: what
     // it answers is the arrow's, or -- where none says -- a type nothing more may be done to.
-    const ir::Type* requirement_shape(const ast::Expr* expr, const Dict<std::string, const ir::Type*>& bound, const Dict<std::tuple<std::string, std::string, std::vector<const ir::Type*>>, const ir::Type*>& shapes, const ir::Type* answers = nullptr);  // check.py:13173
+    const ir::Type* requirement_shape(const ast::Expr* expr, const Dict<std::string, const ir::Type*>& bound, Shapes& shapes, const ir::Type* answers = nullptr);  // check.py:13173
     // An operation in a body checked where it is written: answered by the requirements where it applies to
     // a type parameter, and handed on -- operands lowered already -- where it does not.
     Held abstractly(ir::Builder& builder, const ast::Expr* expr);  // check.py:13200
@@ -84,7 +102,7 @@
     // What a parameter's type is, where everything in it is settled.
     const ir::Type* worked_out(const ast::TypeExpr* param, const Dict<std::string, const ir::Type*>& bound);  // check.py:13682
     // Read what the type parameters are out of an argument's type.
-    bool reading(const ast::TypeExpr* param, const ir::Type* found, const Dict<std::string, const ir::Type*>& bound, Span span, std::string_view name);  // check.py:13701
+    bool reading(const ast::TypeExpr* param, const ir::Type* found, Dict<std::string, const ir::Type*>& bound, Span span, std::string_view name);  // check.py:13701
     // The definition with type parameters a type written down names.
     NamedType* template_of(const ast::TypeRef* ref);  // check.py:13768
     // A value already worked out, standing where `wanted` is asked for.
@@ -102,11 +120,11 @@
     // Lower `λ …`: a function written where a value is wanted.
     ir::Value* lower_lambda(ir::Builder& builder, const ast::Lambda* expr, const ir::Type* expected);  // check.py:13891
     // Everything a lambda reaches through what it brought in, as keys.
-    KeySet reached_by(ir::Builder& builder, std::span<const std::tuple<const ast::Capture*, Local*>> taken);  // check.py:14067
+    KeySet reached_by(ir::Builder& builder, std::span<const Taken> taken);  // check.py:14067
     // What stands for the place a variable is, where a lambda reaches it.
     std::int64_t storage_key(Local* local);  // check.py:14096
     // Say in the report log where what a lambda brought in is kept.
-    void report_environment(std::string_view name, std::span<const std::tuple<const ast::Capture*, Local*>> taken, bool stays, std::optional<const std::tuple<ir::Value*, KeySet>&> arena, Span span);  // check.py:14112
+    void report_environment(std::string_view name, std::span<const Taken> taken, bool stays, const std::optional<ArenaGiven>& arena, Span span);  // check.py:14112
     // Find every lambda in `body` that provably stays in the call writing it.
     void lambdas_that_stay(const ast::Node* body);  // check.py:14134
     // Whether `call` calls a function, rather than making a record or a variant or asking the compiler
@@ -117,13 +135,13 @@
     // The function that stands between an indirect call and `func`.
     ir::Function* shim_for(ir::Function* func, Span span);  // check.py:14234
     // What the lambda brings in, looked up where the lambda is written.
-    std::optional<std::vector<std::tuple<const ast::Capture*, Local*>>> captures_of(const ast::Lambda* expr, std::string_view name);  // check.py:14279
+    std::optional<std::vector<Taken>> captures_of(const ast::Lambda* expr, std::string_view name);  // check.py:14279
     // What `[=]` or `[&]` brings in: everything the body reaches outside.
     std::vector<const ast::Capture*> everything_reached(const ast::Lambda* expr, std::string_view name);  // check.py:14319
     // What the environment holds for one capture.
     const ir::Type* held_by_capture(const ast::Capture* one, Local* local);  // check.py:14355
     // Room for what the lambda brings in, filled where it is written.
-    std::tuple<ir::Value*, std::vector<std::int64_t>, ir::Value*, KeySet> environment(ir::Builder& builder, std::span<const std::tuple<const ast::Capture*, Local*>> taken, std::span<const ir::Type* const> held, Span span, bool stays, std::optional<const std::tuple<ir::Value*, KeySet>&> arena);  // check.py:14373
+    std::tuple<ir::Value*, std::vector<std::int64_t>, ir::Value*, KeySet> environment(ir::Builder& builder, std::span<const Taken> taken, std::span<const ir::Type* const> held, Span span, bool stays, const std::optional<ArenaGiven>& arena);  // check.py:14373
     // What the environment holds one capture in.
     const ir::Type* slot_for(const ir::Type* what);  // check.py:14425
     // Write one capture into the room kept for it.
@@ -135,9 +153,9 @@
     // Where one of the things brought in sits, given where they all are.
     ir::Value* inside(ir::Builder& builder, ir::Value* place, std::int64_t offset, const ir::Type* what, Span span);  // check.py:14469
     // The function a lambda's body becomes, checked and lowered.
-    ir::Function* function_of_a_lambda(const ast::Lambda* expr, std::span<const ir::Type* const> params, const ir::Type* answer, std::span<const ir::Type* const> held, std::span<const std::int64_t> offsets, std::span<const std::tuple<const ast::Capture*, Local*>> taken, std::string_view name, const Dict<std::int64_t, ir::Borrowed>& borrows);  // check.py:14479
+    ir::Function* function_of_a_lambda(const ast::Lambda* expr, std::span<const ir::Type* const> params, const ir::Type* answer, std::span<const ir::Type* const> held, std::span<const std::int64_t> offsets, std::span<const Taken> taken, std::string_view name, const Dict<std::int64_t, ir::Borrowed>& borrows);  // check.py:14479
     // Report anything the list brought in that the body never reaches.
-    void all_of_it_used(std::span<const std::tuple<const ast::Capture*, Local*>> brought);  // check.py:14648
+    void all_of_it_used(std::span<const Taken> brought);  // check.py:14648
     // Lower `r⌖ ← v`, which writes the place a reference names.
     void lower_deref_assign(ir::Builder& builder, const ast::DerefAssign* stmt);  // check.py:14673
     // Lower `r⌖`: what is at the place a reference names.
@@ -181,4 +199,4 @@
     ir::Value* lower_address(ir::Builder& builder, const ast::AddressOf* expr, const ir::Type* expected);  // check.py:15051
     // Where what `expr` names is, what it holds, whether it may be written, and what to call it in a
     // message.
-    std::optional<std::tuple<ir::Value*, const ir::Type*, bool, std::string, bool>> place_written(ir::Builder& builder, const ast::Expr* expr);  // check.py:15093
+    std::optional<PlaceTaken> place_written(ir::Builder& builder, const ast::Expr* expr);  // check.py:15093

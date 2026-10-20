@@ -131,7 +131,7 @@
     // Read a variable at the top level.
     ir::Value* read_global(ir::Builder& builder, ir::GlobalVar* var, Span span);  // check.py:6086
     // Every element of an array written down, in the order they are laid out.
-    std::optional<std::vector<const ir::Value*>> constant_elements(const ast::VarDef* node, const ir::ArrayType* ty, const ast::ArrayLit* written, std::span<const std::optional<std::int64_t>> shape);  // check.py:6107
+    std::optional<std::vector<const ir::Value*>> constant_elements(const ast::VarDef* node, const ir::ArrayType* ty, const ast::ArrayLit* written, std::span<const std::optional<std::uint64_t>> shape);  // check.py:6107
     // The value of an enumeration a `TYPE.NAME` names, outside a body.
     const ir::EnumConst* enum_value_of(const ast::Member* expr);  // check.py:6134
     // Report a literal of a kind the declared type cannot hold.

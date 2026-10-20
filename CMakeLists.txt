@@ -78,6 +78,7 @@ set(PL4G_LIB_SOURCES
   src/lib/opt/passes.cc
   src/lib/rt/arena.cc
   src/lib/interp/interp.cc
+  src/lib/driver/compile.cc
   src/lib/sema/attributes.cc
   src/lib/sema/check-helpers.cc
   src/lib/sema/check-entry.cc
@@ -100,6 +101,8 @@ set(PL4G_LIB_SOURCES
   src/lib/sema/strings.cc
   src/lib/sema/tables.cc
   src/lib/front/doccomment.cc
+  src/lib/front/expand.cc
+  src/lib/front/interpret.cc
   src/lib/comptime/build.cc
   src/lib/comptime/evaluate.cc
   src/lib/target/registry.cc
@@ -120,7 +123,7 @@ function(pl4g_variant suffix)
   target_link_options(pl4g${suffix} PUBLIC ${flags})
   target_link_libraries(pl4g${suffix} PUBLIC simdjson::simdjson ${UNISTRING_LIBRARY})
 
-  foreach(tool lexdump astdump irdump runjson)
+  foreach(tool lexdump astdump irdump runjson checkdump)
     add_executable(pl4g-${tool}${suffix} src/tools/${tool}.cc)
     target_link_libraries(pl4g-${tool}${suffix} PRIVATE pl4g${suffix})
   endforeach()

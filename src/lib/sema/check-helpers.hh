@@ -2,6 +2,7 @@
 // functions, defined in check-helpers.cc.
 #pragma once
 
+#include "front/names.hh"
 #include "sema/check-types.hh"
 
 
@@ -10,6 +11,27 @@ namespace pl4g::sema {
   // -- helpers ----------------------------------------------------------------
 
   // Which branches reach each block of a function.
+  // What `check_macros` answers: the module the macros were lowered into, and
+  // the trees they quoted.  Python's `expand._Checked`.
+  struct CheckedMacros {
+    std::unique_ptr<ir::Module> module;
+    std::vector<const ast::Quote*> quoted;
+  };
+
+  // What the checker answers the evaluator about this program's types.
+  class ReflectHere : public comptime::Reflect {
+  public:
+    explicit ReflectHere(Checker& checker) : checker(checker) {}
+
+    // `⎕fields(⌜E⌝)`: each value of the enumeration with its name.
+    std::optional<comptime::Value> fields(const ast::Expr* written) override;
+    // `TYPE.NAME`, where TYPE is an enumeration this unit knows.
+    std::optional<comptime::Value> enum_value(const ast::Member* written) override;
+
+  private:
+    Checker& checker;
+  };
+
   using Incoming = std::unordered_map<const ir::BasicBlock*, std::vector<const ir::BlockTarget*>>;
 
   // Each is a function of check.py's module level, by the name it has there
@@ -44,7 +66,7 @@ namespace pl4g::sema {
   // The names of the fields of `node` a walk descends into.
   std::vector<std::string> children(const ast::Node* node);  // check.py:601
   // Walk `node` for what may take a lambda further than a call.
-  void lambdas_handed_on(const ast::Node* node, const std::function<bool(const ast::Call*)>& calls, const NameSet& taken, std::vector<const ast::Lambda*>& handed, std::vector<std::pair<std::string, const ast::Lambda*>>& bound);  // check.py:610
+  void lambdas_handed_on(const ast::Node* node, const std::function<bool(const ast::Call*)>& calls, NameSet& taken, std::vector<const ast::Lambda*>& handed, std::vector<std::pair<std::string, const ast::Lambda*>>& bound);  // check.py:610
   // Every name written below `node`, in the order they are written.
   void named_in(const ast::Node* node, std::vector<std::string>& into);  // check.py:658
   // Every name bound below `node`, whichever construct binds it.
@@ -122,7 +144,7 @@ namespace pl4g::sema {
   // The same step, applied to something else.
   const ast::Expr* step_onto(const ast::Expr* node, const ast::Expr* inner);  // check.py:1364
   // Take a value written with `¨` apart, or nothing where it is not one.
-  std::optional<std::tuple<const ast::Expr*, std::int64_t, std::function<const ast::Expr*(const ast::Expr*)>>> marked(const ast::Expr* expr);  // check.py:1371
+  std::optional<std::tuple<const ast::Expr*, std::int64_t, std::function<const ast::Expr*(ast::SyntaxArena&, const ast::Expr*)>>> marked(const ast::Expr* expr);  // check.py:1371
   // Whether a mask written as `expr` may be worked out a place at a time.
   bool walks_per_place(const ast::Expr* expr);  // check.py:1401
   // `value`'s low bits, read as a number of `ty`: two's complement.
@@ -163,7 +185,7 @@ namespace pl4g::sema {
   const ast::Block* continued(ast::SyntaxArena& arena, const ast::Block* body, std::string_view outer, std::string_view inner);  // check.py:1647
   // A generator's body with each `yield v` as `handed` makes it, each `yield ⇉ g` as a loop over `g` of
   // such, and each `return` as the walk running out: going on past the loop of one turn named `outer`.
-  const ast::Block* yields_replaced(ast::SyntaxArena& arena, const ast::Block* body, const std::function<const ast::Node*(const ast::Yield*)>& handed, std::string_view outer, const std::function<std::string()>& walk_name);  // check.py:1661
+  const ast::Block* yields_replaced(ast::SyntaxArena& arena, const ast::Block* body, const std::function<const ast::Node*(const ast::Expr*)>& handed, std::string_view outer, const std::function<std::string()>& walk_name);  // check.py:1661
   // Whether `expr` can be written out again for each element as it is.
   bool stands_alone(const ast::Expr* expr);  // check.py:1690
   // Whether writing `expr` again names the same place, at no cost.
@@ -359,7 +381,7 @@ namespace pl4g::sema {
   // What a value read out of the container `key` names carries.
   // Whether `key` says a value was read out of a container.
   // Check and lower the macros, answering the module and the trees they quoted.
-  std::unique_ptr<ir::Module> check_macros(std::span<const ast::SourceUnit* const> units, DiagEngine& diags, SourceManager* sources = nullptr, ModuleRegistry* registry = nullptr, std::optional<std::filesystem::path> path = std::nullopt);  // check.py:28681
+  CheckedMacros check_macros(std::span<const ast::SourceUnit* const> units, DiagEngine& diags, SourceManager* sources = nullptr, ModuleRegistry* registry = nullptr, std::optional<std::filesystem::path> path = std::nullopt);  // check.py:28681
   // Check `units` and lower them into `module`.
   ir::Module& check(ir::Module& module, std::span<const ast::SourceUnit* const> units, DiagEngine& diags, ModuleRegistry* registry = nullptr, SourceManager* sources = nullptr, Notes* notes = nullptr, Conditions conditions = Conditions::check, bool whole_modules = false, bool ignore_system = false);  // check.py:28702
 

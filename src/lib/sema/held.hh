@@ -25,6 +25,12 @@ namespace pl4g::sema {
     bool operator==(const Mixed&) const = default;
   };
 
+  // What `_REFUSED` is where it is handed around as an `object`: a rewriting
+  // that refused what it was given, and said why.
+  struct Refused {
+    bool operator==(const Refused&) const = default;
+  };
+
 
   // What a Python variable annotated `object` holds: whichever of the
   // checker's things it is.  A name at the top level stands for a variable, a
@@ -33,7 +39,7 @@ namespace pl4g::sema {
   // Empty is Python's `None`.  Compared by identity, as `is` compares.
   struct Held {
     std::variant<std::monostate, const ir::Type*, ir::Value*, LoadedModule*, Generator*, Generic*, NamedType*,
-                 Local*, Bundle*, const ast::Node*, Mixed, std::string, __int128, bool>
+                 Local*, Bundle*, const ast::Node*, Mixed, Refused, std::string, __int128, bool>
       v;
 
     Held() = default;
@@ -48,6 +54,7 @@ namespace pl4g::sema {
     Held(Bundle* b) { if (b != nullptr) v = b; }
     Held(const ast::Node* n) { if (n != nullptr) v = n; }
     Held(Mixed m) : v(m) {}
+    Held(Refused r) : v(r) {}
     Held(std::string s) : v(std::move(s)) {}
     Held(__int128 n) : v(n) {}
     explicit Held(bool b) : v(b) {}
@@ -101,6 +108,7 @@ namespace pl4g::sema {
     const std::string* text() const noexcept { return std::get_if<std::string>(&v); }
     const __int128* number() const noexcept { return std::get_if<__int128>(&v); }
     bool is_mixed() const noexcept { return std::holds_alternative<Mixed>(v); }
+    bool is_refused() const noexcept { return std::holds_alternative<Refused>(v); }
   };
 
 

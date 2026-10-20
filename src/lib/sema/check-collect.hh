@@ -9,7 +9,7 @@
     // Check a parameter that stands for all the arguments from there on.
     void check_several(const ast::FuncDef* node);  // check.py:6637
     // Whether the first part of a definition's name is a type this file defines.
-    bool a_type_here(const ast::FuncDef* node);  // check.py:6656
+    bool a_type_here(const ast::FuncDef* node) pre(node->held.has_value());  // check.py:6656
     // Register one function definition without looking at its body.
     Collected* collect_function(const ast::FuncDef* node, std::string_view path);  // check.py:6674
     // Register a generator: its signature, and the function its body is.
@@ -32,15 +32,15 @@
     // What each parameter of `node` is given where a call gives it nothing.
     std::vector<const ir::Value*> defaults_of(const ast::FuncDef* node, std::span<const ir::Type* const> types);  // check.py:6981
     // The value written as `param`'s default, where it is one.
-    const ir::Value* default_value(const ast::Param* param, const ir::Type* ty);  // check.py:7010
+    const ir::Value* default_value(const ast::Param* param, const ir::Type* ty) pre(param->default_ != nullptr);  // check.py:7010
     // Which arena parameters the answer and each parameter were made in.
-    std::tuple<std::optional<std::vector<std::int64_t>>, std::vector<std::optional<std::int64_t>>> made_in_of(const ast::FuncDef* node, std::span<const ir::Type* const> params, const ir::Type* ret);  // check.py:7032
+    std::pair<std::optional<std::vector<int>>, std::vector<std::optional<int>>> made_in_of(const ast::FuncDef* node, std::span<const ir::Type* const> params, const ir::Type* ret);  // check.py:7032
     // Give the parameters of a body the provenance the signature says.
     void params_made_in(const ast::FuncDef* node, ir::Function* func);  // check.py:7095
     // The name of what `expr` calls, where that hands out an arena.
     std::optional<std::string> handing_callee(const ast::Expr* expr);  // check.py:7184
     // Lower `let v: T in kept = f(…)`: an arena received with an answer.
-    void lower_receiving(ir::Builder& builder, const ast::VarDef* stmt);  // check.py:7200
+    void lower_receiving(ir::Builder& builder, const ast::VarDef* stmt) pre(stmt->made_in.has_value());  // check.py:7200
     // Where the arena a call hands out with its answer is to be kept.
     ir::Value* arena_for(const ast::Call* expr, std::string_view name);  // check.py:7231
     // What parameter `at` of a call was handed the room of: what the call wrote for it, or the arena it
@@ -81,9 +81,9 @@
     // Check a list of attributes against their declarations.
     std::vector<BoundAttr> bind_attributes(std::span<const ast::Attribute* const> nodes, AttrTarget target);  // check.py:7690
     // Match an attribute's arguments to its parameters.
-    std::optional<Dict<std::string, Held>> bind_arguments(const AttrSpec* spec, const ast::Attribute* node);  // check.py:7721
+    std::optional<std::vector<std::pair<std::string_view, AttrValue>>> bind_arguments(const AttrSpec* spec, const ast::Attribute* node);  // check.py:7721
     // Check one attribute argument against its declared kind.
-    Held attr_value(const AttrSpec* spec, std::string_view param_name, std::string_view kind, std::optional<std::span<const std::string>> choices, const ast::AttrArg* arg);  // check.py:7771
+    std::optional<AttrValue> attr_value(const AttrSpec* spec, std::string_view param_name, std::string_view kind, std::span<const std::string_view> choices, const ast::AttrArg* arg);  // check.py:7771
     // Whether the image offers this definition's symbol.
     ir::Linkage linkage_of(std::span<const BoundAttr> bound);  // check.py:7798
     // Whether a file importing this module may name the definition.
@@ -103,7 +103,7 @@
     // The enumeration a definition makes, reporting what is wrong with it.
     const ir::Type* values_of(NamedType* defined);  // check.py:8026
     // The number one value of an enumeration is stored as.
-    std::optional<std::int64_t> number_for(const ast::EnumMember* member, std::span<const std::string> names, std::span<const std::int64_t> numbers, const Dict<std::int64_t, std::string>& taken, bool flag);  // check.py:8065
+    std::optional<std::int64_t> number_for(const ast::EnumMember* member, std::span<const std::string> names, std::span<const std::int64_t> numbers, Dict<std::int64_t, std::string>& taken, bool flag);  // check.py:8065
     // The number a value that says none is given.
     std::int64_t next_number(std::span<const std::int64_t> numbers, bool flag);  // check.py:8095
     // What holds the values: what the definition named, or the smallest unsigned type that holds every one
@@ -182,9 +182,9 @@
     // Refuse a bundle that reaches itself, once every bundle is known.
     void check_bundle_cycles();  // check.py:8976
     // Whether `bundle` applies `wanted`, however many bundles apart.
-    bool reaches(Bundle* bundle, std::string_view wanted, const NameSet& seen);  // check.py:8995
+    bool reaches(Bundle* bundle, std::string_view wanted, NameSet& seen);  // check.py:8995
     // The walk itself, with the bundle's own names already in force.
-    bool reaching(Bundle* bundle, std::string_view wanted, const NameSet& seen);  // check.py:9010
+    bool reaching(Bundle* bundle, std::string_view wanted, NameSet& seen);  // check.py:9010
     // The bundle an expression applies, where it applies one.
     Bundle* bundle_named(const ast::Expr* expr);  // check.py:9025
     // Whether the operands of `expr` are types, which is what decides whether a clause holding it is a
@@ -201,11 +201,11 @@
     // Whether every clause is of a shape that has a reading.
     bool check_clause_shapes(std::span<const ast::Clause* const> clauses);  // check.py:9150
     // Check every requirement of a signature, settling what it settles.
-    bool check_clauses(std::span<const ast::Clause* const> clauses, const Dict<std::string, const ir::Type*>& bound, std::string_view name, Span span);  // check.py:9185
+    bool check_clauses(std::span<const ast::Clause* const> clauses, Dict<std::string, const ir::Type*>& bound, std::string_view name, Span span);  // check.py:9185
     // Whether one requirement is met, settling the type its arrow names.
-    bool met(const ast::Clause* clause, const Dict<std::string, const ir::Type*>& bound, std::string_view name, Span span);  // check.py:9201
+    bool met(const ast::Clause* clause, Dict<std::string, const ir::Type*>& bound, std::string_view name, Span span);  // check.py:9201
     // What a requirement's expression answers, or nothing where it cannot be written at all.
-    const ir::Type* answered_by(const ast::Clause* clause, const Dict<std::string, const ir::Type*>& bound, std::string_view name, Span span);  // check.py:9211
+    const ir::Type* answered_by(const ast::Clause* clause, Dict<std::string, const ir::Type*>& bound, std::string_view name, Span span);  // check.py:9211
     // Whether every line of an applied bundle is met.
     bool bundle_met(Bundle* bundle, const ast::Call* expr, const Dict<std::string, const ir::Type*>& bound, std::string_view name, Span span);  // check.py:9252
     // The type an operand stands for, or nothing where it stands for a value.
@@ -217,10 +217,11 @@
     // written.
     const ir::Type* written_over(std::span<const std::tuple<std::string, const ir::Type*>> dummies, const ast::Expr* expr);  // check.py:9363
     // Bind what a requirement's arrow names, or check it against what is already bound.
-    bool settling(const ast::Clause* clause, const ir::Type* found, const Dict<std::string, const ir::Type*>& bound, std::string_view name);  // check.py:9397
+    bool settling(const ast::Clause* clause, const ir::Type* found, Dict<std::string, const ir::Type*>& bound, std::string_view name) pre(clause->answers != nullptr);  // check.py:9397
 
     // -- the conditions a body carries -------------------------------------------
     // Emit the checks a function's `pre` clauses stand for.
     void lower_conditions(ir::Builder& builder, const ast::FuncDef* node, ir::Function* func, bool while_running = false);  // check.py:9428
     // Lower `⎕entry(NAME)`: what a parameter held when the function began.
     ir::Value* lower_at_entry(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:9448
+

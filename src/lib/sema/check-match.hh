@@ -1,6 +1,14 @@
 // The checker's methods ported from check.py lines 20793 to 23412, defined in
 // check-match.cc.  Not a header of its own: included inside the class body of `Checker` (check.hh).
 
+    // Python's `UndefConst(ty)`: a value nothing may read, a new one each time
+    // as Python makes one (the module's `undef` is one per type).
+    ir::Value* fresh_undef(const ir::Type* ty);
+    // A declaration of a method another part defines, in the shape this part
+    // calls it in: `_an_effect` takes the message's arguments.  DECLARED HERE
+    // until that part declares it so.
+    void an_effect(std::int64_t which, Span span, Held through, DiagArgs args);  // check.py:28387
+
     // -- match -------------------------------------------------------------------
     // Check and lower a `match`, which takes a value's alternatives apart.
     ir::Value* lower_match(ir::Builder& builder, const ast::Match* stmt, ir::Function* func, const ir::Type* wanted, bool produces);  // check.py:20795
@@ -86,13 +94,13 @@
     // Lower `and` or `or`, which do not compute the right side unless the left one leaves the answer open.
     ir::Value* lower_short_circuit(ir::Builder& builder, const ast::Binary* expr, const ir::Type* expected);  // check.py:22448
     // Lower `expr` where only a truth value will do, or report why not.
-    ir::Value* boolean(ir::Builder& builder, const ast::Expr* expr, const ast::Node* op, bool walked = false);  // check.py:22501
+    ir::Value* boolean(ir::Builder& builder, const ast::Expr* expr, std::string_view op, bool walked = false);  // check.py:22501
     // The truth value that is true exactly where `value` is not.
     ir::Value* negate(ir::Builder& builder, ir::Value* value, Span span);  // check.py:22525
     // What one of the four operators a set answers comes to.
-    ir::Value* lower_set_operation(ir::Builder& builder, const ast::BinaryOp* op, const ir::SetType* ty, ir::Value* left, ir::Value* right, Span span);  // check.py:22550
+    ir::Value* lower_set_operation(ir::Builder& builder, ast::BinaryOp op, const ir::SetType* ty, ir::Value* left, ir::Value* right, Span span);  // check.py:22550
     // `ty` itself where it may stand on one side of `op`, and ERROR else.
-    const ir::Type* comparable(Span span, const ast::BinaryOp* op, const ir::Type* ty);  // check.py:22580
+    const ir::Type* comparable(Span span, ast::BinaryOp op, const ir::Type* ty);  // check.py:22580
     // Lower `SHAPE ⍴ VALUES`: something of that shape, filled with those.
     ir::Value* lower_reshape(ir::Builder& builder, const ast::Binary* expr, const ir::Type* expected);  // check.py:22626
     // The shape written on the left of the operator, or nothing where what is written is not one.
@@ -112,15 +120,15 @@
     // Lower what is raised and what it is raised by, and check both.
     std::tuple<ir::Value*, const ir::Type*, ir::Value*, const ir::IntType*> sides_of_a_power(ir::Builder& builder, const ast::Expr* expr, const ast::Expr* written, const ast::Expr* exponent, const ir::Type* expected);  // check.py:23028
     // One divided by a power, which is what a negative exponent means.
-    ir::Value* reciprocal(ir::Builder& builder, ir::Value* base, const ir::Type* ty, std::int64_t times, const ir::Type* answer, Span span);  // check.py:23074
+    ir::Value* reciprocal(ir::Builder& builder, ir::Value* base, const ir::Type* ty, __int128 times, const ir::Type* answer, Span span);  // check.py:23074
     // One divided by a value, in whichever division its type has.
     ir::Value* reciprocal_of(ir::Builder& builder, ir::Value* raised, const ir::Type* ty, const ir::Type* answer, Span span);  // check.py:23089
     // Report a power of two written-down numbers that will not fit.
-    bool power_is_already_known(const ast::Expr* expr, const ir::Type* ty, const ir::IntConst* base, std::int64_t times);  // check.py:23100
+    bool power_is_already_known(const ast::Expr* expr, const ir::Type* ty, const ir::IntConst* base, __int128 times);  // check.py:23100
     // The value anything raised to no power at all comes to.
     ir::Value* unity(ir::Builder& builder, const ir::Type* ty, Span span);  // check.py:23119
     // Raise something to a power written down, with no loop.
-    ir::Value* raised_by(ir::Builder& builder, ir::Value* base, const ir::Type* ty, std::int64_t times, Span span);  // check.py:23132
+    ir::Value* raised_by(ir::Builder& builder, ir::Value* base, const ir::Type* ty, __int128 times, Span span);  // check.py:23132
     // Raise something to a power the program works out, which is a loop.
     ir::Value* raised_over(ir::Builder& builder, ir::Value* base, const ir::Type* ty, ir::Value* times, const ir::IntType* count, const ir::Type* answer, Span span);  // check.py:23163
     // Squaring and multiplying, with the exponent's magnitude in a register.

@@ -182,6 +182,31 @@ namespace pl4g {
   }
 
 
+  DiagEngine::Diverted DiagEngine::divert(Sink to)
+  {
+    Diverted kept{ std::move(sink), error_count, warning_count, errors_only, std::move(expectations),
+                   std::make_shared<std::vector<Because>>(std::move(because_stack)) };
+    sink = std::move(to);
+    error_count = 0;
+    warning_count = 0;
+    errors_only = false;
+    expectations.clear();
+    because_stack.clear();
+    return kept;
+  }
+
+
+  void DiagEngine::restore(Diverted&& kept)
+  {
+    sink = std::move(kept.sink);
+    error_count = kept.error_count;
+    warning_count = kept.warning_count;
+    errors_only = kept.errors_only;
+    expectations = std::move(kept.expectations);
+    because_stack = std::move(*std::static_pointer_cast<std::vector<Because>>(kept.because_stack));
+  }
+
+
   void DiagEngine::and_no_longer(std::size_t mark)
   {
     because_stack.resize(mark - 1);
@@ -201,5 +226,7 @@ namespace pl4g {
       return Severity::error;
     return info.severity;
   }
+
+
 
 } // namespace pl4g
