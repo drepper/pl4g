@@ -106,7 +106,8 @@ def test_the_table_is_there_and_says_what_went_in(triple: str, tmp_path: Path) -
     assert [r.tag for r in rows][:6] == [Tag.COMPILER, Tag.SOURCE, Tag.SOURCE,
                                          Tag.SOURCE, Tag.SOURCE, Tag.SOURCES]
     assert {r.tag for r in rows[6:]} == {Tag.FUNCTION}
-    assert rows[0].name.startswith("pypl4g ")
+    # The compiler that built it, by the name and version it gives itself.
+    assert rows[0].name == run_compiler(["--version"]).stdout.strip()
     assert rows[1].name.endswith("t.pl4g")
     assert [rows[at].name.rsplit("/", 1)[-1] for at in (2, 3, 4)] == \
         ["std.pl4g", "fs.pl4g", "io.pl4g"]

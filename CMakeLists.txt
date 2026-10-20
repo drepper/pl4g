@@ -400,6 +400,22 @@ add_test(NAME encoding-agrees-riscv64
           ${CMAKE_SOURCE_DIR})
 add_test(NAME isa-agrees-riscv64
   COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/isa_agrees_riscv64.py $<TARGET_FILE:pl4g-isadump> ${CMAKE_SOURCE_DIR})
+# The C++ compiler writes for every test program, on every architecture and
+# at every level its test asks for, the image pypl4g writes, byte for byte.
+foreach(triple x86_64-linux-none aarch64-linux-none riscv64-linux-none)
+  add_test(NAME elf-agrees-${triple}
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/elf_agrees.py $<TARGET_FILE:pl4g-compiler> ${CMAKE_SOURCE_DIR}
+            ${CMAKE_BINARY_DIR}/elf-agrees-${triple} ${triple})
+  set_tests_properties(elf-agrees-${triple} PROPERTIES TIMEOUT 1800)
+endforeach()
+# And pypl4g's own test suite -- every language test, built and run natively
+# and under QEMU, and every compiler test that asks the command line -- passes
+# with the C++ compiler in pypl4g's place.
+add_test(NAME suite-with-pl4g
+  COMMAND ${CMAKE_COMMAND} -E env PL4G_COMPILER=$<TARGET_FILE:pl4g-compiler>
+          python3 -m pytest -q ${CMAKE_SOURCE_DIR}/tests
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+set_tests_properties(suite-with-pl4g PROPERTIES TIMEOUT 3600)
 # The same, sanitized, and the fuzzing entry points replayed over the test
 # programs and the corpora under the sanitizers.
 if(PL4G_SANITIZERS)
