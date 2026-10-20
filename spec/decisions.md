@@ -10677,7 +10677,8 @@ Open questions
 
 Questions that are open, and tasks not yet done, are kept in the to-do lists rather than here:
 [TODO-language.md](../TODO-language.md) for the language, [TODO-pypl4g.md](../TODO-pypl4g.md) for the compiler and
-[TODO-editors.md](../TODO-editors.md) for what an editor reads, with a list of its own for each further tool as one is needed.
+[TODO-editors.md](../TODO-editors.md) for what an editor reads and [TODO-cpp.md](../TODO-cpp.md) for the C++ implementation, with
+a list of its own for each further tool as one is needed.
 
 This file records decisions that were made.  A decision that leaves something open says so in its own entry, and the thing left
 open belongs in a list.

@@ -755,3 +755,7 @@ Optimizations
     `src/fuzz/corpus/check/generic-without-a-body.pl4g`.
     Done on 2026-10-20: an instance of one with no body is not checked, there being nothing to check and its loss having
     been said -- in the C++ checker as well.  test_cascades.py holds it.
+
+[ ] an ISA string for `--mclevel` on RISC-V is read by Unicode's rules: a version written in another script's digits,
+    `rv64i٣`, is taken, and case and blanks are folded as Unicode folds them.  The C++ implementation reads ASCII only and
+    refuses such a string; a level is something a build script writes, and the RISC-V specification's strings are ASCII.
