@@ -44,6 +44,9 @@ namespace pl4g::lsp {
     bool whole = false;
     // What made the tree, and holds it.
     std::unique_ptr<driver::Compilation> compilation;
+    // What a run of the whole compiler read the trees into, kept as long as the
+    // tree is read -- and gone before the engine and the sources it used.
+    std::shared_ptr<void> kept;
   };
 
 

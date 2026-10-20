@@ -220,6 +220,8 @@ namespace pl4g::driver {
 
       // What the run compiled, for what is asked of it afterwards.
       const ir::Module* made() const noexcept { return module.get(); }
+      // Where the checker writes down what each name is, where anything asks.
+      sema::Notes* notes = nullptr;
       std::vector<Timing> timings;
 
       void write_report_log();
@@ -325,7 +327,7 @@ namespace pl4g::driver {
       log_before = log.active;
       log.active = &module->reports;
       registry = std::make_unique<sema::ModuleRegistry>(registry_for(options));
-      sema::check(*module, units, diags, registry.get(), &sources, nullptr, options.conditions, false,
+      sema::check(*module, units, diags, registry.get(), &sources, notes, options.conditions, false,
                   options.ignore_system);
       // Before anything is dropped: which tests this binary runs is what
       // decides which of them are reachable at all.
@@ -867,6 +869,31 @@ namespace pl4g::driver {
     ReportLog log;
     auto engine = engine_for(renderer, log);
     return compile_with(options, result, io, sources, renderer, std::move(engine), log);
+  }
+
+
+  int compile_whole(const Options& options, DiagEngine& diags, SourceManager& sources, sema::Notes* notes,
+                    const Descriptors& io, std::shared_ptr<void>* kept)
+  {
+    ReportLog log;
+    auto raw = &diags;
+    diags.write_into([&log, raw](const Diagnostic& d) {
+      log.active->push_back({ std::format("{}", raw->effective_severity(*d.info)), std::string(d.info->name),
+                              d.text(), d.span, unsigned(d.info->number) });
+    });
+    // The image is wanted for what making it says, not for itself.
+    int nowhere = ::open("/dev/null", O_WRONLY | O_CLOEXEC);
+    if (nowhere < 0) [[unlikely]]
+      return exit_code::errors;
+    auto driver = std::make_shared<Driver>(options, diags, sources, io, log, nowhere);
+    driver->notes = notes;
+    int status = driver->run();
+    ::close(nowhere);
+    // The trees the run read are its own, and whoever reads them afterwards
+    // keeps them.
+    if (kept != nullptr)
+      *kept = std::move(driver);
+    return status;
   }
 
 

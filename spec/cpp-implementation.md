@@ -172,8 +172,8 @@ The language server and the tree-sitter service
 -----------------------------------------------
 
 `lsp/` is pypl4g's `lsp/` ported, on descriptors the caller hands it, simdjson reading and a writer of its own; it answers every
-conversation of `tests/compiler/test_lsp.py` as pypl4g's does, except saving, where pypl4g also generates code and the C++ side has
-no back end yet.
+conversation of `tests/compiler/test_lsp.py` as pypl4g's does; typing gets the front end, and opening and saving the whole compiler,
+code generation included (`driver::compile_whole`), so that what only the back end refuses is said when there is a file to refuse.
 
 `ts/` builds the grammar's generated parser and its queries (by `#embed`) into the library: what each piece of a text is and where
 it folds.  The text renderer colours a snippet by it where colour is asked for, as pypl4g's does through the Python binding; every

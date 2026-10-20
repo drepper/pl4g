@@ -1,6 +1,8 @@
 // Running the compiler over what the editor is holding.
 #include "lsp/analysis.hh"
 
+#include "driver/driver.hh"
+
 
 namespace pl4g::lsp {
 
@@ -20,11 +22,13 @@ namespace pl4g::lsp {
     found->compilation = std::make_unique<driver::Compilation>(std::move(options), *found->diags, *found->sources);
     try {
       // Typing gets the front end, which is where all but a handful of the
-      // diagnostics are; saving gets the whole compiler.  pypl4g's whole
-      // compiler goes on to generate code, which the C++ one has nothing of:
-      // the diagnostics only its back end makes are not here.
+      // diagnostics are; saving gets the whole compiler, code generation
+      // included, so that a program the back end refuses says so at the
+      // moment there is a file to refuse.  Nothing of it writes to the
+      // standard output, which carries the protocol.
       if (whole)
-        found->compilation->front_end(found->notes.get());
+        driver::compile_whole(found->compilation->options, *found->diags, *found->sources, found->notes.get(),
+                              { -1, 2, 2 }, &found->kept);
       else
         found->compilation->analyze(found->compilation->read_and_parse(), found->notes.get());
     } catch (const InternalError& error) {

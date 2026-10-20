@@ -7,10 +7,8 @@ back is read as JSON and compared message for message.  What the two may say
 differently is their names -- ``serverInfo`` and every diagnostic's ``source``
 -- and nothing else.
 
-One conversation of that test is not here: the one about saving, which asks
-for what only pypl4g's code generator says (8501).  The C++ implementation has
-no code generator, and saving gets its whole compiler, which stops where the
-front end stops.
+Saving gets the whole compiler on both sides, code generation included, which
+is where a program the back end refuses (8501) is refused.
 """
 
 from __future__ import annotations
@@ -195,6 +193,16 @@ def conversations(room: Path) -> dict[str, Conversation]:
     misnamed.write_text(text, encoding="utf-8")
     one = made["misnamed"] = Conversation(["utf-32"])
     one.open(misnamed, text)
+    # Opened, typed and saved: the back end speaks on opening and on saving,
+    # and not on typing.
+    refused = room / "type-value-not-yet.pl4g"
+    held = (Path(__file__).resolve().parent.parent.parent / "tests" / "language" / "type-value-not-yet"
+            / "type-value-not-yet.pl4g").read_text(encoding="utf-8")
+    refused.write_text(held, encoding="utf-8")
+    one = made["saved"] = Conversation(["utf-32"])
+    one.open(refused, held)
+    one.change(refused, held)
+    one.notify("textDocument/didSave", {"textDocument": {"uri": uri_of(refused)}})
     return made
 
 
