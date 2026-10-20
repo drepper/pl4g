@@ -57,7 +57,7 @@ from collections.abc import Mapping
 from fractions import Fraction
 from typing import Final, Protocol, Sequence
 
-from .desc import OperandRole
+from .desc import InstFlags, OperandRole
 from .inst import MCInst
 from .loops import loop_depths
 from .machine import MachineFunction
@@ -164,6 +164,12 @@ class BlockFlow:
     #: What it reads before writing, and what it writes at all.
     uses: set[int] = field(default_factory=set)
     kills: set[int] = field(default_factory=set)
+    #: The branches that leave it before its end, each with the blocks it
+    #: reaches; and the block cut there, from its start to each such branch and
+    #: from the last of them to its end, by what each piece reads before
+    #: writing and writes at all.  Nothing where it is left only at its end.
+    exits: list[tuple[int, tuple[int, ...]]] = field(default_factory=list)
+    pieces: list[tuple[set[int], set[int]]] = field(default_factory=list)
     #: What is live where it begins and where it ends, once settled.
     live_in: set[int] = field(default_factory=set)
     live_out: set[int] = field(default_factory=set)
@@ -182,6 +188,17 @@ class BlockFlow:
     def exit_point(self) -> int:
         """The point at which control leaves, which is its last write."""
         return self.last * 2 + 1
+
+
+def _branch_targets(inst: MCInst) -> list[str]:
+    """The labels a branch names: every symbol among its operands."""
+    found: list[str] = []
+    for operand in inst.operands:
+        symbol = getattr(getattr(operand, "expr", None), "symbol", None)
+        name = getattr(symbol, "name", None)
+        if isinstance(name, str):
+            found.append(name)
+    return found
 
 
 def _propagate(flows: Sequence[BlockFlow]) -> None:
@@ -203,10 +220,34 @@ def _propagate(flows: Sequence[BlockFlow]) -> None:
             if leaving != flow.live_out:
                 flow.live_out = leaving
                 changed = True
-            arriving = flow.uses | (leaving - flow.kills)
+            arriving = _arriving(flow, flows, leaving)
             if arriving != flow.live_in:
                 flow.live_in = arriving
                 changed = True
+
+
+def _arriving(flow: BlockFlow, flows: Sequence[BlockFlow],
+              leaving: set[int]) -> set[int]:
+    """What is live where *flow* begins, *leaving* being what is live where it
+    ends.
+
+    A block left only at its end wants what it reads before writing and what it
+    does not write and something after it wants.  One with a branch before its
+    end is walked back a piece at a time: what is live just after such a branch
+    is what is live going on together with what the blocks it reaches want --
+    which is what keeps a value one of them reads alive up to the branch, even
+    where the block writes it again after.
+    """
+    if not flow.exits:
+        return flow.uses | (leaving - flow.kills)
+    live = set(leaving)
+    for piece in range(len(flow.pieces) - 1, -1, -1):
+        if piece < len(flow.exits):
+            for at in flow.exits[piece][1]:
+                live |= flows[at].live_in
+        uses, kills = flow.pieces[piece]
+        live = uses | (live - kills)
+    return live
 
 
 @dataclass(slots=True)
@@ -421,6 +462,11 @@ class LinearScan:
                 touch(key, flow.entry_point)
             for key in flow.live_out:
                 touch(key, flow.exit_point)
+            # And at a branch before the end, what the blocks it reaches want.
+            for position, targets in flow.exits:
+                for target in targets:
+                    for key in flows[target].live_in:
+                        touch(key, position * 2)
         stretched = self._stretches(function, flows, seen, virtual=True)
         virtual = [LiveRange(reg=reg, start=first[key], end=last[key],
                              cost=cost.get(key, 0),
@@ -489,11 +535,15 @@ class LinearScan:
             for key in flow.live_in:
                 if key in wanted:
                     start[key] = reached[key] = flow.entry_point
+            exits = dict(flow.exits)
             for at, inst in enumerate(block.insts):
                 position = flow.first + at
                 defs, uses = defs_and_uses(inst)
                 read = {self._key(r) for r in uses
                         if isinstance(r, VirtReg) is virtual}
+                # A branch before the end reads what the blocks it reaches want.
+                for target in exits.get(position, ()):
+                    read |= flows[target].live_in & wanted
                 written = {self._key(r) for r in defs
                            if isinstance(r, VirtReg) is virtual}
                 for key in read:
@@ -529,20 +579,38 @@ class LinearScan:
             begins = position
             uses: set[int] = set()
             kills: set[int] = set()
-            for inst in block.insts:
+            exits: list[tuple[int, tuple[int, ...]]] = []
+            pieces: list[tuple[set[int], set[int]]] = []
+            piece_uses: set[int] = set()
+            piece_kills: set[int] = set()
+            for at, inst in enumerate(block.insts):
                 defs, used = defs_and_uses(inst)
                 for reg in used:
                     key = self._key(reg)
                     seen.setdefault(key, reg)
                     if key not in kills:
                         uses.add(key)
+                    if key not in piece_kills:
+                        piece_uses.add(key)
                 for reg in defs:
                     key = self._key(reg)
                     seen.setdefault(key, reg)
                     kills.add(key)
+                    piece_kills.add(key)
+                if at + 1 < len(block.insts) and InstFlags.TERMINATOR in inst.desc.flags:
+                    reached = tuple(found for found in (
+                        function.index_of(label) for label in _branch_targets(inst))
+                        if found is not None)
+                    if reached:
+                        exits.append((position, reached))
+                        pieces.append((piece_uses, piece_kills))
+                        piece_uses, piece_kills = set(), set()
                 position += 1
+            if exits:
+                pieces.append((piece_uses, piece_kills))
             flows.append(BlockFlow(first=begins, last=position - 1,
-                                   successors=successors, uses=uses, kills=kills))
+                                   successors=successors, uses=uses, kills=kills,
+                                   exits=exits, pieces=pieces))
         return flows, seen
 
     def _key(self, reg: Reg) -> int:

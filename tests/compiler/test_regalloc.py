@@ -534,3 +534,40 @@ def test_a_register_written_in_between_is_read_back() -> None:
         [inst("mov", MCReg(INFO.view(unit, 64)), MCImm(0, 32)) for unit in ORDER])
     reloads = [i for i in out if _reads_slot(i, slot)]
     assert len(reloads) == 2, out
+
+
+def test_a_value_a_branch_target_reads_lives_up_to_the_branch() -> None:
+    """A branch before the end of its block reads what the block it reaches
+    reads, though no operand of it names that.
+
+    Here `held` is written, the block branches to `out` -- which reads `held` --
+    and only then writes `held` again.  What is written between the first write
+    and the branch, `between`, may not take `held`'s register: the value `out`
+    reads has to be in it when the branch is taken.  Liveness worked out for
+    the block as a whole saw the second write and nothing of the branch, and
+    gave the register away.
+    """
+    from pypl4g.mc.operand import MCSymRef, SymExpr
+    from pypl4g.mc.symbol import MCSymbol
+    held, between = virtual(), virtual()
+    built = MachineFunction(name="t")
+    entry = built.add_block("entry")
+    entry.append(inst("mov", MCReg(held), MCImm(1, 32)))
+    entry.append(inst("mov", MCReg(between), MCImm(5, 32)))
+    entry.append(inst("cmp", MCReg(between), MCImm(3, 32)))
+    entry.append(inst("jne", MCSymRef(SymExpr(MCSymbol("out")))))
+    entry.successors.append("out")
+    entry.append(inst("mov", MCReg(held), MCImm(2, 32)))
+    entry.successors.append("on")
+    on = built.add_block("on")
+    on.append(inst("mov", MCMem(disp=8, size_bits=32), MCReg(held)))
+    on.append(inst("ret"))
+    out = built.add_block("out")
+    out.append(inst("mov", MCMem(disp=16, size_bits=32), MCReg(held)))
+    out.append(inst("ret"))
+    result = assigned(built)
+    first = result[0].operands[0]
+    other = result[1].operands[0]
+    assert isinstance(first, MCReg) and isinstance(other, MCReg)
+    assert first.reg.unit is not other.reg.unit, \
+        "a value the branch's target reads was overwritten before the branch"

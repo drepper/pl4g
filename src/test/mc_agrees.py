@@ -340,6 +340,12 @@ def make_program(rng: random.Random) -> dict[str, Any]:
                 elif choice < 0.8:
                     steps.append(["op", "compare", None, [{"reg": rng.choice(defined)},
                                                           {"imm": 3, "bits": 32}]])
+                elif choice < 0.85 and blocks > 1:
+                    # A branch before the end of the block, which goes on after
+                    # it: what the target reads has to live up to the branch.
+                    steps.append(["branch", rng.choice([c.value for c in Condition]),
+                                  {"reg": rng.choice(defined)}, {"imm": 7, "bits": 32},
+                                  labels[rng.randrange(1, blocks)]])
                 elif choice < 0.9 and fname != "helper":
                     steps.append(["move", "r0", {"reg": rng.choice(defined)}])
                     steps.append(["call", "helper", ["r0", "r1", "r2", "r3"], ["r0"]])

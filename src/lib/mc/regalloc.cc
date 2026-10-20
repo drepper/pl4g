@@ -139,6 +139,12 @@ namespace pl4g::mc {
     std::set<Key> kills;
     std::set<Key> live_in;
     std::set<Key> live_out;
+    // The branches that leave it before its end, each with the blocks it
+    // reaches; and the block cut there, from its start to each such branch and
+    // from the last of them to its end, by what each piece reads before writing
+    // and writes at all.  Nothing where it is left only at its end.
+    std::vector<std::pair<std::int64_t, std::vector<std::size_t>>> exits;
+    std::vector<std::pair<std::set<Key>, std::set<Key>>> pieces;
 
     bool empty() const noexcept { return last < first; }
     std::int64_t entry_point() const noexcept { return first * 2; }
@@ -249,21 +255,43 @@ namespace pl4g::mc {
       const auto& block = *function.blocks[b];
       BlockFlow made;
       made.first = position;
-      for (const auto& inst : block.insts) {
+      std::set<Key> piece_uses;
+      std::set<Key> piece_kills;
+      for (std::size_t at = 0; at < block.insts.size(); ++at) {
+        const auto& inst = block.insts[at];
         auto [defs, used] = defs_and_uses(*inst);
         for (auto reg : used) {
           auto k = key(reg);
           seen.emplace(k, reg);
           if (! made.kills.contains(k))
             made.uses.insert(k);
+          if (! piece_kills.contains(k))
+            piece_uses.insert(k);
         }
         for (auto reg : defs) {
           auto k = key(reg);
           seen.emplace(k, reg);
           made.kills.insert(k);
+          piece_kills.insert(k);
+        }
+        if (at + 1 < block.insts.size() && has(inst->desc->flags, InstFlags::terminator)) {
+          std::vector<std::size_t> reached;
+          for (const auto& operand : inst->operands)
+            if (auto ref = std::get_if<MCSymRef>(&operand); ref != nullptr && ref->expr != nullptr
+                && ref->expr->kind == MCExpr::Kind::symbol)
+              if (auto found = function.index_of(static_cast<const SymExpr&>(*ref->expr).symbol->name))
+                reached.push_back(*found);
+          if (! reached.empty()) {
+            made.exits.emplace_back(position, std::move(reached));
+            made.pieces.emplace_back(std::move(piece_uses), std::move(piece_kills));
+            piece_uses.clear();
+            piece_kills.clear();
+          }
         }
         ++position;
       }
+      if (! made.exits.empty())
+        made.pieces.emplace_back(std::move(piece_uses), std::move(piece_kills));
       made.last = position - 1;
       made.successors = reachable[b];
       flows.push_back(std::move(made));
@@ -273,6 +301,39 @@ namespace pl4g::mc {
 
 
   namespace {
+
+    // What is live where `flow` begins, `leaving` being what is live where it
+    // ends.  A block with a branch before its end is walked back a piece at a
+    // time: what is live just after such a branch is what is live going on
+    // together with what the blocks it reaches want -- which keeps a value one
+    // of them reads alive up to the branch, even where the block writes it
+    // again after.
+    template<typename Flow>
+    std::set<const void*> arriving_at(const Flow& flow, const std::vector<Flow>& flows,
+                                      const std::set<const void*>& leaving)
+    {
+      if (flow.exits.empty()) {
+        auto arriving = flow.uses;
+        for (auto k : leaving)
+          if (! flow.kills.contains(k))
+            arriving.insert(k);
+        return arriving;
+      }
+      auto live = leaving;
+      for (std::size_t piece = flow.pieces.size(); piece-- > 0;) {
+        if (piece < flow.exits.size())
+          for (auto at : flow.exits[piece].second)
+            live.insert(flows[at].live_in.begin(), flows[at].live_in.end());
+        const auto& [uses, kills] = flow.pieces[piece];
+        auto before = uses;
+        for (auto k : live)
+          if (! kills.contains(k))
+            before.insert(k);
+        live = std::move(before);
+      }
+      return live;
+    }
+
 
     // Settle what is live where each block begins and ends.
     template<typename Flow>
@@ -289,10 +350,7 @@ namespace pl4g::mc {
             flow->live_out = leaving;
             changed = true;
           }
-          auto arriving = flow->uses;
-          for (auto k : leaving)
-            if (! flow->kills.contains(k))
-              arriving.insert(k);
+          auto arriving = arriving_at(*flow, flows, leaving);
           if (arriving != flow->live_in) {
             flow->live_in = std::move(arriving);
             changed = true;
@@ -344,6 +402,11 @@ namespace pl4g::mc {
         touch(k, one.entry_point());
       for (auto k : one.live_out)
         touch(k, one.exit_point());
+      // And at a branch before the end, what the blocks it reaches want.
+      for (const auto& [at, targets] : one.exits)
+        for (auto target : targets)
+          for (auto k : flows[target].live_in)
+            touch(k, at * 2);
     }
     auto stretched = stretches(function, flows, seen, true);
     std::vector<LiveRange> virtual_;
@@ -416,6 +479,13 @@ namespace pl4g::mc {
         for (auto reg : uses)
           if (reg.is_virtual() == virtual_)
             read.insert(key(reg));
+        // A branch before the end reads what the blocks it reaches want.
+        for (const auto& [exit, targets] : one.exits)
+          if (exit == position)
+            for (auto target : targets)
+              for (auto k : flows[target].live_in)
+                if (wanted.contains(k))
+                  read.insert(k);
         std::set<Key> written;
         for (auto reg : defs)
           if (reg.is_virtual() == virtual_)
