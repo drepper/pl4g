@@ -10,6 +10,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -54,7 +55,14 @@ namespace pl4g::elf {
   };
 
 
-  // Turns the assembled sections into an ELF executable.
+  // The table of a position-independent image, in the section of this name.
+  inline constexpr std::string_view relr_section = ".relr.dyn";
+
+  // Turns the assembled sections into an ELF executable: one at a fixed
+  // address, or a position-independent one (`ImageKind::pie`) -- linked at
+  // nought, with every absolute address it holds named in a table of relative
+  // relocations (elf/relr.hh) that its startup code applies, and the symbols
+  // of target/relocate.hh saying where the table and the image are.
   class ElfWriter {
   public:
     ElfWriter(ImageSettings settings, std::span<mc::MCSection* const> sections, std::span<mc::MCSymbol* const> symbols,
@@ -85,6 +93,11 @@ namespace pl4g::elf {
     void write_tables(mc::Bytes& out, const ImageLayout& layout);
     static std::uint16_t index_of(const ImageLayout& layout, const std::string& name);
     void resolve_fixups();
+    // What a position-independent image adds its load address to, and the
+    // table that says so.
+    void collect_relocations();
+    std::uint64_t place_relocations(ImageLayout& layout, std::uint64_t offset, std::vector<SegmentPlan>& loads);
+    void define(std::string_view name, std::uint64_t vaddr);
 
     ImageSettings settings;
     std::vector<mc::MCSection*> sections;
@@ -93,6 +106,10 @@ namespace pl4g::elf {
     mc::FixupApplier apply_fixup;
     StringTable shstrtab;
     StringTable strtab;
+    // The eight-byte places holding an absolute address, by section and offset
+    // in it, and the table made of where they ended up.
+    std::vector<std::pair<mc::MCSection*, std::uint64_t>> relocated;
+    std::vector<std::uint64_t> relr;
   };
 
 

@@ -114,6 +114,7 @@ set(PL4G_LIB_SOURCES
   src/lib/mc/reg.cc
   src/lib/mc/regalloc.cc
   src/lib/mc/streamer.cc
+  src/lib/elf/relr.cc
   src/lib/elf/strtab.cc
   src/lib/elf/structs.cc
   src/lib/elf/writer.cc
@@ -169,6 +170,7 @@ set(PL4G_LIB_SOURCES
   src/lib/target/frames.cc
   src/lib/target/globals.cc
   src/lib/target/narrow.cc
+  src/lib/target/relocate.cc
   src/lib/target/ordering.cc
   src/lib/target/pool.cc
   src/lib/target/registry.cc
@@ -415,7 +417,24 @@ add_test(NAME suite-with-pl4g
   COMMAND ${CMAKE_COMMAND} -E env PL4G_COMPILER=$<TARGET_FILE:pl4g-compiler>
           python3 -m pytest -q ${CMAKE_SOURCE_DIR}/tests
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-set_tests_properties(suite-with-pl4g PROPERTIES TIMEOUT 3600)
+# Run on its own: pytest uses every core already, and its tests time
+# themselves.
+set_tests_properties(suite-with-pl4g PROPERTIES TIMEOUT 3600 RUN_SERIAL TRUE)
+# With -fpie, every test program's image is a static position-independent
+# executable whose table of relative relocations says what binutils reads out
+# of it, and pypl4g's language suite -- every program built so, run natively
+# and under QEMU, and read by eu-elflint -- passes.
+foreach(triple x86_64-linux-none aarch64-linux-none riscv64-linux-none)
+  add_test(NAME pie-agrees-${triple}
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/pie_agrees.py $<TARGET_FILE:pl4g-compiler> ${CMAKE_SOURCE_DIR}
+            ${CMAKE_BINARY_DIR}/pie-agrees-${triple} ${triple})
+  set_tests_properties(pie-agrees-${triple} PROPERTIES TIMEOUT 1800)
+endforeach()
+add_test(NAME suite-with-pl4g-pie
+  COMMAND ${CMAKE_COMMAND} -E env PL4G_COMPILER=$<TARGET_FILE:pl4g-compiler> PL4G_COMPILER_ARGS=-fpie
+          python3 -m pytest -q ${CMAKE_SOURCE_DIR}/tests/language
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+set_tests_properties(suite-with-pl4g-pie PROPERTIES TIMEOUT 3600 RUN_SERIAL TRUE)
 # The same, sanitized, and the fuzzing entry points replayed over the test
 # programs and the corpora under the sanitizers.
 if(PL4G_SANITIZERS)
@@ -483,6 +502,12 @@ if(PL4G_SANITIZERS)
   add_test(NAME isa-agrees-riscv64-asan
     COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/isa_agrees_riscv64.py $<TARGET_FILE:pl4g-isadump-asan>
             ${CMAKE_SOURCE_DIR})
+  foreach(triple x86_64-linux-none aarch64-linux-none riscv64-linux-none)
+    add_test(NAME pie-agrees-${triple}-asan
+      COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/pie_agrees.py $<TARGET_FILE:pl4g-compiler-asan>
+              ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/pie-agrees-${triple}-asan ${triple})
+    set_tests_properties(pie-agrees-${triple}-asan PROPERTIES TIMEOUT 3600)
+  endforeach()
   foreach(target ${PL4G_FUZZ_TARGETS})
     add_test(NAME fuzz-${target}-replay-asan
       COMMAND pl4g-fuzz-${target}-replay-asan ${PL4G_TESTS} ${CMAKE_SOURCE_DIR}/src/fuzz/corpus/${target})

@@ -12,6 +12,7 @@
 #include "opt/flow.hh"
 #include "rt/blob.hh"
 #include "target/allocator.hh"
+#include "target/relocate.hh"
 #include "target/backtrace.hh"
 #include "target/emit.hh"
 #include "target/faults.hh"
@@ -323,7 +324,9 @@ namespace pl4g::target {
           emit_report(asm_, system);
         if (module.stack_size > 0)
           emit_handler(asm_, syscalls(), stack_abi());
-        emit_start(asm_, module, lookup_cconv(module.startup->cconv), failures, layout);
+        if (pie)
+          emit_relocate(asm_, relocate_regs());
+        emit_start(asm_, module, lookup_cconv(module.startup->cconv), failures, layout, pie);
         runtime.emit(asm_, by_name());
         messages.emit(asm_);
         constants.emit(asm_);

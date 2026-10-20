@@ -79,6 +79,15 @@ namespace pl4g::target {
     // driver to report.  A target with one level never asks.
     virtual bool has_mclevels() const { return false; }
     virtual void use_mclevel(std::string_view level) { (void) level; }
+
+    // Whether the image is to be position-independent (`-fpie`): linked at
+    // nought, loaded anywhere, and relocating itself before anything else runs
+    // (target/relocate.hh).  Said before `generate`.
+    void position_independent(bool on) noexcept { pie = on; }
+    bool is_position_independent() const noexcept { return pie; }
+
+  protected:
+    bool pie = false;
   };
 
 

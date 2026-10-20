@@ -8,6 +8,7 @@
 #pragma once
 
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -54,7 +55,11 @@ namespace pl4g::target::x86_64 {
   // where the message it then says was put, and nothing is asked without one.
   void emit_start(mc::Assembler& asm_, const ir::Module& module, const CallConvDesc& cconv, std::string_view level,
                   const std::optional<std::string>& refused, const std::optional<std::string>& turned_off,
-                  const std::unordered_map<const ir::Function*, Failure>& failures, const ir::DataLayout& layout);
+                  const std::unordered_map<const ir::Function*, Failure>& failures, const ir::DataLayout& layout,
+                  bool relocates = false);
+
+  // The registers the table of a position-independent image is applied with.
+  std::span<const mc::Reg> relocate_regs();
 
   // The helper that reports a fault and stops the program, walking the stack
   // first where `walk` says.

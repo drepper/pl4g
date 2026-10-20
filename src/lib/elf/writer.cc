@@ -2,8 +2,10 @@
 #include "elf/writer.hh"
 
 #include <algorithm>
+#include <format>
 
 #include "elf/const.hh"
+#include "elf/relr.hh"
 #include "elf/structs.hh"
 #include "mc/layout.hh"
 #include "util/fdio.hh"
@@ -12,6 +14,13 @@
 namespace pl4g::elf {
 
   namespace {
+
+    // The symbols the startup code of a position-independent image names
+    // (target/relocate.hh, which the writer does not include: the image format
+    // sits below the targets).
+    constexpr std::string_view target_image_start = "__pl4g_image_start";
+    constexpr std::string_view target_relr_start = "__pl4g_relr_start";
+    constexpr std::string_view target_relr_end = "__pl4g_relr_end";
 
     std::uint8_t binding_of(mc::SymBinding binding) noexcept
     {
@@ -67,8 +76,6 @@ namespace pl4g::elf {
 
   ImageLayout ElfWriter::plan()
   {
-    if (settings.kind == ImageKind::pie) [[unlikely]]
-      throw ImageError("a position-independent executable is not made yet");
     shstrtab = StringTable();
     strtab = StringTable();
     ImageLayout layout;
@@ -81,6 +88,9 @@ namespace pl4g::elf {
       mc::layout_section(*section);
       mc::resolve_symbol_offsets(*section, symbols);
     }
+    bool pie = settings.kind == ImageKind::pie;
+    if (pie)
+      collect_relocations();
 
     // Mapped sections are grouped by the permissions they need, since a
     // segment carries one set of permissions for all of it; a group that
@@ -99,7 +109,9 @@ namespace pl4g::elf {
       // The only combination left is writable and executable, which nothing
       // here produces and no loader should be asked to grant.
       throw ImageError("a mapped section asks for permissions no segment gives");
-    std::uint64_t phnum = groups.size() + 1;
+    // A position-independent image with anything to relocate has its table in
+    // a segment of its own, last, so that nothing else moves with its size.
+    std::uint64_t phnum = groups.size() + 1 + (pie && ! relocated.empty() ? 1 : 0);
     std::uint64_t offset = ehdr_size + phnum * phdr_size;
 
     add_chunk(layout, "ehdr", ehdr_size, 1, 0);
@@ -122,6 +134,8 @@ namespace pl4g::elf {
       }
       offset = place_group(layout, group, offset, bias, flags, page, loads);
     }
+    if (pie)
+      offset = place_relocations(layout, offset, loads);
     place_symbols();
     layout.functions = function_extents(layout);
 
@@ -159,6 +173,89 @@ namespace pl4g::elf {
     layout.entry_vaddr = entry_vaddr();
     layout.total_size = offset;
     return layout;
+  }
+
+
+  void ElfWriter::collect_relocations()
+  {
+    relocated.clear();
+    for (auto section : sections)
+      for (const auto& fragment : section->fragments) {
+        auto fixups = mc::fixups_of(*fragment);
+        if (fixups == nullptr)
+          continue;
+        for (const auto& fixup : *fixups) {
+          if (fixup.kind->base != mc::FixupBase::absolute || fixup.kind->within_a_page)
+            continue;
+          auto where = std::format("'{}' at {}", section->name, fragment->offset + std::uint64_t(fixup.offset));
+          if (section->executable) [[unlikely]]
+            throw ImageError("a position-independent image holds an absolute address in its code, in " + where);
+          if (fixup.kind->size != 8) [[unlikely]]
+            throw ImageError(std::format("a position-independent image holds a {}-byte absolute address, in {}; "
+                                         "only eight bytes can be relocated",
+                                         fixup.kind->size, where));
+          relocated.emplace_back(section, fragment->offset + std::uint64_t(fixup.offset));
+          // The startup code writes it, so it is where writing is allowed --
+          // and what was read-only data is then what linkers call data
+          // read-only once relocated, which is what a reader expects it named.
+          section->writable = true;
+          if (section->name == ".rodata" || section->name.starts_with(".rodata."))
+            section->name = ".data.rel.ro" + section->name.substr(std::string_view(".rodata").size());
+        }
+      }
+  }
+
+
+  std::uint64_t ElfWriter::place_relocations(ImageLayout& layout, std::uint64_t offset,
+                                             std::vector<SegmentPlan>& loads)
+  {
+    // The image is linked at nought: its first byte is where it was loaded.
+    define(target_image_start, settings.base_vaddr);
+    if (relocated.empty()) {
+      relr.clear();
+      define(target_relr_start, 0);
+      define(target_relr_end, 0);
+      return offset;
+    }
+    std::vector<std::uint64_t> places;
+    for (const auto& [section, at] : relocated) {
+      auto address = section->vaddr + at;
+      if (address % 8 != 0) [[unlikely]]
+        throw ImageError(std::format("an absolute address at {:#x} in '{}' is not eight-byte aligned, which a "
+                                     "position-independent image cannot relocate",
+                                     address, section->name));
+      places.push_back(address);
+    }
+    std::ranges::sort(places);
+    relr = encode_relr(places);
+    offset = align_up(offset, 8);
+    auto end_vaddr = loads.back().p_vaddr + loads.back().p_memsz;
+    auto bias = align_up(end_vaddr, settings.page_size) + (offset % settings.page_size) - offset;
+    SectionPlan plan;
+    plan.name = std::string(relr_section);
+    plan.sh_type = sht_relr;
+    plan.sh_flags = shf_alloc;
+    plan.sh_addralign = 8;
+    plan.sh_entsize = 8;
+    plan.alloc = true;
+    plan.offset = offset;
+    plan.addr = offset + bias;
+    plan.size = relr.size() * 8;
+    layout.sections.push_back(plan);
+    add_chunk(layout, plan.name, plan.size, 8, offset);
+    loads.push_back(SegmentPlan{ pt_load, pf_r, settings.page_size, offset, plan.addr, plan.size, plan.size });
+    define(target_relr_start, plan.addr);
+    define(target_relr_end, plan.addr + plan.size);
+    return offset + plan.size;
+  }
+
+
+  void ElfWriter::define(std::string_view name, std::uint64_t vaddr)
+  {
+    // What the startup code names, where it names it: nothing else needs it.
+    for (auto symbol : symbols)
+      if (symbol->name == name && ! symbol->defined)
+        symbol->vaddr = vaddr;
   }
 
 
@@ -361,7 +458,7 @@ namespace pl4g::elf {
     mc::Bytes out(layout.total_size, 0);
 
     Ehdr header;
-    header.e_type = et_exec;
+    header.e_type = layout.kind == ImageKind::pie ? et_dyn : et_exec;
     header.e_machine = layout.machine;
     header.e_entry = layout.entry_vaddr;
     header.e_phoff = ehdr_size;
@@ -386,6 +483,13 @@ namespace pl4g::elf {
       const auto& chunk = layout.chunk(section->name);
       auto data = mc::section_bytes(*section);
       std::ranges::copy(data, out.begin() + std::ptrdiff_t(chunk.file_offset));
+    }
+
+    if (! relr.empty()) {
+      auto at = layout.chunk(std::string(relr_section)).file_offset;
+      for (auto entry : relr)
+        for (int byte = 0; byte < 8; ++byte)
+          out[at++] = std::uint8_t(entry >> (8 * byte));
     }
 
     if (layout.has_chunk(".shstrtab"))

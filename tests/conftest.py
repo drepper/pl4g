@@ -244,8 +244,14 @@ def run_compiler(args: Sequence[str],
     # takes the same command line.
     other = os.environ.get("PL4G_COMPILER")
     command = [other] if other else [sys.executable, "-m", "pypl4g"]
+    # And `PL4G_COMPILER_ARGS` options every compilation is given besides --
+    # `-fpie`, to run the suite over position-independent images -- put before
+    # a `--`, after which the words are the program's.
+    added = os.environ.get("PL4G_COMPILER_ARGS", "").split()
+    words = list(args)
+    at = words.index("--") if "--" in words else len(words)
     return subprocess.run(
-        [*command, *args],
+        [*command, *words[:at], *added, *words[at:]],
         cwd=str(ROOT if cwd is None else cwd), capture_output=True, text=True,
         timeout=180,
         env={**os.environ, "PYTHONPATH": str(ROOT), **(env or {})})

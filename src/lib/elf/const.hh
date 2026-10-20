@@ -42,6 +42,8 @@ namespace pl4g::elf {
   inline constexpr std::uint32_t sht_strtab = 3;
   inline constexpr std::uint32_t sht_rela = 4;
   inline constexpr std::uint32_t sht_nobits = 8;
+  // Relative relocations in the compact encoding (ELF gABI, 2022).
+  inline constexpr std::uint32_t sht_relr = 19;
 
   inline constexpr std::uint64_t shf_write = 0x1;
   inline constexpr std::uint64_t shf_alloc = 0x2;

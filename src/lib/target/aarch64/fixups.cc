@@ -10,12 +10,12 @@ namespace pl4g::target::aarch64 {
   const mc::FixupKind branch26{ "aarch64_branch26", 4, mc::FixupBase::field_start };
   const mc::FixupKind branch19{ "aarch64_branch19", 4, mc::FixupBase::field_start };
   const mc::FixupKind adr_page21{ "aarch64_adr_page21", 4, mc::FixupBase::page_4k };
-  const mc::FixupKind add_lo12{ "aarch64_add_lo12", 4 };
-  const mc::FixupKind ldst8_lo12{ "aarch64_ldst8_lo12", 4 };
-  const mc::FixupKind ldst16_lo12{ "aarch64_ldst16_lo12", 4 };
-  const mc::FixupKind ldst32_lo12{ "aarch64_ldst32_lo12", 4 };
-  const mc::FixupKind ldst64_lo12{ "aarch64_ldst64_lo12", 4 };
-  const mc::FixupKind ldst128_lo12{ "aarch64_ldst128_lo12", 4 };
+  const mc::FixupKind add_lo12{ "aarch64_add_lo12", 4, mc::FixupBase::absolute, true };
+  const mc::FixupKind ldst8_lo12{ "aarch64_ldst8_lo12", 4, mc::FixupBase::absolute, true };
+  const mc::FixupKind ldst16_lo12{ "aarch64_ldst16_lo12", 4, mc::FixupBase::absolute, true };
+  const mc::FixupKind ldst32_lo12{ "aarch64_ldst32_lo12", 4, mc::FixupBase::absolute, true };
+  const mc::FixupKind ldst64_lo12{ "aarch64_ldst64_lo12", 4, mc::FixupBase::absolute, true };
+  const mc::FixupKind ldst128_lo12{ "aarch64_ldst128_lo12", 4, mc::FixupBase::absolute, true };
 
 
   namespace {

@@ -518,6 +518,7 @@ namespace pl4g::driver {
           return exit_code::errors;
         }
       }
+      target->position_independent(options.pie);
       auto start = Clock::now();
       mc::MCStreamer streamer(target->encoder());
       auto asm_ = target->new_assembler(streamer, options.opt_level);

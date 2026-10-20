@@ -21,6 +21,7 @@
 #include "target/runtime.hh"
 #include "target/stack.hh"
 #include "target/started.hh"
+#include "target/relocate.hh"
 #include "target/target.hh"
 #include "target/tests.hh"
 #include "target/vectors.hh"
@@ -231,7 +232,10 @@ namespace pl4g::target {
         std::optional<std::string> turned_off;
         if (levels::state(mclevel) != 0)
           turned_off = messages.symbol(levels::disabled(mclevel));
-        emit_start(asm_, module, lookup_cconv(module.startup->cconv), mclevel, refused, turned_off, failures, layout);
+        if (pie)
+          emit_relocate(asm_, relocate_regs());
+        emit_start(asm_, module, lookup_cconv(module.startup->cconv), mclevel, refused, turned_off, failures, layout,
+                   pie);
         runtime.emit(asm_, by_name());
         messages.emit(asm_);
         constants.emit(asm_);

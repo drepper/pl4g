@@ -6,6 +6,8 @@
 // leaves through an environment call rather than by returning to anything.
 #pragma once
 
+#include <span>
+
 #include <cstdint>
 #include <string_view>
 #include <unordered_map>
@@ -47,7 +49,11 @@ namespace pl4g::target::riscv64 {
 
   // The entry point for `module`.
   void emit_start(mc::Assembler& asm_, const ir::Module& module, const CallConvDesc& cconv,
-                  const std::unordered_map<const ir::Function*, Failure>& failures, const ir::DataLayout& layout);
+                  const std::unordered_map<const ir::Function*, Failure>& failures, const ir::DataLayout& layout,
+                  bool relocates = false);
+
+  // The registers the table of a position-independent image is applied with.
+  std::span<const mc::Reg> relocate_regs();
 
   // The helper that reports a fault and stops the program, and the one a
   // failing test says so through and comes back.

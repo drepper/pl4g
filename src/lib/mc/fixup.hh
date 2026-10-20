@@ -36,6 +36,11 @@ namespace pl4g::mc {
     // The number of bytes the patch reads and writes back.
     int size = 0;
     FixupBase base = FixupBase::absolute;
+    // Whether what is stored is only the address's offset within a 4 KiB page,
+    // as the second half of an AArch64 address pair is: the same wherever an
+    // image aligned to pages is loaded, so nothing a position-independent
+    // image has to relocate.
+    bool within_a_page = false;
 
     // The name used in the debugging dump.
     const std::string& label() const noexcept { return name; }

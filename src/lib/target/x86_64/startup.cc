@@ -1,10 +1,12 @@
 // The program's entry point and the helpers it reports through.
 #include "target/x86_64/startup.hh"
 
+#include <array>
 #include <set>
 
 #include "ir/builder.hh"
 #include "target/emit.hh"
+#include "target/relocate.hh"
 #include "target/started.hh"
 #include "target/statuses.hh"
 #include "target/x86_64/abi.hh"
@@ -297,13 +299,17 @@ namespace pl4g::target::x86_64 {
 
   void emit_start(mc::Assembler& asm_, const ir::Module& module, const CallConvDesc& cconv, std::string_view level,
                   const std::optional<std::string>& refused, const std::optional<std::string>& turned_off,
-                  const std::unordered_map<const ir::Function*, Failure>& failures, const ir::DataLayout& layout)
+                  const std::unordered_map<const ir::Function*, Failure>& failures, const ir::DataLayout& layout,
+                  bool relocates)
   {
     auto& r = registers();
     auto startup = module.startup;
     auto status32 = r.info.view(cconv.int_ret_regs[0]->unit, 32);
 
     asm_.begin_function(std::string(entry_symbol), true);
+    // A position-independent image makes its addresses true first of all.
+    if (relocates)
+      asm_.call(std::string(relocate_symbol));
     // What the kernel set the process up with is at the stack pointer, and
     // this is the only moment it is.
     if (arguments_at(module, layout) || module.environ != nullptr)
@@ -341,6 +347,16 @@ namespace pl4g::target::x86_64 {
     // exit_group does not return; trapping makes that explicit.
     trap(asm_);
     asm_.end_function();
+  }
+
+
+  std::span<const mc::Reg> relocate_regs()
+  {
+    static const auto made = [] {
+      auto& r = registers();
+      return std::array<mc::Reg, relocate_scratch>{ r.rax, r.rcx, r.rdx, r.rsi, r.rdi, r.reg("r8"), r.reg("r9") };
+    }();
+    return made;
   }
 
 

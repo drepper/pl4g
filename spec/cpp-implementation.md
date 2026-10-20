@@ -125,6 +125,49 @@ are given the bytes they held when the last input ended, and after it the bytes 
 since what a variable holds may point into the room one of them placed or into the heap, which nothing gives back.  A value is
 shown as the language writes a literal of it (`repl/show.cc`).
 
+Position-independent images
+---------------------------
+
+With `-fpie` the compiler writes a static position-independent executable, the user's choice (decisions.md, 2026-10-20T10:52);
+without it, an executable at a fixed address that is pypl4g's byte for byte.  Everything that differs is under
+`elf::ImageKind::pie` and the target's `position_independent` flag, so the fixed-address image is untouched by it.
+
+**What the image is.**  `ET_DYN`, linked at address nought, with no `PT_INTERP` and no `PT_DYNAMIC`: the kernel maps such an
+image at an address of its own choosing, randomized, and starts it at its entry point as it would any static executable.  The
+segments are the fixed-address image's -- read-only, then code, then writable data -- and one more, read-only and last, for the
+table, so that nothing else moves with the table's size.  `eu-elflint --strict` takes the image as it is; a dynamic section would
+only repeat the table for a dynamic linker, and there is none.
+
+**What is relocated.**  The code of every back end reaches what it reaches relative to where it is -- x86-64 by `rip`, AArch64
+by `adrp` and the low twelve bits, RISC-V by `auipc` -- and so does the runtime packaged with the compiler.  The low twelve bits
+of an AArch64 pair are an absolute fixup in name and nothing to relocate in fact, the image being loaded at a page boundary;
+`mc::FixupKind::within_a_page` says so.  What is left is the eight-byte addresses stored in data: a global holding an address,
+the table of frames, what the signal action is handed, the ring address in the record the startup function is given.  The writer
+collects every one, refuses an image that would need anything else -- an absolute address in code, one four bytes wide, one not
+eight-byte aligned -- and moves the sections holding them to the writable segment, a read-only one renamed `.data.rel.ro`.
+
+**The table.**  `.relr.dyn`, of type `SHT_RELR`, in the encoding ELF's gABI has for relative relocations since 2022 and lld and
+glibc write (`elf/relr.hh`): an even entry is the address of the next place to fix, an odd one a bitmap of the 63 places after the
+last address, its lowest bit the mark.  Every entry says one thing -- add the load address to these eight bytes -- which is the
+one relocation such an image needs.  The writer gives three symbols what they stand for: `__pl4g_image_start` (nought),
+`__pl4g_relr_start` and `__pl4g_relr_end`.
+
+**Applying it.**  `__pl4g_relocate` (`target/relocate.cc`) is written once, through the assembler every back end has, and is the
+first thing every entry point calls.  It takes the image's first byte PC-relatively, which is the load address, walks the table,
+and adds the load address to each place.  The bitmaps are walked with a mask doubled by addition rather than by shifting the
+bitmap: the walk runs before the entry point asks whether the processor can run what was built for it, so nothing in it may be
+what only a later level has, and on x86-64 at v3 a shift would be `shrx`.  Each branch ends its block, as a lowered function's do,
+which is what the register allocator follows a value along.
+
+**Checked by.**  `pie_agrees.py`, in ctest for each architecture, plainly and with the sanitized compiler: every test program's
+image is `ET_DYN` from address nought with neither an interpreter nor a dynamic section, and its table is the canonical encoding
+of exactly the places binutils' `readelf -r` reads out of it, each aligned and in a writable segment.  And the language suite runs
+over position-independent images (`PL4G_COMPILER_ARGS=-fpie`, ctest `suite-with-pl4g-pie`): every program built so, read by
+`eu-elflint --strict`, and run natively and under QEMU as its test says.
+
+Left open: the relocated data stays writable once the table has been applied, where a dynamic linker's `PT_GNU_RELRO` would make
+it read-only again -- an `mprotect` after the walk would.
+
 The language server and the tree-sitter service
 -----------------------------------------------
 

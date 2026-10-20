@@ -7,6 +7,8 @@
 // the kernel runs, and the process leaves through a supervisor call.
 #pragma once
 
+#include <span>
+
 #include <cstdint>
 #include <string_view>
 #include <unordered_map>
@@ -50,7 +52,11 @@ namespace pl4g::target::aarch64 {
 
   // The entry point for `module`.
   void emit_start(mc::Assembler& asm_, const ir::Module& module, const CallConvDesc& cconv,
-                  const std::unordered_map<const ir::Function*, Failure>& failures, const ir::DataLayout& layout);
+                  const std::unordered_map<const ir::Function*, Failure>& failures, const ir::DataLayout& layout,
+                  bool relocates = false);
+
+  // The registers the table of a position-independent image is applied with.
+  std::span<const mc::Reg> relocate_regs();
   // The helper that reports a fault and stops the program; with `walk`, it
   // says where the program was on the way.
   void emit_abort(mc::Assembler& asm_, const CallConvDesc& cconv, bool walk = false);

@@ -16,6 +16,7 @@
 #include "target/aarch64/regs.hh"
 #include "target/aarch64/startup.hh"
 #include "target/allocator.hh"
+#include "target/relocate.hh"
 #include "target/backtrace.hh"
 #include "target/faults.hh"
 #include "target/frames.hh"
@@ -180,7 +181,9 @@ namespace pl4g::target {
         if (module.stack_size > 0)
           // What the kernel calls where the program follows a bad address.
           emit_handler(asm_, syscalls(), stack_abi());
-        emit_start(asm_, module, lookup_cconv(module.startup->cconv), failures, layout);
+        if (pie)
+          emit_relocate(asm_, relocate_regs());
+        emit_start(asm_, module, lookup_cconv(module.startup->cconv), failures, layout, pie);
         runtime.emit(asm_, by_name());
         messages.emit(asm_);
         constants.emit(asm_);

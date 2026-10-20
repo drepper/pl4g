@@ -1,6 +1,7 @@
 // The program's entry point on RISC-V.
 #include "target/riscv64/startup.hh"
 
+#include <array>
 #include <format>
 #include <stdexcept>
 
@@ -9,6 +10,7 @@
 #include "target/riscv64/abi.hh"
 #include "target/riscv64/opcodes.hh"
 #include "target/riscv64/regs.hh"
+#include "target/relocate.hh"
 #include "target/started.hh"
 #include "target/statuses.hh"
 
@@ -201,8 +203,19 @@ namespace pl4g::target::riscv64 {
   }
 
 
+  std::span<const mc::Reg> relocate_regs()
+  {
+    static const auto made = [] {
+      const auto& r = registers();
+      return std::array<mc::Reg, relocate_scratch>{ r.reg("t0"), r.reg("t1"), r.reg("t2"), r.reg("t3"), r.reg("t4"), r.reg("t5"), r.reg("t6") };
+    }();
+    return made;
+  }
+
+
   void emit_start(mc::Assembler& asm_, const ir::Module& module, const CallConvDesc& cconv,
-                  const std::unordered_map<const ir::Function*, Failure>& failures, const ir::DataLayout& layout)
+                  const std::unordered_map<const ir::Function*, Failure>& failures, const ir::DataLayout& layout,
+                  bool relocates)
   {
     const ir::Function* startup = module.startup;
     if (startup == nullptr) [[unlikely]]
@@ -211,6 +224,9 @@ namespace pl4g::target::riscv64 {
     const mc::PhysReg* status = cconv.int_ret_regs[0];
 
     asm_.begin_function(std::string(entry_symbol), true);
+    // A position-independent image makes its addresses true first of all.
+    if (relocates)
+      asm_.call(std::string(relocate_symbol));
     // What the kernel set the process up with is at the stack pointer, and this
     // is the only moment it is.
     if (arguments_at(module, layout) || module.environ != nullptr)

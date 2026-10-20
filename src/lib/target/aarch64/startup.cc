@@ -1,6 +1,7 @@
 // The program's entry point on AArch64.
 #include "target/aarch64/startup.hh"
 
+#include <array>
 #include <cassert>
 #include <string>
 
@@ -9,6 +10,7 @@
 #include "target/aarch64/ops.hh"
 #include "target/aarch64/regs.hh"
 #include "target/emit.hh"
+#include "target/relocate.hh"
 #include "target/started.hh"
 #include "target/statuses.hh"
 
@@ -229,14 +231,27 @@ namespace pl4g::target::aarch64 {
   }
 
 
+  std::span<const mc::Reg> relocate_regs()
+  {
+    static const auto made = [] {
+      return std::array<mc::Reg, relocate_scratch>{ reg("x9"), reg("x10"), reg("x11"), reg("x12"), reg("x13"), reg("x14"), reg("x15") };
+    }();
+    return made;
+  }
+
+
   void emit_start(mc::Assembler& asm_, const ir::Module& module, const CallConvDesc& cconv,
-                  const std::unordered_map<const ir::Function*, Failure>& failures, const ir::DataLayout& layout)
+                  const std::unordered_map<const ir::Function*, Failure>& failures, const ir::DataLayout& layout,
+                  bool relocates)
   {
     const ir::Function* startup = module.startup;
     assert(startup != nullptr);
     Reg status = cconv.int_ret_regs[0];
 
     asm_.begin_function(std::string(entry_symbol), true);
+    // A position-independent image makes its addresses true first of all.
+    if (relocates)
+      asm_.call(std::string(relocate_symbol));
     // What the kernel set the process up with is at the stack pointer, and this
     // is the only moment it is.  An addition of nothing and not a move: the
     // move between registers reads that encoding as the zero.
