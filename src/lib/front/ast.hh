@@ -12,6 +12,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <memory_resource>
 #include <optional>
@@ -25,6 +26,11 @@
 #include "source/location.hh"
 #include "util/reflect.hh"
 
+
+namespace pl4g::ir {
+  struct Value;
+  class Builder;
+}
 
 namespace pl4g::ast {
 
@@ -65,6 +71,8 @@ namespace pl4g::ast {
     AssignStmt, JoinAssign, DerefAssign, ElementAssign, HoleAssign, MemberAssign, EntryAssign, UnitDef,
     ModuleImport, Range, ForEach, While, Label, Break, Defer, Continue, Block, Param, Capture, Lambda,
     Clause, BundleDef, FuncDef, Field, TypeDef, EnumMember, EnumDef, SourceUnit,
+    // Made by the checker, never by the parser.
+    Ready, Emit, Known, Defaulted,
   };
 
 
@@ -885,6 +893,39 @@ namespace pl4g::ast {
     // BundleDef or MacroDef.
     List<const Node*> items;
     List<const Attribute*> attrs;
+  };
+
+
+  // -- what the checker writes ------------------------------------------------
+  //
+  // Nodes no parser makes: the checker puts one where an expression or a
+  // statement would stand, to lower something again with part of it worked
+  // out already.
+
+  // A value already worked out, standing where an expression would.
+  struct Ready : Expr {
+    static constexpr NodeKind kind_of = NodeKind::Ready;
+    [[=hidden]] ir::Value* value = nullptr;
+  };
+
+  // Code the compiler wrote, standing where a statement put off would.
+  struct Emit : Expr {
+    static constexpr NodeKind kind_of = NodeKind::Emit;
+    [[=hidden]] const std::function<void(ir::Builder&)>* run = nullptr;
+  };
+
+  // A value the compiler worked out, standing where the literal it is would
+  // be written.
+  struct Known : Expr {
+    static constexpr NodeKind kind_of = NodeKind::Known;
+    [[=hidden]] const ir::Value* const_ = nullptr;
+  };
+
+  // What a parameter is given where a call gives it nothing: the default its
+  // definition writes.
+  struct Defaulted : Expr {
+    static constexpr NodeKind kind_of = NodeKind::Defaulted;
+    const Expr* value = nullptr;
   };
 
 

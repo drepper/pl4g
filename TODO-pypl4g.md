@@ -718,3 +718,8 @@ Optimizations
     only around a definition.  The driver turns each exception into an internal error.  The C++ lexer reports an empty
     character, a bad escape, an infinity, a bad escape and an unexpected character; the C++ parser stops reading the file.
     The lexer's inputs are in `src/fuzz/corpus/lexer/python-crashes.txt`.
+
+[ ] a labelled `break` or `continue` in code run while compiling never finds its loop.  `comptime/evaluate.py` compares the
+    `Label` nodes, span and all, so the label a jump names is never the loop's, and the `_Break` or `_Continue` escapes the
+    evaluator and the compiler stops with an internal error.  Comparing the labels' names is what the C++ evaluator does.
+    pypl4g also evaluates a `while … until` loop as a `while` loop; the C++ evaluator does the same, saying so where it does.

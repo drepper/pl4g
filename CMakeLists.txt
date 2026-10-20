@@ -79,6 +79,16 @@ set(PL4G_LIB_SOURCES
   src/lib/rt/arena.cc
   src/lib/interp/interp.cc
   src/lib/sema/attributes.cc
+  src/lib/sema/check-helpers.cc
+  src/lib/sema/check-entry.cc
+  src/lib/sema/check-collect.cc
+  src/lib/sema/check-arenas.cc
+  src/lib/sema/check-constants.cc
+  src/lib/sema/check-places.cc
+  src/lib/sema/check-loops.cc
+  src/lib/sema/check-match.cc
+  src/lib/sema/check-operators.cc
+  src/lib/sema/check-builtins.cc
   src/lib/sema/clauses.cc
   src/lib/sema/environ.cc
   src/lib/sema/lastuse.cc

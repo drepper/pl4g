@@ -229,6 +229,13 @@ namespace pl4g::ir {
     std::vector<Instruction*> insts;
 
     BlockParam* add_param(const Type* ty);
+    // A parameter with the name a reader of the text sees it by.
+    BlockParam* add_param(const Type* ty, std::string name_hint)
+    {
+      auto param = add_param(ty);
+      param->name_hint = std::move(name_hint);
+      return param;
+    }
     Instruction* terminator() const noexcept
     {
       return ! insts.empty() && insts.back()->is_terminator() ? insts.back() : nullptr;
