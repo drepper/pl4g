@@ -142,6 +142,7 @@ namespace pl4g::target::riscv64 {
       SyscallABI abi;
       abi.mmap = nr_mmap;
       abi.munmap = nr_munmap;
+      abi.mprotect = nr_mprotect;
       abi.number = regs.a7;
       for (int n = 0; n < 6; ++n)
         abi.arguments.emplace_back(regs.reg(std::format("a{}", n)));

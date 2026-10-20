@@ -228,6 +228,7 @@ namespace pl4g::target::x86_64 {
       SyscallABI abi;
       abi.mmap = nr_mmap;
       abi.munmap = nr_munmap;
+      abi.mprotect = nr_mprotect;
       abi.number = r.eax;
       abi.arguments = { r.rdi, r.rsi, r.rdx, r.reg("r10"), r.reg("r8"), r.reg("r9") };
       abi.answer = r.rax;

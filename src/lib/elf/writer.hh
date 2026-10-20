@@ -110,6 +110,11 @@ namespace pl4g::elf {
     // in it, and the table made of where they ended up.
     std::vector<std::pair<mc::MCSection*, std::uint64_t>> relocated;
     std::vector<std::uint64_t> relr;
+    // The sections that are read-only but for being relocated: in a segment
+    // of their own, which the startup code makes read-only again once it has
+    // relocated them.
+    std::vector<mc::MCSection*> relro;
+    std::size_t relro_at = 0;
   };
 
 

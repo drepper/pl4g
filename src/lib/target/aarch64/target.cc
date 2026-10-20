@@ -182,7 +182,7 @@ namespace pl4g::target {
           // What the kernel calls where the program follows a bad address.
           emit_handler(asm_, syscalls(), stack_abi());
         if (pie)
-          emit_relocate(asm_, relocate_regs());
+          emit_relocate(asm_, relocate_regs(), syscalls());
         emit_start(asm_, module, lookup_cconv(module.startup->cconv), failures, layout, pie);
         runtime.emit(asm_, by_name());
         messages.emit(asm_);

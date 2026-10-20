@@ -21,6 +21,8 @@ namespace pl4g::elf {
     constexpr std::string_view target_image_start = "__pl4g_image_start";
     constexpr std::string_view target_relr_start = "__pl4g_relr_start";
     constexpr std::string_view target_relr_end = "__pl4g_relr_end";
+    constexpr std::string_view target_relro_start = "__pl4g_relro_start";
+    constexpr std::string_view target_relro_end = "__pl4g_relro_end";
 
     std::uint8_t binding_of(mc::SymBinding binding) noexcept
     {
@@ -99,6 +101,12 @@ namespace pl4g::elf {
     for (auto [executable, writable, flags] : { std::tuple(false, false, pf_r), std::tuple(true, false, pf_r | pf_x),
                                                std::tuple(false, true, pf_r | pf_w) }) {
       auto found = mapped(executable, writable);
+      if (writable && ! relro.empty()) {
+        // What is read-only but for being relocated comes first, in a segment
+        // of its own, so that its pages are none of the writable data's.
+        std::erase_if(found, [&](auto one) { return std::ranges::contains(relro, one); });
+        groups.emplace_back(relro, pf_r | pf_w);
+      }
       if (! found.empty())
         groups.emplace_back(std::move(found), flags);
     }
@@ -111,7 +119,7 @@ namespace pl4g::elf {
       throw ImageError("a mapped section asks for permissions no segment gives");
     // A position-independent image with anything to relocate has its table in
     // a segment of its own, last, so that nothing else moves with its size.
-    std::uint64_t phnum = groups.size() + 1 + (pie && ! relocated.empty() ? 1 : 0);
+    std::uint64_t phnum = groups.size() + 1 + (pie && ! relocated.empty() ? 1 : 0) + (relro.empty() ? 0 : 1);
     std::uint64_t offset = ehdr_size + phnum * phdr_size;
 
     add_chunk(layout, "ehdr", ehdr_size, 1, 0);
@@ -133,6 +141,8 @@ namespace pl4g::elf {
         bias = align_up(end_vaddr, page) + (offset % page) - offset;
       }
       offset = place_group(layout, group, offset, bias, flags, page, loads);
+      if (! relro.empty() && group == relro)
+        relro_at = loads.size() - 1;
     }
     if (pie)
       offset = place_relocations(layout, offset, loads);
@@ -170,6 +180,13 @@ namespace pl4g::elf {
     // Its presence without the executable bit is what makes the stack not
     // executable; how much room it says is what the program was built to want.
     layout.segments.push_back(SegmentPlan{ pt_gnu_stack, pf_r | pf_w, 0x10, 0, 0, 0, settings.stack_size });
+    if (! relro.empty()) {
+      // What is read-only once relocated, said as a loader would be told it;
+      // the startup code is what acts on it, from the symbols given it.
+      const auto& held = loads[relro_at];
+      layout.segments.push_back(SegmentPlan{ pt_gnu_relro, pf_r, 1, held.p_offset, held.p_vaddr, held.p_filesz,
+                                             held.p_memsz });
+    }
     layout.entry_vaddr = entry_vaddr();
     layout.total_size = offset;
     return layout;
@@ -179,6 +196,7 @@ namespace pl4g::elf {
   void ElfWriter::collect_relocations()
   {
     relocated.clear();
+    relro.clear();
     for (auto section : sections)
       for (const auto& fragment : section->fragments) {
         auto fixups = mc::fixups_of(*fragment);
@@ -198,7 +216,10 @@ namespace pl4g::elf {
           // The startup code writes it, so it is where writing is allowed --
           // and what was read-only data is then what linkers call data
           // read-only once relocated, which is what a reader expects it named.
-          section->writable = true;
+          if (! section->writable) {
+            section->writable = true;
+            relro.push_back(section);
+          }
           if (section->name == ".rodata" || section->name.starts_with(".rodata."))
             section->name = ".data.rel.ro" + section->name.substr(std::string_view(".rodata").size());
         }
@@ -211,6 +232,17 @@ namespace pl4g::elf {
   {
     // The image is linked at nought: its first byte is where it was loaded.
     define(target_image_start, settings.base_vaddr);
+    // The pages to make read-only once relocated, from the first page of
+    // their segment -- its own, the segment before ending on a page before --
+    // to their end; nothing where there are none.
+    if (relro.empty()) {
+      define(target_relro_start, 0);
+      define(target_relro_end, 0);
+    } else {
+      const auto& held = loads[relro_at];
+      define(target_relro_start, held.p_vaddr / settings.page_size * settings.page_size);
+      define(target_relro_end, held.p_vaddr + held.p_memsz);
+    }
     if (relocated.empty()) {
       relr.clear();
       define(target_relr_start, 0);

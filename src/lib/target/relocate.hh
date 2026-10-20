@@ -13,6 +13,7 @@
 #include <string_view>
 
 #include "mc/asmbuilder.hh"
+#include "target/allocator.hh"
 
 
 namespace pl4g::target {
@@ -23,14 +24,20 @@ namespace pl4g::target {
   inline constexpr std::string_view image_start_symbol = "__pl4g_image_start";
   inline constexpr std::string_view relr_start_symbol = "__pl4g_relr_start";
   inline constexpr std::string_view relr_end_symbol = "__pl4g_relr_end";
+  // And the pages that are read-only but for being relocated, which are made
+  // read-only again once they are: nothing where both are the same.
+  inline constexpr std::string_view relro_start_symbol = "__pl4g_relro_start";
+  inline constexpr std::string_view relro_end_symbol = "__pl4g_relro_end";
 
   // How many registers a target names for `emit_relocate`, all of them free
   // to destroy where the entry point calls it: before it has done anything.
   inline constexpr std::size_t relocate_scratch = 7;
 
   // Emit the function that walks the table and adds the load address to each
-  // word it names.  What it works in is the allocator's, the width of the
-  // first of `scratch`, which are the registers it may have.
-  void emit_relocate(mc::Assembler& asm_, std::span<const mc::Reg> scratch);
+  // word it names, and then asks the kernel, through `abi`, to make what was
+  // read-only but for that read-only again.  What it works in is the
+  // allocator's, the width of the first of `scratch`, which are the registers
+  // it may have.
+  void emit_relocate(mc::Assembler& asm_, std::span<const mc::Reg> scratch, const SyscallABI& abi);
 
 } // namespace pl4g::target

@@ -53,9 +53,11 @@ namespace pl4g::target {
 
   // How one architecture asks the kernel for something.
   struct SyscallABI {
-    // The numbers of the two calls the allocator makes.
+    // The numbers of the two calls the allocator makes, and of the one that
+    // makes what a position-independent image relocated read-only again.
     std::int64_t mmap = 0;
     std::int64_t munmap = 0;
+    std::int64_t mprotect = 0;
     // Where the number of the call goes, where the arguments go, and where the
     // answer comes back.
     mc::Reg number;

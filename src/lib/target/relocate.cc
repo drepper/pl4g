@@ -8,6 +8,9 @@ namespace pl4g::target {
 
   namespace {
 
+    // What mprotect is asked to leave of a page: reading it.
+    constexpr std::int64_t prot_read = 1;
+
     // A small constant, as the other helpers here write one.
     mc::MCImm number(std::int64_t value)
     {
@@ -17,7 +20,7 @@ namespace pl4g::target {
   } // anonymous namespace
 
 
-  void emit_relocate(mc::Assembler& asm_, std::span<const mc::Reg> scratch)
+  void emit_relocate(mc::Assembler& asm_, std::span<const mc::Reg> scratch, const SyscallABI& abi)
   {
     // An even entry is the address of the next word to fix; an odd one is a
     // bitmap of the 63 words after the last address, its lowest bit the mark.
@@ -44,8 +47,7 @@ namespace pl4g::target {
     auto skip = asm_.reserve_label("relr.skip");
     auto spent = asm_.reserve_label("relr.spent");
     auto done = asm_.reserve_label("relr.done");
-    // Every branch ends its block, as a lowered function's do: the allocator
-    // follows a value along the edges blocks end in.
+    // Every branch ends its block, which is how the walk reads best.
     auto branch_or_on = [&](mc::Condition cond, mc::Reg value, const mc::MCOperand& other, const std::string& to,
                             const std::string& on) {
       asm_.branch(cond, asm_.reg(value), other, to);
@@ -91,7 +93,23 @@ namespace pl4g::target {
     // Whatever the bitmap said, the next one starts 63 words further on.
     asm_.op(mc::ops::plus, where, { asm_.reg(where), number(63 * 8) });
     asm_.jump(next);
+    // Then what was read-only but for being relocated is read-only again:
+    // mprotect(start, end - start, PROT_READ), where there is any.  What the
+    // kernel answers changes nothing -- a page left writable is what there
+    // was before.
     asm_.block(done);
+    auto protected_ = asm_.reserve_label("relro.done");
+    auto protect = asm_.reserve_label("relro.protect");
+    asm_.address(at, std::string(relro_start_symbol));
+    asm_.address(end, std::string(relro_end_symbol));
+    branch_or_on(mc::Condition::eq, at, asm_.reg(end), protected_, protect);
+    asm_.loadreg(abi.arguments[0], asm_.reg(at));
+    asm_.op(mc::ops::minus, abi.arguments[1], { asm_.reg(end), asm_.reg(at) });
+    asm_.loadreg(abi.arguments[2], number(prot_read));
+    asm_.loadreg(abi.number, number(abi.mprotect));
+    abi.enter(asm_);
+    asm_.falls_through(protected_);
+    asm_.block(protected_);
     asm_.ret();
     asm_.end_function();
   }

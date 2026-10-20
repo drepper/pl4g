@@ -7,7 +7,10 @@ of type ET_DYN, with no interpreter and no dynamic section, its segments from
 address nought, and a table of relative relocations in the encoding of ELF's
 SHT_RELR that says exactly what binutils' ``readelf`` reads out of it -- written
 as the canonical encoding (what lld and glibc write), naming only eight-byte
-places that are eight-byte aligned and in a writable segment.  Running the
+places that are eight-byte aligned and in a writable segment.  What is
+read-only but for being relocated is one PT_GNU_RELRO, which is exactly one of
+the writable segments and shares no page with any other -- the pages the
+startup code makes read-only again once it has relocated them.  Running the
 images is the test suite's: ``PL4G_COMPILER_ARGS=-fpie``.
 """
 
@@ -28,6 +31,8 @@ from codegen_agrees import directives  # noqa: E402
 
 ET_DYN = 3
 PT_LOAD, PT_DYNAMIC, PT_INTERP = 1, 2, 3
+PT_GNU_RELRO = 0x6474E552
+PAGE = 0x1000
 PF_W = 2
 SHT_RELR = 19
 WORD = 8
@@ -79,6 +84,8 @@ def examined(image: Path) -> str | None:
     e_phoff, e_shoff = struct.unpack_from("<QQ", data, 32)
     e_phentsize, e_phnum, e_shentsize, e_shnum = struct.unpack_from("<HHHH", data, 54)
     writable: list[tuple[int, int]] = []
+    loads: list[tuple[int, int]] = []
+    relro: list[tuple[int, int]] = []
     lowest = None
     for at in range(e_phnum):
         p_type, p_flags, _, p_vaddr, _, _, p_memsz, _ = struct.unpack_from("<IIQQQQQQ", data,
@@ -87,10 +94,22 @@ def examined(image: Path) -> str | None:
             return "".join(("a segment of type ", str(p_type)))
         if p_type == PT_LOAD:
             lowest = p_vaddr if lowest is None else min(lowest, p_vaddr)
+            loads.append((p_vaddr, p_vaddr + p_memsz))
             if p_flags & PF_W:
                 writable.append((p_vaddr, p_vaddr + p_memsz))
+        elif p_type == PT_GNU_RELRO:
+            relro.append((p_vaddr, p_vaddr + p_memsz))
     if lowest != 0:
         return "".join(("the first segment is at ", hex(lowest or -1), ", not nought"))
+    if len(relro) > 1:
+        return "more than one PT_GNU_RELRO"
+    for lo, hi in relro:
+        if (lo, hi) not in writable:
+            return "the PT_GNU_RELRO is not one of the writable segments"
+        pages = (lo // PAGE, (hi + PAGE - 1) // PAGE)
+        for other in loads:
+            if other != (lo, hi) and other[0] // PAGE < pages[1] and (other[1] + PAGE - 1) // PAGE > pages[0]:
+                return "the PT_GNU_RELRO shares a page with another segment"
     entries: list[int] = []
     for at in range(e_shnum):
         _, sh_type, _, _, sh_offset, sh_size, _, _, _, sh_entsize = struct.unpack_from(

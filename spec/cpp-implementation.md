@@ -175,8 +175,12 @@ of exactly the places binutils' `readelf -r` reads out of it, each aligned and i
 over position-independent images (`PL4G_COMPILER_ARGS=-fpie`, ctest `suite-with-pl4g-pie`): every program built so, read by
 `eu-elflint --strict`, and run natively and under QEMU as its test says.
 
-Left open: the relocated data stays writable once the table has been applied, where a dynamic linker's `PT_GNU_RELRO` would make
-it read-only again -- an `mprotect` after the walk would.
+**Read-only again.**  What is read-only in the fixed-address image and relocated in this one -- `.data.rel.ro`, the frames
+table -- is a writable segment of its own, ahead of the data that stays writable and sharing no page with it, and a
+`PT_GNU_RELRO` header names it.  Once the walk is done, `__pl4g_relocate` asks the kernel to make it read-only again,
+`mprotect(start, end - start, PROT_READ)`, from the first page of that segment to its end (`__pl4g_relro_start` and
+`__pl4g_relro_end`, which the writer defines); where there is nothing to protect the two are the same and nothing is asked.
+What a dynamic linker does for a shared object from the header, the image does for itself.
 
 The language server and the tree-sitter service
 -----------------------------------------------

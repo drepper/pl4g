@@ -30,6 +30,7 @@ namespace pl4g::elf {
   inline constexpr std::uint32_t pt_note = 4;
   inline constexpr std::uint32_t pt_phdr = 6;
   inline constexpr std::uint32_t pt_gnu_stack = 0x6474E551;
+  inline constexpr std::uint32_t pt_gnu_relro = 0x6474E552;
   inline constexpr std::uint32_t pt_gnu_property = 0x6474E553;
 
   inline constexpr std::uint32_t pf_x = 1;

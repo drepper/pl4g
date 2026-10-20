@@ -233,7 +233,7 @@ namespace pl4g::target {
         if (levels::state(mclevel) != 0)
           turned_off = messages.symbol(levels::disabled(mclevel));
         if (pie)
-          emit_relocate(asm_, relocate_regs());
+          emit_relocate(asm_, relocate_regs(), syscalls());
         emit_start(asm_, module, lookup_cconv(module.startup->cconv), mclevel, refused, turned_off, failures, layout,
                    pie);
         runtime.emit(asm_, by_name());

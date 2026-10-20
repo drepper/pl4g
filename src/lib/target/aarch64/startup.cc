@@ -172,6 +172,7 @@ namespace pl4g::target::aarch64 {
       SyscallABI abi;
       abi.mmap = nr_mmap;
       abi.munmap = nr_munmap;
+      abi.mprotect = nr_mprotect;
       abi.number = syscall_number_reg();
       for (int n = 0; n < 6; ++n)
         abi.arguments.push_back(reg("x" + std::to_string(n)));
