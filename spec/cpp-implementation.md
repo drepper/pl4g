@@ -51,26 +51,33 @@ Layout
 ------
 
 ```
-CMakeLists.txt              the project: the library, the driver, the tests, the sanitizer and fuzzing builds
+CMakeLists.txt              the project: the library, the drivers, the tests, the sanitizer and fuzzing builds
 src/lib/                    the library, libpl4g.a
     source/                 source files, spans and positions
-    diag/                   the diagnostic engine and the generated catalog
-    front/                  tokens, lexer, syntax tree, parser, macro expander
-    sema/                   the checker, which lowers to the IR
-    ir/                     types, values, instructions, builder, verifier, printer
+    diag/                   the diagnostic engine, the generated catalog, the text renderer and its colours
+    front/                  tokens, lexer, syntax tree, parser, documentation comments, macro expander and
+                            the machine that runs a macro
+    sema/                   the checker, which lowers to the IR, and its helpers: tables, strings, lists,
+                            liveness, last uses, attributes, modules, notes
+    comptime/               what runs while compiling: the evaluator and the build plan
+    ir/                     types, values, instructions, builder, verifier, printer, layout, the JSON exchange
+    opt/                    the passes every build runs
+    target/                 what the checker asks of the targets: statuses, system calls, conventions
     interp/                 the interpreter of the IR
     rt/                     the runtime the language's `std` reaches: io_uring, the heap
-    repl/                   the REPL
-    ts/                     the tree-sitter service
+    driver/                 the stages up to the IR: read, parse, expand, check
+    repl/                   running a program from its source, and the interactive session
+    ts/                     the tree-sitter service: highlighting and folds from the grammar
     lsp/                    the LSP service
-src/repl/main.cc            the driver: the stand-alone REPL program
-src/fuzz/                   fuzzing entry points, a replay driver, and the seed corpora
-src/tools/                  pl4g-gen-diag (the catalog from share/diagnostics.json), pl4g-lexdump
-src/test/                   the checks ctest runs that compare with pypl4g, and the fuzzing run;
-                            irjson.py writes the whole of what pypl4g compiled as JSON
-bin/pl4g-interp-tests       runs tests/language through the interpreter
+src/repl/main.cc            pl4g-repl: the stand-alone interpreter and session
+src/lsp/main.cc             pl4g-lsp: the stand-alone language server
+src/fuzz/                   fuzzing entry points (lexer, parser, checker), a replay driver, the seed corpora
+src/tools/                  pl4g-gen-diag (the catalog from share/diagnostics.json), and the dumpers the comparisons
+                            run: pl4g-lexdump, -astdump, -irdump, -runjson, -checkdump
+src/test/                   the checks ctest runs that compare with pypl4g, the session and the fuzzing runs;
+                            irjson.py and checkout.py write what pypl4g made
+bin/pl4g-interp-tests       runs tests/language through the interpreter, from source
 ```
-
 The interpreter
 ---------------
 
@@ -82,6 +89,53 @@ calls are activations on a stack of its own, so a program's recursion is measure
 not the interpreter's.  `runtime/io.c` is compiled into the library and called as it is, so a program's input and output go
 through the same ring; the arena allocator the back ends emit as machine code is the same few lines of C++.  The record the
 startup function is handed carries the descriptors the embedder chose (`interp::Devices`).
+
+The checker
+-----------
+
+`sema/` is pypl4g's `sema/check.py` ported method for method, in the order check.py has them, so that what it makes of a program is
+instruction for instruction what pypl4g makes and what it says is word for word what pypl4g says.  `check.hh` declares the class:
+its state, as `__init__` has it, and then every method, the declarations of each part of check.py in a header of their own
+(`check-entry.hh` … `check-builtins.hh`) defined in the `.cc` of the same name; every declaration names the line of check.py it
+comes from.  `check-types.hh` holds the records beside the checker (`Local`, `Borrow`, `NamedType`, `Generator`, …),
+`check-helpers.hh` the module-level functions, and `held.hh` what a Python variable annotated `object` holds -- a variant of the
+checker's things, compared by identity.
+
+What the port keeps of Python's semantics, beside the types (above): a dict iterates in the order things were put in
+(`util/ordered.hh`); `id(x)` is the address; a set of names or of identities iterates in an order nothing can depend on, since
+Python's string hashes are randomized and its identities are addresses; the order Python evaluates the arguments of a call in is
+kept wherever two of them make IR or a diagnostic, C++ leaving it unspecified.
+
+The interactive session
+-----------------------
+
+`pl4g-repl` with no file is the session the user chose (decisions.md, 2026-10-20): a definition is kept, a later one of a name taking
+the place of the earlier; statements run once in a function made for them; a name they bind at their top stays a variable of the
+session holding what it held; the value of the last one, where it is one, is shown with its type; `@help`, `@type`, `@load`,
+`@defs`, `@vars`, `@reset` and `@quit` are the session's own commands.
+
+Each input is checked as one file, since a file's names are its own: the function the input runs in first -- what was typed
+indented beneath its head, the file shown so that a diagnostic names the lines and columns that were typed -- then `std`, the
+session's variables and the definitions kept.  Statements that bind something or come to a value are checked twice: the first
+check is the one reported and says what the types are; the second, quiet, declares a variable of the session for each to be put
+in.  Three things the checker does differently for the session, and only these (`sema/session.hh`): a variable of the session is
+given no value where it is declared, a name the input binds at its top is the session's to keep and so neither unread nor
+needlessly `mut`, and the last statement's value is kept rather than refused.  Before a program starts its variables of the session
+are given the bytes they held when the last input ended, and after it the bytes are taken back; the programs that ran are kept,
+since what a variable holds may point into the room one of them placed or into the heap, which nothing gives back.  A value is
+shown as the language writes a literal of it (`repl/show.cc`).
+
+The language server and the tree-sitter service
+-----------------------------------------------
+
+`lsp/` is pypl4g's `lsp/` ported, on descriptors the caller hands it, simdjson reading and a writer of its own; it answers every
+conversation of `tests/compiler/test_lsp.py` as pypl4g's does, except saving, where pypl4g also generates code and the C++ side has
+no back end yet.
+
+`ts/` builds the grammar's generated parser and its queries (by `#embed`) into the library: what each piece of a text is and where
+it folds.  The text renderer colours a snippet by it where colour is asked for, as pypl4g's does through the Python binding; every
+test program's diagnostics agree with pypl4g's in colour as well.  The queries' one `#match?` is read by a matcher of literal
+prefixes and suffixes, which is all the queries ask.
 
 Which type is which
 -------------------
@@ -104,8 +158,8 @@ Each phase is committed when its own checks pass; the status column is kept curr
 | 2 | Syntax tree and parser | every test program parses as `pypl4g` parses it | done: every file's tree, compared field by field (a dumper written by reflection), as a program's file and as a module's; no difference on 3527 inputs AFL++ found |
 | 3 | IR: types, values, instructions, layout, printer, the JSON exchange | every program's IR, read from what pypl4g compiled, prints as pypl4g prints it and is laid out alike | done; the builder and the verifier go with the checker, which is what uses them |
 | 4 | Interpreter of the IR, and the runtime: heap, io_uring | IR pypl4g compiled, read as JSON, runs and exits as the test says | done: 464 of 464, and under the address and undefined-behaviour sanitizers all but the one test that needs a data limit |
-| 5 | Checker, part one: definitions, types, expressions, statements, calls | the first test programs run | the IR builder and the passes of level nought are done: from what pypl4g's checker made they make exactly what pypl4g's passes make, 464 of 464, and what they make runs as the tests say |
-| 6 | Checker, part two: everything else the language has | every test program runs or is refused as it should | |
-| 7 | Macro expander | the macro tests | |
-| 8 | REPL, tree-sitter service, LSP service | their own tests | |
-| 9 | Sanitizer and fuzzing builds as part of testing | `ctest` | |
+| 5 | Checker, part one: definitions, types, expressions, statements, calls | the first test programs run | done with phase 6 |
+| 6 | Checker, part two: everything else the language has | every test program runs or is refused as it should | done: the same diagnostics, word for word and in colour, and the same IR before any pass, on 947 of the 948 test programs; the one pypl4g fails (TODO-pypl4g.md) is held to its test; every one of the 464 that run runs from source as its test says; all of it under the sanitizers too |
+| 7 | Macro expander | the macro tests | done, within phase 6's numbers |
+| 8 | REPL, tree-sitter service, LSP service | their own tests | done: typed sessions, the colours of every diagnostic, and the LSP conversations of test_lsp.py |
+| 9 | Sanitizer and fuzzing builds as part of testing | `ctest` | done: the comparisons, the source runs and the sessions run sanitized as well; the lexer, the parser and the checker are fuzzed |

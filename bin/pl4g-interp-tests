@@ -1,0 +1,34 @@
+#!/usr/bin/env python
+"""Run the test programs through the C++ interpreter, from their source.
+
+    bin/pl4g-interp-tests [NAME...]
+
+Each test program under `tests/language` that runs is read, checked and
+interpreted by `build/cpp/pl4g-repl` -- built first if anything it is made of is
+newer -- under the limits every program the tests run is held to, and its exit
+status is held to the one its test names.  Names pick tests by their directory.
+`PL4G_CPP_BUILD` names another build directory.
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def main() -> int:
+    """Build the interpreter and run the tests through it."""
+    build = Path(os.environ.get("PL4G_CPP_BUILD", ROOT / "build" / "cpp"))
+    if not (build / "build.ninja").exists():
+        subprocess.run(["cmake", "-S", str(ROOT), "-B", str(build), "-G", "Ninja"], check=True)
+    subprocess.run(["cmake", "--build", str(build), "--target", "pl4g-repl"], check=True)
+    return subprocess.run([sys.executable, "-I", str(ROOT / "src" / "test" / "interp_runs.py"),
+                           str(build / "pl4g-repl"), str(ROOT), *sys.argv[1:]], check=False).returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main())
