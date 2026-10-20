@@ -10650,6 +10650,28 @@ Line editing is **libedit** where the input descriptor is a terminal and plain r
 whoever embeds the library's to choose, as every descriptor is.  libedit over GNU readline for its licence, readline being GPLv3;
 both read from a given descriptor.
 
+## 2026-10-20T10:52+02:00 — compiler
+
+**A compiler in C++: pypl4g's back end ported, and position-independent executables as an option**
+
+The user asked for the compiler in C++: a library function given the inputs, the options and a descriptor to write the result
+into, and a command line like other compilers' drivers, able to make position-independent code that refers to nothing outside
+itself, so that the only relocation is adding where it was loaded -- kept in a simple table of where and what.  Asked, the user
+chose:
+
+- **a static position-independent ELF executable** as what is written, over an image of a format of our own and over both: an
+  `ET_DYN` with no interpreter and no dynamic section, whose startup code applies the table before anything else runs -- as
+  glibc's static-pie and Go's `-buildmode=pie` are -- so a binary still runs on its own, natively and under QEMU;
+- **all three architectures**, x86-64, AArch64 and RISC-V, over x86-64 first;
+- **pypl4g's back end ported faithfully**, so that what it makes can be compared with pypl4g's byte for byte, **and position
+  independence an option rather than the only target**: a static binary at a fixed address, which is what pypl4g makes, stays
+  the default, and `-fpie` asks for the other;
+- **a table in the manner of ELF's `SHT_RELR`** over 16-byte entries of offset and operation and over packed 32-bit ones: an
+  address of a word-aligned eight-byte place where the load address is added, and after it bitmaps saying which of the next
+  words get the same -- what Android, Chrome OS and glibc 2.36 settled on for relative relocations, as dense as such a table
+  gets.  It says nothing but "add the load address to these eight bytes", so a position-independent image holds no four-byte
+  absolute address: whatever stores one in the fixed-address image stores eight bytes, or a displacement, in this one.
+
 Open questions
 --------------
 
