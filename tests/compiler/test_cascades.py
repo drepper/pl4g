@@ -78,3 +78,28 @@ def test_a_reference_of_the_wrong_kind_reports_once() -> None:
 def test_a_literal_with_nowhere_to_look_is_still_reported() -> None:
     """The rule above takes nothing away from the rule it guards."""
     assert D.IMPL_UNIMPLEMENTED_FEATURE in reported(body("    let n := 1\n"))
+
+
+def test_a_file_attribute_list_cut_short_ends_the_file() -> None:
+    """`@[x(` at the end of a list about the file is reported, and what follows
+    it -- nothing here -- is not read: once raised out of the parser."""
+    sources = SourceManager()
+    engine, collected = collecting_engine(None)
+    unit = parse(tokenize(sources.add(Path("t.pl4g"), "@[x("), engine), "t.pl4g", engine)
+    assert [d.info.number for d in collected] == [D.LANG_SYNTAX_UNEXPECTED_TOKEN]
+    assert unit.items == () and unit.attrs == ()
+
+
+def test_a_generic_whose_body_was_lost_is_not_instantiated() -> None:
+    """A stray glyph in a generic function's signature is reported, the parser
+    recovers past the function with no body, and a call asking for an instance
+    asks for nothing more to be said: once an assertion in the checker."""
+    source = "".join((
+        "fn bigger(a: T', b: T') ", ARROW, " T' `re(x):\n",
+        "    a\n",
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n",
+        "@[startup]\n",
+        "fn main(init: std.Init) ", ARROW, " u6:\n",
+        "    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(bigger(2u8, 3u8), ",
+        "\N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6\n"))
+    assert reported(source) == [D.LANG_OPNAME_UNTERMINATED, D.LANG_FILESTRUCT_UNEXPECTED_TOPLEVEL]

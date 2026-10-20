@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A negative number a macro works out goes into the tree as the literal a
+※ program would have written for it, the raised minus and all: there is no
+※ operator that negates, so a negative number is a literal of its own.
+
+macro less(e: syntax) → syntax:
+    ⌜$e + $(0i64 - 7i64)⌝
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let n: i64 = less⌜10i64⌝
+    if n ≠ 3i64: return 1u6
+    0u6

@@ -985,13 +985,11 @@ namespace pl4g::comptime {
   }
 
 
-  // A loop, until the condition stops holding or something leaves it.
-  //
-  // pypl4g reads a loop written `until` as one written `while`, and so does
-  // this, to come to what it comes to.
+  // A loop, until the condition stops holding or something leaves it; written
+  // `unless`, until the condition holds.
   Value Evaluator::while_(const ast::While* expr)
   {
-    while (truth(expr->condition)) {
+    while (truth(expr->condition) != expr->until) {
       step(expr->span);
       try {
         block(expr->body);

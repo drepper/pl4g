@@ -1,0 +1,34 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ What runs while compiling runs its loops as the program would: a `break` or a
+※ `continue` naming a loop leaves or begins again the loop of that name, the
+※ one it is inside as well as one further out, and `unless` runs its body until
+※ the condition holds.  Each value here is worked out for the image, by a
+※ function nothing runs while the program does.
+
+let std := ⎕import("std")
+
+fn first_pair(n: u8) → u8:
+    let found: mut u8 = 0u8
+    foreach §outer i := 1u8…n:
+        foreach j := 1u8…n:
+            if j = i: continue §outer
+            if i + j = 7u8:
+                found ← i × 10u8 + j
+                break §outer
+    found
+
+fn counted(n: u8) → u8:
+    let at: mut u8 = 0u8
+    unless at = n:
+        at ← at + 1u8
+    at
+
+let pair: u8 = first_pair(6u8) in ⎕static
+let count: u8 = counted(4u8) in ⎕static
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if pair ≠ 43u8: return 1u6
+    if count ≠ 4u8: return 2u6
+    0u6

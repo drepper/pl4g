@@ -8,6 +8,7 @@ tokens are not produced.
 
 from __future__ import annotations
 
+import math
 import re
 
 import unicodedata
@@ -506,7 +507,7 @@ class Lexer:
         if ch in SUPERSCRIPT_DIGITS:
             self._lex_exponent(start)
             return True
-        if ch.isdigit():
+        if _is_digit(ch):
             self._lex_number(start)
             return True
         if ch == NEGATIVE_GLYPH:
@@ -665,7 +666,7 @@ class Lexer:
         negative = self._peek() == NEGATIVE_GLYPH
         if negative:
             self._pos += 1
-            if not self._peek().isdigit():
+            if not _is_digit(self._peek()):
                 self._diags.emit(D.LANG_SYNTAX_LONELY_NEGATIVE,
                                  self._span(start, self._pos))
                 self._emit(TokKind.INT, start, int_value=0, int_type=None)
@@ -717,7 +718,7 @@ class Lexer:
         if self._peek().lower() != marker:
             return False
         offset = 2 if self._peek(1) in "+-" else 1
-        return self._peek(offset).isdigit()
+        return _is_digit(self._peek(offset))
 
     def _digit_follows(self, offset: int, radix: int) -> bool:
         """Whether the character at *offset* is a digit of this base."""
@@ -745,13 +746,17 @@ class Lexer:
             self._pos += 1
             if self._peek() in "+-":
                 self._pos += 1
-            while self._peek().isdigit() or self._peek() == "_":
+            while _is_digit(self._peek()) or self._peek() == "_":
                 self._pos += 1
         body = self._text[digits_start:self._pos].replace("_", "")
         suffix = self._lex_literal_suffix(floating=True)
         text = "".join(("0x", body)) if radix == 16 else body
         try:
             value = float.fromhex(text) if radix == 16 else float(text)
+        except OverflowError:
+            # Too large for a double, which is what a decimal one too large
+            # comes to as well: the literal stands for an infinity.
+            value = math.inf
         except ValueError:
             self._diags.emit(D.LANG_SYNTAX_UNEXPECTED_CHAR,
                              self._span(start, self._pos),
@@ -832,7 +837,9 @@ class Lexer:
                              self._span(start, self._pos), found=len(found))
             self._emit(TokKind.CHAR, start, int_value=0)
             return
-        self._emit(TokKind.CHAR, start, int_value=ord(found[0]))
+        # An escape that denotes nothing was reported where it was written, and
+        # stands for nought.
+        self._emit(TokKind.CHAR, start, int_value=ord(found[0]) if found[0] else 0)
 
     def _lex_escape(self) -> str:
         """Lex one escape sequence and return the character it denotes."""
@@ -847,16 +854,32 @@ class Lexer:
             want = 4 if ch == "u" else 8
             self._pos += 1
             digits = ""
-            while len(digits) < want and self._peek() in "0123456789abcdefABCDEF":
+            while len(digits) < want and _is_hex_digit(self._peek()):
                 digits += self._peek()
                 self._pos += 1
-            if len(digits) == want:
+            if len(digits) == want and int(digits, 16) <= _MAX_CODE_POINT:
                 return chr(int(digits, 16))
             self._diags.emit(D.LANG_SYNTAX_BAD_ESCAPE, self._span(start, self._pos), char=ch)
             return ""
         self._pos += 1 if ch != "" else 0
         self._diags.emit(D.LANG_SYNTAX_BAD_ESCAPE, self._span(start, self._pos), char=ch)
         return ""
+
+
+#: The largest code point there is: an escape naming one beyond it names nothing.
+_MAX_CODE_POINT: Final[int] = 0x10FFFF
+
+
+def _is_digit(ch: str) -> bool:
+    """Whether *ch* is a digit a number is written with: the ten of ASCII and no
+    other script's, which `str.isdigit` would also take."""
+    return len(ch) == 1 and "0" <= ch <= "9"
+
+
+def _is_hex_digit(ch: str) -> bool:
+    """Whether *ch* is a digit of a hexadecimal escape.  Nothing, at the end of
+    the text, is none -- which `in` over a string would say it is."""
+    return len(ch) == 1 and ch in "0123456789abcdefABCDEF"
 
 
 def tokenize(source: SourceFile, diags: DiagEngine,

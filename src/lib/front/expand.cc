@@ -993,10 +993,8 @@ namespace pl4g {
         auto n = number.number();
         if (n == nullptr) [[unlikely]]
           throw macro::Refused("a number wanted");
-        if (*n < 0) [[unlikely]]
-          // pypl4g writes `ast.UnaryOp.NEGATE`, which there is none of, and
-          // stops with an internal error; so does this.
-          throw InternalError("a macro filled a hole with a negative number, which pypl4g cannot write");
+        // A negative number is a literal of its own, as the raised minus a
+        // program writes makes it: there is no operator that negates.
         auto written = arena.make<ast::IntLit>(invalid_span);
         written->value = ast::Integer{ *n, false };
         written->type_name = arena.text("i64");

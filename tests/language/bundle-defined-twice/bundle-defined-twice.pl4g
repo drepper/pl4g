@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4001
+
+※ A bundle's name is one of the file's names like any other: a second
+※ definition of one, as a bundle or as anything else, is refused and the first
+※ pointed at.
+
+bundle number(T'):
+    T' ⊞ T' → T'
+
+bundle number(T'):
+    T' ⌈ T' → T'
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

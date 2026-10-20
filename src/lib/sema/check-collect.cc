@@ -2518,9 +2518,17 @@ namespace pl4g::sema {
                    { { "name", node->params[at] }, { "bundle", node->name } });
     std::string name(node->name);
     if (bundles->contains(name) || top->contains(name)) {
-      // pypl4g names a diagnostic its catalog does not have here, and stops
-      // with an internal error; so does this, until the catalog has one.
-      throw InternalError("module 'pypl4g.diag.ids' has no attribute 'LANG_NAME_ALREADY_DEFINED'");
+      auto earlier = bundles->get(name);
+      auto spans = name_spans.get(name);
+      std::optional<Span> previous;
+      if (earlier != nullptr)
+        previous = (*earlier)->node->name_span;
+      else if (spans != nullptr)
+        previous = *spans;
+      auto told = diags.emit(D::LANG_FILESTRUCT_DUPLICATE_DEFINITION, node->name_span, { { "name", name } });
+      if (previous)
+        told.note(D::LANG_FILESTRUCT_PREVIOUS_DEFINITION, *previous, { { "name", name } });
+      return;
     }
     auto bound_ = bind_attributes(node->attrs, AttrTarget::bundle);
     check_clause_shapes(node->clauses);
@@ -2747,9 +2755,8 @@ namespace pl4g::sema {
   {
     if (Bundle* bundle = bundle_named(clause->expr); bundle != nullptr) {
       if (clause->answers != nullptr) {
-        // pypl4g names a diagnostic its catalog does not have here (it has
-        // LANG_BUNDLE_ANSWERS_NOTHING), and stops with an internal error.
-        throw InternalError("module 'pypl4g.diag.ids' has no attribute 'LANG_CLAUSE_BUNDLE_ANSWERS_NOTHING'");
+        diags.emit(D::LANG_BUNDLE_ANSWERS_NOTHING, clause->span, { { "bundle", bundle->node->name } });
+        return nullptr;
       }
       return bundle_met(bundle, ast::as<ast::Call>(clause->expr), bound_, name, span) ? ir::void_type() : nullptr;
     }

@@ -22,7 +22,7 @@ DIRECTIVE = "\N{REFERENCE MARK} pl4g-test:"
 
 #: The tests pypl4g itself fails, each in TODO-pypl4g.md: what the C++ side
 #: says of them is held to what the test expects instead.
-PYPL4G_FAILS = frozenset(("unit-put-on-a-unit",))
+PYPL4G_FAILS: frozenset[str] = frozenset()
 
 
 def as_the_test_says(path: Path, status: int, said: str) -> str | None:

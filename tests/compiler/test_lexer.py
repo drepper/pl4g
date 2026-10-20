@@ -195,3 +195,30 @@ def test_the_sign_and_the_operator_are_told_apart() -> None:
     assert diags == []
     assert kinds[:3] == [TokKind.INT, TokKind.MINUS, TokKind.INT]
 
+
+
+# -- what fuzzing the C++ implementation found --------------------------------
+#
+# Each of these once raised out of the lexer or never ended.  What is wrong
+# with each is reported, and the lexer goes on.
+
+@pytest.mark.parametrize(("text", "wanted"), [
+    ("let e := '\\q'\n", [D.LANG_SYNTAX_BAD_ESCAPE]),
+    ("let c := '\\U00110000'\n", [D.LANG_SYNTAX_BAD_ESCAPE]),
+    ("let s := \"\\u12", [D.LANG_SYNTAX_BAD_ESCAPE, D.LANG_SYNTAX_UNTERMINATED_STRING]),
+    ("let n := \N{ARABIC-INDIC DIGIT THREE}\n", [D.LANG_SYNTAX_UNEXPECTED_CHAR]),
+    ("let f := 0x1p99999\n", []),
+])
+def test_what_fuzzing_found_is_reported(text: str, wanted: list[int]) -> None:
+    """An escape naming nothing or past Unicode, one the file ends inside, a
+    digit of another script and a hexadecimal number too large for a double."""
+    _, diags = lex(text)
+    assert diags == wanted
+
+
+def test_a_float_too_large_is_an_infinity() -> None:
+    """As a decimal literal too large for a double is."""
+    sources = SourceManager()
+    engine, _ = collecting_engine()
+    tokens = tokenize(sources.add(Path("t.pl4g"), "0x1p99999\n"), engine)
+    assert tokens[0].float_value == float("inf")

@@ -402,7 +402,13 @@ class Parser:
             if self._check(TokKind.EOF):
                 break
             if self._attached_to_nothing():
-                about_the_file.extend(self._parse_attributes())
+                try:
+                    about_the_file.extend(self._parse_attributes())
+                except _Bail:
+                    # Nothing past a list about the file that cannot be read
+                    # says what it belongs to: what was said is said, and the
+                    # file is read no further.
+                    break
                 continue
             try:
                 item = self._parse_item()

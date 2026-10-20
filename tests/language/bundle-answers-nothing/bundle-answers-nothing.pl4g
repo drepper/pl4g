@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4915
+
+※ An application of a bundle is a set of requirements and not an operation, so
+※ there is nothing for an arrow after it to say the type of.
+
+bundle number(T'):
+    T' ⊞ T' → T'
+
+fn bigger(a: T', b: T') → T' pre(number(T') → T'):
+    a ⊞ b
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ⎕narrow(bigger(2u8, 3u8), ⌜u6⌝) ?? 1u6

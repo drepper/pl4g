@@ -715,10 +715,10 @@ class _Expander:
         """The same, with the number a program would have written to mean it."""
         if not isinstance(number, int):
             raise Refused("a number wanted")
-        written = ast.IntLit(span=INVALID_SPAN, value=abs(number),
-                             type_name="i64")
-        return self._put_into(tree, at, written if number >= 0 else ast.Unary(
-            span=INVALID_SPAN, op=ast.UnaryOp.NEGATE, operand=written))
+        # A negative number is a literal of its own, as the raised minus a
+        # program writes makes it: there is no operator that negates.
+        return self._put_into(tree, at, ast.IntLit(span=INVALID_SPAN, value=number,
+                                                   type_name="i64"))
 
     def _put_text(self, tree: object, at: object, text: object) -> int:
         """The same, with the literal a program would have written to mean the text.

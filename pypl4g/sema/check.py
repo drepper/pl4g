@@ -8944,8 +8944,14 @@ class Checker:
                 self._diags.emit(D.LANG_BUNDLE_PARAMETER_NOT_A_TYPE, where,
                                  name=name, bundle=node.name)
         if node.name in self._bundles or node.name in self._top:
-            self._diags.emit(D.LANG_NAME_ALREADY_DEFINED, node.name_span,
-                             name=node.name)
+            earlier = self._bundles.get(node.name)
+            previous = earlier.node.name_span if earlier is not None \
+                else self._name_spans.get(node.name)
+            told = self._diags.emit(D.LANG_FILESTRUCT_DUPLICATE_DEFINITION,
+                                    node.name_span, name=node.name)
+            if previous is not None:
+                told.note(D.LANG_FILESTRUCT_PREVIOUS_DEFINITION, previous,
+                          name=node.name)
             return
         bound = self._bind_attributes(node.attrs, AttrTarget.BUNDLE)
         self._check_clause_shapes(node.clauses)
@@ -9221,7 +9227,7 @@ class Checker:
         bundle = self._bundle_named(clause.expr)
         if bundle is not None:
             if clause.answers is not None:
-                self._diags.emit(D.LANG_CLAUSE_BUNDLE_ANSWERS_NOTHING,
+                self._diags.emit(D.LANG_BUNDLE_ANSWERS_NOTHING,
                                  clause.span, bundle=bundle.node.name)
                 return None
             assert isinstance(clause.expr, ast.Call)
@@ -13364,8 +13370,11 @@ class Checker:
         of another body, and what is being checked has to be this one while its
         body is.
         """
-        if isinstance(node.body, ast.DeferredBlock) and node.body.failed:
-            # Said where its body could not be read; there is nothing to check.
+        if node.body is None \
+                or (isinstance(node.body, ast.DeferredBlock) and node.body.failed):
+            # Said where its body could not be read -- or where the parser lost
+            # it on the way, past something it could not read: there is nothing
+            # to check.
             return
         block = func.add_block()
         inner = IRBuilder(self._module, func)
@@ -25304,7 +25313,7 @@ class Checker:
             return self._as_united(builder, given, found.bare, expected, expr.span)
         if not found.unit.is_none:
             self._diags.emit(D.LANG_UNIT_PUT_ON_A_UNIT, expr.args[1].span,
-                             found=found.unit.written())
+                             found=found.unit.render())
             return UndefConst(ERROR)
         written = expr.args[1]
         if not isinstance(written, ast.Lifted):

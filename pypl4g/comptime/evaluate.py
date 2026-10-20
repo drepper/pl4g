@@ -181,6 +181,13 @@ class _Continue(Exception):
         self.label = label
 
 
+def _label_name(label: ast.Label | None) -> str | None:
+    """What a loop or a jump calls the loop it means: the label's name, which is
+    what two labels written in two places have in common -- the nodes, spans and
+    all, never are."""
+    return None if label is None else label.name
+
+
 class Evaluator:
     """One evaluation: the program it is over, and what it has worked out.
 
@@ -331,10 +338,10 @@ class Evaluator:
                 self._assign_entry(stmt)
                 return None
             case ast.Break():
-                raise _Break(stmt.label,
+                raise _Break(_label_name(stmt.label),
                              None if stmt.value is None else self._expr(stmt.value))
             case ast.Continue():
-                raise _Continue(stmt.label)
+                raise _Continue(_label_name(stmt.label))
             case ast.EmptyStmt():
                 return None
             case _:
@@ -403,16 +410,17 @@ class Evaluator:
 
     def _while(self, stmt: ast.While) -> object:
         """A loop, until the condition stops holding or something leaves it."""
-        while self._truth(stmt.condition):
+        # Written `unless`, the body runs until the condition holds.
+        while self._truth(stmt.condition) != stmt.until:
             self._step(stmt.span)
             try:
                 self._block(stmt.body)
             except _Break as left:
-                if left.label not in (None, stmt.label):
+                if left.label not in (None, _label_name(stmt.label)):
                     raise
                 return left.value
             except _Continue as again:
-                if again.label not in (None, stmt.label):
+                if again.label not in (None, _label_name(stmt.label)):
                     raise
         if stmt.alternative is not None:
             return self._block(stmt.alternative)
@@ -430,11 +438,11 @@ class Evaluator:
             try:
                 self._block(stmt.body)
             except _Break as left:
-                if left.label not in (None, stmt.label):
+                if left.label not in (None, _label_name(stmt.label)):
                     raise
                 return left.value
             except _Continue as again:
-                if again.label not in (None, stmt.label):
+                if again.label not in (None, _label_name(stmt.label)):
                     raise
             finally:
                 self._scopes.pop()

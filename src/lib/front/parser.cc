@@ -554,8 +554,8 @@ namespace pl4g {
             auto attrs = parse_attributes();
             about_the_file.insert(about_the_file.end(), attrs.begin(), attrs.end());
           } catch (const Bail&) {
-            // pypl4g does not catch this one, and stops reading the file; the
-            // same here, by what is left being nothing.
+            // Nothing past a list about the file that cannot be read says
+            // what it belongs to: the file is read no further.
             break;
           }
           continue;

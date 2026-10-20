@@ -708,7 +708,7 @@ Optimizations
     every program reaching the definition, the whole of `std.run` once.  Leaving out the names a definition binds itself has to
     respect where each binding begins: a name read before a `let` of it is still the function.
 
-[ ] the lexer and the parser fail on inputs the C++ implementation found while being checked against them by fuzzing.
+[x] the lexer and the parser fail on inputs the C++ implementation found while being checked against them by fuzzing.
     The lexer: a character literal holding one escape that denotes nothing, `'\q'`, reports the bad escape and then raises
     `TypeError` from `ord("")`; `\U00110000` raises `ValueError` from `chr`; a hexadecimal floating-point literal too large
     for a double, `0x1p99999`, raises `OverflowError` from `float.fromhex`; a `\u` or `\U` escape the file ends in the middle
@@ -718,25 +718,40 @@ Optimizations
     only around a definition.  The driver turns each exception into an internal error.  The C++ lexer reports an empty
     character, a bad escape, an infinity, a bad escape and an unexpected character; the C++ parser stops reading the file.
     The lexer's inputs are in `src/fuzz/corpus/lexer/python-crashes.txt`.
+    Done on 2026-10-20: a number is written with the ten digits of ASCII, an escape asks whether a digit follows and not
+    whether nothing is among the digits, an escape past U+10FFFF is a bad one, a character holding an escape that denotes
+    nothing is nought, a hexadecimal number too large is an infinity, and a list about the file cut short ends the file --
+    what the C++ front end does.  The inputs are seeds of the lexer's and the parser's corpora, and test_lexer.py and
+    test_cascades.py hold them.
 
-[ ] a labelled `break` or `continue` in code run while compiling never finds its loop.  `comptime/evaluate.py` compares the
+[x] a labelled `break` or `continue` in code run while compiling never finds its loop.  `comptime/evaluate.py` compares the
     `Label` nodes, span and all, so the label a jump names is never the loop's, and the `_Break` or `_Continue` escapes the
     evaluator and the compiler stops with an internal error.  Comparing the labels' names is what the C++ evaluator does.
     pypl4g also evaluates a `while … until` loop as a `while` loop; the C++ evaluator does the same, saying so where it does.
+    Done on 2026-10-20: the labels' names are compared, and a loop written `unless` runs until its condition holds -- in the
+    C++ evaluator as well.  tests/language/comptime-loops-named.
 
-[ ] `⎕unit` on a value that already carries a unit crashes: `_lower_unit_call` asks `found.unit.written()`, and `Unit` has no
+[x] `⎕unit` on a value that already carries a unit crashes: `_lower_unit_call` asks `found.unit.written()`, and `Unit` has no
     `written`, so `tests/language/unit-put-on-a-unit` ends in an `AttributeError` where it expects 4544.  The C++ checker
     says 4544 with the unit as its textual form writes it.
+    Done on 2026-10-20: the message writes the unit as `Unit.render` does.
 
-[ ] two diagnostics check.py names are not in the catalog: `_collect_bundle` emits `D.LANG_NAME_ALREADY_DEFINED` and
+[x] two diagnostics check.py names are not in the catalog: `_collect_bundle` emits `D.LANG_NAME_ALREADY_DEFINED` and
     `_answered_by` `D.LANG_CLAUSE_BUNDLE_ANSWERS_NOTHING` (the catalog has `LANG_BUNDLE_ANSWERS_NOTHING`), so either place
     stops the compiler with an `AttributeError`.  The C++ checker stops with an internal error at the same places.
+    Done on 2026-10-20: a bundle's name taken already is 4001, with the earlier definition as 4002's note, and a bundle
+    answering something is 4915 -- in the C++ checker as well.  tests/language/bundle-defined-twice and
+    bundle-answers-nothing.
 
-[ ] `⎕fillnumber` with a negative number names `ast.UnaryOp.NEGATE`, which does not exist, and the macro expander stops
+[x] `⎕fillnumber` with a negative number names `ast.UnaryOp.NEGATE`, which does not exist, and the macro expander stops
     with an internal error; so does the C++ expander, for now.
+    Done on 2026-10-20: a negative number is a literal of its own, as the raised minus makes it, in both expanders.
+    tests/language/macro-writes-a-negative-number.
 
-[ ] a generic function whose body the parser lost stops the checker on an assertion.  A stray glyph where a clause stands
+[x] a generic function whose body the parser lost stops the checker on an assertion.  A stray glyph where a clause stands
     -- `` fn bigger(a: T', b: T') → T' `re(shapes.number(T')) …: `` in `tests/language/bundle-imported` -- is reported, the
     parser recovers past it with no body, and the call that instantiates the function reaches `assert node.body is not
     None` in `_lower_instance`.  Found by fuzzing the C++ checker, which stops with an internal error there; the input is
     `src/fuzz/corpus/check/generic-without-a-body.pl4g`.
+    Done on 2026-10-20: an instance of one with no body is not checked, there being nothing to check and its loss having
+    been said -- in the C++ checker as well.  test_cascades.py holds it.
