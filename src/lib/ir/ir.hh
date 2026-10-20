@@ -376,6 +376,8 @@ namespace pl4g::ir {
     std::string subject;
     std::string reason;
     Span span;
+    // The catalog's number, for what the compiler said rather than chose.
+    std::optional<unsigned> number;
   };
 
 
@@ -399,7 +401,7 @@ namespace pl4g::ir {
     {
       bool said = kind == "fatal" || kind == "error" || kind == "warning" || kind == "note";
       if (said || ! in_system(span))
-        reports.push_back({ std::move(kind), std::move(subject), std::move(reason), span });
+        reports.push_back({ std::move(kind), std::move(subject), std::move(reason), span, std::nullopt });
     }
     std::string triple = "x86_64-linux-none";
     // In the order they were added, under the key they were added with.

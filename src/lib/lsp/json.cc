@@ -146,6 +146,58 @@ namespace pl4g::lsp {
   }
 
 
+  std::string Json::dump(unsigned indent) const
+  {
+    std::string out;
+    write(out, indent, 0);
+    return out;
+  }
+
+
+  void Json::write(std::string& out, unsigned indent, unsigned depth) const
+  {
+    auto line = [&](unsigned level) {
+      out += '\n';
+      out.append(std::size_t(indent) * level, ' ');
+    };
+    if (auto array = elements()) {
+      if (array->empty()) {
+        out += "[]";
+        return;
+      }
+      out += '[';
+      for (std::size_t i = 0; i < array->size(); ++i) {
+        if (i > 0)
+          out += ',';
+        line(depth + 1);
+        (*array)[i].write(out, indent, depth + 1);
+      }
+      line(depth);
+      out += ']';
+      return;
+    }
+    if (auto object = members()) {
+      if (object->empty()) {
+        out += "{}";
+        return;
+      }
+      out += '{';
+      for (std::size_t i = 0; i < object->size(); ++i) {
+        if (i > 0)
+          out += ',';
+        line(depth + 1);
+        quoted(out, (*object)[i].first);
+        out += ": ";
+        (*object)[i].second.write(out, indent, depth + 1);
+      }
+      line(depth);
+      out += '}';
+      return;
+    }
+    write(out);
+  }
+
+
   std::optional<Json> Json::parse(std::string_view text)
   {
     ::simdjson::dom::parser parser;

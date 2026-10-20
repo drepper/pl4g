@@ -1,5 +1,7 @@
 #include "opt/passes.hh"
 
+#include <chrono>
+
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
@@ -1440,11 +1442,20 @@ namespace pl4g::opt {
 
   void run_pipeline(Module& module, int level)
   {
+    run_pipeline(module, level, verifying_asked(), nullptr);
+  }
+
+
+  void run_pipeline(Module& module, int level, bool verifying, std::vector<PassTiming>* timings)
+  {
     laid_out = &module;
-    bool verifying = verifying_asked();
     auto names = pipeline_for(level);
     for (std::size_t at = 0; at < names.size(); ++at) {
+      auto start = std::chrono::steady_clock::now();
       bool changed = run_one(names[at], module);
+      if (timings != nullptr)
+        timings->push_back({ names[at], std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(),
+                             changed });
       // After each pass that changed something, and after the last whatever
       // it says: what reaches the back end has always been verified.
       if (verifying && (changed || at + 1 == names.size()))

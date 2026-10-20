@@ -122,6 +122,20 @@ namespace pl4g {
   }
 
 
+  Loc SourceManager::character_offset(Loc loc) const noexcept
+  {
+    if (loc < 0)
+      return loc;
+    Loc base = 0;
+    for (const auto& file : all) {
+      if (loc >= file.base && loc <= file.end())
+        return base + Loc(unicode::length(std::string_view(file.text).substr(0, std::size_t(loc - file.base))));
+      base += Loc(unicode::length(file.text)) + 1;
+    }
+    return loc;
+  }
+
+
   std::optional<std::string_view> SourceManager::line_text(Loc loc) const noexcept
   {
     auto file = file_of(loc);

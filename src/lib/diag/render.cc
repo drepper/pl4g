@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "lsp/json.hh"
 #include "ts/highlight.hh"
 #include "util/unicode.hh"
 
@@ -98,6 +99,54 @@ namespace pl4g {
     }
     pieces += text.substr(at);
     return pieces;
+  }
+
+
+
+  void JsonRenderer::operator()(const Diagnostic& diag)
+  {
+    if (diag.info->severity != Severity::note)
+      collected.push_back(&diag);
+  }
+
+
+  namespace {
+
+    lsp::Json as_json(const Diagnostic& diag, const SourceManager& sources)
+    {
+      auto made = lsp::Json::object({ { "number", std::int64_t(diag.info->number) },
+                                      { "name", diag.info->name },
+                                      { "severity", std::format("{}", diag.info->severity) },
+                                      { "message", diag.text() } });
+      auto position = diag.span.is_valid() ? sources.position(diag.span.start) : std::nullopt;
+      if (position) {
+        made.set("file", std::string(position->path));
+        made.set("line", std::int64_t(position->line));
+        made.set("column", std::int64_t(position->column));
+        made.set("span", lsp::Json::object({ { "start", sources.character_offset(diag.span.start) },
+                                             { "end", sources.character_offset(diag.span.end) } }));
+      }
+      if (! diag.info->option.empty())
+        made.set("option", diag.info->option);
+      if (! diag.notes.empty()) {
+        lsp::Json::Array notes;
+        for (auto note : diag.notes)
+          notes.push_back(as_json(*note, sources));
+        made.set("notes", lsp::Json(std::move(notes)));
+      }
+      return made;
+    }
+
+  } // anonymous namespace
+
+
+  void JsonRenderer::finish()
+  {
+    lsp::Json::Array all;
+    for (auto diag : collected)
+      all.push_back(as_json(*diag, sources));
+    out.print("{}\n", lsp::Json(std::move(all)).dump(2));
+    out.flush();
   }
 
 } // namespace pl4g

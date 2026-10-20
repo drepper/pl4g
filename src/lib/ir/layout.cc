@@ -1,6 +1,13 @@
 #include "ir/layout.hh"
 
 #include <algorithm>
+#include <bit>
+#include <cmath>
+#include <limits>
+#include <string>
+
+#include "diag/engine.hh"
+#include "ir/printer.hh"
 
 
 namespace pl4g::ir {
@@ -295,6 +302,42 @@ namespace pl4g::ir {
       return found;
     }
     return part_offsets_of(ty, layout);
+  }
+
+  std::vector<std::uint8_t> encode_scalar(__int128 value, const Type* ty, const DataLayout& layout)
+  {
+    auto size = size_of(ty, layout);
+    __int128 low = size != 0 ? -(static_cast<__int128>(1) << (size * 8 - 1)) : 0;
+    unsigned __int128 high = size >= 16 ? ~static_cast<unsigned __int128>(0)
+                             : size != 0 ? (static_cast<unsigned __int128>(1) << (size * 8)) - 1 : 0;
+    if (value < low || (value > 0 && static_cast<unsigned __int128>(value) > high)) [[unlikely]]
+      throw InternalError(decimal(value) + " does not fit in '" + ty->render() + "'");
+    std::vector<std::uint8_t> out(size);
+    auto bits = static_cast<unsigned __int128>(value);
+    for (std::uint64_t i = 0; i < size; ++i) {
+      auto at = layout.little_endian ? i : size - 1 - i;
+      out[at] = std::uint8_t(bits >> (8 * i));
+    }
+    return out;
+  }
+
+
+  std::vector<std::uint8_t> encode_float(double value, const Type* ty, const DataLayout& layout)
+  {
+    auto size = size_of(ty, layout);
+    std::uint64_t bits = 0;
+    if (size == 4) {
+      if (std::isfinite(value) && std::fabs(value) > double(std::numeric_limits<float>::max())) [[unlikely]]
+        throw InternalError("float too large to pack with f format");
+      bits = std::bit_cast<std::uint32_t>(static_cast<float>(value));
+    } else if (size == 8)
+      bits = std::bit_cast<std::uint64_t>(value);
+    else [[unlikely]]
+      throw InternalError(std::to_string(size) + " does not fit in '" + ty->render() + "'");
+    std::vector<std::uint8_t> out(size);
+    for (std::uint64_t i = 0; i < size; ++i)
+      out[layout.little_endian ? i : size - 1 - i] = std::uint8_t(bits >> (8 * i));
+    return out;
   }
 
 } // namespace pl4g::ir

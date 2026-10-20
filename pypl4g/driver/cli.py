@@ -181,6 +181,8 @@ class CommandLine:
         parser.add_argument("--conditions")
         parser.add_argument("-O", dest="opt_level")
         parser.add_argument("-g", dest="debug_info", action="store_true")
+        parser.add_argument("-fpie", dest="pie", action="store_true")
+        parser.add_argument("-fno-pie", dest="pie", action="store_false")
         parser.add_argument("-W", dest="warnings", action="append", default=[])
         parser.add_argument("-Werror", "--Werror", dest="werror",
                             action="store_true")
@@ -250,6 +252,10 @@ class CommandLine:
         if found.opt_level is not None:
             options.opt_level = self._level(found.opt_level)
         options.debug_info = found.debug_info
+        if found.pie:
+            # Asked of this compiler, which makes an image at a fixed address
+            # and nothing else: the C++ compiler is the one that relocates.
+            self._diags.emit(D.IMPL_CLI_NOT_IMPLEMENTED, option="-fpie")
         options.warnings_are_errors = found.werror
         for name in found.warnings:
             if name == "error":

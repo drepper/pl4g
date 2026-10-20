@@ -51,4 +51,11 @@ namespace pl4g::ir {
   std::uint64_t tag_offset_of(const Type* ty, const DataLayout& layout);
   std::uint64_t error_offset_of(const ResultType* ty, const DataLayout& layout);
 
+  // The bytes a scalar occupies in memory; a value that does not fit is
+  // refused (an internal error: the checker refused every one a program can
+  // write), never stored with its upper bits dropped.
+  std::vector<std::uint8_t> encode_scalar(__int128 value, const Type* ty, const DataLayout& layout);
+  // The bytes a floating-point value occupies, in the format the type names.
+  std::vector<std::uint8_t> encode_float(double value, const Type* ty, const DataLayout& layout);
+
 } // namespace pl4g::ir

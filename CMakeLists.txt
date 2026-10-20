@@ -65,6 +65,8 @@ set(PL4G_LIB_SOURCES
   src/lib/util/fdio.cc
   src/lib/util/contracts.cc
   src/lib/util/pyfloat.cc
+  src/lib/util/pyrepr.cc
+  src/lib/util/sha256.cc
   src/lib/source/manager.cc
   src/lib/diag/catalog.cc
   src/lib/diag/engine.cc
@@ -74,6 +76,7 @@ set(PL4G_LIB_SOURCES
   src/lib/front/lexer.cc
   src/lib/front/ast.cc
   src/lib/front/parser.cc
+  src/lib/front/repr.cc
   src/lib/front/dump.cc
   src/lib/ir/types.cc
   src/lib/ir/ir.cc
@@ -114,7 +117,11 @@ set(PL4G_LIB_SOURCES
   src/lib/elf/strtab.cc
   src/lib/elf/structs.cc
   src/lib/elf/writer.cc
+  src/lib/driver/cli.cc
   src/lib/driver/compile.cc
+  src/lib/driver/driver.cc
+  src/lib/driver/options.cc
+  src/lib/driver/sbom.cc
   src/lib/repl/lines.cc
   src/lib/repl/repl.cc
   src/lib/repl/session.cc
@@ -153,8 +160,28 @@ set(PL4G_LIB_SOURCES
   src/lib/front/interpret.cc
   src/lib/comptime/build.cc
   src/lib/comptime/evaluate.cc
+  src/lib/target/allocator.cc
+  src/lib/target/backtrace.cc
+  src/lib/target/bitcount.cc
+  src/lib/target/branches.cc
+  src/lib/target/callconv.cc
+  src/lib/target/faults.cc
+  src/lib/target/frames.cc
+  src/lib/target/globals.cc
+  src/lib/target/narrow.cc
+  src/lib/target/ordering.cc
+  src/lib/target/pool.cc
   src/lib/target/registry.cc
+  src/lib/target/runs.cc
+  src/lib/target/runtime.cc
+  src/lib/target/saturate.cc
+  src/lib/target/stack.cc
+  src/lib/target/started.cc
+  src/lib/target/stubs.cc
   src/lib/target/syscalls.cc
+  src/lib/target/target.cc
+  src/lib/target/tests.cc
+  src/lib/target/vectors.cc
   src/lib/ir/verify.cc
   runtime/io.c
   ${PL4G_GENERATED}/diag/catalog_data.cc
@@ -171,6 +198,9 @@ function(pl4g_variant suffix)
   # Where #embed finds the grammar's queries.
   set_source_files_properties(src/lib/ts/highlight.cc PROPERTIES
     COMPILE_OPTIONS "--embed-dir=${CMAKE_SOURCE_DIR}/tree-sitter-pl4g/queries")
+  # And where it finds the shared option table.
+  set_source_files_properties(src/lib/driver/options.cc PROPERTIES
+    COMPILE_OPTIONS "--embed-dir=${CMAKE_SOURCE_DIR}/share")
   target_compile_options(pl4g${suffix} PUBLIC ${PL4G_COMMON_FLAGS} ${flags})
   target_link_options(pl4g${suffix} PUBLIC ${flags})
   target_link_libraries(pl4g${suffix} PUBLIC simdjson::simdjson ${UNISTRING_LIBRARY} ${EDIT_LIBRARY} ${TREE_SITTER_LIBRARY})
@@ -178,11 +208,15 @@ function(pl4g_variant suffix)
   # The stand-alone interpreter: the library and a small driver.
   add_executable(pl4g-repl${suffix} src/repl/main.cc)
   target_link_libraries(pl4g-repl${suffix} PRIVATE pl4g${suffix})
+  # The compiler: the library and its command line, a program called pl4g.
+  add_executable(pl4g-compiler${suffix} src/compiler/main.cc)
+  set_target_properties(pl4g-compiler${suffix} PROPERTIES OUTPUT_NAME pl4g${suffix})
+  target_link_libraries(pl4g-compiler${suffix} PRIVATE pl4g${suffix})
   # The stand-alone language server, the same way.
   add_executable(pl4g-lsp${suffix} src/lsp/main.cc)
   target_link_libraries(pl4g-lsp${suffix} PRIVATE pl4g${suffix})
 
-  foreach(tool lexdump astdump irdump runjson checkdump mcdump)
+  foreach(tool lexdump astdump irdump runjson checkdump mcdump vecdump codegen)
     add_executable(pl4g-${tool}${suffix} src/tools/${tool}.cc)
     target_link_libraries(pl4g-${tool}${suffix} PRIVATE pl4g${suffix})
   endforeach()
@@ -235,6 +269,12 @@ add_test(NAME parser-agrees
 # with a made-up target, exactly what pypl4g's make of them.
 add_test(NAME mc-agrees
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/mc_agrees.py $<TARGET_FILE:pl4g-mcdump> 2000 1)
+# A run of elements comes apart into what each target's vector registers can
+# do exactly as pypl4g's back ends take it apart.
+add_test(NAME vectors-agree
+  COMMAND python3 ${CMAKE_SOURCE_DIR}/src/test/vectors_agree.py $<TARGET_FILE:pl4g-vecdump> ${CMAKE_SOURCE_DIR}
+          ${CMAKE_BINARY_DIR}/vectors-agree)
+set_tests_properties(vectors-agree PROPERTIES TIMEOUT 1800)
 # Every program pypl4g compiles has, read from JSON, the IR text pypl4g wrote
 # and the layout pypl4g computed.
 add_test(NAME ir-agrees
@@ -290,6 +330,12 @@ set_tests_properties(runs-from-source PROPERTIES TIMEOUT 1800)
 add_test(NAME lsp-agrees
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/lsp_agrees.py $<TARGET_FILE:pl4g-lsp> ${CMAKE_SOURCE_DIR})
 set_tests_properties(lsp-agrees PROPERTIES TIMEOUT 900)
+# The compiler's driver answers every command line and every --emit that needs
+# no code generated as pypl4g's does.
+add_test(NAME driver-agrees
+  COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/driver_agrees.py $<TARGET_FILE:pl4g-compiler> ${CMAKE_SOURCE_DIR}
+          ${CMAKE_BINARY_DIR}/driver-agrees)
+set_tests_properties(driver-agrees PROPERTIES TIMEOUT 1800)
 # The interactive session answers typed sessions as it should.
 add_test(NAME repl-sessions
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/repl_sessions.py $<TARGET_FILE:pl4g-repl> ${CMAKE_SOURCE_DIR})
@@ -330,6 +376,10 @@ if(PL4G_SANITIZERS)
   add_test(NAME lsp-agrees-asan
     COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/lsp_agrees.py $<TARGET_FILE:pl4g-lsp-asan> ${CMAKE_SOURCE_DIR})
   set_tests_properties(lsp-agrees-asan PROPERTIES TIMEOUT 1800)
+  add_test(NAME driver-agrees-asan
+    COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/driver_agrees.py $<TARGET_FILE:pl4g-compiler-asan>
+            ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/driver-agrees-asan)
+  set_tests_properties(driver-agrees-asan PROPERTIES TIMEOUT 3600)
   add_test(NAME repl-sessions-asan
     COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/repl_sessions.py $<TARGET_FILE:pl4g-repl-asan> ${CMAKE_SOURCE_DIR})
   foreach(target ${PL4G_FUZZ_TARGETS})

@@ -119,6 +119,8 @@ namespace pl4g {
       return { *this, diag };
     count(info);
     diag.reported = true;
+    if (logger)
+      logger(diag);
     sink(diag);
     for (auto note : diag.notes)
       report_note(*note);
@@ -129,6 +131,8 @@ namespace pl4g {
   void DiagEngine::report_note(Diagnostic& note)
   {
     note.reported = true;
+    if (logger)
+      logger(note);
     sink(note);
   }
 
@@ -142,6 +146,8 @@ namespace pl4g {
     }
     count(*diag.info);
     copy.reported = true;
+    if (logger)
+      logger(copy);
     sink(copy);
   }
 
@@ -184,7 +190,7 @@ namespace pl4g {
 
   DiagEngine::Diverted DiagEngine::divert(Sink to)
   {
-    Diverted kept{ std::move(sink), error_count, warning_count, errors_only, std::move(expectations),
+    Diverted kept{ std::move(sink), std::move(logger), error_count, warning_count, errors_only, std::move(expectations),
                    std::make_shared<std::vector<Because>>(std::move(because_stack)) };
     sink = std::move(to);
     error_count = 0;
@@ -199,6 +205,7 @@ namespace pl4g {
   void DiagEngine::restore(Diverted&& kept)
   {
     sink = std::move(kept.sink);
+    logger = std::move(kept.logger);
     error_count = kept.error_count;
     warning_count = kept.warning_count;
     errors_only = kept.errors_only;

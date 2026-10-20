@@ -5,6 +5,8 @@
 // can compile anything itself.
 #pragma once
 
+#include "source/manager.hh"
+
 #include <expected>
 #include <memory>
 #include <string>
@@ -16,8 +18,12 @@
 namespace pl4g::ir {
 
   // The module `text` describes, or why it could not be read.  Where `types`
-  // is given it is told which type each number of the text stands for.
+  // is given it is told which type each number of the text stands for; where
+  // `sources` is, it is given the files the text says pypl4g read, in the
+  // order it read them, and every span is made a place in them -- pypl4g's
+  // count characters and these bytes.
   std::expected<std::unique_ptr<Module>, std::string> read_json(std::string_view text,
-                                                                std::vector<const Type*>* types = nullptr);
+                                                                std::vector<const Type*>* types = nullptr,
+                                                                SourceManager* sources = nullptr);
 
 } // namespace pl4g::ir

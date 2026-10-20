@@ -108,6 +108,20 @@
       "help": "generate debugging information"
     },
     {
+      "short": "-fpie",
+      "long": null,
+      "arg": "none",
+      "since": "0.1",
+      "help": "write a position-independent executable, which relocates itself where it is loaded"
+    },
+    {
+      "short": "-fno-pie",
+      "long": null,
+      "arg": "none",
+      "since": "0.1",
+      "help": "write an executable loaded at a fixed address, which is the default"
+    },
+    {
       "short": "-W",
       "long": null,
       "arg": "joined",

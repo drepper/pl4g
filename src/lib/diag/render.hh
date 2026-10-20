@@ -49,4 +49,23 @@ namespace pl4g {
     std::unique_ptr<ts::Highlighter> highlighter;
   };
 
+
+
+  // Collects diagnostics and writes them as one JSON array at the end, which
+  // is what makes the numbers reachable from outside: pypl4g's JSONRenderer.
+  class JsonRenderer {
+  public:
+    JsonRenderer(const SourceManager& sources, int fd) : sources(sources), out(fd) {}
+
+    // Keep `diag`; a note is written inside what it was attached to.
+    void operator()(const Diagnostic& diag);
+    // Write everything kept so far.
+    void finish();
+
+  private:
+    const SourceManager& sources;
+    FdWriter out;
+    std::vector<const Diagnostic*> collected;
+  };
+
 } // namespace pl4g

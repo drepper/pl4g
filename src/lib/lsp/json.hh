@@ -58,6 +58,9 @@ namespace pl4g::lsp {
 
     // The text of it, as `json.dumps(…, ensure_ascii=False)` writes it.
     std::string dump() const;
+    // The same, one member or element to a line and each level `indent`
+    // spaces deeper, as `json.dump(…, indent=indent, ensure_ascii=False)` does.
+    std::string dump(unsigned indent) const;
     // What `text` says, or nothing where it is not JSON.
     static std::optional<Json> parse(std::string_view text);
 
@@ -65,6 +68,7 @@ namespace pl4g::lsp {
 
   private:
     void write(std::string& out) const;
+    void write(std::string& out, unsigned indent, unsigned depth) const;
 
     std::variant<std::monostate, bool, std::int64_t, double, std::string, Array, Object> value;
   };

@@ -23,19 +23,24 @@ namespace pl4g::target {
     struct Registered {
       std::string_view triple;
       const std::span<const std::string_view>* conventions;
+      // The back end that answers to it, and whether the triple names a
+      // target rather than abbreviating one.
+      std::string_view backend;
+      bool canonical;
     };
 
+    // In the order pypl4g registers them.
     const Registered registered[] = {
-      { "x86_64-linux-none", &x86_64_known },
-      { "x86_64-linux", &x86_64_known },
-      { "x86_64", &x86_64_known },
-      { "aarch64-linux-none", &aarch64_known },
-      { "aarch64-linux", &aarch64_known },
-      { "aarch64", &aarch64_known },
-      { "arm64", &aarch64_known },
-      { "riscv64-linux-none", &riscv64_known },
-      { "riscv64-linux", &riscv64_known },
-      { "riscv64", &riscv64_known },
+      { "x86_64-linux-none", &x86_64_known, "x86_64", true },
+      { "x86_64-linux", &x86_64_known, "x86_64", false },
+      { "x86_64", &x86_64_known, "x86_64", false },
+      { "aarch64-linux-none", &aarch64_known, "aarch64", true },
+      { "aarch64-linux", &aarch64_known, "aarch64", false },
+      { "aarch64", &aarch64_known, "aarch64", false },
+      { "arm64", &aarch64_known, "aarch64", false },
+      { "riscv64-linux-none", &riscv64_known, "riscv64", true },
+      { "riscv64-linux", &riscv64_known, "riscv64", false },
+      { "riscv64", &riscv64_known, "riscv64", false },
     };
 
   } // anonymous namespace
@@ -57,6 +62,33 @@ namespace pl4g::target {
   bool is_known_triple(std::string_view triple) noexcept
   {
     return conventions_of(triple) != nullptr;
+  }
+
+
+  std::string_view backend_of(std::string_view triple) noexcept
+  {
+    auto found = std::ranges::find(registered, triple, &Registered::triple);
+    return found == std::ranges::end(registered) ? std::string_view() : found->backend;
+  }
+
+
+  std::vector<std::string_view> canonical_triples()
+  {
+    std::vector<std::string_view> found;
+    for (const auto& one : registered)
+      if (one.canonical)
+        found.push_back(one.triple);
+    return found;
+  }
+
+
+  std::vector<std::string_view> known_triples()
+  {
+    std::vector<std::string_view> found;
+    for (const auto& one : registered)
+      found.push_back(one.triple);
+    std::ranges::sort(found);
+    return found;
   }
 
 } // namespace pl4g::target

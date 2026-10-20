@@ -74,6 +74,9 @@ namespace pl4g {
 
     // Resolve `loc` to a path, a line and a column, counted from one.
     std::optional<Position> position(Loc loc) const noexcept;
+    // Where `loc` is in pypl4g's coordinates, which count characters where
+    // these count bytes: what a span says where pypl4g writes one out.
+    Loc character_offset(Loc loc) const noexcept;
 
     // The text of the line containing `loc`, without its end of line.
     std::optional<std::string_view> line_text(Loc loc) const noexcept;

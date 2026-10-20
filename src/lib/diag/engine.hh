@@ -158,6 +158,7 @@ namespace pl4g {
     // rather than a fresh one with the same warning control.
     struct Diverted {
       Sink sink;
+      Sink logger;
       unsigned error_count = 0;
       unsigned warning_count = 0;
       bool errors_only = false;
@@ -175,6 +176,11 @@ namespace pl4g {
 
     // Whether anything was reported that prevents a successful compilation.
     bool failed() const noexcept { return error_count > 0; }
+
+    // Hand every diagnostic reported from here on -- notes as well -- to
+    // `log` beside the sink: what the driver writes down for `--report-log`,
+    // in the order it happened among the module's own choices.
+    void write_into(Sink log) { logger = std::move(log); }
 
     unsigned error_count = 0;
     unsigned warning_count = 0;
@@ -195,6 +201,7 @@ namespace pl4g {
     };
 
     Sink sink;
+    Sink logger;
     WarningControl ctl;
     std::deque<Diagnostic> made;
     std::vector<Expectation*> expectations;

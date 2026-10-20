@@ -232,6 +232,7 @@ namespace pl4g {
     {
       auto made = arena.make<ast::Block>(block->span);
       made->style = block->style;
+      made->set_aside = block->set_aside || block->job != nullptr;
       std::vector<const ast::Stmt*> held;
       held.reserve(stmts.size());
       for (auto one : stmts)

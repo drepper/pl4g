@@ -443,13 +443,28 @@ class Writer:
         return out
 
 
+#: Every file pypl4g read, in the order it read them: what its spans are
+#: offsets into, so that the C++ side can read them back as places.
+FILES: list[tuple[str, str]] = []
+
+
 def render(module: Module) -> str:
     """The module as JSON, in place of the IR's text."""
-    return json.dumps(Writer(module).run(), ensure_ascii=False, separators=(",", ":")) + "\n"
+    written = Writer(module).run()
+    written["files"] = [{"path": path, "text": text} for path, text in FILES]
+    return json.dumps(written, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 
 def main() -> int:
     import pypl4g.driver.main as driver
+    from pypl4g.source import manager
+    adding = manager.SourceManager.add
+
+    def kept(self: manager.SourceManager, path: Path, text: str) -> manager.SourceFile:
+        FILES.append((str(path), text))
+        return adding(self, path, text)
+
+    manager.SourceManager.add = kept  # type: ignore[method-assign]
     args = sys.argv[1:]
     text: Path | None = None
     before: Path | None = None

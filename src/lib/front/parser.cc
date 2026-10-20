@@ -483,6 +483,9 @@ namespace pl4g {
           // Left as text by the lexer: lexed here first.
           piece.pop_back();
           auto body = tokenize_body(*source, last.span, quiet.engine);
+          for (const auto& one : body)
+            if (one.kind != TokKind::eof)
+              body_tokens.push_back(one);
           piece.insert(piece.end(), body.begin(), body.end());
         } else {
           Token eof;
@@ -506,6 +509,8 @@ namespace pl4g {
           diags.replay(*one);
       }
 
+      std::span<const Token> lexed() const override { return body_tokens; }
+
     private:
       SyntaxArena& arena;
       std::span<const Token> tokens;
@@ -516,6 +521,7 @@ namespace pl4g {
       DiagEngine& diags;
       const SourceFile* source;
       CollectingEngine quiet;
+      std::vector<Token> body_tokens;
     };
 
 
@@ -3158,6 +3164,7 @@ namespace pl4g {
     const auto& kept = arena.keep(std::move(tokens));
     Parser parser(arena, kept, path, diags, true, source);
     auto unit = parser.parse_unit();
+    const_cast<ast::SourceUnit*>(unit)->tokens = kept;
     if (! defer)
       for (auto block : parser.deferred)
         (void) block->stmts();

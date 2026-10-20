@@ -83,6 +83,7 @@ namespace pl4g::ir {
 
     class Reader {
     public:
+      explicit Reader(SourceManager* sources) : sources(sources) {}
       std::unique_ptr<Module> read(Object doc);
       // Which type each number stands for, once read.
       const std::vector<const Type*>& types_by_number() const noexcept { return made; }
@@ -106,7 +107,59 @@ namespace pl4g::ir {
       std::unordered_map<std::string, Function*> functions;
       // The constants made of their own, by the number the file gives each.
       std::unordered_map<std::int64_t, const Value*> fresh_ones;
+
+      // The files pypl4g read, added to `sources`, and a span of pypl4g's as
+      // one of theirs.
+      void files(Object doc);
+      Span place(Array span) const;
+      SourceManager* sources;
+      struct Read {
+        Loc theirs = 0;
+        std::size_t characters = 0;
+        Loc ours = 0;
+        // The byte each character begins at.
+        std::vector<std::uint32_t> at;
+      };
+      std::vector<Read> read_files;
     };
+
+
+    void Reader::files(Object doc)
+    {
+      Array all;
+      if (sources == nullptr || doc["files"].get(all) != ::simdjson::SUCCESS)
+        return;
+      Loc theirs = 0;
+      for (Element one : all) {
+        std::string_view path = string_of(one["path"]);
+        std::string_view text = string_of(one["text"]);
+        const SourceFile& added = sources->add(std::string(path), std::string(text));
+        Read made{ theirs, 0, added.base, {} };
+        for (std::size_t at = 0; at < text.size(); ++at)
+          if ((static_cast<unsigned char>(text[at]) & 0xc0) != 0x80)
+            made.at.push_back(std::uint32_t(at));
+        made.at.push_back(std::uint32_t(text.size()));
+        made.characters = made.at.size() - 1;
+        // One past the end, as both managers leave between two files.
+        theirs += Loc(made.characters) + 1;
+        read_files.push_back(std::move(made));
+      }
+    }
+
+
+    Span Reader::place(Array span) const
+    {
+      Span given{ int_of(span.at(0)), int_of(span.at(1)) };
+      if (read_files.empty() || ! given.is_valid())
+        return given;
+      auto convert = [&](Loc loc) -> Loc {
+        for (const auto& one : read_files)
+          if (loc >= one.theirs && loc <= one.theirs + Loc(one.characters))
+            return one.ours + Loc(one.at[std::size_t(loc - one.theirs)]);
+        return loc;
+      };
+      return { convert(given.start), convert(given.end) };
+    }
 
 
     const Unit* Reader::unit(Element u)
@@ -475,7 +528,7 @@ namespace pl4g::ir {
           inst->name_hint = std::string(text);
         Array span;
         if (o["span"].get(span) == ::simdjson::SUCCESS)
-          inst->span = { int_of(span.at(0)), int_of(span.at(1)) };
+          inst->span = place(span);
         if (o["kind"].get(text) == ::simdjson::SUCCESS) {
           switch (inst->kind) {
           case InstKind::BinaryInst: inst->bin = by_description<BinOp>(text); break;
@@ -554,6 +607,7 @@ namespace pl4g::ir {
     {
       auto out = std::make_unique<Module>();
       module = out.get();
+      files(doc);
       out->name = string_of(doc["name"]);
       out->triple = string_of(doc["triple"]);
       out->stack_size = int_of(doc["stack_size"]);
@@ -632,9 +686,9 @@ namespace pl4g::ir {
           func->param_names.emplace_back(string_of(n));
         Array span;
         if (f["span"].get(span) == ::simdjson::SUCCESS)
-          func->span = { int_of(span.at(0)), int_of(span.at(1)) };
+          func->span = place(span);
         if (f["name_span"].get(span) == ::simdjson::SUCCESS)
-          func->name_span = { int_of(span.at(0)), int_of(span.at(1)) };
+          func->name_span = place(span);
         Array from;
         if (f["answer_from"].get(from) == ::simdjson::SUCCESS)
           func->answer_from = std::pair(std::string(string_of(from.at(0))), int(int_of(from.at(1))));
@@ -701,7 +755,8 @@ namespace pl4g::ir {
 
 
   std::expected<std::unique_ptr<Module>, std::string> read_json(std::string_view text,
-                                                                std::vector<const Type*>* types)
+                                                                std::vector<const Type*>* types,
+                                                                SourceManager* sources)
   {
     ::simdjson::dom::parser parser;
     ::simdjson::padded_string padded(text);
@@ -712,7 +767,7 @@ namespace pl4g::ir {
       Object root;
       if (doc.get(root) != ::simdjson::SUCCESS) [[unlikely]]
         return std::unexpected(std::string("not an object"));
-      Reader reader;
+      Reader reader(sources);
       auto module = reader.read(root);
       if (types != nullptr)
         *types = reader.types_by_number();

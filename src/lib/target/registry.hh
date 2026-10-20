@@ -6,6 +6,7 @@
 #pragma once
 
 #include <span>
+#include <vector>
 #include <string_view>
 
 
@@ -23,5 +24,14 @@ namespace pl4g::target {
 
   // Whether a back end answers to `triple` at all.
   bool is_known_triple(std::string_view triple) noexcept;
+
+  // The back end that answers to `triple` -- `x86_64`, `aarch64`, `riscv64`
+  // -- or nothing where none does.
+  std::string_view backend_of(std::string_view triple) noexcept;
+  // The triples that name a target, in the order they were registered: what
+  // `--print-targets` lists.
+  std::vector<std::string_view> canonical_triples();
+  // Every triple the compiler accepts, the abbreviations among them, sorted.
+  std::vector<std::string_view> known_triples();
 
 } // namespace pl4g::target

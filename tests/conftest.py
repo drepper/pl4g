@@ -240,8 +240,12 @@ def run_compiler(args: Sequence[str],
     where to run it, for the tests that are about what a command line means where
     it was typed -- a build file is looked for beside the caller.
     """
+    # `PL4G_COMPILER` names another compiler to run -- the C++ one -- which
+    # takes the same command line.
+    other = os.environ.get("PL4G_COMPILER")
+    command = [other] if other else [sys.executable, "-m", "pypl4g"]
     return subprocess.run(
-        [sys.executable, "-m", "pypl4g", *args],
+        [*command, *args],
         cwd=str(ROOT if cwd is None else cwd), capture_output=True, text=True,
         timeout=180,
         env={**os.environ, "PYTHONPATH": str(ROOT), **(env or {})})

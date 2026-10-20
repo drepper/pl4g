@@ -743,6 +743,9 @@ namespace pl4g::ast {
     virtual std::optional<List<const Stmt*>> parse() = 0;
     // Report in the compilation's engine what the parse said.
     virtual void replay() = 0;
+    // The tokens a body the lexer left as text came to once lexed, without
+    // the end of the text: nothing where it was lexed with the file.
+    virtual std::span<const Token> lexed() const { return {}; }
 
   protected:
     ~BodyParse() = default;
@@ -768,6 +771,9 @@ namespace pl4g::ast {
     [[=hidden]] BodyParse* job = nullptr;
     [[=hidden]] mutable bool done = false;
     [[=hidden]] mutable bool did_fail = false;
+    // Whether it is a body the parser set aside, or made from one: pypl4g's
+    // DeferredBlock, which a copy with other statements still is.
+    [[=hidden]] bool set_aside = false;
   };
 
 
@@ -893,6 +899,8 @@ namespace pl4g::ast {
     // BundleDef or MacroDef.
     List<const Node*> items;
     List<const Attribute*> attrs;
+    // The tokens it was parsed from, which the bill of materials hashes.
+    [[=hidden]] std::span<const Token> tokens;
   };
 
 

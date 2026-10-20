@@ -10,6 +10,7 @@
 #pragma once
 
 #include <span>
+#include <vector>
 #include <string_view>
 
 #include "ir/ir.hh"
@@ -45,5 +46,16 @@ namespace pl4g::opt {
   // Every pass a build at optimization level `level` runs, in order, the
   // module verified after each that changed it where PL4G_VERIFY asks.
   void run_pipeline(ir::Module& module, int level = 0);
+
+  // How long one pass took, as the driver's `--time-report` shows it.
+  struct PassTiming {
+    std::string_view name;
+    double seconds = 0;
+    bool changed = false;
+  };
+
+  // The same, verifying where `verifying` says -- what `--verify` asks for,
+  // beside the environment -- and timing each pass into `timings`.
+  void run_pipeline(ir::Module& module, int level, bool verifying, std::vector<PassTiming>* timings);
 
 } // namespace pl4g::opt
