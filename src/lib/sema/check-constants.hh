@@ -199,4 +199,10 @@
     ir::Value* lower_address(ir::Builder& builder, const ast::AddressOf* expr, const ir::Type* expected);  // check.py:15051
     // Where what `expr` names is, what it holds, whether it may be written, and what to call it in a
     // message.
-    std::optional<PlaceTaken> place_written(ir::Builder& builder, const ast::Expr* expr);  // check.py:15093
+    std::optional<PlaceTaken> place_written(ir::Builder& builder, const ast::Expr* expr, bool writing = false);
+    // `l⟦i⟧.name ← v`: one field of an element of a list written where the element is.
+    void list_field_assign(ir::Builder& builder, const ast::MemberAssign* stmt);
+    // Where one element of a list is, made ready for part of it to be written;
+    // the list's allocator is left in `written_allocator`.
+    std::optional<std::tuple<ir::Value*, const ir::Type*>> list_element_written(ir::Builder& builder,
+                                                                              const ast::Element* expr);  // check.py:15093

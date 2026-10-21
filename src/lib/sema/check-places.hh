@@ -104,7 +104,7 @@
     // The variable another module exports under this path, or nothing.
     ir::GlobalVar* exported_variable(const ast::Member* expr);  // check.py:15722
     // Where one field of a record is, for a reference being taken of it.
-    std::optional<PlaceTaken> place_of_a_field(ir::Builder& builder, const ast::Member* expr);  // check.py:15740
+    std::optional<PlaceTaken> place_of_a_field(ir::Builder& builder, const ast::Member* expr, bool writing = false);  // check.py:15740
     // Where one element of an array is, for a reference being taken of it.
     // Where one element of an array is, for a reference being taken of it --
     // or of a list, where `of_a_list` says the place is only read, there and

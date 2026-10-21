@@ -741,6 +741,10 @@ namespace pl4g::sema {
       diags.emit(D::LANG_VARDEF_NOT_MUTABLE, stmt->span, { { "name", path_text(whole) } });
       return;
     }
+    if (through_a_list(stmt->base)) {
+      list_field_assign(builder, stmt);
+      return;
+    }
     auto found = record_at(builder, stmt->base, true);
     if (! found) {
       diags.emit(D::LANG_ASSIGN_NOT_A_RECORD, stmt->base->span);
@@ -789,6 +793,71 @@ namespace pl4g::sema {
       return;
     }
     builder.store(place, value, stmt->span);
+  }
+
+
+  void Checker::list_field_assign(ir::Builder& builder, const ast::MemberAssign* stmt)
+  {
+    written_allocator = nullptr;
+    auto found = record_at(builder, stmt->base, true);
+    if (! found) [[unlikely]] {
+      diags.emit(D::LANG_ASSIGN_NOT_A_RECORD, stmt->base->span);
+      return;
+    }
+    auto [where, ty] = *found;
+    auto at = field_index(ty, stmt->name);
+    if (! at) [[unlikely]] {
+      diags.emit(D::LANG_PRODUCT_NO_SUCH_FIELD, stmt->name_span, { { "type", ty->written() }, { "name", stmt->name } });
+      return;
+    }
+    auto held = ty->fields[*at].second;
+    if (read_only_table(held)) [[unlikely]] {
+      diags.emit(D::LANG_PLACE_NOT_WRITABLE, stmt->name_span, { { "name", stmt->name }, { "found", held->written() } });
+      return;
+    }
+    if (! made_here(where))
+      an_effect(D::LANG_PURE_WRITES_ELSEWHERE, stmt->span);
+    auto allocator = written_allocator;
+    auto place = field_place(builder, where, ty, *at, stmt->span);
+    auto value = lower_into(builder, stmt->value, held, stmt->span);
+    if (is_error(value_type_of(value)))
+      return;
+    if (owned::points(held) && owned::can_own(held) && allocator != nullptr) {
+      ir::Value* replaced = builder.load(place, stmt->span);
+      value = builder.call(owned::own_function(module, held), std::vector<ir::Value*>{ allocator, value }, held,
+                           stmt->span);
+      builder.store(place, value, stmt->span);
+      owned::give_back(builder, replaced, held, std::nullopt);
+      return;
+    }
+    if (auto inner = ir::as<ir::ProductType>(held)) {
+      record_into(builder, place, value, inner, stmt->span);
+      return;
+    }
+    builder.store(place, value, stmt->span);
+  }
+
+
+  std::optional<std::tuple<ir::Value*, const ir::Type*>> Checker::list_element_written(ir::Builder& builder,
+                                                                                      const ast::Element* expr)
+  {
+    if (expr->indices.size() != 1 || ast::is<ast::Range>(expr->indices[0])) [[unlikely]] {
+      diags.emit(D::LANG_ARRAY_NOT_AN_ARRAY, expr->base->span, { { "found", "a list" } });
+      return std::nullopt;
+    }
+    auto found = list_place(builder, expr->base, expr->base->span, "a field written");
+    if (! found)
+      return std::nullopt;
+    auto [place, ty] = *found;
+    ir::Value* at = index_into(builder, expr->indices[0], expr->span);
+    if (at == nullptr)
+      return std::nullopt;
+    made_writable(builder, place, ty, expr->span, expr->base);
+    auto [elements, count, held] = list_at(builder, place, ty, expr->span);
+    builder.check(builder.compare(ir::CmpPred::ult, at, count, expr->span), "an index outside its list",
+                  target::statuses::OUT_OF_RANGE, expr->span);
+    written_allocator = builder.extract(held, 2, ir::parts_of(ty)[2], expr->span);
+    return std::tuple{ element_place(builder, elements, ty->element, at, expr->span), ty->element };
   }
 
 
@@ -3226,14 +3295,14 @@ namespace pl4g::sema {
   }
 
 
-  std::optional<Checker::PlaceTaken> Checker::place_written(ir::Builder& builder, const ast::Expr* expr)
+  std::optional<Checker::PlaceTaken> Checker::place_written(ir::Builder& builder, const ast::Expr* expr, bool writing)
   {
     if (auto name = ast::as<ast::NameRef>(expr))
       return place_of_a_name(builder, name);
     if (auto element = ast::as<ast::Element>(expr))
       return place_of_an_element(builder, element);
     if (auto member = ast::as<ast::Member>(expr))
-      return place_of_a_field(builder, member);
+      return place_of_a_field(builder, member, writing);
     if (auto deref = ast::as<ast::Deref>(expr)) {
       // `&r⌖` is the place `r` already names, so it is `r`.
       auto value = lower_expr(builder, deref->operand, nullptr);

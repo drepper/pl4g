@@ -729,13 +729,14 @@ namespace pl4g::sema {
   }
 
 
-  std::optional<Checker::PlaceTaken> Checker::place_of_a_field(ir::Builder& builder, const ast::Member* expr)
+  std::optional<Checker::PlaceTaken> Checker::place_of_a_field(ir::Builder& builder, const ast::Member* expr,
+                                                               bool writing)
   {
     if (ir::GlobalVar* shared = exported_variable(expr); shared != nullptr)
       // The variable itself and not a field of one.
       return PlaceTaken{ builder.address(shared, expr->span), shared->value_type, shared->is_mutable(),
                          std::string(expr->name), true };
-    auto found = record_at(builder, expr->base);
+    auto found = record_at(builder, expr->base, writing);
     if (! found) [[unlikely]] {
       diags.emit(D::LANG_REF_NOT_A_PLACE, expr->span);
       return std::nullopt;
@@ -1326,7 +1327,7 @@ namespace pl4g::sema {
       refuse(said);
       return std::nullopt;
     }
-    auto found = place_written(builder, expr);
+    auto found = place_written(builder, expr, through_a_list(expr));
     if (! found)
       return std::nullopt;
     auto [address, held, may_change, what, _] = *found;
@@ -1891,7 +1892,7 @@ namespace pl4g::sema {
       diags.emit(D::LANG_TAKE_NOT_A_PLACE, expr->args[0]->span);
       return undef_error(module);
     }
-    auto found = place_written(builder, expr->args[0]);
+    auto found = place_written(builder, expr->args[0], through_a_list(expr->args[0]));
     if (! found)
       return undef_error(module);
     auto [address, held, may_change, what, _] = *found;

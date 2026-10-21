@@ -1851,6 +1851,13 @@ namespace pl4g::sema {
       }
       if (inst->kind == ir::InstKind::ExtractInst) {
         auto made = inst->operands[0];
+        if (inst->index == 0)
+          if (auto load = inst_of(made, ir::InstKind::LoadInst); load != nullptr && ir::is<ir::ListType>(load->ty)) {
+            // The elements of a list are that list's alone, so those of a list
+            // in a place this call made are too.
+            seen = load->operands[1];
+            continue;
+          }
         // A part of a view made here is what was put in it.
         auto tuple = inst_of(made, ir::InstKind::TupleInst);
         seen = tuple != nullptr && inst->index < static_cast<std::int64_t>(tuple->operands.size())
