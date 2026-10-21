@@ -12,6 +12,7 @@
 #                     offering pl4g_embed_run_source with C's linkage
 #   pl4g-embed-example  a C program that loads it with dlopen and runs a
 #                     program calling back into it (src/examples/embed)
+#   pl4g-embed-example-cc  the same in C++, through embed/pl4g-embed.hh
 #   pl4g-lexdump      the tokens of a file, for comparing with pypl4g
 #   *-asan            the same, built with the address and undefined-behaviour
 #                     sanitizers (PL4G_SANITIZERS=ON, the default)
@@ -413,6 +414,15 @@ set_target_properties(pl4g-embed-example PROPERTIES ENABLE_EXPORTS ON)
 add_dependencies(pl4g-embed-example pl4g-embed)
 add_test(NAME embed-example
   COMMAND prlimit --data=536870912 --cpu=120 -- $<TARGET_FILE:pl4g-embed-example> $<TARGET_FILE:pl4g-embed>)
+# And the same in C++, through the object embed/pl4g-embed.hh wraps it in.
+add_executable(pl4g-embed-example-cc src/examples/embed/host.cc)
+target_include_directories(pl4g-embed-example-cc PRIVATE ${CMAKE_SOURCE_DIR}/src/lib)
+target_compile_options(pl4g-embed-example-cc PRIVATE -Wall -Wextra)
+target_link_libraries(pl4g-embed-example-cc PRIVATE ${CMAKE_DL_LIBS})
+set_target_properties(pl4g-embed-example-cc PROPERTIES ENABLE_EXPORTS ON)
+add_dependencies(pl4g-embed-example-cc pl4g-embed)
+add_test(NAME embed-example-cc
+  COMMAND prlimit --data=536870912 --cpu=120 -- $<TARGET_FILE:pl4g-embed-example-cc> $<TARGET_FILE:pl4g-embed>)
 
 add_executable(pl4g-embed-host src/test/embed_host.cc)
 target_link_libraries(pl4g-embed-host PRIVATE pl4g)

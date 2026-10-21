@@ -1216,7 +1216,11 @@ library's templates.  The functions the program calls with `@[host]` are still f
 loading program is linked with `-rdynamic`.  `src/examples/embed/host.c` is such a program, in C, and ctest's `embed-example` runs
 it: in each of two states made at once, it hands the interpreter a program that reads its input through two functions of the host,
 works out a sum, the extremes and a sum of squares, and delivers them through a third that only stores them, which the host then
-checks against what it works out itself.
+checks against what it works out itself.  **A C++ program has an object for it** (`src/lib/embed/pl4g-embed.hh`, header
+only): `pl4g::embed::LoadedInterpreter` loads the library, finds the three functions and makes a state when it is made -- throwing,
+with what went wrong, where any of that fails -- and gives the state and the library back when it is destroyed; it can be moved
+and not copied, and `run(text, name)` runs a program in its state.  `src/examples/embed/host.cc` is the example again through it,
+which ctest's `embed-example-cc` runs.
 
 **What a run leaves behind is its state's.**  The interpreter had no state of its own between runs, but the runtime it calls did,
 in variables of the C file: the heap's lists and the slab it cuts from, and the base every table's seed is worked out from.  Built
