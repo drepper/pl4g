@@ -54,7 +54,7 @@ from ..ir.layout import (DataLayout, member_offsets_of, offsets_of,
                          size_of, stride_of, tag_offset_of)
 from ..ir.inst import (AddressInst, BinaryInst, BinOp, CallInst, CastInst,
                        CastKind, CmpPred,
-                       ExtractInst, FrameInst, Instruction, LoadInst, RetInst,
+                       ExtractInst, FrameInst, Instruction, LoadInst, MemStartInst, RetInst,
                        Ordering, Terminator, TupleInst, UnOp)
 from ..target.registry import architecture_of, conventions_of
 from ..target.syscalls import KNOWN as SYSCALL_NAMES, number_of
@@ -2656,6 +2656,14 @@ def _holds_a_view(ty: Type) -> bool:
         case ResultType():
             return _holds_a_view(ty.ok)
     return False
+
+
+def _chain_start(builder: IRBuilder) -> Value:
+    """The token the memory chain began with, at the top of the entry block: what
+    a way that wrote nothing hands a join where the other way began the chain."""
+    first = builder.function.entry.insts[0]
+    assert isinstance(first, MemStartInst)
+    return first
 
 
 def _may_hold_a_view(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
@@ -23547,7 +23555,7 @@ class Checker:
         builder.br(joined, (default, after), expr.span)
         builder.position_at(answered)
         builder.br(joined, (builder.unwrap(value, ty.ok, expr.span),
-                            before if before is not None else builder.memory()),
+                            before if before is not None else _chain_start(builder)),
                    expr.span)
         builder.position_at(joined)
         builder.set_memory(token)
@@ -23616,7 +23624,7 @@ class Checker:
         builder.br(joined, (right, after), expr.span)
         builder.position_at(decided)
         builder.br(joined, (builder.bool_const(decides),
-                            before if before is not None else builder.memory()),
+                            before if before is not None else _chain_start(builder)),
                    expr.span)
         builder.position_at(joined)
         builder.set_memory(token)

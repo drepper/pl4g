@@ -30,8 +30,22 @@ fn length(p: Pick) → u64:
         str(s): ⎕drop(#⎕bytes(s))
         _: 0u64
 
+※ Whether `n`'s text is `expected`: the right side of `and` is where the
+※ function first touches memory, so the way that does not take it hands the
+※ join the chain as it began.
+fn spelled(n: u64, expected: str) → bool:
+    n ≠ 0u64 and (⎕text(⎕bytes(⍕n)) ?? "") = expected
+
+※ And the same of `??`, its default the first to touch memory.
+fn defaulted(n: u64?) → u64:
+    n ?? ⎕drop(#⎕bytes(⍕17u64))
+
 @[startup]
 fn main(init: std.Init) → u6:
+    if ¬spelled(25u64, "25") or spelled(0u64, "0") or spelled(3u64, "4"):
+        return 3u6
+    if defaulted(5u64) ≠ 5u64 or defaulted(⊥) ≠ 2u64:
+        return 4u6
     let found: mut u64 = 0u64
     let n: mut u64 = 0u64
     while n < 20u64:
