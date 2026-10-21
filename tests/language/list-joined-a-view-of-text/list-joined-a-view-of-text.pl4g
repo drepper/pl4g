@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4710
+※ pl4g-test: expect-diag 4710 LANG_ARRAY_NOT_COPIED
+
+※ What an array joined onto a list puts in it is a copy of its elements, made by copying
+※ their bytes -- so it is an array copied, and an array is copied only where its elements
+※ are all of their value (4710).  A string points into room something else keeps, and a
+※ second holder of that room is a question the lifetime rules answer one value at a time.
+※ A list of strings is joined onto as a list, `l ⧺← [s]`, which copies each one deep.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let words: str⟦2⟧ = ⟦"one", "two"⟧ in ⎕static
+    let l: mut [str] = []
+    l ⧺← words
+    if #l = 2: 0u6 else: 1u6

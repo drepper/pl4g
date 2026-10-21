@@ -27,7 +27,7 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            AT_NAME, SPAN_NAME,
                            ADDRESS_NAME, BYTES_NAME,
                            IS_RECORD_NAME, FIELDS_NAME, TYPENAME_NAME,
-                           STR_OF_NAME, EMPTY_NAME, ONE_RUN_NAME,
+                           STR_OF_NAME, TEXT_NAME, EMPTY_NAME, ONE_RUN_NAME,
                            WIDEN_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH, EACH_GLYPH, ITER_GLYPH,
                            RESUME_NAME, START_NAME,
@@ -2511,6 +2511,20 @@ def _holds_a_reference(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
             return False
 
 
+def _holds_a_view(ty: Type) -> bool:
+    """Whether a value of *ty* is, or holds, a view: an array whose type does not
+    say its shape, which is where somebody else's elements are -- a list's
+    among them, which is lent for as long as the view is kept."""
+    match ty:
+        case ArrayType():
+            return not ty.fixed
+        case TupleType():
+            return any(_holds_a_view(m) for m in ty.members)
+        case ResultType():
+            return _holds_a_view(ty.ok)
+    return False
+
+
 def _lets_go_of(found: ArrayType, wanted: ArrayType) -> bool:
     """Whether an array of *found* stands where one of *wanted* is asked for.
 
@@ -2722,14 +2736,16 @@ def _operands_of(expr: ast.Expr) -> tuple[ast.Expr, ...]:
 def _takes_room(expr: ast.Expr) -> bool:
     """Whether what the expression does takes room from an arena.
 
-    A join of two, and a collection written out.  Everything else is worked out in
-    registers, so saying which arena it comes from would be saying nothing -- a
-    lambda says where what it brings in is kept after its capture list.
+    A join of two, a collection written out, and the two builtins that copy into
+    room of their own: `⎕one_run`, and `⎕text`, whose text is a copy of the bytes.
+    Everything else is worked out in registers, so saying which arena it comes
+    from would be saying nothing -- a lambda says where what it brings in is kept
+    after its capture list.
     """
     if isinstance(expr, (ast.SetLit, ast.DictLit, ast.ListLit, ast.ArrayLit)):
         return True
     if isinstance(expr, ast.Call) and isinstance(expr.callee, ast.NameRef) \
-            and expr.callee.name == ONE_RUN_NAME:
+            and expr.callee.name in (ONE_RUN_NAME, TEXT_NAME):
         return True
     return isinstance(expr, ast.Binary) and expr.op is ast.BinaryOp.CONCAT
 
@@ -4186,6 +4202,10 @@ class Checker:
         self._made_alias: dict[int, tuple[ast.Expr, ast.Expr]] = {}
         #: The arenas `in` named around what is being lowered: `⎕heap` where none.
         self._out_of_arenas: frozenset[int] = frozenset({_HEAP})
+        #: What was written as a list and read as a view of its elements, by the
+        #: identity of what was written, and the list's type: such a view reads
+        #: and never writes (4251).
+        self._list_views: dict[int, ListType] = {}
         #: What the body being checked said its answer was made in: the arena
         #: parameters' markers and how the signature named them.
         self._answer_made_in: tuple[frozenset[int], str] | None = None
@@ -7436,7 +7456,10 @@ class Checker:
             if at in written and self._lent_to_an_iterator(written[at],
                                                            written[at].span):
                 continue
-            if at in written and not self._may_write(written[at]):
+            if at in written and id(written[at]) in self._list_views:
+                self._diags.emit(D.LANG_LIST_VIEW_WRITTEN, written[at].span,
+                                 found=self._list_views[id(written[at])].written())
+            elif at in written and not self._may_write(written[at]):
                 self._diags.emit(D.LANG_ARRAY_HANDED_NOT_WRITABLE,
                                  written[at].span, param=func.param_names[at],
                                  func=func.name)
@@ -13924,7 +13947,11 @@ class Checker:
         found = self._value_type_of(value)
         if found is wanted or found is ERROR:
             return value
-        if isinstance(found, ArrayType) and isinstance(wanted, ArrayType) \
+        if isinstance(wanted, ArrayType) and not wanted.fixed:
+            view = self._as_a_view(builder, None, value, wanted, span)
+            if view is not None:
+                return view
+        elif isinstance(found, ArrayType) and isinstance(wanted, ArrayType) \
                 and _lets_go_of(found, wanted):
             start, lengths = self._shape_of(builder, value, found, span)
             return self._view(builder, start, lengths,
@@ -14920,7 +14947,7 @@ class Checker:
         bound, and which names it keeps references to is noted against it: the
         scope of each of those lasts as long as its own.
         """
-        if ty is None or not _holds_a_reference(ty):
+        if ty is None or not (_holds_a_reference(ty) or _holds_a_view(ty)):
             return
         # As deep as the scope of the name keeping it, which is not the scope
         # being lowered where the name is given a value in a block inside its own:
@@ -16534,6 +16561,13 @@ class Checker:
         if not may_change:
             self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, span, name=what)
             return None
+        # A view of its elements may be out, which changing it in place could
+        # leave pointing at room given back: the list is lent for as long as
+        # one is kept (`_as_a_view`).
+        borrowed = self._borrowed_name(expr)
+        if borrowed is not None and self._lent_out(borrowed[0], span, True,
+                                                   borrowed[1]):
+            return None
         return (builder.cast(CastKind.BITCAST, address,
                              self._module.types.ptr_type(held, mutable=True),
                              span), held)
@@ -16815,6 +16849,11 @@ class Checker:
         elements.  What is joined on is copied in -- deep, into the list's own
         allocator, where its elements point somewhere -- and a list written out
         here is lowered straight into the room rather than made first.
+
+        *more* may be an array, too -- a view, a slice of one, an array whose type
+        says its shape -- of one dimension and of the list's elements, which are
+        copied in as they are where nothing in them points elsewhere, as an array
+        is copied (4710): `_joined_on`.
         """
         found = self._list_place(builder, stmt.target, stmt.target.span,
                                  "".join((CONCAT_GLYPH, ASSIGN_GLYPH)))
@@ -16830,6 +16869,30 @@ class Checker:
             self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
         stride = stride_of(ty.element, _LAYOUT)
         span = stmt.span
+        if self._may_be_an_array(written):
+            given = self._lower_expr(builder, written, None)
+            held = self._value_type_of(given)
+            if held is ERROR:
+                return
+            view = None
+            if isinstance(held, ArrayType):
+                view = self._as_a_view(
+                    builder, written, given,
+                    self._module.types.array_type(ty.element, (None,)),
+                    written.span)
+            if view is None:
+                self._report_mismatch(written.span, held, ty)
+                return
+            if not self._view_copied(ty.element, written):
+                return
+            count = builder.extract(view, 1, U64, span)
+            made = self._room_made(builder, place, ty, count, span)
+            _, new, there, _, _ = made
+            self._joined_on(builder, new, there, view, ty.element, span)
+            self._room_kept(builder, place, ty, made,
+                            builder.binary(BinOp.WRAP_ADD, there, count, span),
+                            span)
+            return
         if isinstance(written, ast.ListLit) and written.elements \
                 and not owned.points(ty.element):
             values = [self._lower_into(builder, one, ty.element, one.span)
@@ -16880,11 +16943,91 @@ class Checker:
         self._room_kept(builder, place, ty, made,
                         builder.binary(BinOp.WRAP_ADD, count, joined, span), span)
 
+    def _may_be_an_array(self, written: ast.Expr) -> bool:
+        """Whether what is joined onto a list is, by the look of it, an array
+        and not a list: a name or a call that says so, a slice, the bytes of a
+        string.  Anything else is lowered as the list it has to be, which is
+        what lets `[]` and the arms of an `if` take the list's type."""
+        if isinstance(self._said_to_be(written), ArrayType):
+            return True
+        match written:
+            case ast.Element():
+                return any(isinstance(one, ast.Range) for one in written.indices)
+            case ast.Call(callee=ast.NameRef(name=name)):
+                return name in (BYTES_NAME, SPAN_NAME, ONE_RUN_NAME)
+        return False
+
+    def _view_copied(self, element: Type, written: ast.Expr) -> bool:
+        """Whether a view of *element* may be copied into a list, saying why
+        not where it may not: as an array is copied (4710), by its bytes, so
+        nothing in an element may point into room something else keeps."""
+        why = _not_copied_because(element)
+        if why is None:
+            return True
+        self._diags.emit(D.LANG_ARRAY_NOT_COPIED, written.span,
+                         type=element.written(), why=why)
+        return False
+
+    def _joined_on(self, builder: IRBuilder, into: Value, after: Value,
+                   view: Value, element: Type, span: Span) -> None:
+        """Copy the elements of *view*, a view of one dimension, into the room at
+        *into*, *after* elements along: **one move of their bytes** where they
+        are one run, which is a view's commonest shape and every list's, and an
+        element at a time where they are a step apart.  Which it is, is asked
+        while running, a view's stride being a value."""
+        stride = stride_of(element, _LAYOUT)
+        bytes_ = self._module.types.ptr_type(U8, mutable=True)
+        pointer = self._module.types.ptr_type(element, mutable=True)
+        start = builder.extract(view, 0, pointer, span)
+        count = builder.extract(view, 1, U64, span)
+        apart = builder.extract(view, 2, U64, span)
+        size = builder.int_const(U64, stride)
+        place = builder.binary(BinOp.ADD, into,
+                               builder.binary(BinOp.WRAP_MUL, after, size, span),
+                               span)
+        one_run = builder.new_block("join.run")
+        stepped = builder.new_block("join.stepped")
+        done = builder.new_block("joined.view")
+        before = builder.memory()
+        builder.condbr(builder.compare(CmpPred.EQ, apart,
+                                       builder.int_const(U64, 1), span),
+                       one_run, stepped, span=span)
+        builder.position_at(one_run)
+        builder.set_memory(before)
+        strings.moved(builder, place,
+                      builder.cast(CastKind.BITCAST, start, bytes_, span),
+                      builder.binary(BinOp.WRAP_MUL, count, size, span), span)
+        builder.br(done, (builder.memory(),), span)
+        builder.position_at(stepped)
+        builder.set_memory(before)
+        one = builder.int_const(U64, 1)
+        self._element_by_element(
+            builder, (builder.cast(CastKind.BITCAST, place, pointer, span),
+                      (count,), (one,), True),
+            (start, (count,), (apart,), False), element, count, False, span)
+        builder.br(done, (builder.memory(),), span)
+        builder.position_at(done)
+        builder.set_memory(done.add_param(MEM, "mem"))
+
     def _list_element(self, builder: IRBuilder, expr: ast.Element, base: Value,
                       ty: ListType, expected: Type | None) -> Value:
         """`l⟦i⟧`: the element at *i*, which is checked against how many there
-        are while running, a list's length not being in its type."""
-        if len(expr.indices) != 1 or isinstance(expr.indices[0], ast.Range):
+        are while running, a list's length not being in its type.
+
+        And `l⟦i…j⟧`, some of its elements: the list read as a view of them --
+        lent as long as the view is kept, `_as_a_view` says why -- and that view
+        sliced, as an array's is, the ends checked against how many there are.
+        """
+        if len(expr.indices) == 1 and isinstance(expr.indices[0], ast.Range):
+            view = self._as_a_view(
+                builder, expr.base, base,
+                self._module.types.array_type(ty.element, (None,)),
+                expr.base.span)
+            assert view is not None
+            self._list_views[id(expr)] = ty
+            return self._lower_slice(builder, expr, view,
+                                     self._value_type_of(view), expected)
+        if len(expr.indices) != 1:
             self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, expr.base.span,
                              found=ty.written())
             return UndefConst(ERROR)
@@ -19073,6 +19216,10 @@ class Checker:
             return value
         writable = self._may_write(node.value)
         if not ty.fixed:
+            if node.mutable and id(node.value) in self._list_views:
+                self._diags.emit(D.LANG_LIST_VIEW_WRITTEN, node.value.span,
+                                 found=self._list_views[id(node.value)].written())
+                return UndefConst(ERROR)
             if node.mutable and not writable:
                 self._diags.emit(D.LANG_ARRAY_VIEW_NOT_WRITABLE, node.value.span,
                                  name=node.name)
@@ -23442,7 +23589,8 @@ class Checker:
         # does, and two arrays being joined are of two different lengths and so
         # of two different types.
         held = self._value_type_of(left)
-        want = held if held is STR or isinstance(held, ListType) else None
+        want = held if held is STR or isinstance(held, ListType) \
+            and not self._may_be_an_array(expr.right) else None
         right = self._lower_expr(builder, expr.right, want)
         if self._value_type_of(left) is STR or self._value_type_of(right) is STR:
             return self._joined_text(builder, expr, left, right, expected)
@@ -23475,6 +23623,9 @@ class Checker:
         as its type says rather than one byte -- so the two lengths are in
         elements and the copy is in bytes, which is one multiplication apiece.
         """
+        if any(isinstance(self._value_type_of(one), ArrayType)
+               for one in (left, right)):
+            return self._joined_with_a_view(builder, expr, left, right, expected)
         holds: Type | None = None
         for side, value in ((expr.left, left), (expr.right, right)):
             found = self._value_type_of(value)
@@ -23545,6 +23696,57 @@ class Checker:
              builder.binary(BinOp.WRAP_ADD, counts[0], counts[1], expr.span),
              self._out_of(builder, expr.span)),
             answer, expr.span)
+
+    def _joined_with_a_view(self, builder: IRBuilder, expr: ast.Binary,
+                            left: Value, right: Value,
+                            expected: Type | None) -> Value:
+        """Lower `A \N{DOUBLE PLUS} B` where one is a list and the other an array
+        of its elements: a list holding the two, in new room from the arena in
+        force, each side copied in as `_joined_on` copies -- one move of bytes
+        for a run.  An array is copied only where its elements are all of their
+        value (4710), so nothing has to be copied deep."""
+        holds = next(found.element for found in (self._value_type_of(left),
+                                                 self._value_type_of(right))
+                     if isinstance(found, ListType))
+        wanted = self._module.types.array_type(holds, (None,))
+        span = expr.span
+        views: list[Value] = []
+        for written, value in ((expr.left, left), (expr.right, right)):
+            found = self._value_type_of(value)
+            if found is ERROR:
+                return UndefConst(ERROR)
+            view = self._as_a_view(builder, written, value, wanted, written.span) \
+                if isinstance(found, (ArrayType, ListType)) else None
+            if view is None:
+                if isinstance(found, (ArrayType, ListType)):
+                    self._diags.emit(D.LANG_CONCAT_ELEMENTS_DIFFER, span,
+                                     left=self._value_type_of(left).written(),
+                                     right=self._value_type_of(right).written())
+                else:
+                    self._diags.emit(D.LANG_CONCAT_NEEDS_AN_ARRAY, written.span,
+                                     found=found.written())
+                return UndefConst(ERROR)
+            views.append(view)
+        if not self._view_copied(holds, expr):
+            return UndefConst(ERROR)
+        answer = self._module.types.list_type(holds)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(span, answer, expected)
+            return UndefConst(ERROR)
+        self._made_from[id(expr)] = (expr, self._out_of_arenas)
+        counts = [builder.extract(one, 1, U64, span) for one in views]
+        total = builder.binary(BinOp.WRAP_ADD, counts[0], counts[1], span)
+        where = self._out_of(builder, span)
+        room = builder.call(
+            lists.room_function(self._module),
+            (where, total, builder.int_const(U64, stride_of(holds, _LAYOUT))),
+            self._module.types.ptr_type(U8, mutable=True), span)
+        self._joined_on(builder, room, builder.int_const(U64, 0), views[0], holds,
+                        span)
+        self._joined_on(builder, room, counts[0], views[1], holds, span)
+        return builder.make_tuple(
+            (builder.cast(CastKind.BITCAST, room, parts_of(answer)[0], span), total,
+             where), answer, span)
 
     def _joined_text(self, builder: IRBuilder, expr: ast.Binary, left: Value,
                      right: Value, expected: Type | None) -> Value:
@@ -24951,6 +25153,8 @@ class Checker:
                 return self._lower_bytes(builder, expr, expected)
             if given == STR_OF_NAME:
                 return self._lower_str_of(builder, expr, expected)
+            if given == TEXT_NAME:
+                return self._lower_text(builder, expr, expected)
             if given == ONE_RUN_NAME:
                 return self._lower_one_run(builder, expr, expected)
             if given == EMPTY_NAME:
@@ -26036,6 +26240,134 @@ class Checker:
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
         return made
+
+    def _lower_text(self, builder: IRBuilder, expr: ast.Call,
+                    expected: Type | None) -> Value:
+        """Lower `⎕text(BYTES)`: text from bytes, where they are UTF-8.
+
+        The way in that `⎕bytes` is the way out of, and the compiler's name for
+        the reason `⎕str` is: that every `str` is well-formed UTF-8 is an
+        invariant, and this is where it is kept -- **by inspection**, a literal,
+        a join and `⎕str` keeping it by construction.  So it answers a result,
+        `str ? u64`: the text, or where the first byte is that is not part of a
+        well-formed sequence.
+
+        **It copies.**  The bytes are somebody's -- a buffer read into, a list
+        about to be joined onto -- and a string is nobody's to change, so the
+        text is a copy of them in the arena `in` names, or in `⎕heap`, as a join
+        is.  The check reads every byte before the copy writes one, and nothing
+        is copied, or taken room for, where the check fails.  Elements that are
+        not one run are made one first, `⎕one_run`'s way.
+        """
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=TEXT_NAME, expected=1, found=len(expr.args))
+            return UndefConst(ERROR)
+        written = expr.args[0]
+        wanted = self._module.types.array_type(U8, (None,))
+        given = self._lower_expr(builder, written,
+                                 wanted if isinstance(written, ast.ArrayLit)
+                                 or _in_the_image(written) else None)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        view = self._as_a_view(builder, written, given, wanted, written.span)
+        if view is None:
+            self._diags.emit(D.LANG_TEXT_NOT_BYTES, written.span,
+                             found=found.written())
+            return UndefConst(ERROR)
+        answer = self._module.types.result_type(STR, U64)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        self._made_from[id(expr)] = (expr, self._out_of_arenas)
+        span = expr.span
+        run = self._as_one_run(builder, view, wanted, span)
+        bytes_ = self._module.types.ptr_type(U8, mutable=True)
+        start = builder.extract(run, 0, parts_of(wanted)[0], span)
+        count = builder.extract(run, 1, U64, span)
+        upto = builder.call(strings.valid_function(self._module), (start, count),
+                            U64, span)
+        well_formed = builder.compare(CmpPred.EQ, upto, count, span)
+        # Asked before the branch: the answer carries it on both ways.
+        where = self._out_of(builder, span)
+        copying = builder.new_block("text.copy")
+        done = builder.new_block("text")
+        before = builder.memory()
+        builder.condbr(well_formed, copying, done, false_args=(
+            builder.cast(CastKind.BITCAST, builder.int_const(U64, 0), bytes_, span),
+            before), span=span)
+        builder.position_at(copying)
+        builder.set_memory(before)
+        room = tables.allocate(builder, where, count)
+        strings.moved(builder, room, start, count, span)
+        builder.br(done, (room, builder.memory()), span)
+        builder.position_at(done)
+        made = done.add_param(bytes_, "text")
+        builder.set_memory(done.add_param(MEM, "mem"))
+        # On the way that failed the answer half is nowhere, which is what the
+        # truth value beside it says nothing may read.
+        return builder.wrap(
+            builder.make_tuple((made, count, where), STR, span),
+            builder.compare(CmpPred.NE, upto, count, span), answer, span, upto)
+
+    def _as_one_run(self, builder: IRBuilder, view: Value, ty: ArrayType,
+                    span: Span) -> Value:
+        """The view *view* of one dimension as one run: itself where its stride
+        is one, and a copy otherwise, in the arena in force -- `⎕one_run`'s
+        answer, for something that reads the elements as one run."""
+        stride = builder.extract(view, 2, U64, span)
+        kept = builder.new_block("one_run.already")
+        copying = builder.new_block("one_run.copy")
+        done = builder.new_block("one_run")
+        before = builder.memory()
+        builder.condbr(builder.compare(CmpPred.EQ, stride,
+                                       builder.int_const(U64, 1), span),
+                       kept, copying, span=span)
+        builder.position_at(kept)
+        builder.br(done, (view, before), span)
+        builder.position_at(copying)
+        builder.set_memory(before)
+        copied = builder.call(self._one_run_function(ty),
+                              (self._out_of(builder, span), view), ty, span)
+        builder.br(done, (copied, builder.memory()), span)
+        builder.position_at(done)
+        answer = done.add_param(ty, "run")
+        builder.set_memory(done.add_param(MEM, "mem"))
+        return answer
+
+    def _as_a_view(self, builder: IRBuilder, written: ast.Expr | None,
+                   value: Value, wanted: ArrayType, span: Span) -> Value | None:
+        """*value* as the view *wanted*, where it is one or can be read as one,
+        and nothing where it cannot.
+
+        An array whose type says its shape lets the shape go, as everywhere.  A
+        list of the same elements is read as a view of one dimension -- where its
+        elements are and how many, one apart -- **and is lent for as long as the
+        view lives**, as a place a `&` is taken of is: the elements are the
+        list's, in room that joining onto it may move, so while anything can
+        still read them the list is not changed in place (4566).  What *written*
+        is says which list that is; one worked out has no name to lend.
+        """
+        found = self._value_type_of(value)
+        if found is wanted:
+            return value
+        if isinstance(found, ArrayType) and _lets_go_of(found, wanted):
+            start, lengths = self._shape_of(builder, value, found, span)
+            return self._view(builder, start, lengths,
+                              self._strides_of(builder, value, found, span),
+                              wanted, span)
+        if isinstance(found, ListType) and wanted.rank == 1 \
+                and found.element is wanted.element:
+            borrowed = None if written is None else self._borrowed_name(written)
+            if borrowed is not None:
+                self._lend(borrowed[0], False, written.span, borrowed[1])
+            if written is not None:
+                self._list_views[id(written)] = found
+            return self._dense_view(
+                builder, builder.extract(value, 0, parts_of(found)[0], span),
+                (builder.extract(value, 1, U64, span),), wanted, span)
+        return None
 
     def _lower_typename(self, builder: IRBuilder, expr: ast.Call,
                         expected: Type | None) -> Value:
@@ -28201,11 +28533,9 @@ class Checker:
         found = self._value_type_of(value)
         if found is expected or found is ERROR:
             return value
-        if isinstance(found, ArrayType) and _lets_go_of(found, expected):
-            start, lengths = self._shape_of(builder, value, found, span)
-            return self._view(builder, start, lengths,
-                              self._strides_of(builder, value, found, span),
-                              expected, span)
+        view = self._as_a_view(builder, expr, value, expected, span)
+        if view is not None:
+            return view
         self._report_mismatch(span, found, expected)
         return UndefConst(ERROR)
 

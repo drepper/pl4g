@@ -2477,6 +2477,21 @@ namespace pl4g::sema {
     }
   }
 
+  bool holds_a_view(const ir::Type* ty)
+  {
+    switch (ty->kind) {
+    case ir::TypeKind::array:
+      return ! ir::as<ir::ArrayType>(ty)->fixed();
+    case ir::TypeKind::tuple:
+      return std::ranges::any_of(ir::as<ir::TupleType>(ty)->members, [](auto m) { return holds_a_view(m); });
+    case ir::TypeKind::result:
+      return holds_a_view(ir::as<ir::ResultType>(ty)->ok);
+    default:
+      return false;
+    }
+  }
+
+
   bool holds_a_reference(const ir::Type* ty, const KeySet& seen)
   {
     if (ir::is<ir::PtrType>(ty))
@@ -2647,7 +2662,8 @@ namespace pl4g::sema {
         || ast::is<ast::ArrayLit>(expr))
       return true;
     if (auto call = ast::as<ast::Call>(expr))
-      if (auto name = callee_name(call); name != nullptr && name->name == names::one_run_name)
+      if (auto name = callee_name(call);
+          name != nullptr && (name->name == names::one_run_name || name->name == names::text_name))
         return true;
     auto binary = ast::as<ast::Binary>(expr);
     return binary != nullptr && binary->op == ast::BinaryOp::concat;

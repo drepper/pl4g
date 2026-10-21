@@ -1931,7 +1931,10 @@ namespace pl4g::sema {
       return value;
     auto from = ir::as<ir::ArrayType>(found);
     auto into = ir::as<ir::ArrayType>(wanted);
-    if (from != nullptr && into != nullptr && lets_go_of(from, into)) {
+    if (into != nullptr && ! into->fixed()) {
+      if (auto made = as_a_view(builder, nullptr, value, into, span); made != nullptr)
+        return made;
+    } else if (from != nullptr && into != nullptr && lets_go_of(from, into)) {
       auto [start, lengths] = shape_of(builder, value, from, span);
       auto strides = strides_of(builder, value, from, span);
       return view(builder, start, lengths, strides, into, span);
@@ -2911,7 +2914,7 @@ namespace pl4g::sema {
 
   void Checker::kept_by_a_name(const ir::Type* ty, Span keeper)
   {
-    if (ty == nullptr || ! holds_a_reference(ty))
+    if (ty == nullptr || ! (holds_a_reference(ty) || holds_a_view(ty)))
       return;
     // As deep as the scope of the name keeping it, which is not the scope
     // being lowered where the name is given a value in a block inside its own.

@@ -1325,6 +1325,14 @@ namespace pl4g::sema {
       diags.emit(D::LANG_VARDEF_NOT_MUTABLE, span, { { "name", what } });
       return std::nullopt;
     }
+    // A view of its elements may be out, which changing it in place could
+    // leave pointing at room given back: the list is lent for as long as one
+    // is kept (`as_a_view`).
+    if (auto borrowed = borrowed_name(expr)) {
+      const auto& [name, path] = *borrowed;
+      if (lent_out(name, span, true, path)) [[unlikely]]
+        return std::nullopt;
+    }
     return std::tuple{ builder.cast(ir::CastKind::bitcast, address, ir::ptr_type(list, true), span), list };
   }
 
@@ -1600,6 +1608,28 @@ namespace pl4g::sema {
       an_effect(D::LANG_PURE_WRITES_ELSEWHERE, stmt->span);
     auto stride = std::int64_t(ir::stride_of(ty->element, layout()));
     Span span = stmt->span;
+    if (may_be_an_array(written)) {
+      // An array of the list's elements, of one dimension: one growth to fit,
+      // and the elements copied in as `joined_on` copies.
+      ir::Value* given = lower_expr(builder, written, nullptr);
+      const ir::Type* held = value_type_of(given);
+      if (held == ir::error_type())
+        return;
+      ir::Value* view = nullptr;
+      if (ir::is<ir::ArrayType>(held))
+        view = as_a_view(builder, written, given, ir::array_type(ty->element, { std::nullopt }), written->span);
+      if (view == nullptr) [[unlikely]] {
+        report_mismatch(written->span, held, ty);
+        return;
+      }
+      if (! view_copied(ty->element, written)) [[unlikely]]
+        return;
+      ir::Value* count = builder.extract(view, 1, ir::u64(), span);
+      Room made = room_made(builder, place, ty, count, span);
+      joined_on(builder, made.grown, made.count, view, ty->element, span);
+      room_kept(builder, place, ty, made, builder.binary(ir::BinOp::wrap_add, made.count, count, span), span);
+      return;
+    }
     if (auto list = ast::as<ast::ListLit>(written);
         list != nullptr && ! list->elements.empty() && ! owned::points(ty->element)) {
       std::vector<ir::Value*> values;
@@ -1644,10 +1674,81 @@ namespace pl4g::sema {
   }
 
 
+  bool Checker::may_be_an_array(const ast::Expr* written)
+  {
+    if (ir::is<ir::ArrayType>(said_to_be(written)))
+      return true;
+    if (auto element = ast::as<ast::Element>(written))
+      return std::ranges::any_of(element->indices, [](const ast::Expr* one) { return ast::is<ast::Range>(one); });
+    if (auto call = ast::as<ast::Call>(written))
+      if (auto name = ast::as<ast::NameRef>(call->callee))
+        return name->name == names::bytes_name || name->name == names::span_name
+               || name->name == names::one_run_name;
+    return false;
+  }
+
+
+  bool Checker::view_copied(const ir::Type* element, const ast::Expr* written)
+  {
+    auto why = not_copied_because(element);
+    if (! why.has_value())
+      return true;
+    diags.emit(D::LANG_ARRAY_NOT_COPIED, written->span, { { "type", element->written() }, { "why", *why } });
+    return false;
+  }
+
+
+  void Checker::joined_on(ir::Builder& builder, ir::Value* into, ir::Value* after, ir::Value* view,
+                          const ir::Type* element, Span span)
+  {
+    auto stride = std::int64_t(ir::stride_of(element, layout()));
+    const ir::PtrType* bytes = ir::ptr_type(ir::u8(), true);
+    const ir::PtrType* pointer = ir::ptr_type(element, true);
+    ir::Value* start = builder.extract(view, 0, pointer, span);
+    ir::Value* count = builder.extract(view, 1, ir::u64(), span);
+    ir::Value* apart = builder.extract(view, 2, ir::u64(), span);
+    ir::Value* size = builder.int_const(ir::u64(), stride);
+    ir::Value* offset = builder.binary(ir::BinOp::wrap_mul, after, size, span);
+    ir::Value* place = builder.binary(ir::BinOp::add, into, offset, span);
+    auto one_run = builder.new_block("join.run");
+    auto stepped = builder.new_block("join.stepped");
+    auto done = builder.new_block("joined.view");
+    ir::Value* before = builder.memory();
+    builder.condbr(builder.compare(ir::CmpPred::eq, apart, builder.int_const(ir::u64(), 1), span), one_run, stepped,
+                   {}, {}, span);
+    builder.position_at(one_run);
+    builder.set_memory(before);
+    ir::Value* from = builder.cast(ir::CastKind::bitcast, start, bytes, span);
+    ir::Value* length = builder.binary(ir::BinOp::wrap_mul, count, size, span);
+    strings::moved(builder, place, from, length, span);
+    builder.br(done, std::vector<ir::Value*>{ builder.memory() }, span);
+    builder.position_at(stepped);
+    builder.set_memory(before);
+    ir::Value* one = builder.int_const(ir::u64(), 1);
+    ir::Value* to = builder.cast(ir::CastKind::bitcast, place, pointer, span);
+    std::vector<ir::Value*> counts{ count };
+    std::vector<ir::Value*> dense{ one };
+    std::vector<ir::Value*> strides{ apart };
+    element_by_element(builder, Laid{ to, counts, dense, true }, Laid{ start, counts, strides, false }, element, count,
+                       false, span);
+    builder.br(done, std::vector<ir::Value*>{ builder.memory() }, span);
+    builder.position_at(done);
+    builder.set_memory(done->add_param(ir::mem_type(), "mem"));
+  }
+
+
   ir::Value* Checker::list_element(ir::Builder& builder, const ast::Element* expr, ir::Value* base,
                                    const ir::ListType* ty, const ir::Type* expected)
   {
-    if (expr->indices.size() != 1 || ast::is<ast::Range>(expr->indices[0])) [[unlikely]] {
+    if (expr->indices.size() == 1 && ast::is<ast::Range>(expr->indices[0])) {
+      // Some of its elements: the list read as a view of them, lent as long as
+      // the view is kept, and that view sliced as an array's is.
+      auto view = as_a_view(builder, expr->base, base, ir::array_type(ty->element, { std::nullopt }), expr->base->span);
+      contract_assert(view != nullptr);
+      list_views[id_of(expr)] = ty;
+      return lower_slice(builder, expr, view, ir::as<ir::ArrayType>(value_type_of(view)), expected);
+    }
+    if (expr->indices.size() != 1) [[unlikely]] {
       diags.emit(D::LANG_ARRAY_NOT_AN_ARRAY, expr->base->span, { { "found", ty->written() } });
       return undef_error(module);
     }

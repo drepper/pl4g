@@ -1,0 +1,86 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **What is not well-formed UTF-8 is not text**, and `⎕text` answers where it begins: the
+※ offset of the first byte that is not part of a well-formed sequence, which is where the
+※ sequence it would have begun starts.  Well formed is Unicode's table of well-formed byte
+※ sequences (Table 3-7) and nothing looser: no overlong form of any length, no surrogate, no
+※ number above `10FFFF`, no continuation byte without a leading one, no leading byte without
+※ all of its continuation bytes -- the end of the bytes cutting one short included.
+※
+※ Compare: **Rust**'s `from_utf8` and **Python**'s strict decoder, which refuse exactly these
+※ and answer the same offset; **Java**'s `String(byte[], UTF_8)` and **Go**'s `[]rune(s)`,
+※ which put U+FFFD where they are and so answer no error at all; **Modified UTF-8**, which is
+※ Java's for its own files and which writes nought as the overlong `C0 80` this refuses.
+
+let std := ⎕import("std")
+
+fn offset(made: str ? u64) → u64:
+    match made:
+        ⊥(at): at
+        _: 1000u64
+
+※ Where the bytes stop being text, after three that are.
+fn after_three(bad: u8⟦⟧) → u64:
+    let l: mut [u8] = [0x61u8, 0x62u8, 0x63u8]
+    l ⧺← bad
+    offset(⎕text(l))
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ A continuation byte with nothing before it, the first and the last of them.
+    if after_three(⟦0x80u8, 0x41u8⟧ in ⎕static) ≠ 3u64:
+        return 1u6
+    if after_three(⟦0xBFu8⟧ in ⎕static) ≠ 3u64:
+        return 2u6
+    ※ Overlong forms: of two bytes (`C0` and `C1` lead nothing else), of three (`E0` followed
+    ※ by less than `A0`), of four (`F0` followed by less than `90`).
+    if after_three(⟦0xC0u8, 0x80u8⟧ in ⎕static) ≠ 3u64:
+        return 3u6
+    if after_three(⟦0xC1u8, 0xBFu8⟧ in ⎕static) ≠ 3u64:
+        return 4u6
+    if after_three(⟦0xE0u8, 0x80u8, 0x80u8⟧ in ⎕static) ≠ 3u64:
+        return 5u6
+    if after_three(⟦0xE0u8, 0x9Fu8, 0xBFu8⟧ in ⎕static) ≠ 3u64:
+        return 6u6
+    if after_three(⟦0xF0u8, 0x80u8, 0x80u8, 0x80u8⟧ in ⎕static) ≠ 3u64:
+        return 7u6
+    if after_three(⟦0xF0u8, 0x8Fu8, 0xBFu8, 0xBFu8⟧ in ⎕static) ≠ 3u64:
+        return 8u6
+    ※ The smallest of each length that is not overlong is text.
+    if after_three(⟦0xC2u8, 0x80u8, 0xE0u8, 0xA0u8, 0x80u8, 0xF0u8, 0x90u8, 0x80u8, 0x80u8⟧
+                   in ⎕static) ≠ 1000u64:
+        return 9u6
+    ※ Surrogates, the first and the last, and what is either side of them.
+    if after_three(⟦0xEDu8, 0xA0u8, 0x80u8⟧ in ⎕static) ≠ 3u64:
+        return 10u6
+    if after_three(⟦0xEDu8, 0xBFu8, 0xBFu8⟧ in ⎕static) ≠ 3u64:
+        return 11u6
+    if after_three(⟦0xEDu8, 0x9Fu8, 0xBFu8, 0xEEu8, 0x80u8, 0x80u8⟧ in ⎕static) ≠ 1000u64:
+        return 12u6
+    ※ Above `10FFFF`: `F4` followed by `90` or more, and every leading byte from `F5`.
+    if after_three(⟦0xF4u8, 0x90u8, 0x80u8, 0x80u8⟧ in ⎕static) ≠ 3u64:
+        return 13u6
+    if after_three(⟦0xF4u8, 0x8Fu8, 0xBFu8, 0xBFu8⟧ in ⎕static) ≠ 1000u64:
+        return 14u6
+    if after_three(⟦0xF5u8, 0x80u8, 0x80u8, 0x80u8⟧ in ⎕static) ≠ 3u64:
+        return 15u6
+    if after_three(⟦0xFFu8⟧ in ⎕static) ≠ 3u64:
+        return 16u6
+    ※ Cut short by the end, after each number of continuation bytes there can be.
+    if after_three(⟦0xC3u8⟧ in ⎕static) ≠ 3u64:
+        return 17u6
+    if after_three(⟦0xE2u8, 0x82u8⟧ in ⎕static) ≠ 3u64:
+        return 18u6
+    if after_three(⟦0xF0u8, 0x9Fu8, 0x98u8⟧ in ⎕static) ≠ 3u64:
+        return 19u6
+    ※ Cut short by a byte that does not continue it, in each place one can be.
+    if after_three(⟦0xC3u8, 0x41u8⟧ in ⎕static) ≠ 3u64:
+        return 20u6
+    if after_three(⟦0xE2u8, 0x82u8, 0x41u8⟧ in ⎕static) ≠ 3u64:
+        return 21u6
+    if after_three(⟦0xF0u8, 0x9Fu8, 0x98u8, 0xC3u8⟧ in ⎕static) ≠ 3u64:
+        return 22u6
+    ※ What comes after a well-formed sequence is where the offset counts from.
+    if after_three(⟦0xC3u8, 0xA9u8, 0xE2u8, 0x82u8, 0xACu8, 0x80u8⟧ in ⎕static) ≠ 8u64:
+        return 23u6
+    0u6

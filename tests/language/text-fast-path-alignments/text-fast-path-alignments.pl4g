@@ -1,0 +1,60 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **`⎕text` reads eight bytes at a time while they are ASCII**, and a sequence at a time
+※ from the first word that is not.  So where a sequence of two, three or four bytes stands
+※ relative to the words decides which of the two ways reads it: wholly inside a word, across
+※ the end of one, in the few bytes past the last whole word.  This puts one of each length
+※ after every number of ASCII bytes from nought to twenty-three -- every place in three words
+※ -- with ASCII after it, and asks that it is text; then cuts each short, and asks that the
+※ offset answered is where it began.
+※
+※ Compare: **simdjson**'s and **Rust**'s validators, which take the same ASCII shortcut a
+※ vector or a word at a time and fall back to a sequence at a time where it fails.
+
+let std := ⎕import("std")
+
+fn offset(made: str ? u64) → u64:
+    match made:
+        ⊥(at): at
+        _: 1000u64
+
+※ *before* bytes of ASCII, then *middle*, then nine more of ASCII.
+fn around(before: u64, middle: u8⟦⟧) → [u8]:
+    let l: mut [u8] = []
+    foreach _ := 0u64…before:
+        l ⧺← [0x61u8]
+    l ⧺← middle
+    l ⧺← ⎕bytes("bcdefghij")
+    l
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let two: u8⟦2⟧ = ⟦0xC3u8, 0xA9u8⟧ in ⎕static
+    let three: u8⟦3⟧ = ⟦0xE2u8, 0x82u8, 0xACu8⟧ in ⎕static
+    let four: u8⟦4⟧ = ⟦0xF0u8, 0x9Fu8, 0x98u8, 0x80u8⟧ in ⎕static
+    foreach before := 0u64…24u64:
+        if offset(⎕text(around(before, two))) ≠ 1000u64:
+            return 1u6
+        if offset(⎕text(around(before, three))) ≠ 1000u64:
+            return 2u6
+        if offset(⎕text(around(before, four))) ≠ 1000u64:
+            return 3u6
+        ※ The same, one byte short: the ASCII after it does not continue it.
+        if offset(⎕text(around(before, two⟦0…1⟧))) ≠ before:
+            return 4u6
+        if offset(⎕text(around(before, three⟦0…2⟧))) ≠ before:
+            return 5u6
+        if offset(⎕text(around(before, four⟦0…3⟧))) ≠ before:
+            return 6u6
+        ※ And a stray continuation byte where the sequence was.
+        if offset(⎕text(around(before, four⟦1…4⟧))) ≠ before:
+            return 7u6
+    ※ A sequence cut short by the end, after every number of ASCII bytes.
+    foreach before := 0u64…24u64:
+        let l: mut [u8] = []
+        foreach _ := 0u64…before:
+            l ⧺← [0x61u8]
+        l ⧺← four⟦0…3⟧
+        if offset(⎕text(l)) ≠ before:
+            return 8u6
+    0u6

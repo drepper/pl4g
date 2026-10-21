@@ -1,0 +1,65 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **`⎕text(BYTES)` is the way in from bytes**, the door `⎕bytes` is the way out of.  It takes
+※ the bytes as anything that can be read as a `u8⟦⟧` -- a view, an array whose type says its
+※ shape, a list of them -- and answers `str ? u64`: the text, a copy of the bytes in the arena
+※ `in` names or in `⎕heap`, where they are well-formed UTF-8, and otherwise where the first byte
+※ is that is not part of a well-formed sequence.  So the invariant that every `str` is
+※ well-formed UTF-8 still holds: kept by inspection here, by construction everywhere else.
+※
+※ Compare: **Rust**'s `str::from_utf8`, whose error's `valid_up_to` is the offset answered
+※ here, and `String::from_utf8`, which takes the bytes over rather than copying them; **Go**'s
+※ `string(b)`, which copies and checks nothing, leaving `utf8.Valid` to whoever remembers;
+※ **Python**'s `bytes.decode`, which raises with the same offset in `UnicodeDecodeError.start`;
+※ **Swift**'s `String(validating:as:)`, which answers nothing at all on failure.
+
+let std := ⎕import("std")
+
+fn offset(made: str ? u64) → u64:
+    match made:
+        ⊥(at): at
+        _: 1000u64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ Every length of sequence, through the bytes of a string and back.
+    let all: str = "a£€😀 and the rest of it, past eight bytes"
+    if (⎕text(⎕bytes(all)) ?? "") ≠ all:
+        return 1u6
+    ※ A list of bytes, built up a piece at a time.
+    let l: mut [u8] = []
+    l ⧺← ⎕bytes("hé")
+    l ⧺← ⎕bytes("llo")
+    if (⎕text(l) ?? "") ≠ "héllo":
+        return 2u6
+    ※ An array whose type says its shape.
+    let euro: u8⟦3⟧ = ⟦0xE2u8, 0x82u8, 0xACu8⟧ in ⎕static
+    if (⎕text(euro) ?? "") ≠ "€":
+        return 3u6
+    ※ Nothing is well formed, and is the empty string.
+    if (⎕text(⎕bytes("")) ?? "x") ≠ "":
+        return 4u6
+    ※ A slice, and one a step apart, which is made one run first.
+    let both: u8⟦⟧ = ⎕bytes("aXbXcXdXeXfXgXhXiX")
+    if (⎕text(both⟦2…6⟧) ?? "") ≠ "bXcX":
+        return 5u6
+    if (⎕text(both⟦0…#both…2⟧) ?? "") ≠ "abcdefghi":
+        return 6u6
+    ※ The text is a copy: changing the list after changes nothing in it.
+    let t: str = ⎕text(l) ?? ""
+    l⟦0⟧ ← 0x4Eu8
+    if t ≠ "héllo" ∨ (⎕text(l) ?? "") ≠ "Néllo":
+        return 7u6
+    ※ An answer that is not text says where the first ill-formed sequence begins.
+    if offset(⎕text(⎕bytes(all))) ≠ 1000u64:
+        return 8u6
+    let cut: mut [u8] = [0x61u8, 0x62u8]
+    cut ⧺← [0xE2u8, 0x82u8]
+    if offset(⎕text(cut)) ≠ 2u64:
+        return 9u6
+    ※ Made in an arena `in` names.
+    let scratch: mut arena = ⎕arena
+    let kept: str = ⎕text(l) in scratch ?? ""
+    if kept ≠ "Néllo":
+        return 10u6
+    0u6

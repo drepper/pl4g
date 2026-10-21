@@ -64,6 +64,8 @@ namespace pl4g::names {
   inline constexpr std::string_view fields_name = "\N{APL FUNCTIONAL SYMBOL QUAD}fields";
   inline constexpr std::string_view typename_name = "\N{APL FUNCTIONAL SYMBOL QUAD}typename";
   inline constexpr std::string_view str_of_name = "\N{APL FUNCTIONAL SYMBOL QUAD}str";
+  // Text from bytes, checked to be well-formed UTF-8: the way in `⎕bytes` is the way out of.
+  inline constexpr std::string_view text_name = "\N{APL FUNCTIONAL SYMBOL QUAD}text";
   inline constexpr std::string_view one_run_name = "\N{APL FUNCTIONAL SYMBOL QUAD}one_run";
   inline constexpr std::string_view empty_name = "\N{APL FUNCTIONAL SYMBOL QUAD}empty";
   inline constexpr std::string_view address_name = "\N{APL FUNCTIONAL SYMBOL QUAD}address";

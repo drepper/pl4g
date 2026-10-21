@@ -2300,7 +2300,8 @@ namespace pl4g::sema {
     // What is wanted of the right is what the left turned out to be, where
     // that type says nothing about how many there are.
     auto held = value_type_of(left);
-    auto want = held == ir::str_type() || ir::is<ir::ListType>(held) ? held : nullptr;
+    auto want = held == ir::str_type() || (ir::is<ir::ListType>(held) && ! may_be_an_array(expr->right)) ? held
+                                                                                                    : nullptr;
     auto right = lower_expr(builder, expr->right, want);
     if (value_type_of(left) == ir::str_type() || value_type_of(right) == ir::str_type())
       return joined_text(builder, expr, left, right, expected);
@@ -2327,6 +2328,8 @@ namespace pl4g::sema {
   ir::Value* Checker::joined_list(ir::Builder& builder, const ast::Binary* expr, ir::Value* left, ir::Value* right,
                                   const ir::Type* expected)
   {
+    if (ir::is<ir::ArrayType>(value_type_of(left)) || ir::is<ir::ArrayType>(value_type_of(right)))
+      return joined_with_a_view(builder, expr, left, right, expected);
     const ir::Type* holds = nullptr;
     for (auto [side, value] : { std::pair{ expr->left, left }, std::pair{ expr->right, right } }) {
       auto found = value_type_of(value);
@@ -2400,6 +2403,56 @@ namespace pl4g::sema {
     parts.push_back(builder.binary(ir::BinOp::wrap_add, counts[0], counts[1], expr->span));
     parts.push_back(out_of(builder, expr->span));
     return builder.make_tuple(parts, answer, expr->span);
+  }
+
+
+  ir::Value* Checker::joined_with_a_view(ir::Builder& builder, const ast::Binary* expr, ir::Value* left,
+                                         ir::Value* right, const ir::Type* expected)
+  {
+    auto list = ir::as<ir::ListType>(value_type_of(left));
+    if (list == nullptr)
+      list = ir::as<ir::ListType>(value_type_of(right));
+    auto holds = list->element;
+    auto wanted = ir::array_type(holds, { std::nullopt });
+    auto span = expr->span;
+    std::vector<ir::Value*> views;
+    for (auto [written, value] : { std::pair{ expr->left, left }, std::pair{ expr->right, right } }) {
+      auto found = value_type_of(value);
+      if (found == error_ty())
+        return fresh_undef(error_ty());
+      bool runs = ir::is<ir::ArrayType>(found) || ir::is<ir::ListType>(found);
+      auto view = runs ? as_a_view(builder, written, value, wanted, written->span) : nullptr;
+      if (view == nullptr) [[unlikely]] {
+        if (runs)
+          diags.emit(D::LANG_CONCAT_ELEMENTS_DIFFER, span,
+                     { { "left", value_type_of(left)->written() }, { "right", value_type_of(right)->written() } });
+        else
+          diags.emit(D::LANG_CONCAT_NEEDS_AN_ARRAY, written->span, { { "found", found->written() } });
+        return fresh_undef(error_ty());
+      }
+      views.push_back(view);
+    }
+    if (! view_copied(holds, expr)) [[unlikely]]
+      return fresh_undef(error_ty());
+    auto answer = ir::list_type(holds);
+    if (! accepts(expected, answer)) [[unlikely]] {
+      report_mismatch(span, answer, expected);
+      return fresh_undef(error_ty());
+    }
+    made_from[id_of(expr)] = { expr, out_of_arenas };
+    std::vector<ir::Value*> counts;
+    for (auto one : views)
+      counts.push_back(builder.extract(one, 1, ir::u64(), span));
+    auto total = builder.binary(ir::BinOp::wrap_add, counts[0], counts[1], span);
+    auto where = out_of(builder, span);
+    auto room_function = lists::room_function(module);
+    auto stride = builder.int_const(ir::u64(), __int128(ir::stride_of(holds, layout())));
+    auto room = builder.call(room_function, std::vector<ir::Value*>{ where, total, stride }, ir::ptr_type(ir::u8(), true),
+                             span);
+    joined_on(builder, room, builder.int_const(ir::u64(), 0), views[0], holds, span);
+    joined_on(builder, room, counts[0], views[1], holds, span);
+    auto start = builder.cast(ir::CastKind::bitcast, room, ir::parts_of(answer)[0], span);
+    return builder.make_tuple(std::vector<ir::Value*>{ start, total, where }, answer, span);
   }
 
 } // namespace pl4g::sema

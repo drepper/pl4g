@@ -137,3 +137,7 @@
     ir::Value* lower_concat(ir::Builder& builder, const ast::Binary* expr, const ir::Type* expected);  // check.py:23287
     // Lower `A ⧺ B` where the two are lists.
     ir::Value* joined_list(ir::Builder& builder, const ast::Binary* expr, ir::Value* left, ir::Value* right, const ir::Type* expected);  // check.py:23332
+    /// Lower `A ⧺ B` where one is a list and the other an array of its elements: a list holding the
+    /// two, in new room from the arena in force, each side copied in as `joined_on` copies.
+    ir::Value* joined_with_a_view(ir::Builder& builder, const ast::Binary* expr, ir::Value* left, ir::Value* right,
+                                  const ir::Type* expected);
