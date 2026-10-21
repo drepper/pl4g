@@ -901,10 +901,12 @@ def tokenize_body(source: SourceFile, span: Span, diags: DiagEngine) -> list[Tok
 
 
 #: What `_depth_change` takes out of a line before counting: text, a character
-#: written out (not the mark after a type parameter), and a comment.
+#: written out (not the mark after a type parameter), and a comment.  Written
+#: raw, so that what the pattern says of a backslash is the pattern's: an escape
+#: in text takes the character after it, and a quote escaped does not end it.
 _NOT_COUNTED: Final = re.compile(
-    "|".join(('"(?:[^"\\\n]|\\.)*"',
-              "(?<![\\w'])'(?:\\[^'\n]*|[^'\\\n])'",
+    "|".join((r'"(?:[^"\\\n]|\\.)*"',
+              r"(?<![\w'])'(?:\\[^'\n]*|[^'\\\n])'",
               "".join((COMMENT_GLYPH, ".*$")))))
 _GLYPHS: Final = re.compile("[^\\x00-\\x7f]")
 _ASCII_OPEN: Final = "([{"
