@@ -171,16 +171,19 @@ type Scalar = value : Value ; end : u64 ¤idx
 ※ -- bytes ---------------------------------------------------------------------
 
 ※ Whether `flag` is among `allow`.
+@[inline]
 fn allows(allow: Extensions, flag: Extensions) → bool:
     (allow & flag) = flag
 
 ※ Whether a byte is the white space RFC 8259 has: space, tab, line feed and
 ※ carriage return.
+@[inline]
 fn is_space(c: u8) → bool:
     c = 32u8 or c = 10u8 or c = 13u8 or c = 9u8
 
 ※ Whether a byte is one of the six structural characters: `{` and `[` differ by
 ※ one bit, as do `}` and `]`, so one `|` asks about each pair.
+@[inline]
 fn is_operator(c: u8) → bool:
     let folded: u8 = c | 32u8
     folded = 123u8 or folded = 125u8 or c = 58u8 or c = 44u8
@@ -311,14 +314,16 @@ fn block_starts(block: u8⟦64⟧, before: Carry) → Carry:
 ※ time: RFC 8259's way of writing strings and white space, which is every
 ※ extension's but the four `slowly` reads.  Each block is copied into room of
 ※ its own -- the last one, short, into room of spaces, which begin nothing, so
-※ that it is read as the others are -- and its bits walked off into `found` with
-※ `⎕trail`, the lowest first.  The places are made in `s`, an arena `decode`
+※ that it is read as the others are -- and its bits walked off with `⎕trail`,
+※ the lowest first, into room of the frame's, which is joined onto `found` in
+※ one move: a join is a call or three, a place written in the frame is not.  The places are made in `s`, an arena `decode`
 ※ gives back when it is done with them.
 fn quickly(input: u8⟦⟧, start: u64 ¤idx, s: &mut arena) → [u32] in s:
     let n: u64 ¤idx = #input
     let found: mut [u32] = [] in s
     ⎕reserve(found, (n - start) ÷ 4 ?? 0)
     let carry: mut Carry = Carry(.escaped ← 0u64, .inside ← 0u64, .scalar ← 0u64, .starts ← 0u64)
+    let places: mut u32⟦64⟧ = 64 ⍴ 0u32
     let at: mut u64 ¤idx = start
     while §blocks at < n:
         if at + 64 ≤ n:
@@ -328,11 +333,15 @@ fn quickly(input: u8⟦⟧, start: u64 ¤idx, s: &mut arena) → [u32] in s:
             let last: mut u8⟦64⟧ = 64 ⍴ 32u8
             last⟦0…n - at⟧ ← input⟦at…n⟧
             carry ← block_starts(last, carry)
+        ※ the block's places into room of the frame's, and joined on in one move
         let base: u32 = ⎕narrow(⎕drop(at), ⌜u32⌝) ?? 0u32
         let bits: mut u64 = carry.starts
+        let count: mut u64 ¤idx = 0
         while §bits bits ≠ 0u64:
-            found ⧺← ⟦base + ⎕widen(⎕trail(bits), ⌜u32⌝)⟧
+            places⟦count⟧ ← base + ⎕widen(⎕trail(bits), ⌜u32⌝)
+            count ← count + 1
             bits ← bits & ⎕wrap(bits - 1u64)
+        found ⧺← places⟦0…count⟧
         at ← at + 64
     found ⧺← ⟦⎕narrow(⎕drop(n), ⌜u32⌝) ?? 0u32⟧
     found
@@ -419,12 +428,14 @@ fn failure(input: u8⟦⟧, fault: Fault) → Error:
 ※ for what comes next.
 
 ※ The place of the `k`-th thing the first stage found.
+@[inline]
 fn place_of(index: u32⟦⟧, k: u64 ¤idx) → u64 ¤idx:
     ⎕unit(⎕widen(index⟦k⟧, ⌜u64⌝), ⌜idx⌝)
 
 ※ The byte at `at`, and nought at the end of the input -- which is never a
 ※ place a value begins at, a nought byte outside a string being refused where
 ※ it stands.
+@[inline]
 fn byte_at(input: u8⟦⟧, at: u64 ¤idx) → u8:
     if at < ⎕unit(⎕drop(#input), ⌜idx⌝): input⟦at⟧ else: 0u8
 
@@ -443,6 +454,7 @@ fn ends_here(input: u8⟦⟧, at: u64 ¤idx, allow: Extensions) → bool:
     is_space(c) or is_operator(c) or (allow ≠ Extensions.strict and skipped(input, at, allow) ≠ 0)
 
 ※ Whether a byte opens an array or an object.
+@[inline]
 fn opens(c: u8) → bool:
     (c | 32u8) = 123u8
 
@@ -466,6 +478,7 @@ fn leaf_at(input: u8⟦⟧, index: u32⟦⟧, k: u64 ¤idx, a: &mut arena, how: 
 type Open = values : u64 ¤idx ; keys : u64 ¤idx ; object : bool
 
 ※ How many elements a list has, as a place among them.
+@[inline]
 fn held(l: [T']) → u64 ¤idx:
     ⎕unit(⎕drop(#l), ⌜idx⌝)
 
@@ -647,10 +660,11 @@ fn is_identifier(c: u8, first: bool) → bool:
 
 ※ The string whose opening quote is at `at`, as text made in `a`.
 ※
-※ Thirty-two bytes at a time while there are as many, to the first byte that
-※ is a quote, a backslash or a control character: where that is the closing
-※ quote, the bytes between are the string, checked and copied by `⎕text` in one
-※ move.  Where it is a backslash, the rest is read by `escaped`.
+※ Thirty-two bytes at a time, to the first byte that is a quote, a backslash or
+※ a control character (`stop_at`): where that is the closing quote, the bytes
+※ between are the string, checked and copied by `⎕text` in one move.  Where it
+※ is a backslash, the rest is read by `escaped`, which goes from one of them to
+※ the next the same way.
 fn string_at(input: u8⟦⟧, at: u64 ¤idx, a: &mut arena, allow: Extensions) → str ? Fault in a:
     let n: u64 ¤idx = #input
     let quote: u8 = input⟦at⟧
@@ -658,15 +672,7 @@ fn string_at(input: u8⟦⟧, at: u64 ¤idx, a: &mut arena, allow: Extensions) �
     let end: mut u64 ¤idx = begin
     let raw: bool = allows(allow, Extensions.control_characters)
     while §scan true:
-        while §blocks end + 32 ≤ n:
-            let block: u8⟦32⟧ = input⟦end…end + 32⟧
-            let stops: u32 = ⎕mask((block = quote) ∨ (block = 92u8) ∨ (block < 32u8))
-            if stops ≠ 0u32:
-                end ← end + ⎕unit(⎕widen(⎕trail(stops), ⌜u64⌝), ⌜idx⌝)
-                break §blocks
-            end ← end + 32
-        while §bytes end < n and input⟦end⟧ ≠ quote and input⟦end⟧ ≠ 92u8 and input⟦end⟧ ≥ 32u8:
-            end ← end + 1
+        end ← stop_at(input, end, quote)
         if end ≥ n:
             return ⊥ Fault(.problem ← Problem.truncated, .at ← n)
         let c: u8 = input⟦end⟧
@@ -682,6 +688,27 @@ fn string_at(input: u8⟦⟧, at: u64 ¤idx, a: &mut arena, allow: Extensions) �
             text
         ⊥(bad):
             ⊥ Fault(.problem ← Problem.not_utf8, .at ← begin + ⎕unit(bad, ⌜idx⌝))
+
+※ The place of the first quote, backslash or control character from `from` on,
+※ or the end: thirty-two bytes at a time, the last block copied into room of
+※ quotes, so that it is read as the others are and stops where the bytes do.
+@[inline]
+fn stop_at(input: u8⟦⟧, from: u64 ¤idx, quote: u8) → u64 ¤idx:
+    let n: u64 ¤idx = #input
+    let at: mut u64 ¤idx = from
+    while §blocks true:
+        let stops: mut u32 = 0u32
+        if at + 32 ≤ n:
+            let block: u8⟦32⟧ = input⟦at…at + 32⟧
+            stops ← ⎕mask((block = quote) ∨ (block = 92u8) ∨ (block < 32u8))
+        else:
+            let last: mut u8⟦32⟧ = 32 ⍴ quote
+            last⟦0…n - at⟧ ← input⟦at…n⟧
+            stops ← ⎕mask((last = quote) ∨ (last = 92u8) ∨ (last < 32u8))
+        if stops ≠ 0u32:
+            return (at + ⎕unit(⎕widen(⎕trail(stops), ⌜u64⌝), ⌜idx⌝)) ⌊ n
+        at ← at + 32
+    n
 
 ※ The rest of a string with an escape in it: `begin` is its first byte and
 ※ `from` the first backslash.  What it stands for is gathered in a list -- the
@@ -737,9 +764,7 @@ fn escaped(input: u8⟦⟧, begin: u64 ¤idx, from: u64 ¤idx, a: &mut arena,
             return ⊥ Fault(.problem ← Problem.control_character, .at ← at)
         else:
             ※ a run of bytes that are none of the three, in one move
-            let run: mut u64 ¤idx = at + 1
-            while §plain run < n and input⟦run⟧ ≠ quote and input⟦run⟧ ≠ 92u8 and (input⟦run⟧ ≥ 32u8 or raw):
-                run ← run + 1
+            let run: u64 ¤idx = stop_at(input, at + 1, quote)
             out ⧺← input⟦at…run⟧
             at ← run
     match ⎕text(out) in a:
@@ -1174,26 +1199,14 @@ fn new_line(into: mut [u8] in a, a: &mut arena, count: u64) → [u8] in a:
     into
 
 ※ `v` written onto `into`, `level` arrays and objects deep.
+※
+※ **Only arrays and objects are written here, everything else by `leaf_written`,**
+※ which is never inlined: this is the one function writing recurses through,
+※ once a level, and the room a numeral and a string's blocks take in a frame
+※ would otherwise be taken once for every level a document has.
 fn written(v: &Value, into: mut [u8] in a, a: &mut arena, pretty: bool, indent: u64, level: u64,
            ascii: bool) → [u8] in a:
     match v⌖:
-        void:
-            into ⧺← ⎕bytes("null")
-        bool(b):
-            if b:
-                into ⧺← ⎕bytes("true")
-            else:
-                into ⧺← ⎕bytes("false")
-        i64(n):
-            let text: string.Numeral = string.numeral_int(n)
-            into ⧺← text.text⟦text.from…text.to⟧
-        u64(n):
-            let text: string.Numeral = string.numeral_int(n)
-            into ⧺← text.text⟦text.from…text.to⟧
-        f64(x):
-            into ← number(x, into, a)
-        str(s):
-            into ← quoted(⎕bytes(s), into, a, ascii)
         [Value](items):
             if #items = 0:
                 into ⧺← ⎕bytes("[]")
@@ -1230,6 +1243,33 @@ fn written(v: &Value, into: mut [u8] in a, a: &mut arena, pretty: bool, indent: 
                 if pretty:
                     into ← new_line(into, a, level × indent)
                 into ⧺← ⟦125u8⟧
+        _:
+            into ← leaf_written(v, into, a, ascii)
+    into
+
+※ A value that is neither an array nor an object written onto `into`.
+@[inline(never)]
+fn leaf_written(v: &Value, into: mut [u8] in a, a: &mut arena, ascii: bool) → [u8] in a:
+    match v⌖:
+        void:
+            into ⧺← ⎕bytes("null")
+        bool(b):
+            if b:
+                into ⧺← ⎕bytes("true")
+            else:
+                into ⧺← ⎕bytes("false")
+        i64(n):
+            let text: string.Numeral = string.numeral_int(n)
+            into ⧺← text.text⟦text.from…text.to⟧
+        u64(n):
+            let text: string.Numeral = string.numeral_int(n)
+            into ⧺← text.text⟦text.from…text.to⟧
+        f64(x):
+            into ← number(x, into, a)
+        str(s):
+            into ← quoted(⎕bytes(s), into, a, ascii)
+        _:
+            into ← into
     into
 
 ※ A number, as Python's `repr` lays it out: with a point or an exponent always,
@@ -1252,19 +1292,7 @@ fn quoted(text: u8⟦⟧, into: mut [u8] in a, a: &mut arena, ascii: bool) → [
     let at: mut u64 ¤idx = 0
     let from: mut u64 ¤idx = 0
     while §runs at < n:
-        let found: mut bool = false
-        while §blocks at + 32 ≤ n:
-            let block: u8⟦32⟧ = text⟦at…at + 32⟧
-            let stops: u32 = (⎕mask((block < 32u8) ∨ (block = 34u8) ∨ (block = 92u8))
-                              | (⎕mask(block ≥ 127u8) & high))
-            if stops ≠ 0u32:
-                at ← at + ⎕unit(⎕widen(⎕trail(stops), ⌜u64⌝), ⌜idx⌝)
-                found ← true
-                break §blocks
-            at ← at + 32
-        if ¬found:
-            while §bytes at < n and ¬wanted(text⟦at⟧, ascii):
-                at ← at + 1
+        at ← wanted_at(text, at, high)
         into ⧺← text⟦from…at⟧
         if at < n:
             let c: u8 = text⟦at⟧
@@ -1286,9 +1314,29 @@ fn quoted(text: u8⟦⟧, into: mut [u8] in a, a: &mut arena, ascii: bool) → [
     into ⧺← ⟦34u8⟧
     into
 
-※ Whether a byte of a string is written as an escape.
-fn wanted(c: u8, ascii: bool) → bool:
-    c < 32u8 or c = 34u8 or c = 92u8 or (ascii and c ≥ 127u8)
+※ The place of the first byte from `from` on that is written as an escape, or
+※ the end: thirty-two bytes at a time, the last block copied into room of
+※ quotes, which want one.  `high` is every bit where DEL and what is above ASCII
+※ want one too.
+@[inline]
+fn wanted_at(text: u8⟦⟧, from: u64 ¤idx, high: u32) → u64 ¤idx:
+    let n: u64 ¤idx = #text
+    let at: mut u64 ¤idx = from
+    while §blocks true:
+        let stops: mut u32 = 0u32
+        if at + 32 ≤ n:
+            let block: u8⟦32⟧ = text⟦at…at + 32⟧
+            stops ← (⎕mask((block < 32u8) ∨ (block = 34u8) ∨ (block = 92u8))
+                     | (⎕mask(block ≥ 127u8) & high))
+        else:
+            let last: mut u8⟦32⟧ = 32 ⍴ 34u8
+            last⟦0…n - at⟧ ← text⟦at…n⟧
+            stops ← (⎕mask((last < 32u8) ∨ (last = 34u8) ∨ (last = 92u8))
+                     | (⎕mask(last ≥ 127u8) & high))
+        if stops ≠ 0u32:
+            return (at + ⎕unit(⎕widen(⎕trail(stops), ⌜u64⌝), ⌜idx⌝)) ⌊ n
+        at ← at + 32
+    n
 
 ※ An ASCII byte that wants an escape, escaped.
 fn escape(c: u8, into: mut [u8] in a, a: &mut arena) → [u8] in a:

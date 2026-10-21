@@ -1,12 +1,15 @@
 ※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+※ pl4g-test: args --stack-size=4M
 
 ※ **How deeply a document may nest is a parameter of `json.decode`**, 1024 unless
 ※ the caller says otherwise, and an array or an object that would go deeper is
-※ refused as `too_deep` at its bracket.  Reading is recursive, a call or two for
-※ each level, so this is what keeps a hostile document of a million `[` from
-※ running the program off its stack: refused, at the bracket past the limit,
-※ having taken as much stack as the limit allows and no more.  Exactly as deep
-※ as the limit is read, written back and read again.
+※ refused as `too_deep` at its bracket.  Reading keeps what is open on a stack
+※ of its own, so a hostile document of a hundred thousand `[` is refused at the
+※ bracket past the limit without the machine's stack being touched; writing,
+※ comparing and this test's own `depth` recurse, a call a level, which is why
+※ the stack is four megabytes here: the interpreter the C++ port is checked
+※ with takes several times the room a level that compiled code takes.  Exactly
+※ as deep as the limit is read, written back and read again.
 ※
 ※ Compare: **serde_json**'s recursion limit of 128, on by default; **simdjson**'s
 ※ `max_depth` of 1024, the default here; **Python**'s `json`, which runs into
