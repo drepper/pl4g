@@ -4764,6 +4764,15 @@ Comparing two tables with `=` asks what they hold and not in which order.
 `=` and `≠` compare two sets, or two dictionaries, for holding the same thing.  Ordering is not defined on them: Python reads `<=`
 as "is part of", and here ordering is about which of two comes first, which neither does.
 
+**Two tables are equal where they hold as many keys, and every key of one is in the other standing for an equal value.**  The
+values are compared by their own `=` -- a number as a number, text by its bytes -- so two dictionaries whose values have no `=`, a
+record's or a sum's, cannot be compared (4280).  One that may be written and one that may only be read are compared as any two
+tables are: what is asked about is what they hold, and the type of the handle says only who may change it.  A table is equal to
+itself, which is the one answer the walk does not give for a dictionary holding a not-a-number: as in Python, whose `==` asks
+whether two objects are one before it asks what they hold.  Compare **Python**'s `==` on two `dict`s or `set`s, which is this;
+**Rust**'s `PartialEq` for `HashMap` and `HashSet`, the same and asked of the values the same way; **Go**, which has no `==` on maps
+and leaves it to `maps.Equal`; **Java**'s `Map.equals` and `Set.equals`; **C++**'s `==` on `unordered_map`, which is this too.
+
 ##### Where one lives
 
 A collection is a table in an **arena**, and `in` says which:

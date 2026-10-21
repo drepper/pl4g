@@ -4126,6 +4126,15 @@ leaves the word of the index naming it, so a probe walking past it to what was p
 later is a new key and goes last, its old entry a hole.  `__pl4g_table_next` and `__pl4g_table_select` walk the dense array from
 nought to `used`, stepping past the holes, which is what makes a walk, and the set operators' answers, in order.
 
+**`=` on two tables is `__pl4g_table_same.<shape>(one, other)`** (`tables.ensure_same`), a truth value: the same address answers
+at once; counts that differ answer at once; otherwise the dense array of `one` is walked from nought to `used`, each live key
+looked up in `other` with `__pl4g_table_slot`, and the walk stops at the first key `other` does not hold or -- for a dictionary --
+holds standing for a value that differs, compared with `=` of the value's type (`_same_value`: text through
+`__pl4g_str_compare`, everything else one comparison).  `≠` is the answer with its bit turned round.  `_lower_comparison` lowers
+the right operand as the read-only kind of the left's table type and holds the two to it, so `mut ⸨K⸩` and `⸨K⸩` compare;
+`tables.not_compared` names a value type `=` is not defined on, which `_compared_tables` refuses with 4280.  A value is never a
+table (4445), so the function never calls another of its kind.
+
 **The table carries two counts.**  `count` is how many keys it holds, which is what `#` answers; `used` is how many entries are
 written, the keys and the holes, which is also how many words of the index are taken.  The load is measured on `used`: `put` calls
 `__pl4g_table_grow.<shape>` *before* its probe where one more would pass three quarters of the index.  That rebuilds the run --

@@ -1729,6 +1729,13 @@ def _is_a_table(ty: Type) -> bool:
     return isinstance(ty, (SetType, DictType))
 
 
+def _read_only(module: Module, ty: SetType | DictType) -> SetType | DictType:
+    """The kind of table *ty* is that may only be read, which every table stands as."""
+    if isinstance(ty, SetType):
+        return module.types.set_type(ty.element, mutable=False)
+    return module.types.dict_type(ty.key, ty.value, mutable=False)
+
+
 def _read_only_table(ty: Type) -> bool:
     """Whether *ty* is a collection nothing may put anything in."""
     return isinstance(ty, (SetType, DictType)) and not ty.mutable
@@ -22463,8 +22470,12 @@ class Checker:
             left = self._lower_expr(builder, expr.left, context)
             ty = self._comparable(expr.left.span, expr.op,
                                   self._scalar_of(self._value_type_of(left)))
-            if ty is not ERROR:
-                other: Type | None = ty
+            if isinstance(ty, (SetType, DictType)):
+                # Either side may be the writable kind: what is compared is what
+                # the two hold, and the right is asked for the kind both stand as.
+                other: Type | None = _read_only(self._module, ty)
+            elif ty is not ERROR:
+                other = ty
             elif self._value_type_of(left) is ERROR:
                 # Whatever is wrong with the left has been reported, and the
                 # right takes its type from it: handing the error down is what
@@ -22487,11 +22498,19 @@ class Checker:
                                  self._scalar_of(self._value_type_of(right)))
         if ty is ERROR or found is ERROR:
             return UndefConst(ERROR)
-        if found is not ty:
+        if found is not ty and not (
+                isinstance(ty, (SetType, DictType))
+                and isinstance(found, (SetType, DictType))
+                and _read_only(self._module, found) is _read_only(self._module, ty)):
             self._diags.emit(D.LANG_TYPE_OPERAND_MISMATCH, expr.right.span,
                              operator=expr.op.value, expected=ty.written(),
                              found=found.written())
             return UndefConst(ERROR)
+        if isinstance(ty, (SetType, DictType)):
+            if not self._accepts(expected, BOOL):
+                self._report_mismatch(expr.span, BOOL, expected)
+                return UndefConst(ERROR)
+            return self._compared_tables(builder, expr, left, right, ty)
         if isinstance(ty, FloatType) and expr.op in _EXACT_ON_FLOATS:
             # Two floating-point values computed different ways are rarely the
             # one value, so asking whether they are is nearly always the wrong
@@ -22517,6 +22536,32 @@ class Checker:
             return UndefConst(ERROR)
         return builder.compare(signed if signed_reading else unsigned,
                                left, right, expr.span)
+
+    def _compared_tables(self, builder: IRBuilder, expr: ast.Binary, left: Value,
+                         right: Value, ty: SetType | DictType) -> Value:
+        """Lower `=` or `≠` between two sets or two dictionaries.
+
+        **What they hold is compared, and not in which order**: the same count,
+        and every key of one in the other standing for an equal value.  The
+        walk is `__pl4g_table_same`, generated per shape.  A dictionary's
+        values are compared by their own `=`, so one whose values have none is
+        refused (4280) -- a record, a sum, a list.
+        """
+        if isinstance(ty, DictType):
+            missing = tables.not_compared(ty.value)
+            if missing is not None:
+                self._diags.emit(D.LANG_TABLE_VALUES_NOT_COMPARABLE, expr.span,
+                                 operator=expr.op.value, found=missing.written())
+                return UndefConst(ERROR)
+        table_ptr = tables.table_type(self._module)
+        same = builder.call(
+            tables.ensure_same(self._module, self._table_shape(ty)),
+            (builder.cast(CastKind.BITCAST, left, table_ptr, expr.span),
+             builder.cast(CastKind.BITCAST, right, table_ptr, expr.span)),
+            BOOL, expr.span)
+        if expr.op is ast.BinaryOp.EQUAL:
+            return same
+        return builder.binary(BinOp.XOR, same, builder.bool_const(True), expr.span)
 
     def _compared_text(self, builder: IRBuilder, expr: ast.Binary, left: Value,
                        right: Value) -> Value:

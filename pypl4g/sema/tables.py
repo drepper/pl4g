@@ -59,8 +59,8 @@ from ..ir.inst import BinOp, CastKind, CmpPred
 from ..ir.layout import DataLayout, size_of
 from ..ir.module import Module
 from ..ir.layout import parts_of
-from ..ir.types import (ARENA, I64, MEM, PtrType, STR, Type, U8, U64,
-                         VOID)
+from ..ir.types import (ARENA, BOOL, CHAR, I64, MEM, EnumType, FloatType,
+                         IntType, PtrType, STR, Type, U8, U64, VOID)
 from ..ir.value import Value
 
 #: What the allocator is called, and what it takes.  Declared here rather than
@@ -1332,6 +1332,142 @@ def _build_select(module: Module, shape: Shape) -> Function:
     builder.position_at(done)
     done.add_param(MEM, "mem")
     builder.ret()
+    return func
+
+
+# -- comparing two ---------------------------------------------------------------
+
+SAME_SYMBOL: Final[str] = "__pl4g_table_same"
+
+
+def not_compared(ty: Type) -> Type | None:
+    """What stops two tables holding values of *ty* from being compared:
+    nothing, or the type itself where `=` is not defined on it.
+
+    The types `=` answers on are numbers, truth values, characters, the values
+    of an enumeration and text.  A table is not what a key stands for (4445),
+    so a table's values are never tables.
+    """
+    if isinstance(ty, (IntType, FloatType, EnumType)) or ty is BOOL \
+            or ty is CHAR or ty is STR:
+        return None
+    return ty
+
+
+def _same_value(builder: IRBuilder, ty: Type, one: Value, other: Value) -> Value:
+    """Whether two values held in tables are equal, as `=` says of them."""
+    from .strings import compare_function
+
+    if ty is not STR:
+        return builder.compare(CmpPred.EQ, one, other)
+    return builder.compare(
+        CmpPred.EQ,
+        builder.call(compare_function(builder.module),
+                     (*_taken_apart(builder, one), *_taken_apart(builder, other)),
+                     I64),
+        builder.int_const(I64, 0))
+
+
+def ensure_same(module: Module, shape: Shape) -> Function:
+    """``__pl4g_table_same(one, other)``: whether two tables hold the same thing.
+
+    **The same count, and every key of one in the other with an equal value.**
+    One walk of the first table's dense array and a probe of the second for each
+    key it holds: the counts being equal, every key of the first found in the
+    second means there is no key of the second that is not in the first.  The
+    order is not asked about -- two tables that were filled differently and
+    hold the same are equal, as Python's dictionaries are -- and the walk stops
+    at the first key that differs.
+
+    **A table is equal to itself without a walk.**  That is the one place where
+    it can differ from comparing what it holds key by key: a value that is not
+    equal to itself, a floating-point not-a-number, makes a table holding it
+    unequal to a copy of itself and equal to itself, as Python's identity check
+    before `==` does.
+
+    Generated per shape, as the probe is, a value compared by the `=` of its
+    own type.
+    """
+    table_ptr = table_type(module)
+    func, fresh = generated(module, named(SAME_SYMBOL, shape),
+                            (table_ptr, table_ptr), BOOL)
+    if not fresh:
+        return func
+    ensure_runtime(module, shape)
+    slot_of = module.functions[named(SLOT_SYMBOL, shape)]
+    entry = func.add_block()
+    counted = func.add_block("counted")
+    walk = func.add_block("walk")
+    look = func.add_block("look")
+    live = func.add_block("live")
+    held = func.add_block("held") if shape.value is not None else None
+    onward = func.add_block("onward")
+    same = func.add_block("same")
+    differs = func.add_block("differs")
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    one = entry.add_param(table_ptr, "one")
+    other = entry.add_param(table_ptr, "other")
+    builder.condbr(_same_address(builder, one, other), same, counted,
+                   true_args=(builder.memory(),), false_args=(builder.memory(),))
+
+    builder.position_at(counted)
+    builder.set_memory(counted.add_param(MEM, "mem"))
+    used = _read(builder, one, USED_FIELD)
+    stride = builder.int_const(U64, shape.stride)
+    entries = _read_address(builder, one, ENTRIES_FIELD, U64)
+    builder.condbr(builder.compare(CmpPred.EQ, _read(builder, one, COUNT_FIELD),
+                                   _read(builder, other, COUNT_FIELD)),
+                   walk, differs,
+                   true_args=(builder.int_const(U64, 0), builder.memory()),
+                   false_args=(builder.memory(),))
+
+    builder.position_at(walk)
+    at = walk.add_param(U64, "at")
+    builder.set_memory(walk.add_param(MEM, "mem"))
+    builder.condbr(builder.compare(CmpPred.UGE, at, used), same, look,
+                   true_args=(builder.memory(),), false_args=(builder.memory(),))
+
+    builder.position_at(look)
+    builder.set_memory(look.add_param(MEM, "mem"))
+    place = _entry(builder, entries, at, stride)
+    builder.condbr(builder.compare(CmpPred.EQ, builder.load(place),
+                                   builder.int_const(U64, LIVE)),
+                   live, onward,
+                   true_args=(builder.memory(),), false_args=(builder.memory(),))
+
+    builder.position_at(live)
+    builder.set_memory(live.add_param(MEM, "mem"))
+    there = builder.call(slot_of, (other, _load_key(builder, shape, place)),
+                         table_ptr)
+    found = builder.compare(CmpPred.EQ, builder.load(there),
+                            builder.int_const(U64, LIVE))
+    if held is None:
+        builder.condbr(found, onward, differs, true_args=(builder.memory(),),
+                       false_args=(builder.memory(),))
+    else:
+        builder.condbr(found, held, differs, true_args=(builder.memory(),),
+                       false_args=(builder.memory(),))
+        builder.position_at(held)
+        builder.set_memory(held.add_param(MEM, "mem"))
+        assert shape.value is not None
+        alike = _same_value(builder, shape.value, _load_value(builder, shape, place),
+                            _load_value(builder, shape, there))
+        builder.condbr(alike, onward, differs, true_args=(builder.memory(),),
+                       false_args=(builder.memory(),))
+
+    builder.position_at(onward)
+    builder.set_memory(onward.add_param(MEM, "mem"))
+    builder.br(walk, (builder.binary(BinOp.WRAP_ADD, at, builder.int_const(U64, 1)),
+                      builder.memory()))
+
+    builder.position_at(same)
+    builder.set_memory(same.add_param(MEM, "mem"))
+    builder.ret(builder.bool_const(True))
+
+    builder.position_at(differs)
+    builder.set_memory(differs.add_param(MEM, "mem"))
+    builder.ret(builder.bool_const(False))
     return func
 
 

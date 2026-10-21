@@ -1,0 +1,16 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4280 LANG_TABLE_VALUES_NOT_COMPARABLE
+
+※ Two dictionaries are equal where each key stands for an equal value in both, so
+※ comparing them compares their values -- and a record has no `=` yet.
+
+type Point = x : u8 ; y : u8
+
+fn alike(a: ⸨u8: Point⸩, b: ⸨u8: Point⸩) → bool:
+    a = b
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6
