@@ -2633,14 +2633,33 @@ namespace pl4g::sema {
   }
 
 
-  ir::Value* Checker::payload_from(ir::Builder& builder, ir::Value* place, const ir::Type* held, Span span)
+  ir::Value* Checker::payload_from(ir::Builder& builder, ir::Value* place, const ir::Type* held, Span span,
+                                   bool in_place)
   {
     auto where = builder.cast(ir::CastKind::bitcast, place, ir::ptr_type(held, true), span);
     if (auto record = ir::as<ir::ProductType>(held); record != nullptr)
       return record_from(builder, where, record, span);
-    if (ir::held_in_memory(held))
+    // A part that is itself a place is answered as where it is, except where
+    // the sum is the place the program named: the arm may write that place,
+    // so the part is copied, that part and not the whole sum.
+    if (ir::held_in_memory(held) && ! in_place)
       return builder.cast(ir::CastKind::bitcast, place, held, span);
     return builder.load(where, span);
+  }
+
+
+  ir::Value* Checker::loaded_or_in_place(ir::Builder& builder, ir::Value* address, const ast::Expr* expr, Span span)
+  {
+    // A sum read out of a place is copied into room of its own; one a `match`
+    // takes apart is read twice, its tag and its part, both before anything
+    // else can write there, so the copy is skipped.
+    auto pointer = ir::as<ir::PtrType>(value_type_of(address));
+    if (match_in_place.contains(id_of(expr)) && pointer != nullptr && ir::is<ir::SumType>(pointer->pointee)) {
+      match_in_place.erase(id_of(expr));
+      matched_in_place.insert(id_of(expr));
+      return builder.cast(ir::CastKind::bitcast, address, pointer->pointee, span);
+    }
+    return builder.load(address, span);
   }
 
 

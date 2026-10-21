@@ -123,6 +123,11 @@ namespace pl4g::mc {
                                                                             std::int64_t link);
     virtual Insts select_save_link(std::int64_t offset, Span span);
     virtual Insts select_restore_link(std::int64_t offset, Span span);
+    // Read `bits` of an argument `offset` bytes above the stack pointer into
+    // `dst`, widened by its sign where `is_signed` says.  Asked once the frame
+    // stands, so the offset is the final one; a load whose offset the
+    // instruction cannot carry builds the address in `dst` itself.
+    virtual Insts select_incoming(Reg dst, std::int64_t offset, int bits, bool is_signed, Span span);
     // Put `bound` into `dst` where `lhs` and `rhs` stand in `cond`.
     virtual Insts select_clamp(Condition cond, Reg dst, const MCOperand& lhs, const MCOperand& rhs,
                                const MCOperand& bound, Span span);
@@ -311,6 +316,11 @@ namespace pl4g::mc {
     void unframe(std::int64_t size, Span span = invalid_span);
     void put_aside(std::int64_t slot, Reg source, Span span = invalid_span);
     void take_back(Reg destination, std::int64_t slot, Span span = invalid_span);
+    // Read into `dst` the argument the caller left `offset` bytes above its
+    // stack pointer, `bits` wide and widened by its sign where `is_signed`
+    // says: a stand-in (`incoming_desc`) the frame turns into a load once it
+    // knows how far above this function's stack pointer the caller's is.
+    void incoming(Reg dst, std::int64_t offset, int bits, bool is_signed, Span span = invalid_span);
     // Return from the current function; `reads` is where the answer was put.
     void ret(Span span = invalid_span, std::vector<Reg> reads = {});
 
@@ -323,6 +333,7 @@ namespace pl4g::mc {
     static bool is_branch_target(const MachineFunction& function, const MachineBasicBlock& block);
     void assign_registers(MachineFunction& function);
     void make_frame(MachineFunction& function);
+    void place_incoming(MachineFunction& function, std::int64_t above);
     std::vector<Reg> kept_registers(const MachineFunction& function);
 
     InstructionSelector& selector_;

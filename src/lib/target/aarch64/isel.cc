@@ -1145,6 +1145,23 @@ namespace pl4g::target::aarch64 {
   }
 
 
+  Insts A64Selector::select_incoming(Reg dst, std::int64_t offset, int bits, bool is_signed, Span span)
+  {
+    // One load from the stack pointer and the offset, which is scaled by the
+    // size of the access and carried in twelve bits: past the end of every
+    // frame `select_frame` makes for anything but a byte.  Beyond that the
+    // program is refused, there being no register free to build the address
+    // in for a floating-point value.
+    if (offset > 0xFFF * (bits / 8)) [[unlikely]]
+      throw UnsupportedOperation(std::format("an argument {} bytes up the stack", offset),
+                                 span.is_valid() ? std::optional(span) : std::nullopt);
+    if (is_float(dst))
+      return { inst("ldr", { named(dst, bits), named(regs().sp), offset_of(offset) }, span) };
+    return { inst(load_mnemonic(bits, is_signed), { named(dst, bits >= 64 ? 64 : 32), named(regs().sp), offset_of(offset) },
+                  span) };
+  }
+
+
   Insts A64Selector::select_spill(std::int64_t slot, Reg source, Span span)
   {
     // Eight bytes of an ordinary register and the whole of one of the others,
@@ -1330,6 +1347,25 @@ namespace pl4g::target::aarch64 {
         // into.
         return registers.view(place->unit, float_register_bits);
       return registers.view(place->unit, std::max(32, width_of(ty)));
+    }
+
+    // Write one part of an argument into its slot at the bottom of the frame:
+    // a whole number as the whole register, which is what it would have been
+    // in a register of the convention, and a floating-point one at its own
+    // width.  The callee reads only as much as the type holds.
+    void pass_on_stack(mc::Assembler& asm_, const OnStack& place, const ir::Type* ty, const MCOperand& source,
+                       Span span)
+    {
+      MCMem slot;
+      slot.base = regs().sp;
+      slot.disp = place.offset;
+      if (ir::is<ir::FloatType>(ty)) {
+        slot.size_bits = bits_of(ty);
+        asm_.store(slot, source, span);
+        return;
+      }
+      slot.size_bits = 64;
+      asm_.store(slot, named(std::get<MCReg>(source).reg, 64), span);
     }
 
     // The register an instruction's result is put in; a value narrower than a
@@ -1882,6 +1918,12 @@ namespace pl4g::target::aarch64 {
       normalize(asm_, ty, made, std::max(32, width_of(ty)), inst->span);
     };
 
+    // What each call passes where, asked once rather than at the call: the
+    // room the arguments that go on the stack are written into is at the
+    // bottom of this function's frame, where the stack pointer is at every
+    // call, so it is taken before anything else of the frame is.
+    auto placed = calls_placed(func, lookup_cconv);
+
     // A call: placed by the callee's convention, the arguments a parallel copy.
     auto lower_call = [&](ir::Instruction* inst) {
       auto span = valid(inst->span);
@@ -1891,27 +1933,32 @@ namespace pl4g::target::aarch64 {
       // so the convention is the one every function of this language follows.
       ir::Value* through = callee == nullptr ? inst->operands[0] : nullptr;
       auto given = inst->arguments();
-      const auto& theirs = lookup_cconv(through != nullptr ? ir::default_cconv : std::string_view(callee->cconv));
-      std::vector<std::vector<const mc::PhysReg*>> going;
-      try {
-        std::vector<const ir::Type*> types;
-        for (auto one : given)
-          types.push_back(one->ty);
-        going = argument_places(theirs, types, through != nullptr || callee->attrs.chained);
-      } catch (const TooManyArguments&) {
-        throw UnsupportedOperation("a call with more arguments than the convention passes in registers", span);
-      }
+      const auto& [placed_by, going] = placed.at(inst);
+      const auto& theirs = *placed_by;
+      // What goes on the stack is written first, into the room at the bottom
+      // of the frame; that reads values and writes no register, so it is no
+      // part of the parallel copy.
       std::vector<Move> handed;
       for (std::size_t position = 0; position < given.size(); ++position) {
         const ir::Value* argument = given[position];
         auto pieces = ir::leaves_of(argument->ty);
         if (ir::made_of_parts(argument->ty)) {
-          for (std::size_t at = 0; at < pieces.size() && at < going[position].size(); ++at)
-            handed.push_back({ as_argument(going[position][at], pieces[at], registers),
-                               named(operands.part(argument, at, span)) });
+          for (std::size_t at = 0; at < pieces.size() && at < going[position].size(); ++at) {
+            MCOperand source = named(operands.part(argument, at, span));
+            if (auto slot = std::get_if<OnStack>(&going[position][at])) {
+              pass_on_stack(asm_, *slot, pieces[at], source, inst->span);
+              continue;
+            }
+            handed.push_back({ as_argument(std::get<const mc::PhysReg*>(going[position][at]), pieces[at], registers),
+                               source });
+          }
           continue;
         }
-        handed.push_back({ as_argument(going[position].at(0), argument->ty, registers),
+        if (auto slot = std::get_if<OnStack>(&going[position].at(0))) {
+          pass_on_stack(asm_, *slot, argument->ty, operands.register_for(argument, inst->span), inst->span);
+          continue;
+        }
+        handed.push_back({ as_argument(std::get<const mc::PhysReg*>(going[position].at(0)), argument->ty, registers),
                            operands.operand(argument, inst->span) });
       }
       Reg called;
@@ -1965,17 +2012,20 @@ namespace pl4g::target::aarch64 {
     // later.  The entry block's are the function's own, arriving where the
     // convention says, and copied out at once.
     ir::BasicBlock* entry = func.blocks.empty() ? nullptr : func.blocks.front().get();
-    std::vector<std::vector<const mc::PhysReg*>> arriving;
+    Places arriving;
     if (entry != nullptr) {
       std::vector<const ir::Type*> types;
       for (const auto& param : entry->params)
         types.push_back(param->ty);
-      try {
-        arriving = argument_places(cconv, types, func.attrs.chained);
-      } catch (const TooManyArguments&) {
-        throw UnsupportedOperation("a function with more arguments than the convention passes in registers");
-      }
+      arriving = argument_places(cconv, types, func.attrs.chained);
     }
+    // The room for outgoing arguments, at offset nought and as large as the
+    // largest call wants it.
+    std::int64_t outgoing = 0;
+    for (const auto& [_, one] : placed)
+      outgoing = std::max(outgoing, stack_bytes(one.second));
+    if (outgoing != 0 && asm_.frame_slot(outgoing, 16) != 0) [[unlikely]]
+      throw InternalError("the room for outgoing arguments is not at the bottom");
     for (std::size_t index = 0; index < func.blocks.size(); ++index) {
       const auto& block = func.blocks[index];
       for (std::size_t position = 0; position < block->params.size(); ++position) {
@@ -1988,9 +2038,11 @@ namespace pl4g::target::aarch64 {
           for (auto part : pieces)
             given.push_back(new_value(part, registers, layout));
         } else
-          for (std::size_t at = 0; at < pieces.size() && at < arriving[position].size(); ++at)
+          for (std::size_t at = 0; at < pieces.size() && at < arriving[position].size(); ++at) {
+            auto place = std::get_if<const mc::PhysReg*>(&arriving[position][at]);
             given.push_back(new_value(pieces[at], registers, layout,
-                                      as_argument(arriving[position][at], pieces[at], registers)));
+                                      place == nullptr ? nullptr : as_argument(*place, pieces[at], registers)));
+          }
         held[param] = given.at(0);
         if (given.size() > 1)
           extra[param] = { given.begin() + 1, given.end() };
@@ -2000,9 +2052,17 @@ namespace pl4g::target::aarch64 {
       for (std::size_t position = 0; position < entry->params.size(); ++position) {
         const ir::BlockParam* param = entry->params[position].get();
         auto pieces = ir::leaves_of(param->ty);
-        for (std::size_t at = 0; at < pieces.size() && at < arriving[position].size(); ++at)
+        for (std::size_t at = 0; at < pieces.size() && at < arriving[position].size(); ++at) {
+          if (auto slot = std::get_if<OnStack>(&arriving[position][at])) {
+            // Read where the caller left it, in its own frame.
+            asm_.incoming(operands.part(param, at, std::nullopt), slot->offset, width_of(pieces[at]),
+                          is_signed_type(pieces[at]), func.span);
+            continue;
+          }
           asm_.loadreg(operands.part(param, at, std::nullopt),
-                       named(as_argument(arriving[position][at], pieces[at], registers)), func.span);
+                       named(as_argument(std::get<const mc::PhysReg*>(arriving[position][at]), pieces[at], registers)),
+                       func.span);
+        }
       }
 
     for (std::size_t index = 0; index < func.blocks.size(); ++index) {

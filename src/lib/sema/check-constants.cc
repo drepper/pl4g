@@ -2977,7 +2977,7 @@ namespace pl4g::sema {
       diags.emit(D::LANG_DEREF_NOT_A_REFERENCE, expr->span, { { "found", found->written() } });
       return error_value(module);
     }
-    auto answer = builder.load(value, expr->span);
+    auto answer = loaded_or_in_place(builder, value, expr, expr->span);
     if (! accepts(expected, answer->ty))
       report_mismatch(expr->span, answer->ty, expected);
     return answer;

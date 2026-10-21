@@ -15,6 +15,19 @@ namespace pl4g::mc {
       throw std::logic_error("this target has no " + std::string(what));
     }
 
+    // What stands for the read of an argument the caller left on the stack
+    // until the frame is made: it writes its first operand and reads nothing,
+    // and the three immediates after it are the slot's offset above the
+    // caller's stack pointer, how many bits the value is, and whether it is
+    // widened by its sign.  Nothing that encodes ever sees one.
+    const InstDesc incoming_row = [] {
+      InstDesc made;
+      made.mnemonic = "incoming";
+      made.operands = { OperandSpec{ OperandKind::reg }, OperandSpec{ OperandKind::imm },
+                        OperandSpec{ OperandKind::imm }, OperandSpec{ OperandKind::imm } };
+      return made;
+    }();
+
   } // anonymous namespace
 
 
@@ -128,6 +141,7 @@ namespace pl4g::mc {
   }
   Insts InstructionSelector::select_save_link(std::int64_t, Span) { missing("select_save_link"); }
   Insts InstructionSelector::select_restore_link(std::int64_t, Span) { missing("select_restore_link"); }
+  Insts InstructionSelector::select_incoming(Reg, std::int64_t, int, bool, Span) { missing("select_incoming"); }
   Insts InstructionSelector::select_clamp(Condition, Reg, const MCOperand&, const MCOperand&, const MCOperand&, Span)
   {
     missing("select_clamp");
@@ -315,6 +329,10 @@ namespace pl4g::mc {
       function.return_at = std::nullopt;
       function.caller_at = 0;
     }
+    // The arguments the caller left on the stack are above this frame, and
+    // above where the caller's stack pointer is, which is what the walk asks
+    // as well -- so the same answer says where they are.
+    place_incoming(function, selector_.frame_walk(total, size, link).second);
     if (total == 0)
       return;
     if (is_branch_target(function, *function.blocks[0])) [[unlikely]]
@@ -351,6 +369,29 @@ namespace pl4g::mc {
           out.insert(out.end(), undone.begin(), undone.end());
         }
         out.push_back(inst);
+      }
+      block->insts = std::move(out);
+    }
+  }
+
+
+  void Assembler::place_incoming(MachineFunction& function, std::int64_t above)
+  {
+    for (auto& block : function.blocks) {
+      if (std::ranges::none_of(block->insts, [](const InstRef& inst) { return inst->desc == &incoming_row; }))
+        continue;
+      Insts out;
+      for (const auto& inst : block->insts) {
+        if (inst->desc != &incoming_row) {
+          out.push_back(inst);
+          continue;
+        }
+        auto into = std::get<MCReg>(inst->operands[0]).reg;
+        auto offset = std::int64_t(std::get<MCImm>(inst->operands[1]).value);
+        auto bits = int(std::get<MCImm>(inst->operands[2]).value);
+        bool is_signed = std::get<MCImm>(inst->operands[3]).value != 0;
+        auto loaded = selector_.select_incoming(into, above + offset, bits, is_signed, inst->span);
+        out.insert(out.end(), loaded.begin(), loaded.end());
       }
       block->insts = std::move(out);
     }
@@ -757,6 +798,15 @@ namespace pl4g::mc {
   void Assembler::take_back(Reg destination, std::int64_t slot, Span span)
   {
     emit(selector_.select_reload(destination, slot, span));
+  }
+
+
+  void Assembler::incoming(Reg dst, std::int64_t offset, int bits, bool is_signed, Span span)
+  {
+    emit({ make_inst(&incoming_row,
+                     { MCReg{ dst }, MCImm{ offset, 32, false }, MCImm{ bits, 32, false },
+                       MCImm{ is_signed ? 1 : 0, 32, false } },
+                     span) });
   }
 
 

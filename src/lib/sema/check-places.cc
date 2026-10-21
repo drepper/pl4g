@@ -1380,11 +1380,14 @@ namespace pl4g::sema {
 
 
   ir::Value* Checker::element_of(ir::Builder& builder, ir::Value* elements, const ir::ListType* ty, ir::Value* at,
-                                 Span span)
+                                 Span span, const ast::Expr* expr)
   {
     auto stride = std::int64_t(ir::stride_of(ty->element, layout()));
     ir::Value* offset = builder.binary(ir::BinOp::wrap_mul, at, builder.int_const(ir::u64(), stride), span);
-    return builder.load(builder.binary(ir::BinOp::add, elements, offset, span), span);
+    ir::Value* address = builder.binary(ir::BinOp::add, elements, offset, span);
+    if (expr == nullptr)
+      return builder.load(address, span);
+    return loaded_or_in_place(builder, address, expr, span);
   }
 
 
@@ -1780,7 +1783,7 @@ namespace pl4g::sema {
     builder.check(builder.compare(ir::CmpPred::ult, at, count, expr->span), "an index outside its list",
                   target::statuses::OUT_OF_RANGE, expr->span);
     ir::Value* elements = builder.extract(base, 0, ir::parts_of(ty)[0], expr->span);
-    return element_of(builder, elements, ty, at, expr->span);
+    return element_of(builder, elements, ty, at, expr->span, expr);
   }
 
 

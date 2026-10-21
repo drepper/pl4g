@@ -170,7 +170,7 @@
     // Move what follows one element down, and write the shorter list back.
     void erased(ir::Builder& builder, ir::Value* place, const ir::ListType* ty, ir::Value* elements, ir::Value* count, ir::Value* at, Span span);  // check.py:16412
     // The element `at` places along, read where the elements are.
-    ir::Value* element_of(ir::Builder& builder, ir::Value* elements, const ir::ListType* ty, ir::Value* at, Span span);  // check.py:16429
+    ir::Value* element_of(ir::Builder& builder, ir::Value* elements, const ir::ListType* ty, ir::Value* at, Span span, const ast::Expr* expr = nullptr);  // check.py:16429
     // Check `†l⟦i⟧`, which takes one element out and answers what it was.
     ir::Value* lower_take_at(ir::Builder& builder, const ast::TakeAt* expr, const ir::Type* expected);  // check.py:16438
     // Room in the list at `place` for `more` elements after the ones it has.

@@ -219,6 +219,9 @@ namespace pl4g::sema {
     ir::Value* memory = nullptr;
     bool carried = false;
     bool payload = false;
+    // Whether the place the part is read from is the place the program named
+    // rather than a copy of the sum made for the match.
+    bool in_place = false;
   };
 
   // A type a program defined, and what it turned out to be.

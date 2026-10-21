@@ -105,6 +105,7 @@ namespace pl4g::target::riscv64 {
                                                                     std::int64_t link) override;
     mc::Insts select_save_link(std::int64_t offset, Span span) override;
     mc::Insts select_restore_link(std::int64_t offset, Span span) override;
+    mc::Insts select_incoming(mc::Reg dst, std::int64_t offset, int bits, bool is_signed, Span span) override;
     mc::Insts select_spill(std::int64_t slot, mc::Reg source, Span span) override;
     mc::Insts select_reload(mc::Reg destination, std::int64_t slot, Span span) override;
     mc::Insts select_frame(std::int64_t size, Span span) override;

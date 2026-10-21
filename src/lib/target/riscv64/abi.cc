@@ -66,6 +66,9 @@ namespace pl4g::target::riscv64 {
       auto one = shaped("pl4g");
       const auto& regs = registers();
       one.int_ret_regs = { regs.reg("a0"), regs.reg("a1"), regs.reg("a2") };
+      // As many as it answers values in, so that an answer of floating-point
+      // numbers is answered in registers wherever one of whole numbers is.
+      one.float_ret_regs = { regs.reg("f10"), regs.reg("f11"), regs.reg("f12") };
       // t2, as GCC has it: a temporary no argument uses.
       one.chain_reg = regs.reg("t2");
       return one;
@@ -80,6 +83,12 @@ namespace pl4g::target::riscv64 {
       auto one = shaped("lp64");
       const auto& regs = registers();
       one.int_ret_regs = { regs.reg("a0"), regs.reg("a1") };
+      // What the system answers a pair of `double`s in, fa0 and fa1.
+      one.float_ret_regs = { regs.reg("f10"), regs.reg("f11") };
+      // A floating-point argument with no floating-point register left is
+      // passed as the integer convention passes one, in an ordinary register
+      // while there is one and on the stack after that.
+      one.floats_in_integers = true;
       return one;
     }();
     return made;

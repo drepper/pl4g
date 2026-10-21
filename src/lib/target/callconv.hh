@@ -3,12 +3,14 @@
 // A port of pypl4g/target/callconv.py.
 #pragma once
 
+#include <functional>
 #include <optional>
 #include <set>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 #include "ir/ir.hh"
@@ -38,6 +40,10 @@ namespace pl4g::target {
     // Where a call through a value passes a lambda's environment, and where a
     // function called that way finds it; nothing for a convention that has none.
     const mc::PhysReg* chain_reg = nullptr;
+    // Whether a floating-point argument that finds no register of its own kind
+    // left takes an ordinary one before it takes the stack, as RISC-V's
+    // convention has it.
+    bool floats_in_integers = false;
 
     // The allocation orders by the name of the class each belongs to: one
     // entry where the target says nothing about floating point.
@@ -53,18 +59,49 @@ namespace pl4g::target {
   std::vector<const mc::PhysReg*> destroyed_by(const ir::Function* callee, const CallConvDesc& cconv,
                                                mc::RegisterInfo& registers, const Destroyed* known);
 
-  // More arguments than a convention passes in registers.
+  // More parts in an answer than a convention answers in registers: a defect
+  // of the compiler, `largeanswers` having sent every answer too large for the
+  // registers through storage before code is generated.
   struct TooManyArguments : std::runtime_error {
     TooManyArguments() : std::runtime_error("too many arguments") {}
   };
 
-  // Which registers each argument is passed in, in order, one per part.
+  // How many bytes one part takes on the stack.
+  inline constexpr std::int64_t stack_slot = 8;
+
+  // A part passed on the stack: its slot begins `offset` bytes above the stack
+  // pointer at the call.
+  struct OnStack {
+    std::int64_t offset = 0;
+    bool operator==(const OnStack&) const = default;
+  };
+
+  // Where one part of an argument travels.
+  using Place = std::variant<const mc::PhysReg*, OnStack>;
+  using Places = std::vector<std::vector<Place>>;
+
+  // Where each argument is passed, in order, one place per part: a register of
+  // its kind while there is one, an eight-byte slot on the stack after that.
   // `chained` passes the first in the chain register.
-  std::vector<std::vector<const mc::PhysReg*>> argument_places(const CallConvDesc& cconv,
-                                                               std::span<const ir::Type* const> types,
-                                                               bool chained = false);
+  Places argument_places(const CallConvDesc& cconv, std::span<const ir::Type* const> types, bool chained = false);
+
+  // How much room the parts `places` puts on the stack take, rounded to sixteen.
+  std::int64_t stack_bytes(const Places& places);
 
   // Which registers a value of `ty` is answered with, one per part.
   std::vector<const mc::PhysReg*> result_places(const CallConvDesc& cconv, const ir::Type* ty);
+
+  // Every call of a function, with the convention it is placed by and where
+  // each part of each of its arguments goes.
+  using CallsPlaced = std::unordered_map<const ir::Instruction*, std::pair<const CallConvDesc*, Places>>;
+
+  // What `calls_placed` asks a convention of: how a target looks one up.
+  using Conventions = std::function<const CallConvDesc&(std::string_view)>;
+
+  // Every call of `func`, placed: the callee's convention, and for a call
+  // through a value the language's own with the environment in its chain
+  // register.  Asked before any code is generated, the stack's share being
+  // room at the bottom of the caller's frame taken before anything else is.
+  CallsPlaced calls_placed(const ir::Function& func, const Conventions& conventions);
 
 } // namespace pl4g::target

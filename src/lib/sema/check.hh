@@ -326,6 +326,10 @@ namespace pl4g::sema {
     // The values that are copied where they are lowered, by identity: a list
     // read out of a place into another, where either may change it in place.
     KeySet copying;  // check.py:3996
+    // The subjects of a `match` that are to be read where they are, by the
+    // identity of the expression, and those that were.
+    KeySet match_in_place;
+    KeySet matched_in_place;
     // The operators, by identity, whose answer is wanted as one run of lanes
     // held as a value rather than as an array in room of its own: what `⎕mask`
     // was handed, and every operator walked over arrays inside it.

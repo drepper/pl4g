@@ -55,6 +55,9 @@ namespace pl4g::target::aarch64 {
     static const CallConvDesc made = [] {
       CallConvDesc cc = shaped("pl4g");
       cc.int_ret_regs = { reg("x0"), reg("x1"), reg("x2") };
+      // As many as it answers values in, so that an answer of floating-point
+      // numbers is answered in registers wherever one of whole numbers is.
+      cc.float_ret_regs = { reg("d0"), reg("d1"), reg("d2") };
       // Not x18, GCC's: this back end leaves x18 alone.  x15 is a temporary no
       // argument uses, and x16 and x17 are the linker's.
       cc.chain_reg = reg("x15");
@@ -69,6 +72,9 @@ namespace pl4g::target::aarch64 {
     static const CallConvDesc made = [] {
       CallConvDesc cc = shaped("aapcs64");
       cc.int_ret_regs = { reg("x0"), reg("x1") };
+      // What the system answers a pair of `double`s in, the first two of the
+      // four a homogeneous aggregate may take.
+      cc.float_ret_regs = { reg("d0"), reg("d1") };
       return cc;
     }();
     return made;

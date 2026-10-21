@@ -1130,6 +1130,18 @@ namespace pl4g::target::x86_64 {
   Insts X86Selector::select_restore_link(std::int64_t, Span) { return {}; }
 
 
+  Insts X86Selector::select_incoming(Reg dst, std::int64_t offset, int bits, bool is_signed, Span span)
+  {
+    // A load from the stack pointer and the offset, which any offset fits.
+    MCMem place;
+    place.base = registers().rsp;
+    place.disp = offset;
+    place.size_bits = bits;
+    place.is_signed = is_signed;
+    return select_move(dst, place, span);
+  }
+
+
   Insts X86Selector::select_spill(std::int64_t slot, Reg source, Span span)
   {
     // The whole of a vector register goes: the same register holds a run.

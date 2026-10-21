@@ -78,6 +78,9 @@ namespace pl4g::target::x86_64 {
       // function answering with what it was given is a bare `ret`.
       cc.int_arg_regs = { r.rax, r.rdx, r.rcx, r.rsi, r.rdi, r.reg("r8"), r.reg("r9"), r.reg("r10") };
       cc.int_ret_regs = { r.rax, r.rdx, r.rcx };
+      // As many as it answers values in, so that an answer of floating-point
+      // numbers is answered in registers wherever one of whole numbers is.
+      cc.float_ret_regs = { r.reg("xmm0"), r.reg("xmm1"), r.reg("xmm2") };
       // Not r10, the static chain of the system's convention: this one passes
       // an argument there.  r11 is the one caller-saved register no argument
       // uses.
@@ -95,6 +98,8 @@ namespace pl4g::target::x86_64 {
       CallConvDesc cc = common("sysv64");
       cc.int_arg_regs = { r.rdi, r.rsi, r.rdx, r.rcx, r.reg("r8"), r.reg("r9") };
       cc.int_ret_regs = { r.rax, r.rdx };
+      // What the system answers a pair of `double`s in.
+      cc.float_ret_regs = { r.reg("xmm0"), r.reg("xmm1") };
       return cc;
     }();
     return made;

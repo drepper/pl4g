@@ -22,7 +22,7 @@
     // Lower a `match` over a result, which has two alternatives.
     ir::Value* lower_match_on_result(ir::Builder& builder, const ast::Match* stmt, ir::Function* func, ir::Value* subject, const ir::ResultType* ty, std::span<const std::tuple<const ast::MatchArm*, KeySet>> taken, const ir::Type* wanted, bool produces);  // check.py:20933
     // Lower a `match` over a sum.
-    ir::Value* lower_match_on_sum(ir::Builder& builder, const ast::Match* stmt, ir::Function* func, ir::Value* subject, const ir::SumType* ty, std::span<const std::tuple<const ast::MatchArm*, KeySet>> taken, const ir::Type* wanted, bool produces);  // check.py:20977
+    ir::Value* lower_match_on_sum(ir::Builder& builder, const ast::Match* stmt, ir::Function* func, ir::Value* subject, const ir::SumType* ty, std::span<const std::tuple<const ast::MatchArm*, KeySet>> taken, const ir::Type* wanted, bool produces, bool in_place = false);  // check.py:20977
     // Lower a `match` over an enumeration.
     ir::Value* lower_match_on_enum(ir::Builder& builder, const ast::Match* stmt, ir::Function* func, ir::Value* subject, const ir::EnumType* ty, std::span<const std::tuple<const ast::MatchArm*, KeySet>> taken, const ir::Type* wanted, bool produces);  // check.py:21029
     // Lower each arm into its block and join what the arms leave behind.

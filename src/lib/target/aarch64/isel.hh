@@ -97,6 +97,7 @@ namespace pl4g::target::aarch64 {
                                                                     std::int64_t link) override;
     mc::Insts select_save_link(std::int64_t offset, Span span) override;
     mc::Insts select_restore_link(std::int64_t offset, Span span) override;
+    mc::Insts select_incoming(mc::Reg dst, std::int64_t offset, int bits, bool is_signed, Span span) override;
     mc::Insts select_clamp(mc::Condition cond, mc::Reg dst, const mc::MCOperand& lhs, const mc::MCOperand& rhs,
                            const mc::MCOperand& bound, Span span) override;
     mc::Insts select_select(mc::Reg dst, const mc::MCOperand& chooser, const mc::MCOperand& if_true,

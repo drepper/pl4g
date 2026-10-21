@@ -158,7 +158,11 @@
     // One piece of a copy, as a pointer to a value of `part`.
     ir::Value* byte_place(ir::Builder& builder, ir::Value* place, const ir::Type* part, std::int64_t offset, Span span);  // check.py:25711
     // Read what a part carries out of the place holding a sum.
-    ir::Value* payload_from(ir::Builder& builder, ir::Value* place, const ir::Type* held, Span span);  // check.py:25722
+    ir::Value* payload_from(ir::Builder& builder, ir::Value* place, const ir::Type* held, Span span, bool in_place = false);
+    // What is at `address`, read as `expr` reads it -- or, where `expr` is the
+    // subject of a `match` asking to be read in place and what is there is a
+    // sum, the place itself, which is what a value of a sum is.
+    ir::Value* loaded_or_in_place(ir::Builder& builder, ir::Value* address, const ast::Expr* expr, Span span);  // check.py:25722
     // Lower `⎕syscall(NUMBER, ARG...)`: what the kernel answered.
     ir::Value* lower_syscall(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:25739
     // Lower `⎕at(ADDRESS, ⌜TYPE⌝)` and `⎕span(ADDRESS, COUNT, ⌜TYPE⌝)`.

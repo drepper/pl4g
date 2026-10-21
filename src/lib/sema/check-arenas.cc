@@ -2501,6 +2501,8 @@ namespace pl4g::sema {
 
   ir::Value* Checker::lower_element(ir::Builder& builder, const ast::Element* expr, const ir::Type* expected)
   {
+    // The expression as written, which the index settled below may replace.
+    const ast::Element* as_written = expr;
     if (ir::Value* found = paired(builder, expr->base, array_pair, expr->indices, expr->span, expected))
       return found;
     ir::Value* base = array_in_a_field(builder, expr->base, false);
@@ -2601,7 +2603,8 @@ namespace pl4g::sema {
         report_mismatch(expr->span, found_ty, expected);
       return row;
     }
-    ir::Value* value = builder.load(element_place(builder, start, array->element, offset, expr->span), expr->span);
+    ir::Value* value = loaded_or_in_place(builder, element_place(builder, start, array->element, offset, expr->span),
+                                          as_written, expr->span);
     if (! accepts(expected, array->element))
       report_mismatch(expr->span, array->element, expected);
     return value;

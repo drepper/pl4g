@@ -141,7 +141,22 @@ namespace pl4g::sema {
   ir::Value* Checker::lower_match(ir::Builder& builder, const ast::Match* stmt, ir::Function* func,
                                   const ir::Type* wanted, bool produces)
   {
-    auto subject = lower_expr(builder, stmt->subject, nullptr);
+    // A sum that is somewhere -- what a reference names, an element, a field
+    // -- is taken apart where it is: its tag is read there before any arm runs
+    // and the part the chosen arm binds as that arm begins, so a copy of the
+    // whole would be bytes nothing else reads.
+    auto asked = id_of(stmt->subject);
+    match_in_place.insert(asked);
+    ir::Value* subject;
+    try {
+      subject = lower_expr(builder, stmt->subject, nullptr);
+    } catch (...) {
+      match_in_place.erase(asked);
+      throw;
+    }
+    match_in_place.erase(asked);
+    bool in_place = matched_in_place.contains(asked);
+    matched_in_place.erase(asked);
     auto ty = value_type_of(subject);
     if (ty == error_ty())
       return fresh_undef(error_ty());
@@ -153,7 +168,7 @@ namespace pl4g::sema {
     if (! taken)
       return fresh_undef(error_ty());
     if (auto sum = ir::as<ir::SumType>(ty))
-      return lower_match_on_sum(builder, stmt, func, subject, sum, *taken, wanted, produces);
+      return lower_match_on_sum(builder, stmt, func, subject, sum, *taken, wanted, produces, in_place);
     if (auto en = ir::as<ir::EnumType>(ty))
       return lower_match_on_enum(builder, stmt, func, subject, en, *taken, wanted, produces);
     return lower_match_on_result(builder, stmt, func, subject, ir::as<ir::ResultType>(ty), *taken, wanted, produces);
@@ -326,7 +341,7 @@ namespace pl4g::sema {
   ir::Value* Checker::lower_match_on_sum(ir::Builder& builder, const ast::Match* stmt, ir::Function* func,
                                          ir::Value* subject, const ir::SumType* ty,
                                          std::span<const std::tuple<const ast::MatchArm*, KeySet>> taken,
-                                         const ir::Type* wanted, bool produces)
+                                         const ir::Type* wanted, bool produces, bool in_place)
   {
     if (taken.size() == 1 && std::get<0>(taken[0])->pattern->wildcard)
       return run_arms(builder, stmt, func, std::vector<ArmPlan>{ arm_plan(std::get<0>(taken[0])->body) },
@@ -363,6 +378,7 @@ namespace pl4g::sema {
         binds = ArmBinding{ std::string(*arm->pattern->name), arm->pattern->name_span, arm->pattern->span, place, held };
       }
       plan.push_back(arm_plan(arm->body, blocks[arm], binds, false, true));
+      plan.back().in_place = in_place;
     }
     return run_arms(builder, stmt, func, plan, wanted, produces);
   }
@@ -448,7 +464,7 @@ namespace pl4g::sema {
       push_scope();
       if (arm.binds) {
         const auto& b = *arm.binds;
-        auto bound = arm.payload   ? payload_from(builder, b.value, b.ty, b.value_span)
+        auto bound = arm.payload   ? payload_from(builder, b.value, b.ty, b.value_span, arm.in_place)
                      : arm.carried ? builder.error(b.value, b.ty, b.value_span)
                                    : builder.unwrap(b.value, b.ty, b.value_span);
         name_value(bound, b.name, b.span);

@@ -1064,7 +1064,8 @@ namespace pl4g::sema {
     auto place = field_place(builder, where, ty, *at, expr->span);
     auto held = ty->fields[*at].second;
     auto record = ir::as<ir::ProductType>(held);
-    auto found = record != nullptr ? record_from(builder, place, record, expr->span) : builder.load(place, expr->span);
+    auto found = record != nullptr ? record_from(builder, place, record, expr->span)
+                                   : loaded_or_in_place(builder, place, expr, expr->span);
     if (! accepts(expected, found->ty))
       report_mismatch(expr->span, found->ty, expected);
     return found;
