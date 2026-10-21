@@ -1,0 +1,95 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A frame is as large as what a function keeps in it, and no larger is refused.
+※ The offset a load or a store carries reaches 2047 bytes on RISC-V and 4095
+※ on AArch64 -- 32760 for a word, the offset being counted in what is read --
+※ and what moves the stack pointer carries twelve bits on both; past that a
+※ place is built in a register, the one each sets aside for it in a function
+※ whose frame grows that large, and in no other.  Each
+※ function here keeps an array of a size past one of those ends, takes more
+※ arguments than go in registers -- so that some are read from above the frame
+※ -- keeps whole and floating-point values across a call it makes on every
+※ turn, so that its registers are saved and its values set aside where the
+※ frame is, and answers with what all of them come to.  A frame past sixteen
+※ megabytes, the most two instructions move the stack pointer by on AArch64,
+※ is held to its instructions in `tests/compiler/test_frame_reach.py`: an
+※ array that large takes the code generator a long time to fill.
+
+let std := ⎕import("std")
+
+@[inline(never)]
+fn mixed(x: u64, y: f64) → u64:
+    x + (⎕narrow(⎕trunc(y, ⌜i64⌝) ?? 0i64, ⌜u64⌝) ?? 0u64)
+
+@[inline(never)]
+fn small(a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64, h: u64, i: u64, j: u64, y: f64) → u64:
+    let rows: mut u64⟦300⟧ = 300 ⍴ 0u64
+    let at: mut u64 ¤idx = 0
+    let sum: mut u64 = 0u64
+    let z: mut f64 = y
+    while at < 300:
+        rows⟦at⟧ ← mixed(a + b + c + d + e + f + g + h + i + j, z)
+        z ← z + 1f64
+        at ← at + 1
+    at ← 0
+    while at < 300:
+        sum ← sum + rows⟦at⟧
+        at ← at + 1
+    sum + a + j + (⎕narrow(⎕trunc(z, ⌜i64⌝) ?? 0i64, ⌜u64⌝) ?? 0u64)
+
+@[inline(never)]
+fn page(a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64, h: u64, i: u64, j: u64, y: f64) → u64:
+    let rows: mut u64⟦520⟧ = 520 ⍴ 0u64
+    let at: mut u64 ¤idx = 0
+    let sum: mut u64 = 0u64
+    let z: mut f64 = y
+    while at < 520:
+        rows⟦at⟧ ← mixed(a + b + c + d + e + f + g + h + i + j, z)
+        z ← z + 1f64
+        at ← at + 1
+    at ← 0
+    while at < 520:
+        sum ← sum + rows⟦at⟧
+        at ← at + 1
+    sum + a + j + (⎕narrow(⎕trunc(z, ⌜i64⌝) ?? 0i64, ⌜u64⌝) ?? 0u64)
+
+@[inline(never)]
+fn words(a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64, h: u64, i: u64, j: u64, y: f64) → u64:
+    let rows: mut u64⟦4200⟧ = 4200 ⍴ 0u64
+    let at: mut u64 ¤idx = 0
+    let sum: mut u64 = 0u64
+    let z: mut f64 = y
+    while at < 4200:
+        rows⟦at⟧ ← mixed(a + b + c + d + e + f + g + h + i + j, z)
+        z ← z + 1f64
+        at ← at + 1
+    at ← 0
+    while at < 4200:
+        sum ← sum + rows⟦at⟧
+        at ← at + 1
+    sum + a + j + (⎕narrow(⎕trunc(z, ⌜i64⌝) ?? 0i64, ⌜u64⌝) ?? 0u64)
+
+※ What each answers: n turns of 55 + z, z counting up from 0.5 and truncated,
+※ then a, j and the z it ended at.
+fn expected(n: u64) → u64:
+    let sum: mut u64 = 0u64
+    let k: mut u64 = 0u64
+    while k < n:
+        sum ← sum + 55u64 + k
+        k ← k + 1u64
+    sum + 1u64 + 10u64 + n
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ one, though the compiler cannot see it
+    let one: u64 = ⎕drop(#init.args)
+    let half: f64 = 0.5f64 × ⎕float(one, ⌜f64⌝)
+    let args: u64⟦10⟧ = ⟦one, 2u64 × one, 3u64 × one, 4u64 × one, 5u64 × one, 6u64 × one,
+                          7u64 × one, 8u64 × one, 9u64 × one, 10u64 × one⟧
+    if small(args⟦0⟧, args⟦1⟧, args⟦2⟧, args⟦3⟧, args⟦4⟧, args⟦5⟧, args⟦6⟧, args⟦7⟧, args⟦8⟧, args⟦9⟧, half) ≠ expected(300u64):
+        return 1u6
+    if page(args⟦0⟧, args⟦1⟧, args⟦2⟧, args⟦3⟧, args⟦4⟧, args⟦5⟧, args⟦6⟧, args⟦7⟧, args⟦8⟧, args⟦9⟧, half) ≠ expected(520u64):
+        return 2u6
+    if words(args⟦0⟧, args⟦1⟧, args⟦2⟧, args⟦3⟧, args⟦4⟧, args⟦5⟧, args⟦6⟧, args⟦7⟧, args⟦8⟧, args⟦9⟧, half) ≠ expected(4200u64):
+        return 3u6
+    0u6

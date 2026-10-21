@@ -38,6 +38,22 @@ where it is busy and in memory where it is not would generate better code and is
 a great deal more machinery; this is the version that is obviously right, and
 the shape of the loop is what makes the better version a change in one place.
 
+**One split is made: around a call.**  A value live across a call needs a
+register the call does not destroy, and there are five or six of those; where
+the value is wanted far more often than the calls it lives across are made --
+by `block_frequencies`, which guesses at branches as well as counting loops --
+it is put in the frame just before each such call and read back just after,
+and is in an ordinary register everywhere else.  A loop that calls a function
+on one way of a branch then pays for the call where the call is made, rather
+than with a read of the frame on every turn.  A value split so that is still in
+the way in the next round goes to the frame everywhere, as any other.
+
+**A value moved to or from another is given the other's register** where that
+is free, as a hint is honoured: a block's parameter and what a branch hands it,
+the first operand of an instruction that writes over it and what is written.
+The move is then a move of a register to itself, which goes -- on the edge that
+goes round a loop, that is every value the loop carries.
+
 Spilling is done by rewriting and starting again rather than by patching the
 assignment as it goes.  A spill adds instructions, which moves every position
 after it and so changes every range; recomputing is simpler than repairing, and
@@ -59,7 +75,7 @@ from typing import Final, Protocol, Sequence
 
 from .desc import InstFlags, OperandRole
 from .inst import MCInst
-from .loops import loop_depths
+from .loops import block_frequencies, loop_depths
 from .machine import MachineFunction
 from .operand import MCMem, MCOperand, MCReg
 from ..source.location import Span
@@ -269,6 +285,12 @@ class Assignment:
     #: Reads of the frame made into nothing or into a move between registers,
     #: because what the slot holds was still in a register.
     forwarded: int = 0
+    #: The virtual registers that are put in the frame only across the calls
+    #: they live across, by their identity, and the slot each is put in; and
+    #: the reads and writes of the frame that put them there, by the identity
+    #: of the instruction.
+    split: dict[int, int] = field(default_factory=dict)
+    split_code: dict[int, set[int]] = field(default_factory=dict)
 
 
 def _merged(stretches: Sequence[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
@@ -333,6 +355,24 @@ def defs_and_uses(inst: MCInst) -> tuple[list[Reg], list[Reg]]:
     return defs, uses
 
 
+def _move_partners(function: MachineFunction) -> dict[int, list[int]]:
+    """For each virtual register, the virtual registers it is moved to or from,
+    by their identity and in the order the moves stand in."""
+    found: dict[int, list[int]] = {}
+    for inst in function.instructions():
+        if InstFlags.MOVE not in inst.desc.flags or len(inst.operands) != 2:
+            continue
+        first, second = inst.operands
+        if not isinstance(first, MCReg) or not isinstance(second, MCReg):
+            continue
+        if not isinstance(first.reg, VirtReg) or not isinstance(second.reg, VirtReg) \
+                or first.reg is second.reg:
+            continue
+        found.setdefault(first.reg.ident, []).append(second.reg.ident)
+        found.setdefault(second.reg.ident, []).append(first.reg.ident)
+    return found
+
+
 #: What the one class is called where a target names no classes at all.  Every
 #: value then belongs to it, which is the arrangement a target has until it has
 #: a value that is not an integer.
@@ -348,6 +388,14 @@ class LinearScan:
         self._registers = registers
         #: What the target says a read or a write of a frame slot looks like.
         self._selector = selector
+        #: What each virtual register is moved to or from, worked out afresh
+        #: for every round of `run`.
+        self._partners: dict[int, list[int]] = {}
+        #: How often each register is read and written, in the measure of
+        #: `block_frequencies`, and every call with how often it runs; both of
+        #: the round being allocated.
+        self._often: dict[int, float] = {}
+        self._calls: list[tuple[int, float]] = []
         #: The units that may be given out, in the order they are preferred,
         #: for each class of register.  The convention states it, since which
         #: registers are free to use is what a convention is about.
@@ -385,8 +433,11 @@ class LinearScan:
         the rounds run out.
         """
         assignment = Assignment()
-        for _ in range(self._widest_order + 1):
+        # Twice as many rounds as there are registers: a value may be put in
+        # the frame across its calls in one and everywhere in the next.
+        for _ in range(2 * self._widest_order + 2):
             ranges, blocked = self._live_ranges(function)
+            self._partners = _move_partners(function)
             assignment.ranges = ranges
             crowded = self._assign(ranges, blocked, assignment)
             if not crowded:
@@ -419,9 +470,12 @@ class LinearScan:
         flows, seen = self._flow(function)
         _propagate(flows)
         weights = self._weights(function, flows)
+        often = self._frequencies(function, flows)
         first: dict[int, int] = {}
         last: dict[int, int] = {}
         cost: dict[int, int] = {}
+        self._often = {}
+        self._calls = []
 
         def touch(key: int, point: int) -> None:
             """Note that the register is live at *point*."""
@@ -440,6 +494,11 @@ class LinearScan:
         for position, inst in enumerate(function.instructions()):
             defs, uses = defs_and_uses(inst)
             weight = weights[position]
+            runs = often[position]
+            # A call that destroys nothing -- the one to the fault path, which
+            # does not come back -- is no reason to move a value anywhere.
+            if InstFlags.CALL in inst.desc.flags and inst.clobbers:
+                self._calls.append((position, runs))
             for reg in uses:
                 key = self._key(reg)
                 touch(key, position * 2)
@@ -447,10 +506,12 @@ class LinearScan:
                 # write of one is a write of the frame here; both are paid for
                 # as often as this instruction runs.
                 cost[key] = cost.get(key, 0) + weight
+                self._often[key] = self._often.get(key, 0.0) + runs
             for reg in defs:
                 key = self._key(reg)
                 touch(key, position * 2 + 1)
                 cost[key] = cost.get(key, 0) + weight
+                self._often[key] = self._often.get(key, 0.0) + runs
         # And a register live where a block begins or ends is live there even
         # though no instruction of that block names it.  A block with nothing
         # in it has no point to name, and skipping it opens no hole: what is
@@ -496,6 +557,21 @@ class LinearScan:
             if flow.empty:
                 continue
             found.extend([10 ** depth] * (flow.last - flow.first + 1))
+        return found
+
+    def _frequencies(self, function: MachineFunction,
+                     flows: Sequence[BlockFlow]) -> list[float]:
+        """How often each instruction is taken to run, in layout order: its
+        block's frequency, which the depth of its loops and a guess at its
+        branches make.  What decides whether a value is put in the frame
+        everywhere or only across its calls, the two being costs of different
+        places in the same loops."""
+        frequencies = block_frequencies(function)
+        found: list[float] = []
+        for flow, frequency in zip(flows, frequencies):
+            if flow.empty:
+                continue
+            found.extend([frequency] * (flow.last - flow.first + 1))
         return found
 
     def _stretches(self, function: MachineFunction, flows: Sequence[BlockFlow],
@@ -652,7 +728,7 @@ class LinearScan:
             meeting = [(r, u) for r, u in active if r.covers(found)]
             fixed = self._blocked_by(found, blocked)
             taken = {u for _, u in meeting} | fixed
-            unit = self._choose(found, taken)
+            unit = self._choose(found, taken, assignment)
             assert isinstance(found.reg, VirtReg)
             if unit is not None:
                 assignment.units[found.reg.ident] = unit
@@ -698,18 +774,31 @@ class LinearScan:
                 units.add(other.reg.unit)
         return units
 
-    def _choose(self, found: LiveRange, taken: set[RegUnit]) -> RegUnit | None:
-        """The unit to give *found*, preferring the one it asked for.
+    def _choose(self, found: LiveRange, taken: set[RegUnit],
+                assignment: Assignment) -> RegUnit | None:
+        """The unit to give *found*, preferring the one it asked for, and then
+        one a value it is moved to or from already holds.
 
         A hint is where the value is wanted anyway -- the register a result is
         returned in, most often -- so taking it turns the move that would put it
-        there into a move of a register to itself, which then goes.
+        there into a move of a register to itself, which then goes.  A value
+        moved to or from another that already has a unit is the same thing with
+        the other value for the hint: a block's parameter and what a branch
+        hands it, the operand of an instruction that writes over its first
+        operand and what is written.  Where that unit is free here, the two
+        never live at once, and the move between them is a move of a register
+        to itself.
         """
         reg = found.reg
         order = self._order_for(reg)
         if isinstance(reg, VirtReg) and reg.hint is not None:
             if reg.hint.unit not in taken and reg.hint.unit in order:
                 return reg.hint.unit
+        if isinstance(reg, VirtReg):
+            for partner in self._partners.get(reg.ident, ()):
+                unit = assignment.units.get(partner)
+                if unit is not None and unit not in taken and unit in order:
+                    return unit
         for unit in order:
             if unit not in taken:
                 return unit
@@ -728,17 +817,88 @@ class LinearScan:
         there is always somewhere to put them.
         """
         slots = {}
+        ranges = {found.reg.ident: found for found in assignment.ranges
+                  if isinstance(found.reg, VirtReg)}
+        split: dict[int, tuple[VirtReg, frozenset[int]]] = {}
         for victim in victims:
             if not victim.spillable:
                 raise RegisterPressureError(function.name, len(victims),
                                             len(self._order_for(victim)))
             if victim.ident in assignment.spilled:
                 continue
+            kept = assignment.split.get(victim.ident)
+            if kept is not None:
+                # Put in the frame across its calls already and still in the
+                # way: everywhere, then, in the slot it has -- and what put it
+                # there across the calls goes, every read and write of it
+                # reaching the frame now.
+                slots[victim.ident] = kept
+                gone = assignment.split_code.pop(victim.ident, set())
+                for block in function.blocks:
+                    block.insts = [one for one in block.insts if id(one) not in gone]
+                continue
+            across = self._calls_across(ranges.get(victim.ident))
+            if across and 2 * sum(runs for _, runs in across) \
+                    < self._often.get(self._key(victim), 0.0):
+                slot = function.frame.allocate(victim.bits // 8)
+                assignment.split[victim.ident] = slot
+                split[victim.ident] = (victim, frozenset(at for at, _ in across))
+                continue
             slots[victim.ident] = function.frame.allocate(victim.bits // 8)
+        if split:
+            self._split_at_calls(function, split, assignment)
         assignment.spilled.update(slots)
-        wanted = {v.ident: v for v in victims if v.ident in assignment.spilled}
+        wanted = {v.ident: v for v in victims if v.ident in slots}
+        if not wanted:
+            return
         for block in function.blocks:
             block.insts = self._with_spill_code(block.insts, wanted, assignment)
+
+    def _calls_across(self, found: LiveRange | None) -> list[tuple[int, float]]:
+        """The calls *found* lives across, and how often each runs: the ones
+        it is live both before and after, and not as what the call answers."""
+        if found is None:
+            return []
+        parts = found._parts()
+        return [(at, runs) for at, runs in self._calls
+                if any(a <= at * 2 and b >= at * 2 + 1 for a, b in parts)]
+
+    def _split_at_calls(self, function: MachineFunction,
+                        split: Mapping[int, tuple[VirtReg, frozenset[int]]],
+                        assignment: Assignment) -> None:
+        """Put each value of *split* in its slot just before every call it lives
+        across, and back in its register just after.
+
+        Its register then holds nothing across the call, so that one a call
+        destroys will do -- the value is in a register where it is read and
+        written, and in the frame only where the call would have destroyed it.
+        A spill everywhere is a read of the frame at every use: in a loop that
+        calls something on one way of a branch, every turn of the loop pays for
+        the turns that call.  The stores and loads stand next to the call,
+        after the arguments are put where it wants them and before the answer
+        is taken from where it leaves it.
+        """
+        position = 0
+        for block in function.blocks:
+            out: list[MCInst] = []
+            for inst in block.insts:
+                before: list[MCInst] = []
+                after: list[MCInst] = []
+                for ident, (victim, calls) in split.items():
+                    if position not in calls:
+                        continue
+                    slot = assignment.split[ident]
+                    stored = self._selector.select_spill(slot, victim, inst.span)
+                    loaded = self._selector.select_reload(victim, slot, inst.span)
+                    assignment.split_code.setdefault(ident, set()).update(
+                        id(one) for one in (*stored, *loaded))
+                    before.extend(stored)
+                    after.extend(loaded)
+                out.extend(before)
+                out.append(inst)
+                out.extend(after)
+                position += 1
+            block.insts = out
 
     def _with_spill_code(self, insts: Sequence[MCInst], wanted: dict[int, VirtReg],
                          assignment: Assignment) -> list[MCInst]:

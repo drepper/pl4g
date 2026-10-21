@@ -100,8 +100,10 @@ set(PL4G_LIB_SOURCES
   src/lib/ir/builder.cc
   src/lib/opt/passes.cc
   src/lib/opt/flow.cc
+  src/lib/opt/conditions.cc
   src/lib/opt/constfold.cc
   src/lib/opt/dce.cc
+  src/lib/opt/divisions.cc
   src/lib/opt/facts.cc
   src/lib/opt/inline.cc
   src/lib/opt/knownargs.cc

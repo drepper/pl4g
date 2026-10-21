@@ -367,4 +367,14 @@ namespace pl4g::opt {
     return total;
   }
 
+
+  bool is_leaf(const Function& func)
+  {
+    for (const auto& block : func.blocks)
+      for (auto inst : block->insts)
+        if (inst->kind == InstKind::CallInst || inst->kind == InstKind::SyscallInst)
+          return false;
+    return true;
+  }
+
 } // namespace pl4g::opt

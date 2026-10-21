@@ -63,6 +63,11 @@ namespace pl4g::mc {
     std::unordered_map<const MCInst*, std::pair<std::int64_t, const VirtReg*>> stores;
     // Frame reads made into nothing or into a move between registers.
     std::int64_t forwarded = 0;
+    // The virtual registers put in the frame only across the calls they live
+    // across, by identity, and their slots; and the reads and writes of the
+    // frame that put them there.
+    OrderedMap<int, std::int64_t> split;
+    std::unordered_map<int, std::set<const MCInst*>> split_code;
     // What keeps the instructions named above alive, so that no other one
     // ever takes an address they had.
     Insts kept;
@@ -133,9 +138,15 @@ namespace pl4g::mc {
     std::vector<const VirtReg*> assign(std::span<const LiveRange> ranges, std::span<const LiveRange> blocked,
                                        Assignment& assignment);
     std::set<const RegUnit*> blocked_by(const LiveRange& found, std::span<const LiveRange> blocked) const;
-    const RegUnit* choose(const LiveRange& found, const std::set<const RegUnit*>& taken) const;
+    const RegUnit* choose(const LiveRange& found, const std::set<const RegUnit*>& taken,
+                          const Assignment& assignment) const;
 
     void spill(MachineFunction& function, std::span<const VirtReg* const> victims, Assignment& assignment);
+    std::vector<std::pair<std::int64_t, double>> calls_across(const LiveRange* found) const;
+    void split_at_calls(MachineFunction& function,
+                        const OrderedMap<int, std::pair<const VirtReg*, std::set<std::int64_t>>>& split,
+                        Assignment& assignment);
+    std::vector<double> frequencies(const MachineFunction& function, std::span<const BlockFlow> flows);
     Insts with_spill_code(const Insts& insts, const OrderedMap<int, const VirtReg*>& wanted,
                           Assignment& assignment);
     void forward_reloads(MachineFunction& function, Assignment& assignment);
@@ -152,6 +163,14 @@ namespace pl4g::mc {
     RegisterInfo& registers;
     SpillSelector& selector;
     AllocationOrder orders;
+    // What each virtual register is moved to or from, by identity, worked out
+    // afresh for every round.
+    std::unordered_map<int, std::vector<int>> partners;
+    // How often each register is read and written, in the measure of
+    // `block_frequencies`, and every call with how often it runs: of the round
+    // being allocated.
+    std::unordered_map<Key, double> often;
+    std::vector<std::pair<std::int64_t, double>> calls;
   };
 
   // Assign every virtual register of `function`.

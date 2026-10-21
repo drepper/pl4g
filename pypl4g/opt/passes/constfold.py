@@ -23,12 +23,12 @@ from __future__ import annotations
 from typing import Final, Sequence
 
 from ...ir.inst import (AssertInst, BinaryInst, BinOp, CastInst, CastKind,
-                        CmpInst, CmpPred, ExtractInst, Instruction, SelectInst,
-                        TupleInst)
+                        CmpInst, CmpPred, ExtractInst, FailedInst, Instruction,
+                        SelectInst, TupleInst, UnwrapInst, WrapInst)
 from ...ir.function import Function
 from ...ir.module import Module
 from ...ir.types import BOOL, CHAR, BoolType, CharType, IntType, PtrType
-from ...ir.value import BoolConst, CharConst, IntConst, Value
+from ...ir.value import BoolConst, CharConst, IntConst, UndefConst, Value
 
 #: What each comparison asks, as a question about two numbers.  The signed and
 #: the unsigned orderings are separate entries because they are separate
@@ -192,6 +192,21 @@ class ConstantFolding:
                 # read as is worked out from the whole's type, and two ways of
                 # working out one type need not meet in one instance of it.
                 if part.ty == inst.ty:
+                    return part
+            return None
+        if isinstance(inst, (FailedInst, UnwrapInst)):
+            # A result made of its parts answers with them: whether it failed
+            # is the truth value it was made with, and its answer the value --
+            # which is what a division by a constant leaves, a result that
+            # never failed.
+            # An answer that is not one -- a result made as an error carries
+            # an undefined value there -- is left where it is: there is
+            # nothing to read in its place, and a register holding nothing
+            # in particular is what the backend reads it from.
+            whole = inst.operands[0]
+            if isinstance(whole, WrapInst):
+                part = whole.operands[1 if isinstance(inst, FailedInst) else 0]
+                if part.ty == inst.ty and not isinstance(part, UndefConst):
                     return part
             return None
         if not isinstance(inst, BinaryInst):

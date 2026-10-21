@@ -9,7 +9,10 @@ Nothing is ever looked at twice, and nothing round a cycle is looked at at all.
 **What is inlined.**  A function the program said to inline, whatever its size;
 a function the whole program calls once, since the copy is then the only one
 there is and what is left behind is dropped; and a function small enough that a
-copy of it costs less than the call would.  What is never inlined is a function
+copy of it costs less than the call would, a leaf -- one that calls nothing --
+being allowed twice the size.  A caller may grow only so much, and what counts
+against that is what makes the program larger: neither the copy of a function
+called once nor one no larger than the call.  What is never inlined is a function
 that can reach itself, one that follows another convention -- the call is the
 convention, and inlining it would answer a question nobody asked -- and one the
 program marked `@[inline(never)]`.
@@ -40,8 +43,8 @@ from __future__ import annotations
 from copy import copy
 from typing import Final
 
-from ...ir.callgraph import (called_by_count, cost_of_body, in_a_cycle,
-                             in_call_order)
+from ...ir.callgraph import (CALL_COST, called_by_count, cost_of_body,
+                             in_a_cycle, in_call_order, is_leaf)
 from ...ir.function import (BasicBlock, DEFAULT_CCONV, Function, InlineHint,
                             Linkage)
 from ...ir.inst import (BlockTarget, BrInst, CallInst, CondBrInst, Instruction,
@@ -62,8 +65,18 @@ from ..flow import Dominators, dominators
 #: less code and fewer calls, and a larger one buys calls with code.
 SMALL: Final[int] = 16
 
+#: The same for a leaf -- a function that calls nothing -- which may be half as
+#: large again and more.  What a call costs a leaf's caller is more than the
+#: call: every register the convention lets a callee destroy is one the caller
+#: cannot keep a value in across it, and a leaf copied in destroys only what it
+#: uses.  `to_odd` of `std.string`, two wide multiplications and a carry, is the
+#: size this is for.
+SMALL_LEAF: Final[int] = 32
+
 #: And how much a caller may grow in total, in the same measure, so that a
-#: function calling many small ones does not become one enormous one.
+#: function calling many small ones does not become one enormous one.  What a
+#: copy of a function called once comes to is not counted, nor that of one no
+#: larger than the call: neither makes the program any larger.
 BUDGET: Final[int] = 300
 
 
@@ -107,7 +120,7 @@ class Inlining:
                                               grown):
                     at += 1
                     continue
-                grown += cost_of_body(callee)
+                grown += self._growth(callee, counted)
                 module.reports.record(
                     ReportKind.INLINE, callee.name,
                     "".join(("put where ", caller.name, " calls it, ",
@@ -135,24 +148,40 @@ class Inlining:
             # entry point or the testing machinery calls by name has to be
             # there to be called.
             return False
-        if callee.attrs.inline is InlineHint.NEVER:
+        if callee.attrs.inline is InlineHint.NEVER or callee.attrs.opaque:
+            # What the program said -- `@[opaque]` saying it too, a call of one
+            # being a black box -- whatever the size or the count says.
             return False
         if callee.attrs.inline is InlineHint.ALWAYS:
             return True
+        # Called once and named by nothing else: the copy is the only one there
+        # is, so what this costs is nothing and what it saves is the call --
+        # which is why the budget does not stand in its way either.
+        if _called_once(callee, counted):
+            return True
+        cost = cost_of_body(callee)
+        if cost <= CALL_COST:
+            # No larger than the call it replaces, so it costs nothing however
+            # much the caller has grown.
+            return True
         if grown >= BUDGET:
             return False
-        if cost_of_body(callee) <= SMALL:
-            return True
-        # Called once and named by nothing else: the copy is the only one there
-        # is, so what this costs is nothing and what it saves is the call.
-        return (counted.get(id(callee), 0) == 1
-                and callee.linkage is not Linkage.VISIBLE)
+        return cost <= _limit(callee)
+
+    def _growth(self, callee: Function, counted: dict[int, int]) -> int:
+        """What a copy of *callee* adds to the program, in the budget's measure:
+        nothing where the original goes or the copy is no larger than a call."""
+        cost = cost_of_body(callee)
+        if callee.attrs.inline is not InlineHint.ALWAYS \
+                and (_called_once(callee, counted) or cost <= CALL_COST):
+            return 0
+        return cost
 
     def _because(self, callee: Function, counted: dict[int, int]) -> str:
         """Why it was inlined, for the log."""
         if callee.attrs.inline is InlineHint.ALWAYS:
             return "which the program asked for"
-        if cost_of_body(callee) <= SMALL:
+        if cost_of_body(callee) <= _limit(callee):
             return "".join(("coming to about ", str(cost_of_body(callee)),
                             " machine instructions"))
         return "the whole program calling it once"
@@ -262,6 +291,18 @@ class Inlining:
                 _resume_chain(caller, after, token, one)
         else:
             _resume_chain(caller, after, token, resumed)
+
+
+def _called_once(callee: Function, counted: dict[int, int]) -> bool:
+    """Whether *callee* is named by one call of the whole program and can be
+    reached from nowhere outside it."""
+    return (counted.get(id(callee), 0) == 1
+            and callee.linkage is not Linkage.VISIBLE)
+
+
+def _limit(callee: Function) -> int:
+    """How large *callee* may be and still be small: more for a leaf."""
+    return SMALL_LEAF if is_leaf(callee) else SMALL
 
 
 def _map_into(made: Instruction, values: dict[int, Value],

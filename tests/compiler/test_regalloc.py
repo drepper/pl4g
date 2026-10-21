@@ -571,3 +571,38 @@ def test_a_value_a_branch_target_reads_lives_up_to_the_branch() -> None:
     assert isinstance(first, MCReg) and isinstance(other, MCReg)
     assert first.reg.unit is not other.reg.unit, \
         "a value the branch's target reads was overwritten before the branch"
+
+
+# -- moves and calls ----------------------------------------------------------------
+
+def test_a_value_moved_from_another_is_given_its_register() -> None:
+    """Where the register is free while the value is live, which it is where
+    the two meet end to end: the move is then of a register to itself, and
+    goes."""
+    first, second = virtual(hint=reg("ecx")), virtual()
+    built = function(inst("mov", MCReg(first), MCImm(1, 32)),
+                     inst("mov", MCReg(second), MCReg(first)),
+                     inst("add", MCReg(second), MCReg(second)))
+    assignment = allocate(built, INFO, ORDER, SELECTOR)
+    assert assignment.coalesced == 1
+    added = built.instructions()[-1]
+    assert added.operands[0].reg.name == "ecx"
+
+
+def test_a_value_used_more_than_its_calls_run_is_put_in_the_frame_only_across_them() -> None:
+    """More values live across a call than there are registers a call leaves
+    alone: one of them is stored before the call and loaded after, and is in a
+    register the call destroys everywhere else, rather than read from the
+    frame at every use."""
+    held = [virtual(64) for _ in range(8)]
+    target = virtual(64)
+    call = inst("call", MCReg(target))
+    call.clobbers = tuple(reg(name) for name in ("rax", "rcx", "rdx", "rsi", "rdi", "r8",
+                                                 "r9", "r10", "r11"))
+    body = [inst("mov", MCReg(one), MCImm(at, 32)) for at, one in enumerate(held)]
+    body.append(inst("mov", MCReg(target), MCImm(0, 32)))
+    body.append(call)
+    body.extend(inst("add", MCReg(held[0]), MCReg(one))
+                for _ in range(3) for one in held[1:])
+    assignment = allocate(function(*body), INFO, ORDER, SELECTOR)
+    assert assignment.split, "nothing was put in the frame across the call alone"

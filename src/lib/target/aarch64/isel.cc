@@ -654,6 +654,12 @@ namespace pl4g::target::aarch64 {
     if (auto mnemonic = binary_mnemonic(op); ! mnemonic.empty()) {
       if (dst.is_none() || sources.size() != 2)
         throw UnsupportedOperation(std::format("'{}' needs a destination and two sources", op->name), span);
+      // A place in the frame past what twelve bits say: not the number in a
+      // register and the register form, which reads register 31 as nought.
+      if (op == mc::ops::plus)
+        if (auto first = as_reg(sources[0]); first != nullptr && first->reg == Reg(regs().sp))
+          if (auto second = std::get_if<MCImm>(&sources[1]); second != nullptr && second->value > 0xFFF)
+            return stack_plus(dst, std::int64_t(second->value), span);
       auto [before, ready] = accepting(mnemonic, { named(dst), sources[0], sources[1] }, span);
       before.push_back(inst(mnemonic, std::move(ready), span));
       return before;
@@ -1144,32 +1150,85 @@ namespace pl4g::target::aarch64 {
   }
 
 
+  const mc::PhysReg* A64Selector::frame_spare() const
+  {
+    // The first of the two the standard convention leaves to the linker for
+    // its veneers: nothing in a function this compiler writes lives across one.
+    static const mc::PhysReg* const found = reg("x16");
+    return found;
+  }
+
+
+  const mc::PhysReg* A64Selector::spare_for(std::int64_t offset) const
+  {
+    if (spare == nullptr) [[unlikely]]
+      throw mc::FrameOutOfReach(std::format("a place {} bytes into the frame", offset));
+    return spare;
+  }
+
+
+  Insts A64Selector::stack_plus(Reg dst, std::int64_t offset, Span span)
+  {
+    // One `add` where twelve bits hold it, the upper twelve a page at a time
+    // and the lower twelve after where twenty-four do, and the number built in
+    // a register and added in the extended form beyond.
+    auto stack = named(regs().sp);
+    auto target = named(dst, 64);
+    if (offset <= 0xFFF)
+      return { inst("add", { target, stack, offset_of(offset) }, span) };
+    if (offset <= 0xFFFFFF) {
+      Insts made{ inst("add.lsl12", { target, stack, offset_of(offset >> 12) }, span) };
+      if (offset & 0xFFF)
+        made.push_back(inst("add", { target, target, offset_of(offset & 0xFFF) }, span));
+      return made;
+    }
+    Reg holder = dst == Reg(regs().sp) ? Reg(spare_for(offset)) : dst;
+    auto made = materialize(holder, offset, span);
+    made.push_back(inst("add.uxtx", { target, stack, named(holder, 64) }, span));
+    return made;
+  }
+
+
+  std::tuple<Insts, MCReg, std::int64_t> A64Selector::frame_place(std::int64_t offset, int bytes, Span span, Reg base)
+  {
+    if (offset % bytes == 0 && offset / bytes <= 0xFFF)
+      return { Insts{}, named(regs().sp), offset };
+    Reg holder = ! base.is_none() ? base : Reg(spare_for(offset));
+    return { stack_plus(holder, offset, span), named(holder, 64), 0 };
+  }
+
+
   Insts A64Selector::select_save_link(std::int64_t offset, Span span)
   {
-    return { inst("str", { named(regs().x30, 64), named(regs().sp), offset_of(offset) }, span) };
+    auto [before, base, at] = frame_place(offset, 8, span);
+    before.push_back(inst("str", { named(regs().x30, 64), base, offset_of(at) }, span));
+    return before;
   }
 
 
   Insts A64Selector::select_restore_link(std::int64_t offset, Span span)
   {
-    return { inst("ldr", { named(regs().x30, 64), named(regs().sp), offset_of(offset) }, span) };
+    auto [before, base, at] = frame_place(offset, 8, span, Reg(regs().x30));
+    before.push_back(inst("ldr", { named(regs().x30, 64), base, offset_of(at) }, span));
+    return before;
   }
 
 
   Insts A64Selector::select_incoming(Reg dst, std::int64_t offset, int bits, bool is_signed, Span span)
   {
     // One load from the stack pointer and the offset, which is scaled by the
-    // size of the access and carried in twelve bits: past the end of every
-    // frame `select_frame` makes for anything but a byte.  Beyond that the
-    // program is refused, there being no register free to build the address
-    // in for a floating-point value.
-    if (offset > 0xFFF * (bits / 8)) [[unlikely]]
-      throw UnsupportedOperation(std::format("an argument {} bytes up the stack", offset),
-                                 span.is_valid() ? std::optional(span) : std::nullopt);
-    if (is_float(dst))
-      return { inst("ldr", { named(dst, bits), named(regs().sp), offset_of(offset) }, span) };
-    return { inst(load_mnemonic(bits, is_signed), { named(dst, bits >= 64 ? 64 : 32), named(regs().sp), offset_of(offset) },
-                  span) };
+    // size of the access and carried in twelve bits.  Beyond that the address
+    // is built in the destination, which is about to be written anyway -- or,
+    // for a floating-point value, in the register set aside.
+    if (is_float(dst)) {
+      auto [before, base, at] = frame_place(offset, bits / 8, span);
+      before.push_back(inst("ldr", { named(dst, bits), base, offset_of(at) }, span));
+      return before;
+    }
+    auto [before, base, at] = frame_place(offset, bits / 8, span, dst);
+    before.push_back(inst(load_mnemonic(bits, is_signed), { named(dst, bits >= 64 ? 64 : 32), base, offset_of(at) },
+                          span));
+    return before;
   }
 
 
@@ -1178,26 +1237,45 @@ namespace pl4g::target::aarch64 {
     // Eight bytes of an ordinary register and the whole of one of the others,
     // which holds a floating-point value or a whole run.
     int bits = is_float(source) ? 128 : 64;
-    return { inst("str", { named(source, bits), named(regs().sp), offset_of(slot) }, span) };
+    auto [before, base, at] = frame_place(slot, bits / 8, span);
+    before.push_back(inst("str", { named(source, bits), base, offset_of(at) }, span));
+    return before;
   }
 
 
   Insts A64Selector::select_reload(Reg destination, std::int64_t slot, Span span)
   {
-    int bits = is_float(destination) ? 128 : 64;
-    return { inst("ldr", { named(destination, bits), named(regs().sp), offset_of(slot) }, span) };
+    bool floating = is_float(destination);
+    int bits = floating ? 128 : 64;
+    auto [before, base, at] = frame_place(slot, bits / 8, span, floating ? Reg() : destination);
+    before.push_back(inst("ldr", { named(destination, bits), base, offset_of(at) }, span));
+    return before;
   }
 
 
   Insts A64Selector::select_frame(std::int64_t size, Span span)
   {
-    return { inst("sub", { named(regs().sp), named(regs().sp), offset_of(size) }, span) };
+    // One `sub` where twelve bits hold it, the pages and the rest where
+    // twenty-four do, and the register set aside beyond.
+    auto stack = named(regs().sp);
+    if (size <= 0xFFF)
+      return { inst("sub", { stack, stack, offset_of(size) }, span) };
+    if (size <= 0xFFFFFF) {
+      Insts made{ inst("sub.lsl12", { stack, stack, offset_of(size >> 12) }, span) };
+      if (size & 0xFFF)
+        made.push_back(inst("sub", { stack, stack, offset_of(size & 0xFFF) }, span));
+      return made;
+    }
+    Reg holder(spare_for(size));
+    auto made = materialize(holder, size, span);
+    made.push_back(inst("sub.uxtx", { stack, stack, named(holder, 64) }, span));
+    return made;
   }
 
 
   Insts A64Selector::select_unframe(std::int64_t size, Span span)
   {
-    return { inst("add", { named(regs().sp), named(regs().sp), offset_of(size) }, span) };
+    return stack_plus(Reg(regs().sp), size, span);
   }
 
 

@@ -12,7 +12,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Final, Mapping, Sequence
 
 from ...mc import ops
-from ...mc.asmbuilder import InstructionSelector
+from ...mc.asmbuilder import FrameOutOfReach, InstructionSelector
 from ...mc.desc import InstrTable, SelectionError
 from ...mc.inst import MCInst
 from ...mc.operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
@@ -50,7 +50,7 @@ from ...ir.function import DEFAULT_CCONV, SYSTEM_CCONV
 from .abi import lookup as lookup_cconv
 from .startup import ABORT_SYMBOL, REPORT_SYMBOL, SYSCALLS
 from .opcodes import AARCH64_INSTRS
-from .regs import GPR, INFO, SP, VEC, X30
+from .regs import GPR, INFO, SP, VEC, X30, reg
 
 if TYPE_CHECKING:
     from ...ir.function import Function
@@ -166,6 +166,12 @@ _UNARY_OPERATIONS: Final[dict[UnOp, Op]] = {
 #: Where a function's own room is measured from.
 STACK_POINTER: Final = SP
 
+#: The register a place in the frame further from the stack pointer than an
+#: offset reaches is built in, in the function whose frame is that large and in
+#: no other.  The first of the two the standard convention leaves to the linker
+#: for its veneers: nothing in a function this compiler writes lives across one.
+FRAME_SPARE: Final[PhysReg] = reg("x16")
+
 
 #: What memory looks like here.  Every one of these targets has an eight-byte
 #: pointer, and nothing else about the layout differs between them.
@@ -186,6 +192,60 @@ class A64Selector(InstructionSelector):
 
     def __init__(self, table: InstrTable | None = None) -> None:
         self.table = table if table is not None else InstrTable(AARCH64_INSTRS)
+        #: The register a place out of an offset's reach is built in, where the
+        #: function being built has one set aside -- which the builder does for
+        #: a function whose frame turned out that large, and only then.
+        self.spare: Reg | None = None
+
+    def frame_spare(self) -> PhysReg:
+        """The register to set aside where the frame is out of an offset's reach."""
+        return FRAME_SPARE
+
+    def _spare_for(self, offset: int, span: Span) -> Reg:
+        """The register set aside to build a place in, or the signal that one is
+        wanted: the builder then sets it aside and allocates again."""
+        if self.spare is None:
+            raise FrameOutOfReach("".join(("a place ", str(offset),
+                                           " bytes into the frame")))
+        return self.spare
+
+    def _stack_plus(self, dst: Reg, offset: int, span: Span) -> list[MCInst]:
+        """*dst* made the stack pointer and *offset*, however large: one `add`
+        where twelve bits hold it, the upper twelve a page at a time and the
+        lower twelve after where twenty-four do, and the number built in a
+        register and added as the stack pointer's extended form beyond.  *dst*
+        may be the stack pointer itself; that is the one case that needs the
+        register set aside, any other building the number in *dst*."""
+        stack = MCReg(SP)
+        target = MCReg(dst, bits=64)
+        if offset <= 0xFFF:
+            return [self._inst("add", (target, stack,
+                                       MCImm(offset, 12, signed=False)), span)]
+        if offset <= 0xFFFFFF:
+            made = [self._inst("add.lsl12", (target, stack,
+                                             MCImm(offset >> 12, 12, signed=False)),
+                               span)]
+            if offset & 0xFFF:
+                made.append(self._inst("add", (target, target,
+                                               MCImm(offset & 0xFFF, 12,
+                                                     signed=False)), span))
+            return made
+        holder = self._spare_for(offset, span) if dst is SP else dst
+        return [*self._materialize(holder, offset, span),
+                self._inst("add.uxtx", (target, stack, MCReg(holder, bits=64)),
+                           span)]
+
+    def _frame_place(self, offset: int, bytes_: int, span: Span,
+                     base: Reg | None = None) -> tuple[list[MCInst], MCReg, int]:
+        """How a place *offset* bytes into the frame is reached by an access of
+        *bytes_*: what has to be done first, the register to measure from and
+        how far from it.  The stack pointer and the offset wherever the offset,
+        scaled by the access, fits twelve bits; past that the place built in
+        *base* -- a load's own destination -- or in the register set aside."""
+        if offset % bytes_ == 0 and offset // bytes_ <= 0xFFF:
+            return [], MCReg(SP), offset
+        holder = base if base is not None else self._spare_for(offset, span)
+        return self._stack_plus(holder, offset, span), MCReg(holder, bits=64), 0
 
     def _inst(self, mnemonic: str, operands: Sequence[MCOperand], span: Span) -> MCInst:
         """Select the encoding of *mnemonic* for *operands*."""
@@ -634,6 +694,13 @@ class A64Selector(InstructionSelector):
             if dst is None or len(sources) != 2:
                 raise UnsupportedOperation("".join((
                     "'", op.name, "' needs a destination and two sources")), span)
+            first, second = sources
+            if op is ops.PLUS and isinstance(first, MCReg) and first.reg is SP \
+                    and isinstance(second, MCImm) and second.value > 0xFFF:
+                # A place in the frame past what twelve bits say.  Not the
+                # number in a register and the register form: that form reads
+                # register 31 as nought, not as the stack pointer.
+                return tuple(self._stack_plus(dst, second.value, span))
             before, ready = self._accepting(mnemonic, (MCReg(dst), *sources), span)
             return (*before, self._inst(mnemonic, ready, span))
         mnemonic = _UNARY.get(op.name)
@@ -1217,34 +1284,33 @@ class A64Selector(InstructionSelector):
 
     def select_save_link(self, offset: int, span: Span) -> Sequence[MCInst]:
         """Instructions that put the return address into the frame at *offset*."""
-        return (self._inst("str", (MCReg(X30, bits=64), MCReg(SP),
-                                   MCImm(offset, 12, signed=False)), span),)
+        before, base, at = self._frame_place(offset, 8, span)
+        return (*before, self._inst("str", (MCReg(X30, bits=64), base,
+                                            MCImm(at, 12, signed=False)), span))
 
     def select_incoming(self, dst: Reg, offset: int, bits: int, signed: bool,
                         span: Span) -> Sequence[MCInst]:
         """One load from the stack pointer and the offset.
 
         The offset is scaled by the size of the access and carried in twelve
-        bits, which reaches past the end of every frame `select_frame` can make
-        for anything but a byte; beyond that the program is refused rather than
-        an address built, there being no register free to build it in for a
-        floating-point value.
+        bits.  Beyond that the address is built in the destination, which is
+        about to be written anyway -- or, for a floating-point value, whose
+        register cannot hold an address, in the register set aside.
         """
-        if offset > 0xFFF * (bits // 8):
-            raise UnsupportedOperation("".join((
-                "an argument ", str(offset), " bytes up the stack")), span)
         if self._is_float(dst):
-            return (self._inst("ldr", (MCReg(dst, bits=bits), MCReg(SP),
-                                       MCImm(offset, 12, signed=False)), span),)
+            before, base, at = self._frame_place(offset, bits // 8, span)
+            return (*before, self._inst("ldr", (MCReg(dst, bits=bits), base,
+                                                MCImm(at, 12, signed=False)), span))
+        before, base, at = self._frame_place(offset, bits // 8, span, dst)
         held = MCReg(dst, bits=64 if bits >= 64 else 32)
-        return (self._inst(self._LOADS[(bits, signed)],
-                           (held, MCReg(SP), MCImm(offset, 12, signed=False)),
-                           span),)
+        return (*before, self._inst(self._LOADS[(bits, signed)],
+                                    (held, base, MCImm(at, 12, signed=False)), span))
 
     def select_restore_link(self, offset: int, span: Span) -> Sequence[MCInst]:
         """Instructions that take it back out again."""
-        return (self._inst("ldr", (MCReg(X30, bits=64), MCReg(SP),
-                                   MCImm(offset, 12, signed=False)), span),)
+        before, base, at = self._frame_place(offset, 8, span, X30)
+        return (*before, self._inst("ldr", (MCReg(X30, bits=64), base,
+                                            MCImm(at, 12, signed=False)), span))
 
     def select_spill(self, slot: int, source: Reg, span: Span) -> Sequence[MCInst]:
         """Instructions that write *source* to the frame slot at *slot*.
@@ -1255,25 +1321,44 @@ class A64Selector(InstructionSelector):
         see.  A slot for one is as wide as the register, so there is room.
         """
         bits = 128 if self._is_float(source) else 64
-        return (self._inst("str", (MCReg(source, bits=bits), MCReg(SP),
-                                   MCImm(slot, 12, signed=False)), span),)
+        before, base, at = self._frame_place(slot, bits // 8, span)
+        return (*before, self._inst("str", (MCReg(source, bits=bits), base,
+                                            MCImm(at, 12, signed=False)), span))
 
     def select_reload(self, destination: Reg, slot: int,
                       span: Span) -> Sequence[MCInst]:
         """Instructions that read the frame slot at *slot* into *destination*."""
-        bits = 128 if self._is_float(destination) else 64
-        return (self._inst("ldr", (MCReg(destination, bits=bits), MCReg(SP),
-                                   MCImm(slot, 12, signed=False)), span),)
+        floating = self._is_float(destination)
+        bits = 128 if floating else 64
+        before, base, at = self._frame_place(slot, bits // 8, span,
+                                             None if floating else destination)
+        return (*before, self._inst("ldr", (MCReg(destination, bits=bits), base,
+                                            MCImm(at, 12, signed=False)), span))
 
     def select_frame(self, size: int, span: Span) -> Sequence[MCInst]:
-        """Instructions that make room for *size* bytes on the stack."""
-        return (self._inst("sub", (MCReg(SP), MCReg(SP),
-                                   MCImm(size, 12, signed=False)), span),)
+        """Instructions that make room for *size* bytes on the stack: one `sub`
+        where twelve bits hold it, the pages and the rest where twenty-four do,
+        and the register set aside beyond."""
+        stack = MCReg(SP)
+        if size <= 0xFFF:
+            return (self._inst("sub", (stack, stack, MCImm(size, 12, signed=False)),
+                               span),)
+        if size <= 0xFFFFFF:
+            made = [self._inst("sub.lsl12", (stack, stack,
+                                             MCImm(size >> 12, 12, signed=False)),
+                               span)]
+            if size & 0xFFF:
+                made.append(self._inst("sub", (stack, stack,
+                                               MCImm(size & 0xFFF, 12, signed=False)),
+                                       span))
+            return tuple(made)
+        holder = self._spare_for(size, span)
+        return (*self._materialize(holder, size, span),
+                self._inst("sub.uxtx", (stack, stack, MCReg(holder, bits=64)), span))
 
     def select_unframe(self, size: int, span: Span) -> Sequence[MCInst]:
         """Instructions that give that room back."""
-        return (self._inst("add", (MCReg(SP), MCReg(SP),
-                                   MCImm(size, 12, signed=False)), span),)
+        return tuple(self._stack_plus(SP, size, span))
 
 
 def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,

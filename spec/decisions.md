@@ -11327,6 +11327,96 @@ business.
 writing an element through it writes the caller's list (`let y: [u8] = x; let out: mut [u8] = y; out⟦0⟧ ← 9u8`).  The
 specification says the variable gets elements of its own where either place may change; it does not.  It is in the to-do list,
 and it is why the rule above does not trust a name.
+## 2026-10-22T16:00+02:00 — compiler
+
+### What the number code asked of the code generator: conditions branched on, a division by a constant, the inliner's budget, the allocator's moves and calls, and a frame of any size
+
+`std.string` measured two and a half to four times what C takes for the same algorithms, and its author traced the gap to five
+things the code generator did; the user approved closing them with the rest of the JSON list.  None of it changes what a program
+means -- every answer is the one it was, and both compilers make the same images -- so what follows is how, and what was settled
+along the way.  Measured on `examples/numbers` at `-O1` on x86-64, per number, the least user time of fifteen runs: `parse_f64`
+of seventeen digits 46 ns before and 39 after (227 cycles and 199; 1093 instructions and 788), of short numbers 22 ns and 17 (115
+cycles and 89; 693 instructions and 506); `format_f64` 81 ns and 70 (377 cycles and 356; 1647 instructions and 1542);
+`format_int` 20 ns and 17, about 90 cycles both, there being little of the five in it.
+
+**A condition made of parts is branched on a part at a time.**  `if a ∧ b:` is two comparisons and two branches; it was both truth
+values set into registers, joined, and the register tested.  The pass `conditions` rewrites the checker's two shapes -- the parts
+joined with `and.bool` where the second costs nothing, and the block where a short-circuit's two ways meet with the answer as its
+parameter -- into branches on the parts, going through the meeting block rather than to it, and moving what works out the second
+part into the block that asks for it.  It is in the representation rather than in the three selectors because there it is one
+rewrite of blocks every later pass already reads, and because it goes before `facts`, which then finds `at < n` on the edge into
+the block reading `bytes⟦at⟧`.  Compare: **C** defines `&&` as control flow and every C compiler lowers it so; **GCC** folds the
+truth values back into branches (`fold_truth_andor`, and jump threading over a `phi` of them), **LLVM** likewise in `SimplifyCFG`
+and `JumpThreading`, which is what **Rust**, **Zig**, **Swift** and **D**'s LDC get; **Go**'s SSA back end branches on each part;
+**Haskell** and **Lisp**, whose `and` is a special form, branch for the same reason C does.
+
+**A division by a constant is the upper word of a product and shifts.**  The pass `divisions` rewrites `udiv`, `urem`, `sdiv` and
+`srem` of any width by a constant other than nought and, signed, other than minus one: a shift for a power of two (after adding
+`2^k - 1` to a negative dividend, signed), Granlund and Montgomery's multiplier otherwise -- the smallest shift at which it fits a
+word and is exact for every dividend the type holds, the dividend shifted down by the divisor's twos where none fits, the
+multiplier a bit too wide where that fails too -- and Hacker's Delight's for a signed one, read through `⎕wide_mul`'s signed upper
+half.  A remainder is the dividend less the quotient times the divisor.
+- **In the representation and not the selectors**, because what it writes is arithmetic every back end has, the signed upper half
+  included, and because the pass that shares values worked out twice then makes `x ÷ 10` and `x % 10` one multiplication.
+- **At 64 bits whatever the width**, a narrower dividend widened first: it is what a machine does with a narrow value anyway, and
+  it gives a dividend below `2^32` a multiplier that needs no shift at all.
+- **What it leaves is a result that never failed**, and folding learned to read through a result made of its parts -- `failed` of
+  it is the truth value, `unwrap` the answer -- which also has a narrowing's `??` branch on its comparison rather than on a flag
+  made of it.  Nought and minus one are left to the machine's division and the check before it: one has no answer and the other none
+  for the smallest dividend, and only that check knows how to say so.
+- Compare: **GCC** (`expand_divmod`, `choose_multiplier`) and **LLVM** (`BuildUDIV`, `BuildSDIV`, the pre-shift included) do exactly
+  this, and through them **C**, **C++**, **Rust**, **Zig**, **Swift**, **Odin** and **D**'s LDC; **Go**'s compiler does it in its
+  generic rewrite rules (`magic.go`); **DMD** does it in its own back end.  **Python**, **Lisp**, **Haskell** and the array
+  languages divide numbers of no fixed width and leave it to their runtimes.
+
+**The inliner spends its budget only on what makes the program larger.**  A copy of a function the whole program calls once, and a
+copy no larger than the call it replaces, are not counted against the three hundred instructions a caller may grow by, and are
+inlined whatever the budget says; a leaf -- a function that calls nothing -- may be thirty-two instructions where one that calls
+may be sixteen, since a call costs its caller every register the convention lets the callee destroy.  Counted, the copy of
+`shortest` that `format_f64` is the only caller of spent the whole budget, and `tenth`, `decimal_count`, `byte_of` and `to_odd`
+were then called on every number written.  Compare: **GCC** inlines a static function called once whatever its size
+(`-finline-functions-called-once`) and limits growth per unit and per function rather than per call; **LLVM** gives the last call
+of a local function a large bonus; **Go** inlines up to a budget of eighty nodes with
+no rule for one call; **Rust**'s MIR inliner and **Zig**'s `inline` are what the program says before LLVM's own choices; **Haskell**
+(GHC) inlines what occurs once unconditionally, which is the rule here.
+
+**The allocator gives a value moved to or from another that other's register, and puts a value in the frame only across its
+calls where that is cheaper.**  The back edge of every loop moved each value it carried out of a temporary into the register the
+loop held it in, and the loops that call on one way of a branch -- the separator test in `parse_f64` -- read their values from the
+frame on every turn.  The first is a preference after the hint: a unit a move's other end already holds, where it is free.  The
+second splits a range around the calls it lives across, a store before each and a load after, where those calls run less than
+half as often as the value is read and written -- how often being a new guess, `block_frequencies`, that halves at every branch
+where the depth of the loops alone could not tell a test's two ways apart.
+- **What the guess decides is only that.**  Which value is given up is still the price, cost per point of register time; putting
+  the new guess there as well would be a second change to every allocation, and this one was enough to measure.
+- **A split value still in the way goes to the frame everywhere** the next round, as before; the rounds are twice as many as the
+  registers, each value being split at most once.  What is not done is splitting at a loop's edges, which is what the values a
+  whole inlined program's inner loops read would want: the pressure there is real, and is in the to-do list.
+- Compare: **LLVM**'s greedy allocator splits ranges around calls and at region boundaries and coalesces copies first; **GCC**'s
+  IRA saves a caller-saved register around the calls of a region; **Go**'s, with no register a call leaves alone, keeps a value in
+  a register up to a call and loads it again where it is next used; **Cranelift**'s regalloc2 splits and coalesces by bundles.  Ball and Larus's static branch
+  prediction, which GCC's estimated frequencies come from, would refine the guess.
+
+**A frame of any size works on AArch64 and RISC-V.**  The AArch64 stack pointer moves a page at a time and the rest, and past
+sixteen megabytes by a register in the extended-register form; a place in the frame no offset reaches is built in a load's own
+destination, or in a register the function sets aside -- `x16`, the linker's veneer register, which nothing a function here does
+lives across, and `t6` on RISC-V, which a function working on runs kept already.
+- **Set aside only where the frame needs it, found by allocating twice.**  The frame's size is known only once the allocator has
+  said what it spilled, and what it spills depends on how many registers it had; the to-do list's suggestion, the size of the
+  representation's `frame`s before allocation, misses a frame the spills make large and costs a register in one the allocator
+  would not.  So a selector says, once the frame stands, that a place is out of reach with nothing to build it in
+  (`FrameOutOfReach`), and the builder puts the function back as it was, sets the register aside and allocates again; every other
+  function keeps every register.
+- Compare: **GCC**'s AArch64 back end builds a large frame's offsets in `x16` and `x17` (IP0 and IP1) in the prologue and
+  epilogue, where nothing is live in them, and leaves a large offset in the body to its reload pass;
+  **LLVM** finds a free register with its register scavenger and spills one to an emergency slot where none is free; **Go**
+  reserves `R27` on arm64 and `X31` on riscv64 in every function; **Rust**, **Zig** and **Swift** are LLVM's; on x86-64 nothing
+  is needed, an offset there carrying 32 bits.
+
+Two things were found and fixed on the way, both places where pypl4g and the C++ port answered differently once a pass ran where
+it had not: `largeanswers` made its offsets as constants of its own rather than the module's, and the checker makes a fresh
+undefined value wherever it wants one, so two equal values were two to pypl4g's `samevalues` and one to the port's.  Both are now
+one in both.
 
 Open questions
 --------------

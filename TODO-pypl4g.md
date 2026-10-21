@@ -799,11 +799,16 @@ Optimizations
 
 [ ] RISC-V saves and restores `sp` in every function that names it: `sp` is among the callee-saved names, and a function whose
     code addresses its frame names it.  The restore puts back the value it already has; two instructions a function, wasted.
-[ ] a frame larger than an offset reaches, on AArch64 and RISC-V, in every function.  `sub sp, sp, N` past 4095 and a place past
+[x] a frame larger than an offset reaches, on AArch64 and RISC-V, in every function.  `sub sp, sp, N` past 4095 and a place past
     2047 bytes into a RISC-V frame are refused (8501) except in a function that works on runs, which keeps `t6` for it; a
     function holding two records of 392 bytes and the copies a call of them makes reaches both.  `std.string` keeps its big
     integers as one function's rows for this reason.  A frame whose size is known before allocation -- what the IR's `frame`
     instructions hold -- can say whether the register is wanted.
+    Done on 2026-10-22, and not by the frame's size before allocation, which the allocator's slots are most of: AArch64 moves
+    the stack pointer a page at a time and the rest, and past sixteen megabytes by a register; a place no offset reaches is
+    built in the destination of a load or in `x16`/`t6`, which a function sets aside only where its frame turned out to need
+    it, the builder allocating it again (`FrameOutOfReach`).  In pypl4g and the C++ port; `tests/language/frame-past-an-offset`
+    and `tests/compiler/test_frame_reach.py`.  `std.string`'s rows may go back where they belong.
 
 [ ] code generation the `std.string` measurements point at (2026-10-22): three to four times what C takes for the same
     algorithms.  A condition joined with `and` or `∧` is a truth value made with `setcc` and tested, where a branch on each part
@@ -812,9 +817,22 @@ Optimizations
     it is called; and the parsing loops keep values in the frame.  Each is visible in `perf annotate` of `examples/numbers`.
     **Partly done (2026-10-23):** the index and the `at + 1` are not checked where what holds says they cannot fail (`facts`'
     ranges, spec/details.md); the `and`, the calls and the frame are still as they were.
+    **Partly done (2026-10-22):** a condition is branched on a part at a time (`conditions`); the inliner's budget counts only
+    what grows the program and a leaf may be twice as large, so all three of those and `byte_of`, `place` and `shortest` are put
+    in place; the allocator coalesces moves -- the copies a loop's back edge made are gone -- and puts a value in the frame only
+    across the calls it lives across where those are made less often than it is used.  At `-O1`, per number: `parse_f64` 788
+    instructions rather than 1093 (17 digits) and 506 rather than 693 (short ones), `format_f64` 1542 rather than 1647.  What
+    is left in the loops is selection more than allocation: a constant put in a register to be subtracted or multiplied by, an
+    element's address added up where x86-64 would index, a block laid out so that a turn takes three jumps, `⎕wrap` of a `u8`
+    masked after every subtraction; in `format_f64`, the list appended to (`__pl4g_list_grow` and `__pl4g_own.list` are a sixth of
+    it); and in a `main` the whole program was inlined into, values the inner loops read still spilled, the pressure there being
+    real -- a range split at a loop's edges rather than only around calls would take them out.  `eisel_lemire` (230 machine
+    instructions, called twice) is a call on every number read.
 
-[ ] divide by a constant with a multiplication.  `÷ 10u64` and `÷ 100u64` are the machine's division -- some thirty times the
+[x] divide by a constant with a multiplication.  `÷ 10u64` and `÷ 100u64` are the machine's division -- some thirty times the
     multiplication by the inverse and the shift every C compiler emits, which `std.string` writes out by hand (`tenth`).
+    Done on 2026-10-22: the pass `divisions`, every width and both signs, in pypl4g and the C++ port
+    (`tests/language/divides-by-a-constant`).  `tenth` is now what the compiler writes for `÷ 10u64`.
 
 [x] answer a local list without copying it.  `fn f() → [u8]: let out: mut [u8] = [] … out` copies the whole list on the way out,
     only a temporary of the heap's being answered as it is; a `mut` local changed in place has room no other name shares, and a

@@ -36,7 +36,7 @@ from ...ir.layout import size_of
 from ...ir.types import (MEM, ProductType, ResultType, TupleType, Type, U8,
                          U16, U32, U64,
                          VOID, held_in_memory, leaves_of, parts_of)
-from ...ir.value import IntConst, Value
+from ...ir.value import Value
 
 #: The one layout this compiler has.  Where it grows a second, the pass is
 #: handed the target's rather than knowing one.
@@ -275,7 +275,7 @@ def _at(module: Module, place: Value, part: Type, offset: int,
     made.append(base)
     if offset == 0:
         return base
-    moved = BinaryInst(BinOp.ADD, base, IntConst(U64, offset), span)
+    moved = BinaryInst(BinOp.ADD, base, module.int_const(U64, offset), span)
     made.append(moved)
     return moved
 

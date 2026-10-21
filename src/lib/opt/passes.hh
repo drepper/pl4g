@@ -33,6 +33,8 @@ namespace pl4g::opt {
   bool pure_calls(ir::Module& module);
   bool simplify_cfg(ir::Module& module);
   bool facts(ir::Module& module);
+  bool branch_conditions(ir::Module& module);
+  bool divisions(ir::Module& module);
   bool known_arguments(ir::Module& module);
   bool dead_code(ir::Module& module);
   // Folding, simplifying and knowing the arguments in turn until none of

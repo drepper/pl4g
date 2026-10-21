@@ -44,6 +44,15 @@ namespace pl4g::target::riscv64 {
     // on runs; nothing in a function that does not.
     const mc::PhysReg* spare = nullptr;
 
+    // The one a function working on runs keeps already, set aside as well in
+    // a function whose frame no offset reaches.
+    const mc::PhysReg* frame_spare() const override;
+    const mc::PhysReg* held_spare() const override { return spare; }
+    void hold_spare(const mc::PhysReg* held) override { spare = held; }
+    // The register set aside to build a place in, or the signal to the
+    // builder that one is wanted.
+    const mc::PhysReg* spare_for(std::int64_t offset) const;
+
     mc::Insts select_move(mc::Reg dst, const mc::MCOperand& src, Span span) override;
     mc::Insts select_op(const mc::Op* op, mc::Reg dst, std::span<const mc::MCOperand> sources, Span span) override;
     mc::Insts select_acquire(mc::Reg dst, const mc::MCMem& address, Span span) override;

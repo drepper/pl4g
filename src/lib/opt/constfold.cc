@@ -311,6 +311,22 @@ namespace pl4g::opt {
           }
           return nullptr;
         }
+        case InstKind::FailedInst:
+        case InstKind::UnwrapInst: {
+          // A result made of its parts answers with them: whether it failed
+          // is the truth value it was made with, and its answer the value --
+          // but not an answer that is none, which has nothing to stand for.
+          auto whole = inst->operands[0];
+          if (whole->vkind == ValueKind::instruction) {
+            auto made = static_cast<const Instruction*>(whole);
+            if (made->kind == InstKind::WrapInst) {
+              auto part = made->operands[inst->kind == InstKind::FailedInst ? 1 : 0];
+              if (same(part->ty, inst->ty) && part->vkind != ValueKind::undef)
+                return part;
+            }
+          }
+          return nullptr;
+        }
         case InstKind::BinaryInst:
           return fold_binary(inst);
         default:

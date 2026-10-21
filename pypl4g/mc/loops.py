@@ -136,3 +136,107 @@ def loop_depths(function: MachineFunction) -> list[int]:
         for at in natural_loop(edges, latch, header):
             depths[at] += 1
     return depths
+
+
+#: How many times a loop is taken to turn for each time it is entered.
+TURNS = 10
+
+
+def block_frequencies(function: MachineFunction) -> list[float]:
+    """How often each block of *function* is taken to run for each time the
+    function is called, by its place in the layout.
+
+    Ten turns of every loop, as the depths say, and beside that a guess at which
+    way each branch goes: either way alike.  So a block behind one test in a
+    loop runs half as often as the loop's header, and the call behind two tests
+    a quarter as often -- which is what the depth alone cannot say, a block
+    being as deep in a loop whether every turn runs it or almost none.
+
+    **A way out of a loop is taken once, whichever turn takes it.**  What the
+    branches inside a loop share between them is a turn, and only the ways
+    that stay in the loop share it: the header of a `while` goes on into the
+    body every turn but the last.  Where the loop is left is reached as often as
+    the loop is entered -- its header's share at the level outside -- divided
+    among the ways out there are.  That keeps what follows a loop as frequent as
+    what came before it, which a halving at every test of the loop's condition
+    would not.
+
+    The guess is the uniform one LLVM's block frequencies start from without a
+    profile, with the loop scale this allocator already used; Ball and Larus's
+    heuristics for which way a branch goes would refine it and are not here.
+    """
+    edges = function.successor_indices()
+    count = len(edges)
+    if count == 0:
+        return []
+    reached = _reachable(edges)
+    latches = back_edges(edges)
+    backward = set(latches)
+    # Every loop, its blocks, by its header: two back edges to one header are
+    # one loop.
+    bodies: dict[int, set[int]] = {}
+    for latch, header in latches:
+        bodies.setdefault(header, set()).update(natural_loop(edges, latch, header))
+    holding: list[list[int]] = [[] for _ in range(count)]
+    for header, body in bodies.items():
+        for at in body:
+            holding[at].append(header)
+    depths = [len(found) for found in holding]
+    exits: dict[int, int] = {header: sum(1 for at in body for reached_ in edges[at]
+                                         if reached_ not in body)
+                             for header, body in bodies.items()}
+    # The forward edges in the order the layout and each block's successors
+    # give them, for each block the ones arriving.
+    arriving: list[list[int]] = [[] for _ in range(count)]
+    for at, going in enumerate(edges):
+        for target in going:
+            if (at, target) not in backward:
+                arriving[target].append(at)
+    share = [0.0] * count
+    for at in _forward_order(edges, backward, reached):
+        if at == 0:
+            share[at] = 1.0
+            continue
+        total = 0.0
+        for source in arriving[at]:
+            if source not in reached:
+                continue
+            left = [header for header in holding[source]
+                    if at not in bodies[header]]
+            if left:
+                # Out of every loop in *left*: the outermost of them is entered
+                # as often as its header's share says.
+                outer = max(left, key=lambda header: len(bodies[header]))
+                total += share[outer] / exits[outer]
+                continue
+            staying = sum(1 for target in edges[source]
+                          if all(target in bodies[header]
+                                 for header in holding[source]))
+            total += share[source] / staying
+        share[at] = total
+    return [share[at] * TURNS ** depths[at] for at in range(count)]
+
+
+def _forward_order(edges: Edges, backward: set[tuple[int, int]],
+                   reached: set[int]) -> list[int]:
+    """The blocks the entry reaches, each after every block with a forward edge
+    to it: the reverse of the order a walk along forward edges leaves them in."""
+    if not edges:
+        return []
+    order: list[int] = []
+    seen = {0}
+    stack: list[tuple[int, int]] = [(0, 0)]
+    while stack:
+        at, next_ = stack[-1]
+        going = [target for target in edges[at] if (at, target) not in backward]
+        if next_ < len(going):
+            stack[-1] = (at, next_ + 1)
+            target = going[next_]
+            if target not in seen:
+                seen.add(target)
+                stack.append((target, 0))
+            continue
+        stack.pop()
+        order.append(at)
+    order.reverse()
+    return [at for at in order if at in reached]

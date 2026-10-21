@@ -16,14 +16,14 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Final, Mapping, Sequence
 
 from ...mc import ops
-from ...mc.asmbuilder import InstructionSelector
+from ...mc.asmbuilder import FrameOutOfReach, InstructionSelector
 from ...mc.desc import InstrTable, SelectionError
 from ...mc.inst import MCInst
 from ...mc.operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
 from ...mc.ops import Condition, Op, Rounding
 from . import isa
 from ...ir.inst import BinOp, Ordering, UnOp
-from ...mc.reg import Reg, VirtReg
+from ...mc.reg import PhysReg, Reg, VirtReg
 from ...mc.operand import SymExpr
 from ...source.location import Span
 from ..branches import (CONDITIONS, Move, UnsupportedBranch,
@@ -987,12 +987,23 @@ class RVSelector(InstructionSelector):
         """
         if IMM12_MIN <= offset <= IMM12_MAX:
             return (), MCReg(SP), offset
-        if self.spare is None:
-            raise UnsupportedOperation("".join((
-                "a place ", str(offset), " bytes into the frame")), span)
-        spare = MCReg(self.spare)
-        return ((*self._materialize(self.spare, offset, span),
+        held = self._spare_for(offset)
+        spare = MCReg(held)
+        return ((*self._materialize(held, offset, span),
                  self._inst("add", (spare, spare, MCReg(SP)), span)), spare, 0)
+
+    def frame_spare(self) -> PhysReg:
+        """The register to set aside where the frame is out of an offset's
+        reach: the one a function working on runs keeps to itself already."""
+        return SPARE
+
+    def _spare_for(self, offset: int) -> Reg:
+        """The register set aside to build a place in, or the signal that one is
+        wanted: the builder then sets it aside and allocates again."""
+        if self.spare is None:
+            raise FrameOutOfReach("".join(("a place ", str(offset),
+                                           " bytes into the frame")))
+        return self.spare
 
     def _frame_word(self, mnemonic: str, register: Reg, offset: int,
                     span: Span) -> Sequence[MCInst]:
@@ -1061,19 +1072,21 @@ class RVSelector(InstructionSelector):
 
     def select_frame(self, size: int, span: Span) -> Sequence[MCInst]:
         """Instructions that make room for *size* bytes on the stack."""
-        if size <= IMM12_MAX + 1 or self.spare is None:
+        if size <= IMM12_MAX + 1:
             return (self._inst("addi", (MCReg(SP), MCReg(SP), MCImm(-size, 12)),
                                span),)
-        return (*self._materialize(self.spare, size, span),
-                self._inst("sub", (MCReg(SP), MCReg(SP), MCReg(self.spare)), span))
+        held = self._spare_for(size)
+        return (*self._materialize(held, size, span),
+                self._inst("sub", (MCReg(SP), MCReg(SP), MCReg(held)), span))
 
     def select_unframe(self, size: int, span: Span) -> Sequence[MCInst]:
         """Instructions that give that room back."""
-        if size <= IMM12_MAX or self.spare is None:
+        if size <= IMM12_MAX:
             return (self._inst("addi", (MCReg(SP), MCReg(SP), MCImm(size, 12)),
                                span),)
-        return (*self._materialize(self.spare, size, span),
-                self._inst("add", (MCReg(SP), MCReg(SP), MCReg(self.spare)), span))
+        held = self._spare_for(size)
+        return (*self._materialize(held, size, span),
+                self._inst("add", (MCReg(SP), MCReg(SP), MCReg(held)), span))
 
     # -- runs, where the build has the vector extension -------------------------
     #
