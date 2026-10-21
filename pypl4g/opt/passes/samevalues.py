@@ -37,7 +37,7 @@ from ...ir.inst import (CallInst, FrameInst, Instruction, LoadInst,
                         MemStartInst, Ordering, SyscallInst,
                         Terminator)
 from ...ir.module import Module
-from ...ir.value import Value
+from ...ir.value import UndefConst, Value
 from ..flow import dominators, predecessors, replace_uses, successors
 
 #: The slots every instruction has, which say nothing about what it computes.
@@ -82,6 +82,16 @@ def _writes_unseen(inst: Instruction) -> bool:
     """
     return isinstance(inst, (CallInst, SyscallInst)) or (
         isinstance(inst, LoadInst) and inst.ordering is not Ordering.PLAIN)
+
+
+def _operand_key(value: Value) -> Hashable:
+    """What an operand is, for telling two instructions apart: which value it
+    is -- and for an undefined one, which type, every undefined value of one
+    type being the same nothing.  The checker makes a fresh one wherever it
+    wants one; the C++ port's module makes each once."""
+    if isinstance(value, UndefConst):
+        return ("undef", id(value.ty))
+    return id(value)
 
 
 class SameValues:
@@ -164,7 +174,7 @@ class SameValues:
         holds walks everything it holds, which was most of what this pass cost.
         """
         return (type(inst), inst.opcode, id(inst.ty),
-                tuple([id(standing(one)) for one in inst.operands]),
+                tuple([_operand_key(standing(one)) for one in inst.operands]),
                 tuple([getattr(inst, name, None) if hashed else
                        id(getattr(inst, name, None))
                        for name, hashed in _attributes(type(inst))]))
