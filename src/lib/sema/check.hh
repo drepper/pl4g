@@ -120,7 +120,22 @@ namespace pl4g::sema {
     // nothing has asked for yet, and the generic ones not yet checked where
     // they are written.
     std::vector<Collected*> waiting;  // check.py:3782
-    std::vector<Generic*> waiting_generics;  // check.py:3783
+    std::vector<Generic*> waiting_generics;
+    // And the variables in the image whose value is a call nothing has named
+    // yet, in the order they were written: worked out where a name for one is
+    // asked for, as a body is lowered.
+    struct WaitingImage {
+      ir::GlobalVar* var = nullptr;
+      const ast::VarDef* node = nullptr;
+      const ir::Type* ty = nullptr;
+    };
+    std::vector<std::pair<std::string, WaitingImage>> waiting_images;  // check.py:_waiting_images
+    // Whether the variables are worked out where they are defined.
+    bool images_now = true;
+    // Work out the variable *name* in the image, left until something named it.
+    void image_now(std::string_view name);  // check.py:_image_now
+    // Whether the variable *name* is one waiting to be worked out.
+    bool image_waits(std::string_view name) const;  // check.py:3783
     Conditions conditions = Conditions::check;  // check.py:3786
     bool for_macros = false;  // check.py:3792
     // The trees quoted in the macros, in the order they were written, and the

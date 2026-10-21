@@ -378,6 +378,16 @@ namespace pl4g::target::x86_64 {
         return {};
       return { inst("movsd", { MCReg{ dst, 128 }, MCReg{ reg->reg, 128 } }, span) };
     }
+    if (auto imm = std::get_if<MCImm>(&src)) {
+      // A number written out, which is the nought standing for the answer of
+      // an error that nothing reads.  Nothing puts one straight into a
+      // floating-point register, so it goes into an ordinary one and its bits
+      // are moved across.
+      auto carried = new_gpr(64);
+      Insts made = select_move(carried, MCImm{ imm->value, 64, false }, span);
+      extend(made, select_move_bits(dst, MCReg{ carried, 64 }, 64, span));
+      return made;
+    }
     throw UnsupportedOperation("putting that kind of operand in a floating-point register", span);
   }
 

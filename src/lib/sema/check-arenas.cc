@@ -2791,6 +2791,9 @@ namespace pl4g::sema {
         return std::nullopt;
       const Held* found = top->get(std::string(ref->name));
       if (auto var = found != nullptr ? found->get<ir::GlobalVar>() : nullptr) {
+        if (image_waits(ref->name))
+          // A number read where it may be one the compiler knows.
+          image_now(ref->name);
         if (var->is_mutable() || var->initializer == nullptr || var->initializer->vkind != ir::ValueKind::int_const)
           return std::nullopt;
         auto initial = static_cast<const ir::IntConst*>(var->initializer);

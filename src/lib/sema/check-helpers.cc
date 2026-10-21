@@ -2772,6 +2772,74 @@ namespace pl4g::sema {
     return shape;
   }
 
+  bool threaded(std::string_view name, const ast::Block* body)
+  {
+    // Handed bare to a call: `f(x, l)`, or `f(.into ← l)`.
+    auto through = [&](const ast::Expr* expr) {
+      auto call = ast::as<ast::Call>(expr);
+      if (call == nullptr)
+        return false;
+      for (auto one : call->args) {
+        if (auto named = ast::as<ast::Named>(one))
+          one = named->value;
+        if (auto ref = ast::as<ast::NameRef>(one); ref != nullptr && ref->name == name)
+          return true;
+      }
+      return false;
+    };
+    bool found = false;
+    auto visit = [&](this auto& self, const ast::Node* one) -> void {
+      if (found || one == nullptr)
+        return;
+      if (auto assign = ast::as<ast::AssignStmt>(one)) {
+        if (assign->name == name && assign->more.empty() && through(assign->value))
+          found = true;
+      } else if (auto back = ast::as<ast::ReturnStmt>(one)) {
+        if (through(back->value))
+          found = true;
+      }
+      ast::for_each_child(one, [&](const ast::Node* child) { self(child); });
+    };
+    visit(body);
+    if (found)
+      return true;
+    auto stmts = body->stmts();
+    if (stmts.empty())
+      return false;
+    auto last = ast::as<ast::ExprStmt>(stmts.back());
+    return last != nullptr && through(last->value);
+  }
+
+
+  bool referenced(const ast::Node* node, std::string_view name)
+  {
+    if (node == nullptr)
+      return false;
+    if (auto taken = ast::as<ast::AddressOf>(node))
+      if (auto ref = ast::as<ast::NameRef>(taken->operand); ref != nullptr && ref->name == name)
+        return true;
+    if (auto call = ast::as<ast::Call>(node)) {
+      auto callee = callee_name(call);
+      if (callee != nullptr && callee->name == names::iter_name && call->args.size() == 1)
+        if (auto ref = ast::as<ast::NameRef>(call->args[0]); ref != nullptr && ref->name == name)
+          return true;
+    }
+    if (auto capture = ast::as<ast::Capture>(node);
+        capture != nullptr && capture->by_reference && capture->name == name)
+      return true;
+    if (auto lambda = ast::as<ast::Lambda>(node);
+        lambda != nullptr && lambda->brings_in == ast::CaptureAll::by_reference) {
+      std::vector<std::string> written;
+      named_in(lambda->body, written);
+      if (std::ranges::find(written, name) != written.end())
+        return true;
+    }
+    bool found = false;
+    ast::for_each_child(node, [&](const ast::Node* one) { found = found || referenced(one, name); });
+    return found;
+  }
+
+
   std::vector<std::int64_t> takes_owned(const ast::FuncDef* node, std::span<const ir::Type* const> params)
   {
     std::vector<std::int64_t> found;
@@ -2780,7 +2848,7 @@ namespace pl4g::sema {
     for (std::size_t at = 0; at < node->params.size() && at < params.size(); ++at) {
       auto param = node->params[at];
       if (param->mutable_ && holds_a_list(params[at]) && owned::can_own(params[at])
-          && changed_in_place(param->name, node->body))
+          && (changed_in_place(param->name, node->body) || threaded(param->name, node->body)))
         found.push_back(std::int64_t(at));
     }
     return found;

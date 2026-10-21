@@ -340,6 +340,12 @@ namespace pl4g::sema {
   std::optional<std::vector<std::int64_t>> shape_of_literal(const ast::ArrayLit* expr);  // check.py:3080
   // Which parameters of a definition its body takes as its own: `mut` ones holding a list that the body
   // changes in place.
+  // Whether *body* hands the list *name* holds to a call and takes back what
+  // the call answers -- `l ← f(x, l)` -- or answers with what it answers.
+  bool threaded(std::string_view name, const ast::Block* body);  // check.py:_threaded
+  // Whether anything below *node* reaches the variable *name* other than by
+  // its name: `&`, a lambda bringing it in by reference, a cursor.
+  bool referenced(const ast::Node* node, std::string_view name);  // check.py:_referenced
   std::vector<std::int64_t> takes_owned(const ast::FuncDef* node, std::span<const ir::Type* const> params);  // check.py:3095
   // How many times `name` is read in `node`.
   std::int64_t mentions(const ast::Node* node, std::string_view name);  // check.py:3105

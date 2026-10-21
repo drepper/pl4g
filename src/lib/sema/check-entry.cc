@@ -138,6 +138,7 @@ namespace pl4g::sema {
         unit = copy;
       }
     units = kept;
+    images_now = whole_program || whole_modules || for_macros || notes != nullptr;
     for (auto unit : units)
       mark_system(unit);
     definitions.clear();
@@ -272,6 +273,12 @@ namespace pl4g::sema {
       if (! grew)
         break;
     }
+    std::vector<std::string> named;
+    for (const auto& [name, _] : waiting_images)
+      if (names.contains(name))
+        named.push_back(name);
+    for (const auto& name : named)
+      image_now(name);
     if (chosen.empty() && generics.empty()) {
       for (const auto& name : exported_imports) {
         auto held = top->get(name);
@@ -287,6 +294,25 @@ namespace pl4g::sema {
       lower_function(entry);
     for (auto one : generics)
       check_generic(one);
+  }
+
+
+  void Checker::image_now(std::string_view name)
+  {
+    auto at = std::ranges::find_if(waiting_images, [&](const auto& one) { return one.first == name; });
+    if (at == waiting_images.end())
+      return;
+    auto waited = at->second;
+    waiting_images.erase(at);
+    auto outer = std::exchange(for_the_image, true);
+    waited.var->initializer = constant_value(waited.node, waited.ty);
+    for_the_image = outer;
+  }
+
+
+  bool Checker::image_waits(std::string_view name) const
+  {
+    return std::ranges::any_of(waiting_images, [&](const auto& one) { return one.first == name; });
   }
 
 
@@ -486,6 +512,7 @@ namespace pl4g::sema {
     const ir::Type* ty = nullptr;
     const ir::Value* initializer = nullptr;
     bool is_static = false;
+    bool later = false;
     {
       defining_globally = true;
       ty = variable_type(node);
@@ -513,10 +540,16 @@ namespace pl4g::sema {
         ty = ir::error_type();
       // An empty one in the heap costs nothing until something is put in it.
       bool unbuilt = ty != nullptr && is_a_table(ty) && ! is_static && empty_in_the_heap(node->value);
+      // A call laid out in the image, in a module lowered as far as it is
+      // named, is worked out where something names it.
+      if (auto allocated = ast::as<ast::Allocated>(node->value);
+          is_static && ! images_now && pairs.empty() && ty != nullptr && ty != ir::error_type()
+          && allocated != nullptr && ast::is<ast::Call>(allocated->value))
+        later = true;
       auto outer = std::exchange(for_the_image, is_static);
       if (unbuilt)
         initializer = empty_table_constant(ty);
-      else if (ty == nullptr || (is_a_table(ty) && ! is_static))
+      else if (ty == nullptr || later || (is_a_table(ty) && ! is_static))
         initializer = nullptr;
       else
         initializer = constant_value(node, ty);
@@ -560,6 +593,8 @@ namespace pl4g::sema {
     top_level.push_back(global);
     if (is_a_table(ty) && ! is_static && initializer == nullptr)
       built_globals.emplace_back(var, node);
+    if (later && ty != ir::error_type())
+      waiting_images.emplace_back(std::string(node->name), WaitingImage{ var, node, ty });
   }
 
 
@@ -1445,8 +1480,10 @@ namespace pl4g::sema {
     default:
       break;
     }
+    auto array_answer = ir::as<ir::ArrayType>(ty);
     if (auto call = ast::as<ast::Call>(value); call != nullptr && for_the_image
-        && (ir::is<ir::SetType>(ty) || ir::is<ir::DictType>(ty) || ir::is<ir::ListType>(ty) || ir::is<ir::StrType>(ty))
+        && (ir::is<ir::SetType>(ty) || ir::is<ir::DictType>(ty) || ir::is<ir::ListType>(ty) || ir::is<ir::StrType>(ty)
+            || (array_answer != nullptr && array_answer->fixed() && array_answer->rank() == 1))
         && ast::is<ast::NameRef>(call->callee)
         && find_local(static_cast<const ast::NameRef*>(call->callee)->name) == nullptr) {
       auto literal = worked_out_for_the_image(call, ty);
@@ -1623,6 +1660,11 @@ namespace pl4g::sema {
       made->value = { *number, false };
       return made;
     }
+    if (auto number = value.get<double>()) {
+      auto made = syntax.make<ast::FloatLit>(span);
+      made->value = *number;
+      return made;
+    }
     if (auto text = value.get<std::string>()) {
       auto made = syntax.make<ast::StringLit>(span);
       made->value = syntax.text(*text);
@@ -1673,6 +1715,12 @@ namespace pl4g::sema {
       }
       if (missing)
         return nullptr;
+      if (ir::is<ir::ArrayType>(ty)) {
+        // An array the call made, laid out as one written down.
+        auto made = syntax.make<ast::ArrayLit>(span);
+        made->elements = syntax.list(elements);
+        return made;
+      }
       auto made = syntax.make<ast::ListLit>(span);
       made->elements = syntax.list(elements);
       return made;
@@ -2321,7 +2369,10 @@ namespace pl4g::sema {
 
   void Checker::report_unused(Local* local)
   {
-    if (local->read || local->is_parameter || local->value->ty == ir::error_type())
+    if (local->read || local->is_parameter || local->value->ty == ir::error_type()
+        || local->name == names::wildcard_name)
+      // `_` is what an arm writes where it binds nothing, and nothing is there
+      // to read.
       return;
     if (session != nullptr && session->kept.contains(local->span.start))
       return;
@@ -2381,6 +2432,7 @@ namespace pl4g::sema {
     local->is_mutable = mutable_;
     local->value_span = value_span.is_valid() ? value_span : span;
     local->is_parameter = is_parameter;
+    local->named_parameter = is_parameter;
     local->depth = std::int64_t(scopes.size());
     if (placed_as != nullptr) {
       // A name that already stands for a place: what was handed over is the

@@ -1496,7 +1496,7 @@ namespace pl4g::sema {
       if (std::size_t(at) >= given.size())
         continue;
       const ast::Expr* one = written.get_or(at, nullptr);
-      if (one != nullptr && movable(one)) {
+      if (one != nullptr && movable(one, &builder.function())) {
         module.record("copy-into-allocator", func->name,
                       "'" + written_as(one) + "' is handed to '" + func->name
                         + "' as it is: nothing reads it again, and the callee changes it in place",
@@ -1509,16 +1509,23 @@ namespace pl4g::sema {
   }
 
 
-  bool Checker::movable(const ast::Expr* written)
+  bool Checker::movable(const ast::Expr* written, ir::Function* current)
   {
     auto name = ast::as<ast::NameRef>(written);
     if (name == nullptr)
       return false;
     Local* local = find_local(name->name);
     const ast::Stmt* stmt = current_stmt;
-    if (local == nullptr || local->is_parameter || ! local->is_mutable || addressed.contains(name->name)
+    if (local == nullptr || ! local->is_mutable || (local->named_parameter && ! owned_parameter(written, current))
         || stmt == nullptr || mentions(stmt, name->name) != 1)
       return false;
+    if (addressed.contains(name->name)) {
+      // A place: of its own, for joining onto it in place, or one a second
+      // way reaches, which nothing handed over can be.
+      auto node = node_of_func.get(id_of(current));
+      if (node == nullptr || *node == nullptr || (*node)->body == nullptr || referenced((*node)->body, name->name))
+        return false;
+    }
     if (auto assign = ast::as<ast::AssignStmt>(stmt); assign != nullptr && assign->name == name->name
                                                       && assign->more.empty())
       return true;
@@ -1532,7 +1539,7 @@ namespace pl4g::sema {
     if (name == nullptr)
       return false;
     Local* local = find_local(name->name);
-    if (local == nullptr || ! local->is_parameter)
+    if (local == nullptr || ! local->named_parameter)
       return false;
     auto at = std::ranges::find(func->param_names, name->name);
     if (at == func->param_names.end())
