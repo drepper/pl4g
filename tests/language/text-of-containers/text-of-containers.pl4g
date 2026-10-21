@@ -1,0 +1,57 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **`⍕` writes a list, a set, a dictionary and a sum as each is written down**: a list
+※ between brackets, `[1, 2]`; a set and a dictionary between the double parentheses,
+※ `⸨1, 2⸩` and `⸨a: 1⸩`, in the order their keys were put in; and a sum as it is made,
+※ the one part it holds named -- `Json(.number ← 1)` -- and a part that carries nothing
+※ with the `true` it is made with.  What each holds is written by the same definition,
+※ so a type that reaches itself through a list is written all the way down.  Text is
+※ itself wherever it stands, as it is in a field of a record.
+※
+※ Compare **Python**'s `repr` of a list or a `dict`, which is what this is but for the
+※ quotes; **Rust**'s `#[derive(Debug)]`, which writes `Items([Number(1), Null])`;
+※ **Haskell**'s `deriving Show`, the same; **Go**'s `%v`, which writes `[1 2]` and
+※ `map[a:1]`.
+
+let std := ⎕import("std")
+
+type Json = null : void | flag : bool | number : u32 | text : str | items : [Json] | fields : [Member]
+type Member = key : str ; value : Json
+type Shelf = counts : [u16]
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: mut [u8] = []
+    if ⍕l ≠ "[]":
+        return 1u6
+    l ⧺← [1u8, 2u8, 30u8]
+    if ⍕l ≠ "[1, 2, 30]":
+        return 2u6
+    let nested: mut [[i8]] = []
+    nested ⧺← [[⁻1i8], [], [2i8, 3i8]]
+    if ⍕nested ≠ "[[⁻1], [], [2, 3]]":
+        return 3u6
+
+    let d: mut ⸨str: u8⸩ = ⸨⸩
+    if ⍕d ≠ "⸨⸩":
+        return 4u6
+    d⸨"b"⸩ ← 2u8
+    d⸨"a"⸩ ← 1u8
+    if ⍕d ≠ "⸨b: 2, a: 1⸩":
+        return 5u6
+    let s: mut ⸨char⸩ = ⸨⸩
+    s ← s | ⸨'x'⸩
+    s ← s | ⸨'y'⸩
+    if ⍕s ≠ "⸨x, y⸩":
+        return 6u6
+
+    let doc: Json = Json(.items ← [Json(.number ← 1u32), Json(.null ← true),
+                                   Json(.fields ← [Member(.key ← "k", .value ← Json(.flag ← false))])])
+    if ⍕doc ≠ "Json(.items ← [Json(.number ← 1), Json(.null ← true), Json(.fields ← [Member(.key ← k, .value ← Json(.flag ← false))])])":
+        return 7u6
+    if std.text(Json(.text ← "hi")) ≠ "Json(.text ← hi)":
+        return 8u6
+    let shelf: Shelf = Shelf(.counts ← [4u16, 5u16])
+    if ⍕shelf ≠ "Shelf(.counts ← [4, 5])":
+        return 9u6
+    if std.padded(l, .width ← 12u64) ≠ "[1, 2, 30]  ": 10u6 else: 0u6

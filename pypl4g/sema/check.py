@@ -27,6 +27,7 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            AT_NAME, SPAN_NAME,
                            ADDRESS_NAME, BYTES_NAME,
                            IS_RECORD_NAME, FIELDS_NAME, TYPENAME_NAME,
+                           KIND_OF_NAME, ALTERNATIVES_NAME,
                            STR_OF_NAME, TEXT_NAME, EMPTY_NAME, ONE_RUN_NAME,
                            WIDEN_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH, EACH_GLYPH, ITER_GLYPH,
@@ -1752,6 +1753,55 @@ def _a_place_again(expr: ast.Expr) -> bool:
 def _is_a_table(ty: Type) -> bool:
     """Whether a value of *ty* is a collection, and so is built and not written."""
     return isinstance(ty, (SetType, DictType))
+
+
+#: What `⎕kindof` answers, for each kind of type there is, in the words the
+#: specification uses for them; `"other"` is everything a program cannot hold
+#: as a value of its own -- a walk, a piece of syntax.
+_KINDS: Final[tuple[str, ...]] = (
+    "integer", "float", "bool", "char", "str", "enumeration", "record", "sum",
+    "tuple", "array", "list", "set", "dictionary", "result", "reference",
+    "function", "other")
+
+
+def _kind_of(ty: Type) -> str:
+    """The kind `⎕kindof` names for *ty*."""
+    from ..ir.types import BoolType, CharType, StrType
+
+    match ty:
+        case IntType():
+            return "integer"
+        case FloatType():
+            return "float"
+        case BoolType():
+            return "bool"
+        case CharType():
+            return "char"
+        case StrType():
+            return "str"
+        case EnumType():
+            return "enumeration"
+        case ProductType():
+            return "record"
+        case SumType():
+            return "sum"
+        case TupleType():
+            return "tuple"
+        case ArrayType():
+            return "array"
+        case ListType():
+            return "list"
+        case SetType():
+            return "set"
+        case DictType():
+            return "dictionary"
+        case ResultType():
+            return "result"
+        case PtrType():
+            return "reference"
+        case FuncType():
+            return "function"
+    return "other"
 
 
 def _read_only(module: Module, ty: SetType | DictType) -> SetType | DictType:
@@ -8796,7 +8846,11 @@ class Checker:
     def _collection_type(self, ref: ast.CollectionTypeRef) -> Type:
         """Resolve `⸨T⸩` or `⸨K: V⸩`, checking that the key can be one."""
         element = self._resolve_type(ref.element)
-        if element is not ERROR and not _can_be_a_key(element):
+        # A type parameter stands as a key where a generic function is written:
+        # what it is, is settled where a call says, by an argument that is a
+        # table already and whose key was held to this there.
+        if element is not ERROR and not _can_be_a_key(element) \
+                and not isinstance(element, OpaqueType):
             self._diags.emit(D.LANG_COLLECTION_KEY_NOT_HASHABLE, ref.element.span,
                              found=element.written())
             element = ERROR
@@ -13860,6 +13914,14 @@ class Checker:
                                          param.name)
                 if not read:
                     return UndefConst(ERROR)
+                with self._in_scope_of(written):
+                    settled = self._worked_out(param.type, bound)
+                if isinstance(settled, (SetType, DictType)) \
+                        and settled is not found and isinstance(found, (SetType, DictType)) \
+                        and _read_only(self._module, found) is settled:
+                    # A table that may be written handed where one that may only be
+                    # read is wanted: the same handle, nothing generated for it.
+                    value = builder.cast(CastKind.BITCAST, value, settled, one.span)
             args.append(value)
         # The requirements come between the arguments and the instance: they are
         # what the types must satisfy, and an arrow in one of them may settle a
@@ -17506,6 +17568,10 @@ class Checker:
                                                   ast.BinaryOp.SHORT_OR):
                 return self._both_settled(condition, any)
             case ast.Binary() if condition.op in (ast.BinaryOp.EQUAL,
+                                                  ast.BinaryOp.NOT_EQUAL) \
+                    and (kind := self._settled_kind(condition)) is not None:
+                return kind if condition.op is ast.BinaryOp.EQUAL else not kind
+            case ast.Binary() if condition.op in (ast.BinaryOp.EQUAL,
                                                   ast.BinaryOp.NOT_EQUAL):
                 left = self._type_stood_for(condition.left)
                 right = self._type_stood_for(condition.right)
@@ -17518,6 +17584,34 @@ class Checker:
                 return self._settled_is_record(condition)
             case _:
                 return None
+
+    def _settled_kind(self, condition: ast.Binary) -> bool | None:
+        """Whether `⎕kindof(⌜T⌝) = "KIND"` holds, where one side of *condition*
+        asks it and the other is the literal; nothing where it is not that.
+
+        The kind is the type's own, read off what the type is, and the literal is
+        held to the kinds there are (4282): a misspelt kind would otherwise be a
+        condition that is never true, and its arm never checked.
+        """
+        asked, said = condition.left, condition.right
+        if isinstance(asked, ast.StringLit):
+            asked, said = said, asked
+        if not (isinstance(asked, ast.Call) and isinstance(asked.callee, ast.NameRef)
+                and asked.callee.name == KIND_OF_NAME
+                and isinstance(said, ast.StringLit)):
+            return None
+        if len(asked.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, asked.span,
+                             name=KIND_OF_NAME, expected=1, found=len(asked.args))
+            return False
+        if said.value not in _KINDS:
+            self._diags.emit(D.LANG_KIND_UNKNOWN, said.span, found=said.value,
+                             kinds=", ".join(_KINDS))
+            return False
+        found = self._type_stood_for(asked.args[0])
+        if found is None:
+            return None
+        return _kind_of(found) == said.value
 
     def _settled_is_record(self, call: ast.Call) -> bool | None:
         """Whether `⎕isrecord` was asked of a record.
@@ -25418,6 +25512,11 @@ class Checker:
                 # condition the compiler settles never lowering what is in it.
                 self._diags.emit(D.LANG_ISRECORD_OUTSIDE_COMPTIME, expr.span)
                 return UndefConst(ERROR)
+            if given == KIND_OF_NAME:
+                self._diags.emit(D.LANG_KIND_ASKED_OUTSIDE_COMPTIME, expr.span)
+                return UndefConst(ERROR)
+            if given == ALTERNATIVES_NAME:
+                return self._lower_alternatives(builder, expr, expected)
             if given in _ASKS_ABOUT_A_PIECE:
                 return self._lower_asked(builder, expr, given, expected)
             if given == TYPEOF_NAME:
@@ -26718,6 +26817,62 @@ class Checker:
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
         return builder.make_tuple(tuple(leaves), answer, expr.span)
+
+    def _lower_alternatives(self, builder: IRBuilder, expr: ast.Call,
+                            expected: Type | None) -> Value:
+        """Lower `⎕alternatives(v)`: a sum's parts as a tuple of name and view.
+
+        **One pair for every part, in the order the type declares them**, the
+        view of a part's type: where the sum is, one element long where its tag
+        names that part, and none long where it names another.  Nothing is read
+        but the tag; what a part carries is read only through the view, and a
+        view of none has nothing in it to read -- which is what keeps a part the
+        sum does not hold from being read at all.  A part that carries nothing is
+        a view of a `true` in the frame, the value it is written with.
+
+        It is `⎕fields` for a sum: what lets a generic definition write one it
+        was never told about, walking it with `comptime foreach`.
+        """
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=ALTERNATIVES_NAME, expected=1,
+                             found=len(expr.args))
+            return UndefConst(ERROR)
+        given = self._lower_expr(builder, expr.args[0], None)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(found, SumType):
+            self._diags.emit(D.LANG_ALTERNATIVES_NOT_A_SUM, expr.args[0].span,
+                             found=found.written())
+            return UndefConst(ERROR)
+        span = expr.span
+        place = builder.cast(CastKind.BITCAST, given,
+                             self._module.types.ptr_type(found, mutable=True), span)
+        tag = builder.load(self._tag_place(builder, place, found, span), span)
+        truth: Value | None = None
+        pairs: list[Value] = []
+        for at, (name, held) in enumerate(found.variants):
+            shown = BOOL if held is VOID else held
+            view = self._module.types.array_type(shown, (None,))
+            if held is VOID and truth is None:
+                truth = builder.frame(BOOL, span)
+                builder.store(truth, builder.bool_const(True), span)
+            where = truth if held is VOID else place
+            assert where is not None
+            start = builder.cast(CastKind.BITCAST, where, parts_of(view)[0], span)
+            count = builder.cast(CastKind.ZEXT, builder.compare(
+                CmpPred.EQ, tag, builder.int_const(U8, at), span), U64, span)
+            pairs.append(self._made_tuple(
+                builder, (self._written_text(builder, name, span),
+                          self._view(builder, start, [count],
+                                     [builder.int_const(U64, 1)], view, span)),
+                self._module.types.tuple_type((STR, view)), span))
+        whole = self._module.types.tuple_type(tuple(one.ty for one in pairs))
+        if not self._accepts(expected, whole):
+            self._report_mismatch(span, whole, expected)
+            return UndefConst(ERROR)
+        return self._made_tuple(builder, pairs, whole, span)
 
     def _fields_of_a_type(self, expr: ast.Expr) -> Type | None:
         """The type `⎕fields(⌜T⌝)` asks about, where it asks about a type rather

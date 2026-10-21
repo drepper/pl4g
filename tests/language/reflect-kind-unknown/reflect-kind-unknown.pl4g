@@ -1,0 +1,17 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4282 LANG_KIND_UNKNOWN
+
+※ A kind `⎕kindof` never answers would make a condition that never holds, its arm never
+※ checked and never run; a misspelling is refused rather than left to be that.
+
+let std := ⎕import("std")
+
+fn kind(v: T') → u8:
+    comptime if ⎕kindof(⌜T'⌝) = "lsit":
+        1u8
+    else:
+        0u8
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if kind(3u8) = 0u8: 0u6 else: 1u6

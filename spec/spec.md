@@ -434,6 +434,22 @@ the only way to write the smallest value a type has, there being no positive of 
 **A record is written by reflection over its fields** (see [Asking what a type is](#asking-what-a-type-is)), so a type `std` was
 never told about is written without being told, and a field that is a record is written the same way.
 
+**A list, a set and a dictionary are written as each is written down, and a sum as it is made**:
+
+```
+⍕l                               ※ "[1, 2, 30]", and "[]" for none
+⍕d                               ※ "⸨b: 2, a: 1⸩", in the order the keys were put in
+⍕s                               ※ "⸨x, y⸩"
+⍕Json(.items ← [Json(.number ← 1u32), Json(.null ← true)])   ※ "Json(.items ← [Json(.number ← 1), Json(.null ← true)])"
+```
+
+What each holds is written by the same definition, so a type that reaches itself through a list is written all the way down, and
+the one part a sum holds is named with what it carries -- `true` for a part that carries nothing, the value it is made with.
+**Text is itself wherever it stands**, in a list as in a field of a record: `⍕["a"]` is `[a]`.  That is what `⍕` of text is, and
+quoting it inside something else would be a second notation for text that only one place uses; what reads back as a program is
+the shape, and a program that wants quotes writes them.  Compare **Python**, whose `str` of a list is the `repr` of its elements,
+quotes and all; **Rust**'s `Debug`, which quotes too; **Go**'s `%v`, which does not: `[a b]`.
+
 **A program says what its own type's text is by writing the definition for its file**, which wins over the imported one, and
 handing every other type back to `std.text`:
 
@@ -4734,6 +4750,12 @@ and put in again is a new key, and is the last of them.
 **It is writing, so it needs `mut`** (4598), which reading does not: a name holding the read-only type cannot empty a table under
 everything else holding one.
 
+**A generic function may take one**: `fn keys(d: ⸨K': V'⸩) → u64` reads what the table holds out of the argument it is handed,
+`⸨K'⸩` a set's.  A type parameter stands as a key where the function is written -- what it is, is settled where a call says, by an
+argument that is a table already and whose key was held to being one there -- and a table that may be written is handed where one
+that may only be read is wanted, as anywhere else.  What the body does to a key is what its requirements say, as for any value of
+a type parameter.
+
 **Putting anything in one needs `mut` in the type** (4598).  A collection type written `mut ⸨K: V⸩` says entries may be put in it
 and one written `⸨K: V⸩` says they may not, which is the distinction `&mut T` and `&T` draw about a place and is drawn here for
 the same reason: a collection is a handle, so the one who made it and the one who was handed it reach the one table, and what may
@@ -5363,6 +5385,8 @@ record than for a number -- the language having no overloading, so that a glyph 
 | `⎕fields(v)` | a record's fields as a tuple of pairs | anywhere a value stands |
 | `⎕fields(⌜E⌝)` | an enumeration's values, each with its name, as a tuple of pairs | anywhere a value stands |
 | `⎕fields(⌜T⌝)` | a record type's fields, each name with its type | what `comptime foreach` walks, and nowhere else (4692) |
+| `⎕kindof(⌜T⌝)` | what kind of type `T` is, as text compared with a literal | a condition `comptime` was written on, and nowhere else (4281) |
+| `⎕alternatives(v)` | a sum's parts as a tuple of pairs, each a name and a view of what it carries | anywhere a value stands |
 
 ```
 type Point = x : u8 ; y : u16
@@ -5439,9 +5463,37 @@ introspection over a type's members; **Rust**, which has none and derives an imp
 `consteval` function takes apart, which is the same shape arrived at thirty years later; and **C**, where the question cannot be
 asked.
 
-What is deliberately absent is **a general question about what kind of type something is**.  `⎕isrecord` is one predicate, and a
-second kind -- a sum, an array, an enumeration -- would want an answer naming which, rather than a predicate each.  That wants a
-`comptime if` that can compare something other than two types, and it waits for a use.
+**`⎕kindof(⌜T⌝)` names what kind of type `T` is**, which is the question a second kind wanted answered rather than a predicate
+each: `"integer"`, `"float"`, `"bool"`, `"char"`, `"str"`, `"enumeration"`, `"record"`, `"sum"`, `"tuple"`, `"array"`, `"list"`,
+`"set"`, `"dictionary"`, `"result"`, `"reference"`, `"function"`, and `"other"` for what no program holds as a value of its own.
+It is text the compiler settles, compared with `=` or `≠` against a literal in a condition `comptime` was written on and standing
+nowhere else (4281), for the reason `⎕isrecord` does; a literal naming no kind is refused (4282), a misspelt kind being a
+condition that never holds and an arm never checked.  `⎕isrecord(⌜T⌝)` is `⎕kindof(⌜T⌝) = "record"` and stays.
+
+```
+fn `⍕`(v: T') → str:
+    comptime if ⎕kindof(⌜T'⌝) = "list":
+        …                        ※ walk it
+    comptime elif ⎕kindof(⌜T'⌝) = "sum":
+        …                        ※ take it apart
+```
+
+**`⎕alternatives(v)` takes a sum apart as `⎕fields` takes a record**: a tuple with a pair for every part, in the order the type
+declares them, each the part's name and **a view of what the part carries -- one element long where the sum holds that part, and
+none long where it holds another**.  Only one part is there to be read, and a view of none is what says so without reading
+anything: nothing but the tag is read until the view is.  A part that carries nothing is a view of a `bool` holding `true`, which
+is what it is made with.  Anything but a sum is refused (4283).
+
+```
+comptime foreach p := ⎕alternatives(v):
+    if #p⟦1⟧ ≠ 0:
+        out ← ⎕typename(⌜T'⌝) ⧺ "(." ⧺ p⟦0⟧ ⧺ " ← " ⧺ ⍕p⟦1⟧⟦0⟧ ⧺ ")"
+```
+
+Compare **Zig**, whose `@typeInfo` answers a union with a case for each kind -- `⎕kindof` is its tag -- and whose tagged union's
+fields are walked with `inline for` and asked which is active with `std.meta.activeTag`; **C++26**, whose `is_union_type` and its
+siblings are a predicate each; **Rust**, which has neither and derives what it needs (`Debug`, serde) with a macro; and **Go**'s
+`reflect.Kind`, which is this question asked at run time.
 
 #### foreach
 

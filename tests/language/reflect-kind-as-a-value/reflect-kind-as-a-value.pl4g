@@ -1,0 +1,12 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4281 LANG_KIND_ASKED_OUTSIDE_COMPTIME
+
+※ What kind a type is, is settled while compiling, so `⎕kindof` is compared with a
+※ literal in a condition `comptime` was written on and stands nowhere else.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let said: str = ⎕kindof(⌜u8⌝)
+    if said = "integer": 0u6 else: 1u6
