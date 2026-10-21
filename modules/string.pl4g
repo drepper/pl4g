@@ -2107,11 +2107,15 @@ fn closest(text: u8⟦⟧, guess: u64) → u64:
 
 ※ -- writing numbers ----------------------------------------------------------
 ※
-※ Digits are written into a buffer of the writer's frame, from the right, and
-※ joined onto the list in one move.  They are written there by each writer and
-※ not by a function of their own: a function writing a buffer it was handed is
-※ not pure, and one answering a buffer of digits copies it into its caller's
-※ room and back out again, which costs more than the digits do.
+※ Digits are written into a buffer of the frame, from the right, and joined onto
+※ the list in one move.  `format_int` writes them there itself: a function
+※ writing a buffer it was handed is not pure, and one answering a buffer of
+※ digits copies it into its caller's room, which for a whole number costs a
+※ fifth again of what the digits do.  `numeral_int` and `numeral_f64` answer
+※ the buffer, as a `Numeral`, for a writer whose list is an arena's -- which a
+※ list handed in and back is not moved through, an arena's being answered as a
+※ copy in the heap -- and `format_f64` is `numeral_f64` joined on, its layout
+※ being too long to write twice and its digits dearer than the copy.
 
 ※ v ÷ 10, as a multiplication by its inverse and a shift, which is what C
 ※ compilers make of a division by a constant: this one asks the machine to
@@ -2127,6 +2131,83 @@ fn decimal_count(v: u64) → u64 ¤idx:
     let bits: u64 = 64u64 - ⎕widen(⎕lead(v), ⌜u64⌝)
     let t: u64 ¤idx = ⎕unit((bits × 1233u64) » 12u64, ⌜idx⌝)
     if v ≥ TENS⟦t⟧: t + 1 else: t
+
+※※ A number written out, as a value: the bytes `text⟦from…to⟧`.
+※※
+※※ \details What `format_int` and `format_f64` join onto a list, answered rather
+※※ than joined: a writer whose list is an arena's, or that wants the text in a
+※※ buffer of its own, takes the bytes from here.  Seventy-two bytes are room for
+※※ a sign and the sixty-four digits of a `u64` in base two.
+@[export]
+type Numeral = text : u8⟦72⟧ ; from : u64 ¤idx ; to : u64 ¤idx
+
+※※ A whole number written out, as `format_int` writes it.
+※※
+※※ \param n the number, of any whole-number type
+※※ \param base how many digits a place has
+※※ \param digits how many digits at least
+※※ \param upper whether the digits past nine are capitals
+※※ \return the text, at the end of the room: from `from` to seventy-two
+※
+※ The magnitude is a `u64` whatever the type, so one body writes them all, and a
+※ sign is a flag beside it: the smallest `i64` has a magnitude and no positive.
+※ Base ten goes two digits at a time; the others one, by division.  The digits
+※ are written from the right, and the noughts in front of them are the room's.
+@[export]
+fn numeral_int(n: T', base: u8 ← 10u8, digits: u8 ← 1u8, upper: bool ← false) → Numeral
+        pre(base ≥ 2u8 ∧ base ≤ 36u8):
+    let magnitude: mut u64 = 0u64
+    let negative: mut bool = false
+    comptime if ⌜T'⌝ = ⌜u64⌝:
+        magnitude ← n
+    else:
+        ※ every other whole number fits an i64
+        let signed: i64 = ⎕narrow(n, ⌜i64⌝) ?? 0i64
+        negative ← signed < 0i64
+        if negative:
+            magnitude ← (⎕narrow(⁻1i64 - signed, ⌜u64⌝) ?? 0u64) + 1u64
+        else:
+            magnitude ← ⎕narrow(signed, ⌜u64⌝) ?? 0u64
+    let text: mut u8⟦72⟧ = 72 ⍴ 48u8
+    let at: mut u64 ¤idx = 72
+    let rest: mut u64 = magnitude
+    if base = 10u8:
+        ※ two digits a step, ÷ 100 being v ÷ 4 times ⌈2^68 ÷ 25⌉, exact for every u64
+        while §pairs rest ≥ 100u64:
+            let product: 〈u64, u64〉 = ⎕wide_mul(rest » 2u64, 0x28F5C28F5C28F5C3u64)
+            let below: u64 = product⟦0⟧ » 2u64
+            let pair: u64 ¤idx = ⎕unit(2u64 × (rest - below × 100u64), ⌜idx⌝)
+            at ← at - 2
+            text⟦at⟧ ← PAIRS⟦pair⟧
+            text⟦at + 1⟧ ← PAIRS⟦pair + 1⟧
+            rest ← below
+        if rest ≥ 10u64:
+            let pair: u64 ¤idx = ⎕unit(2u64 × rest, ⌜idx⌝)
+            at ← at - 2
+            text⟦at⟧ ← PAIRS⟦pair⟧
+            text⟦at + 1⟧ ← PAIRS⟦pair + 1⟧
+        else:
+            at ← at - 1
+            text⟦at⟧ ← byte_of(rest + 48u64)
+    else:
+        let radix: u64 = ⎕widen(base, ⌜u64⌝)
+        let past: u64 = if upper: 55u64 else: 87u64
+        let more: mut bool = true
+        while §places more:
+            let below: u64 = rest ÷ radix ?? 0u64
+            let d: u64 = rest - below × radix
+            at ← at - 1
+            text⟦at⟧ ← byte_of(d + (if d < 10u64: 48u64 else: past))
+            rest ← below
+            more ← rest ≠ 0u64
+    let wanted: u64 ¤idx = ⎕unit(⎕widen(digits ⌊ 64u8, ⌜u64⌝), ⌜idx⌝)
+    if 72 - at < wanted:
+        ※ the noughts are already there: the room was made of them
+        at ← 72 - wanted
+    if negative:
+        at ← at - 1
+        text⟦at⟧ ← 45u8
+    Numeral(.text ← text, .from ← at, .to ← 72)
 
 ※※ A whole number written onto the end of some bytes.
 ※※
@@ -2223,37 +2304,11 @@ enum Form:
     javascript ;
     python
 
-※※ The shortest text that reads back as the same `f64`, written onto the end of
-※※ some bytes, in the form JavaScript's `Number.prototype.toString` gives it --
-※※ which is what `JSON.stringify` writes -- or with *form* the form Python's
-※※ `repr` gives it.
-※※
-※※ \details The digits are the fewest that `parse_f64` reads back as this number,
-※※ and of several so few the nearest to it, a tie to the even digit.  Where they
-※※ go is JavaScript's rule.  With the digits d₁…dₖ and the number d₁.d₂…dₖ ×
-※※ 10ⁿ⁻¹:
-※※
-※※ - k ≤ n ≤ 21: the digits and n - k noughts, no point -- `100`, `1e21` being
-※※   `1000000000000000000000`;
-※※ - 0 < n ≤ 21: the digits with a point after the first n -- `1.5`, `123.456`;
-※※ - -6 < n ≤ 0: `0.`, -n noughts and the digits -- `0.000001`;
-※※ - otherwise one digit, a point and the rest where there are more, `e`, a sign
-※※   and n - 1 -- `1e+21`, `1.5e-7`, `5e-324`.
-※※
-※※ Python's rule is the same with 16 for 21 and -4 for -6, `.0` after a whole
-※※ number, `0.0` for nought and at least two digits of exponent: `1e-07`.
-※※
-※※ A negative number has a `-` in front.  Where JavaScript and this part is
-※※ nought with its sign, which this writes `-0` and JavaScript `0`: what is written
-※※ here reads back as the number it was, and `0` is the other nought.  A number
-※※ that is not finite, which JSON has no way to write, is what JavaScript calls it
-※※ -- `Infinity`, `-Infinity`, `NaN` -- and what `parse_f64` reads back with
-※※ `Allow.special`.
+※※ The shortest text that reads back as the same `f64`, as `format_f64` writes it.
 ※※
 ※※ \param x the number
-※※ \param into what to write onto
 ※※ \param form how the digits are laid out
-※※ \return what was handed in, the text after what it held
+※※ \return the text
 ※
 ※ The digits are Giulietti's Schubfach, which was chosen over Ryu and Dragonbox
 ※ for what it costs to write and to trust: one table of 617 powers of ten where
@@ -2264,29 +2319,29 @@ enum Form:
 ※ or two digits to spare, each rounded to odd so that whether it was exact is
 ※ kept in its last bit; the digits are then the shortest whole number inside the
 ※ interval, one digit fewer tried first.  Trailing noughts are taken off, and the
-※ digits are laid out in a buffer of the frame's and joined on in one move.
+※ digits are laid out in the numeral's room, which `format_f64` joins on in one
+※ move.
 @[export]
-fn format_f64(x: f64, into: mut [u8], form: Form ← Form.javascript) → [u8]:
+fn numeral_f64(x: f64, form: Form ← Form.javascript) → Numeral:
     let python: bool = form = Form.python
     let bits: u64 = ⎕bits(x)
     let negative: bool = bits ≥ 0x8000000000000000u64
     let magnitude: u64 = bits & 0x7FFFFFFFFFFFFFFFu64
+    let out: mut u8⟦72⟧ = 72 ⍴ 48u8
     if magnitude ≥ INFINITY_BITS:
         if magnitude > INFINITY_BITS:
-            into ⧺← ⎕bytes("NaN")
-        elif negative:
-            into ⧺← ⎕bytes("-Infinity")
-        else:
-            into ⧺← ⎕bytes("Infinity")
-        return into
-    if magnitude = 0u64:
+            out⟦0…3⟧ ← ⎕bytes("NaN")
+            return Numeral(.text ← out, .from ← 0, .to ← 3)
         if negative:
-            into ⧺← ⎕bytes("-0")
-        else:
-            into ⧺← ⎕bytes("0")
-        if python:
-            into ⧺← ⎕bytes(".0")
-        return into
+            out⟦0…9⟧ ← ⎕bytes("-Infinity")
+            return Numeral(.text ← out, .from ← 0, .to ← 9)
+        out⟦0…8⟧ ← ⎕bytes("Infinity")
+        return Numeral(.text ← out, .from ← 0, .to ← 8)
+    if magnitude = 0u64:
+        ※ the noughts are the room's own
+        out⟦0⟧ ← 45u8
+        out⟦2⟧ ← 46u8
+        return Numeral(.text ← out, .from ← if negative: 0 else: 1, .to ← if python: 4 else: 2)
     let decimal: 〈u64, i64〉 = shortest(magnitude)
     let value: mut u64 = decimal⟦0⟧
     let power: mut i64 = decimal⟦1⟧
@@ -2300,7 +2355,6 @@ fn format_f64(x: f64, into: mut [u8], form: Form ← Form.javascript) → [u8]:
     let count: i64 = ⎕narrow(⎕drop(k), ⌜i64⌝) ?? 0i64
     ※ where the point goes, counted from in front of the first digit
     let point: i64 = count + power
-    let out: mut u8⟦32⟧ = 32 ⍴ 48u8
     let start: u64 ¤idx = if negative: 1 else: 0
     out⟦0⟧ ← if negative: 45u8 else: 48u8
     ※ JavaScript's four forms, each saying where the digits go -- they end just
@@ -2379,7 +2433,43 @@ fn format_f64(x: f64, into: mut [u8], form: Form ← Form.javascript) → [u8]:
         else:
             out⟦length + 2⟧ ← byte_of(size + 48u64)
             length ← length + 3
-    into ⧺← out⟦0…length⟧
+    Numeral(.text ← out, .from ← 0, .to ← length)
+
+※※ The shortest text that reads back as the same `f64`, written onto the end of
+※※ some bytes, in the form JavaScript's `Number.prototype.toString` gives it --
+※※ which is what `JSON.stringify` writes -- or with *form* the form Python's
+※※ `repr` gives it.
+※※
+※※ \details The digits are the fewest that `parse_f64` reads back as this number,
+※※ and of several so few the nearest to it, a tie to the even digit.  Where they
+※※ go is JavaScript's rule.  With the digits d₁…dₖ and the number d₁.d₂…dₖ ×
+※※ 10ⁿ⁻¹:
+※※
+※※ - k ≤ n ≤ 21: the digits and n - k noughts, no point -- `100`, `1e21` being
+※※   `1000000000000000000000`;
+※※ - 0 < n ≤ 21: the digits with a point after the first n -- `1.5`, `123.456`;
+※※ - -6 < n ≤ 0: `0.`, -n noughts and the digits -- `0.000001`;
+※※ - otherwise one digit, a point and the rest where there are more, `e`, a sign
+※※   and n - 1 -- `1e+21`, `1.5e-7`, `5e-324`.
+※※
+※※ Python's rule is the same with 16 for 21 and -4 for -6, `.0` after a whole
+※※ number, `0.0` for nought and at least two digits of exponent: `1e-07`.
+※※
+※※ A negative number has a `-` in front.  Where JavaScript and this part is
+※※ nought with its sign, which this writes `-0` and JavaScript `0`: what is written
+※※ here reads back as the number it was, and `0` is the other nought.  A number
+※※ that is not finite, which JSON has no way to write, is what JavaScript calls it
+※※ -- `Infinity`, `-Infinity`, `NaN` -- and what `parse_f64` reads back with
+※※ `Allow.special`.
+※※
+※※ \param x the number
+※※ \param into what to write onto
+※※ \param form how the digits are laid out
+※※ \return what was handed in, the text after what it held
+@[export]
+fn format_f64(x: f64, into: mut [u8], form: Form ← Form.javascript) → [u8]:
+    let written: Numeral = numeral_f64(x, form)
+    into ⧺← written.text⟦written.from…written.to⟧
     into
 
 ※ The digits and the power of ten of the shortest decimal number that reads
