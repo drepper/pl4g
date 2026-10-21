@@ -106,6 +106,10 @@ namespace pl4g::ir {
   // the memory token.
   std::vector<std::pair<BlockParam*, Value*>> carried_values(const BlockTarget& target);
 
+  // What the stub that finds a function the host defines is called, before the
+  // host's symbol: the compiler's own prefix, so that a lookup never finds it.
+  inline constexpr std::string_view host_prefix = "__pl4g_host.";
+
   // The name a function is known by in an image.
   std::string symbol_name(const Function& func);
   std::string mangle(std::string_view name, const FuncType& ty, std::string_view module);

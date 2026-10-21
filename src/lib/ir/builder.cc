@@ -429,6 +429,8 @@ namespace pl4g::ir {
   {
     if (func.attrs.external)
       return *func.attrs.external;
+    if (func.attrs.host)
+      return std::string(host_prefix) + *func.attrs.host;
     if (func.attrs.abi)
       return func.name;
     return mangle(func.name, *func.fty, func.module);

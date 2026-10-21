@@ -189,6 +189,8 @@ namespace pl4g::ir {
         out += " priority(" + std::to_string(*func.attrs.priority) + ")";
       if (func.attrs.abi)
         out += " abi(" + *func.attrs.abi + ")";
+      if (func.attrs.host)
+        out += " host(" + *func.attrs.host + ")";
       if (func.attrs.impure)
         out += " impure";
       if (func.attrs.opaque)

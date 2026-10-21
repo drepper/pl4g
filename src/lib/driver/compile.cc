@@ -101,8 +101,11 @@ namespace pl4g::driver {
     module->triple = options.triple;
     if (options.stack_size)
       module->stack_size = *options.stack_size;
+    if (options.output_kind == ir::Output::shared)
+      module->stack_size = 0;
     if (options.guard_size)
       module->guard_size = *options.guard_size;
+    module->output = options.output_kind;
     auto found = registry();
     try {
       sema::check(*module, units, diags, &found, &sources, notes, options.conditions, false, options.ignore_system,

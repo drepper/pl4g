@@ -3,6 +3,9 @@
 // src/test/check_agrees.py compares both with what pypl4g makes.
 //
 // Usage: pl4g-checkdump [--ir=FILE] [--passes] [PYPL4G-OPTION...] FILE...
+//
+// `-shared` is pypl4g's spelling and is taken as it is; argp would read it as
+// six short options, so it is put aside before argp sees the command line.
 #include <argp.h>
 
 #include <cstdint>
@@ -35,6 +38,7 @@ namespace {
     std::optional<std::int64_t> stack_size;
     std::optional<std::int64_t> guard_size;
     bool ignore_system = false;
+    bool shared = false;
     pl4g::ColourWhen colour = pl4g::ColourWhen::automatic;
     std::vector<std::string> files;
   };
@@ -127,7 +131,13 @@ namespace {
 int main(int argc, char* argv[])
 {
   Arguments args;
-  ::argp_parse(&parser, argc, argv, 0, nullptr, &args);
+  std::vector<char*> kept(argv, argv + argc);
+  std::erase_if(kept, [&](char* one) {
+    bool shared = std::string_view(one) == "-shared";
+    args.shared = args.shared || shared;
+    return shared;
+  });
+  ::argp_parse(&parser, int(kept.size()), kept.data(), 0, nullptr, &args);
 
   pl4g::SourceManager sources;
   pl4g::TextRenderer renderer(sources, 2);
@@ -158,6 +168,8 @@ int main(int argc, char* argv[])
   given.stack_size = args.stack_size;
   given.guard_size = args.guard_size;
   given.ignore_system = args.ignore_system;
+  if (args.shared)
+    given.output_kind = pl4g::ir::Output::shared;
   pl4g::driver::Compilation compilation(std::move(given), diags, sources);
   auto made = compilation.front_end();
   if (made == nullptr)

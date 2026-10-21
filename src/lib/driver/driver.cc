@@ -319,8 +319,11 @@ namespace pl4g::driver {
       module = std::make_unique<ir::Module>();
       module->name = options.inputs.empty() ? "<none>" : options.inputs.front().filename().string();
       module->triple = options.triple;
-      module->stack_size = options.stack_size.value_or(1 << 20);
+      // A shared object runs on the stack of whatever calls it, so it makes
+      // none of its own.
+      module->stack_size = options.output_kind == ir::Output::shared ? 0 : options.stack_size.value_or(1 << 20);
       module->guard_size = options.guard_size.value_or(1 << 16);
+      module->output = options.output_kind;
       // One log for the run, written from both ends: what was said and what
       // the module chooses, in the order it happened.
       module->reports = std::move(*log.active);

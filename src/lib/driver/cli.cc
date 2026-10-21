@@ -47,6 +47,7 @@ namespace pl4g::driver {
       key_debug_info,
       key_pie,
       key_no_pie,
+      key_shared,
       key_warning,
       key_werror,
       key_color,
@@ -82,6 +83,7 @@ namespace pl4g::driver {
         { { "-g" }, Takes::nothing, key_debug_info },
         { { "-fpie" }, Takes::nothing, key_pie },
         { { "-fno-pie" }, Takes::nothing, key_no_pie },
+        { { "-shared" }, Takes::nothing, key_shared },
         { { "-W" }, Takes::value, key_warning },
         { { "-Werror", "--Werror" }, Takes::nothing, key_werror },
         { { "--color" }, Takes::value, key_color },
@@ -360,7 +362,7 @@ namespace pl4g::driver {
       std::optional<std::string> emit, target, mclevel, conditions, opt_level, color, diag_format, jobs, stack_size,
         guard_size, report_log, test_runner;
       std::vector<std::string> warnings, module_path, defines;
-      bool debug_info = false, pie = false, werror = false, incremental = false, ignore_system = false,
+      bool debug_info = false, pie = false, shared = false, werror = false, incremental = false, ignore_system = false,
            verbose = false, time_report = false, verify = false, help = false, help_json = false, targets = false,
            version = false;
     };
@@ -379,6 +381,7 @@ namespace pl4g::driver {
       case key_debug_info: g.debug_info = true; return 0;
       case key_pie: g.pie = true; return 0;
       case key_no_pie: g.pie = false; return 0;
+      case key_shared: g.shared = true; return 0;
       case key_warning: g.warnings.push_back(value); return 0;
       case key_werror: g.werror = true; return 0;
       case key_color: g.color = value; return 0;
@@ -553,6 +556,8 @@ namespace pl4g::driver {
     options.debug_info = g.debug_info;
     if (g.pie)
       options.pie = true;
+    if (g.shared)
+      options.output_kind = ir::Output::shared;
     options.warnings_are_errors = g.werror;
     for (const auto& name : g.warnings)
       if (name == "error")

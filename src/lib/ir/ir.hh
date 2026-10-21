@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ir/output.hh"
 #include "ir/types.hh"
 #include "source/location.hh"
 #include "util/reflect.hh"
@@ -259,6 +260,9 @@ namespace pl4g::ir {
     InlineHint inline_ = InlineHint::default_;
     std::optional<std::string> abi;
     std::optional<std::string> external;
+    // The symbol a function the host defines is known by there, looked up the
+    // first time it is called.
+    std::optional<std::string> host;
     bool builtin = false;
     bool can_ignore = false;
     bool impure = false;
@@ -433,6 +437,9 @@ namespace pl4g::ir {
     std::vector<std::string> source_paths;
     std::int64_t stack_size = 1 << 20;
     std::int64_t guard_size = 1 << 16;
+    // What the program is made into: asked by the checker, which refuses a
+    // function the host defines where there is no host, and by the back end.
+    Output output = Output::executable;
     // How large each generator's frame came to, which the pass splitting it
     // measured.
     std::unordered_map<const CoroutineFrame*, std::uint64_t> frame_sizes;

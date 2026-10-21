@@ -665,6 +665,7 @@ namespace pl4g::ir {
                               : inline_hint == "never" ? InlineHint::never : InlineHint::default_;
         func->attrs.abi = maybe_string(attrs["abi"]);
         func->attrs.external = maybe_string(attrs["external"]);
+        func->attrs.host = maybe_string(attrs["host"]);
         func->attrs.builtin = bool_of(attrs["builtin"]);
         func->attrs.can_ignore = bool_of(attrs["can_ignore"]);
         func->attrs.impure = bool_of(attrs["impure"]);

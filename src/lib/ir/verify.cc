@@ -115,8 +115,10 @@ namespace pl4g::ir {
           auto previous = seen.find(symbol);
           if (previous != seen.end()) {
             const Function* before = previous->second;
-            if (before->attrs.external && func->attrs.external && before->blocks.empty() && func->blocks.empty())
-              // One function of the runtime declared by two files.
+            if (((before->attrs.external && func->attrs.external) || (before->attrs.host && func->attrs.host))
+                && before->blocks.empty() && func->blocks.empty())
+              // One function of the runtime, or of the host, declared by two
+              // files.
               continue;
             fail("module", "'" + before->name + "' and '" + func->name + "' are both known by the symbol '" + symbol
                  + "'");

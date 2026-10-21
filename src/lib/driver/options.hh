@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "diag/style.hh"
+#include "ir/output.hh"
 #include "sema/clauses.hh"
 #include "util/ordered.hh"
 
@@ -90,6 +91,10 @@ namespace pl4g::driver {
     // executable that relocates itself where it was loaded.  pypl4g makes a
     // fixed-address one only, which is the default.
     bool pie = false;
+    // What the program is made into: an executable, or with `-shared` a
+    // shared object a program loads.  An interpreter embedded in a program
+    // says it runs one interpreted, which has a host as a shared object has.
+    ir::Output output_kind = ir::Output::executable;
     bool show_help = false;
     bool show_help_json = false;
     bool show_targets = false;
