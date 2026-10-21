@@ -2253,7 +2253,16 @@ it is bound to, so the report says which.
 **What a container owns is copied by a generated function**, `__pl4g_own.T(arena, v)`, one per element type and built on
 first ask in `sema/owned.py` the way the table functions are: text is a join of its bytes with nothing, a list is a join of its
 run with nothing followed by a loop copying every element that points somewhere, and a list of lists calls the function for its
-element type.  Giving back one object is `__pl4g_free(arena, where, size)`, the fourth of the allocator's hand-written symbols;
+element type.  A value held in memory -- a sum, or a record or a tuple holding one -- is copied by `_build_own_in_memory`: its
+bytes into a frame slot of the function's own, then every part that points somewhere copied where it stands (`_own_where_it_stands`
+loads it, calls the part's own function and stores the answer back), and for a sum only the part its tag names, by a chain of
+comparisons over the tag, one per part that points anywhere.  The answer is the slot, which `largeanswers` turns into a write
+through the caller's storage as it does for every answer held in memory.  `__pl4g_disown.T` takes the same walk without the
+copy: a record travelling in registers part by part (`_disown_leaves`), one held in memory and a sum where their parts stand
+(`_disown_in_memory`), the part of a sum chosen by its tag -- and an element of a list held in memory is handed over where it is,
+a value of it being its address, rather than loaded into a frame to be given back.  Before this a list of records holding text
+reached `__pl4g_disown` with a record and failed an assertion the moment an element was replaced.
+Giving back one object is `__pl4g_free(arena, where, size)`, the fourth of the allocator's hand-written symbols;
 for an arena its body is a return.  The checker decides where a copy is needed from what it knows of where a value was made,
 and a value made in `⎕heap` carries a mark of its own for that, so that "made in `⎕heap`" is told apart from "made in nothing".
 
@@ -2661,6 +2670,21 @@ equal; that is why they are written out rather than `eq=False` alone.
 second ask arrives with the depth at zero the definition is refused as before; where it arrives with the depth above zero a
 reference stands somewhere on the way round, and the shell is handed back.  That is exactly the question -- not whether the field
 in hand is a reference, but whether one is open anywhere between the type and itself.
+
+**A list and a table's value raise the same depth** (`_behind_an_indirection`), since each is a few words whatever it holds: a
+list where its elements are, how many and the allocator, a table a handle.  A set's element does not, needing none -- it is a key,
+and nothing that could close a circle is one.  An array whose type says its length is its elements and raises nothing.
+
+**The depth is compared with where the definition began, not with zero.**  `defined.opened_at` is the depth when its resolving
+started, and the second ask is allowed only where the depth has risen since: an indirection opened on the way round.  Asking
+"above zero" let `type Inner = d : u8 ; again : Inner` through whenever `Inner` was first reached from behind a reference --
+`type Far = r : &Near`, `type Near = n : Inner` -- and its size would then have been worked out by walking round it for ever.
+
+**Nothing else had to learn the circle.**  Every walk over a type that goes into a list's element already carried a set of what it
+had seen, because a reference had made types circular before; `owned.can_own` is the one that had not, and now takes one, a type
+met again being taken to be what the rest of the walk finds.  The generated copy and give-back functions close their circle on a
+call: `tables.generated` registers a function before its body is built, so the copy of `[Json]`, asking for the copy of `Json`
+which asks for the copy of `[Json]`, finds it.
 
 
 A unit is part of a type
@@ -4406,11 +4430,23 @@ list each pass's `run` leaves behind, `settle` the union of its three), only tho
 suite sets the variable for every compilation it makes, in a process of its own or not, so a pass that breaks the IR is found at that
 pass; `pl4g-timing` takes it out of what it runs, so a column is the time of an ordinary compilation.
 
-**The blocks are never reordered.**  The order they are laid out in is the order
-the backend walks, and a value has to be computed in a block standing before the
-one that reads it; merging removes a block and moves nothing, so that stays true
-without anything having to reason about it.  What is merged away is also never
-a loop header: a header has the way in and the way round, which is two ways in.
+**The blocks are reordered in one case only.**  The order they are laid out in is
+the order the backend walks, and a value has to be computed in a block standing
+before the one that reads it; merging a block into one standing before it removes
+a block and moves nothing, so that stays true without anything having to reason
+about it.  What is merged away is also never a loop header: a header has the way
+in and the way round, which is two ways in.
+
+The case is a block merged into a predecessor standing *after* it, which `match`
+makes: its join is laid out after the first arm, and where every arm but a later
+one returned, that later arm is its one way in.  What the join computed then
+moves down to the arm, and the blocks it dominated -- which stood after it, and
+which the inliner put there when the join made a call -- would read values
+computed below them.  `_follow` moves those, and only those, to just after the
+predecessor, keeping their order; what the predecessor does not dominate reads
+nothing it computed, and stays.  A program that showed it walked a recursive
+document in a function called after such a `match`; the backend refused it with
+"a value this backend did not compute", the IR having verified.
 
 What it is for is less what the language writes than what the passes leave.  An
 `if` whose condition is known should leave no trace at all, and before this it
@@ -5109,3 +5145,29 @@ relocation the linker settles.
 
 **A slice may begin at the length** (`_checked_index(…, one_past=True)`): `a⟦n…n⟧` is the empty run at the end.  The start was
 checked as an element index, which refused it, and `cat` with no arguments stopped on `init.args⟦1…#init.args⟧`.
+
+
+A recursive document, and what it found
+---------------------------------------
+
+`type Json = … | items : [Json] | fields : [Member]` beside `type Member = key : str ; value : Json` is the shape the JSON module
+reads into, and making it work found four things that were wrong for every program and not only for it.
+
+**A heap container held what a name still held.**  `_stored` let in as it was anything made in an allocator lasting as long as the
+container, and the heap lasts as long as itself -- so `[w, "x"]`, `w` a string a call made, held `w`'s bytes, and `l⟦0⟧ ← …` gave
+them back while `w` still read them.  The specification already said otherwise -- "anything else of the heap's is copied" -- and
+now the code does: into a heap container, only a temporary of the heap's goes in as it is.
+
+**`EXPR ?? DEFAULT` lost the memory of its default.**  `_lower_or_else` joined the two ways with the value alone, so a default that
+wrote memory -- a sum, made in a frame slot of its own -- left what followed reading a token from the way not taken, which
+`--verify` reports as a use the definition does not dominate.  Where the default wrote memory, the join now takes the token too,
+as the join of an `if` does; where it did not, nothing about the IR changes.  `IRBuilder.memory_so_far` is what tells the two
+apart without starting a chain by asking.
+
+**A field of an element of a list was refused** (4449): `_record_at` asks `_place_of_an_element` where the element is, which knew
+arrays only.  A list's element is where its run says, so reading `l⟦i⟧.name` asks for that, checked against the length as any
+index of a list is; a reference into a list and a field written through one are still not taken this way, the run moving when the
+list grows and the element perhaps shared until written.
+
+**Giving back a list of records holding text failed an assertion**, `__pl4g_disown` having been written for text and lists only;
+that and the merge above are in their own sections.

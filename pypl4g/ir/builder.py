@@ -235,6 +235,12 @@ class IRBuilder:
             self._memory = start  # type: ignore[assignment]
         return self._memory
 
+    def memory_so_far(self) -> Value | None:
+        """The memory token in force, or nothing where the chain has not begun --
+        asked by what has to tell whether something it lowered touched memory,
+        without beginning the chain by asking."""
+        return self._memory
+
     def set_memory(self, token: Value) -> None:
         """Make *token* the memory token from here on.
 

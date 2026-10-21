@@ -4781,7 +4781,7 @@
           "description": "the element's type"
         }
       ],
-      "cause": "An element not provably made in its container's allocator is copied into it.  Text, lists of text or of plain values, and records and tuples of those can be copied; a sum holding text, an array held inside a container, a set or a dictionary, and a record that is moved rather than copied cannot yet.",
+      "cause": "An element not provably made in its container's allocator is copied into it.  Text, lists of text or of plain values, and records, tuples and sums of those can be copied; an array held inside a container or a sum, a set or a dictionary, and a record that is moved rather than copied cannot yet.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Arenas / What a container holds",

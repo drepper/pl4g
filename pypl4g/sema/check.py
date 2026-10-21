@@ -286,8 +286,11 @@ class _NamedType:
     What it is made of is worked out on first ask rather than where it is
     written, so that one definition may name another written below it.  The
     `resolving` flag is what catches a type that reaches itself: a value of such
-    a type would have to hold a value of it, and a reference is the one
-    indirection that makes that finite.
+    a type would have to hold a value of it, and an indirection -- a reference,
+    or a list, a set or a table, each of which holds its elements out of line --
+    is what makes that finite.  `opened_at` is how many indirections were open
+    when its resolving began, so that the way round is asked about and not the
+    way in: a type reached behind a reference may still not hold itself inline.
 
     `shell` is the type object, made before its parts are known so that a
     reference written in those parts has something to point at.  The parts are
@@ -312,6 +315,7 @@ class _NamedType:
     closed_by: str = ""
     ty: Type | None = None
     resolving: bool = False
+    opened_at: int = 0
     shell: Type | None = None
     #: For a type that takes type parameters: nothing here, its instances being
     #: what a reference names.  For one of those instances: what each parameter
@@ -3881,9 +3885,10 @@ class Checker:
         #: names given storage of their own rather than standing for a value.
         #: Gathered once per body, before any of it is lowered.
         self._addressed: set[str] = set()
-        #: How many references are open around the type being resolved.  A
-        #: definition that reaches itself is refused, unless a reference stands
-        #: somewhere on the way round.
+        #: How many indirections -- references, and the lists, sets and tables
+        #: that hold their elements out of line -- are open around the type
+        #: being resolved.  A definition that reaches itself is refused, unless
+        #: one stands somewhere on the way round.
         self._behind_a_reference: int = 0
         #: The units a program has introduced, innermost scope last.  A unit
         #: reaches as far as where it was written does, so the stack is pushed
@@ -5238,7 +5243,8 @@ class Checker:
                 # An array's elements are where the array is, so one of them is
                 # a place whatever it holds.  The index is checked here as it is
                 # anywhere else: what this answers is one element and not a run.
-                place = self._place_of_an_element(builder, expr)
+                place = self._place_of_an_element(builder, expr,
+                                                  of_a_list=not writing)
                 if place is None or not isinstance(place[1], ProductType):
                     return None
                 return (place[0], place[1])
@@ -8107,15 +8113,18 @@ class Checker:
         if defined.ty is not None:
             return defined.ty
         if defined.resolving:
-            if self._behind_a_reference == 0 or defined.shell is None:
+            if self._behind_a_reference <= defined.opened_at \
+                    or defined.shell is None:
                 self._diags.emit(D.LANG_TYPEDEF_CONTAINS_ITSELF,
                                  defined.node.name_span, name=defined.name)
                 defined.ty = ERROR
                 return ERROR
-            # A reference stands between the type and itself, which is the
-            # indirection that makes such a type finite: what a reference
-            # occupies is the same whatever it names, so the parts need not be
-            # known to point at it.  The object being built is what is handed
+            # A reference, a list, a set or a table stands between the type and
+            # itself, which is the indirection that makes such a type finite:
+            # what one occupies is the same whatever it holds, so the parts
+            # need not be known to point at it.  It has to stand on the way
+            # round -- opened since this resolving began -- and not merely
+            # around it: `&B` where `B` holds itself inline is still refused.  The object being built is what is handed
             # back, and its parts are filled in before anything reads them.
             return defined.shell
         if defined.takes_types:
@@ -8123,6 +8132,7 @@ class Checker:
             # has said (`_defined_type`); nothing is made of it.
             return ERROR
         defined.resolving = True
+        defined.opened_at = self._behind_a_reference
         defined.shell = _shell_for(defined)
         kept = (self._bound, self._top, self._bundles)
         if defined.bound is not None:
@@ -8451,7 +8461,10 @@ class Checker:
         if isinstance(ref, ast.ArrayTypeRef):
             return self._array_type(ref)
         if isinstance(ref, ast.ListTypeRef):
-            element = self._resolve_type(ref.element)
+            # A list is where its elements are and how many: two words whatever
+            # they are, so a definition may reach itself through one as it may
+            # through a reference.
+            element = self._behind_an_indirection(ref.element)
             if element is ERROR:
                 return ERROR
             if element is VOID:
@@ -8647,6 +8660,17 @@ class Checker:
             return ERROR
         return self._module.types.ptr_type(pointee, ref.mutable, ref.lasting)
 
+    def _behind_an_indirection(self, ref: ast.TypeExpr) -> Type:
+        """Resolve *ref*, a type held out of line: a list's element, a table's
+        value.  What holds it is the same size whatever it is, so a definition
+        may reach itself through it -- which is what the depth says while the
+        circle is being walked."""
+        self._behind_a_reference += 1
+        try:
+            return self._resolve_type(ref)
+        finally:
+            self._behind_a_reference -= 1
+
     def _array_type(self, ref: ast.ArrayTypeRef) -> Type:
         """Resolve `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}N\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` or `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`.
 
@@ -8699,7 +8723,10 @@ class Checker:
         if ref.value is None:
             return (self._module.types.set_type(element, ref.mutable)
                     if element is not ERROR else ERROR)
-        value = self._resolve_type(ref.value)
+        # A table holds its entries out of line, so its value is behind an
+        # indirection as a list's element is.  Its key is not, and need not be:
+        # what may be one never reaches a type a program defined.
+        value = self._behind_an_indirection(ref.value)
         if element is ERROR or value is ERROR:
             return ERROR
         if value is VOID:
@@ -10192,7 +10219,11 @@ class Checker:
         else:
             if made == {_HEAP} and _is_temporary(written):
                 return value, made, None
-            fits = all(self._lasts(one, holder, depth, local) for one in made)
+            # The heap is the holder here, and what else holds the heap's -- a
+            # name, a field, another container -- would give it back too, or
+            # read it after this one had: it is copied, as the rule says.
+            fits = all(one != _HEAP and self._lasts(one, holder, depth, local)
+                       for one in made)
         if fits:
             return value, made, None
         if not owned.can_own(ty):
@@ -15893,13 +15924,34 @@ class Checker:
                 or self._may_write(expr.base), _path_of(expr),
                 self._lasting(where))
 
-    def _place_of_an_element(self, builder: IRBuilder, expr: ast.Element
+    def _place_of_an_element(self, builder: IRBuilder, expr: ast.Element,
+                             of_a_list: bool = False
                              ) -> tuple[Value, Type, bool, str, bool] | None:
-        """Where one element of an array is, for a reference being taken of it."""
+        """Where one element of an array is, for a reference being taken of it.
+
+        Or of a list, where *of_a_list* says the place is only read from, there
+        and then: a record that is an element is read a field at a time, so
+        `l⟦i⟧.name` asks for where the element is.  A reference into a list is
+        not taken this way -- the run moves when the list grows -- and nor is a
+        field written: what the list holds may be shared until it is written,
+        and that is `l⟦i⟧ ← v`'s business."""
         base = self._lower_expr(builder, expr.base, None)
         ty = self._value_type_of(base)
         if ty is ERROR:
             return None
+        if of_a_list and isinstance(ty, ListType) and len(expr.indices) == 1 \
+                and not isinstance(expr.indices[0], ast.Range):
+            at = self._index_into(builder, expr.indices[0], expr.span)
+            if at is None:
+                return None
+            builder.check(builder.compare(CmpPred.ULT, at,
+                                          builder.extract(base, 1, U64, expr.span),
+                                          expr.span),
+                          "an index outside its list", statuses.OUT_OF_RANGE,
+                          expr.span)
+            start = builder.extract(base, 0, parts_of(ty)[0], expr.span)
+            return (self._element_place(builder, start, ty.element, at, expr.span),
+                    ty.element, False, "an element", False)
         if not isinstance(ty, ArrayType):
             self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, expr.base.span,
                              found=ty.written())
@@ -22558,6 +22610,7 @@ class Checker:
         answer = joined.add_param(ty.ok, "answer")
         builder.condbr(builder.failed(value, expr.span), instead, answered,
                        span=expr.span)
+        before = builder.memory_so_far()
         builder.position_at(instead)
         default = self._lower_expr(builder, expr.right, ty.ok)
         found = self._value_type_of(default)
@@ -22566,10 +22619,26 @@ class Checker:
             default = UndefConst(ty.ok)
         elif found is ERROR:
             default = UndefConst(ty.ok)
-        builder.br(joined, (default,), expr.span)
+        after = builder.memory_so_far()
+        if after is before:
+            builder.br(joined, (default,), expr.span)
+            builder.position_at(answered)
+            builder.br(joined, (builder.unwrap(value, ty.ok, expr.span),),
+                       expr.span)
+            builder.position_at(joined)
+            return answer
+        # The default wrote memory -- a sum made in room of its own, say -- and
+        # what follows reads the memory of whichever way was taken, so the two
+        # tokens meet where the ways do, as they meet after an `if`.
+        assert after is not None
+        token = joined.add_param(MEM, "mem")
+        builder.br(joined, (default, after), expr.span)
         builder.position_at(answered)
-        builder.br(joined, (builder.unwrap(value, ty.ok, expr.span),), expr.span)
+        builder.br(joined, (builder.unwrap(value, ty.ok, expr.span),
+                            before if before is not None else builder.memory()),
+                   expr.span)
         builder.position_at(joined)
+        builder.set_memory(token)
         return answer
 
     def _lower_short_circuit(self, builder: IRBuilder, expr: ast.Binary,

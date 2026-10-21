@@ -2467,16 +2467,37 @@ product meaning exactly what it would have meant without it.
 
 **A type definition may name a type defined below it**, and may name one another module exports (`m.Point`), for which the
 definition there needs `@[export]` as a function or a variable does.  What it may not do is reach itself (4408), through its own
-fields or through a chain of other definitions -- **unless a reference stands somewhere on the way round**.  A value of such a
-type would otherwise have to hold a value of itself and there would be no size that fitted; what a reference occupies is the same
-whatever it names, so a definition may reach itself through one and a value of it is as big as its other fields and one address.
+fields or through a chain of other definitions -- **unless an indirection stands somewhere on the way round**: a reference, a list
+`[T]`, or a table `⸨K: V⸩` as its value.  A value of such a type would otherwise have to hold a value of itself and there would be
+no size that fitted; what each of those occupies is the same whatever it holds -- an address, or where the elements are, how many
+and the allocator, or a handle to the entries -- so a definition may reach itself through one and a value of it is as big as its
+other fields and those few words.
 
 ```
 type Node = value : u8 ; next : &mut Node       ※ a list
 type Tree = leaf : u8 ; left : &Tree ; right : &Tree
 type Pair = n : u8 ; other : &Other             ※ and two that reach each other
 type Other = m : u16 ; back : &Pair
+type Json = null : void | flag : bool | number : f64 | text : str | items : [Json] | fields : [Member]
+type Member = key : str ; value : Json          ※ a document, through a list of records
+type Doc = leaf : u32 | object : ⸨str: Doc⸩     ※ and through a table
 ```
+
+**The indirection has to stand on the way round, not on the way in.**  `type Far = r : &Near` beside `type Near = again : Near`
+is refused for `Near`, which holds a `Near` inline whatever names it from behind a reference.  An array whose type says its length
+is its elements, held where it is, and is no indirection: `type Grid = cells : Grid⟦2⟧ | empty : void` is refused.  A set's
+elements are keys, which no type a program defines can be, so a set never closes a circle.
+
+**Everything that works over a type works over one of these**: a value is built, taken apart by `match`, read a field at a time --
+`m⟦0⟧.key` out of a list of records as well -- walked by `foreach`, joined onto, copied and given back.  A copy is the same copy
+any value gets, and goes all the way down: the copy of a `Json` holding `[Json]` copies the list, which copies each element with
+the copy of a `Json`.
+
+Compare: **Haskell** and **ML**, where every value is behind a pointer and a `data` type naming itself is the usual thing; **Rust**,
+where `Vec<Self>` and `Box<Self>` are accepted and a bare `Self` is refused by this rule; **Go**, likewise with a slice or a
+pointer; **C++**, where `std::vector` of an incomplete type has been allowed since C++17 for the same reason; **Zig**, where
+`std.ArrayList(Self)` works because it is a pointer and a length; **Swift**, which needs `indirect` on an `enum` naming itself
+inline and nothing for one naming itself through an array.
 
 The rule is about the way round and not about the length of it: a chain with a reference anywhere on it is finite, and one with
 none on it is not, however many definitions it passes through.  So `type A = b : B` beside `type B = a : A` is still refused.
@@ -2566,7 +2587,8 @@ takes a type an earlier field settled.  `Pair(.first ← 3u16, .second ← 4)` i
 
 **One type per set of types**: two references naming the same types name the same type, as one generic function is made once per
 set of types.  A generic function reads its own type parameters out of one -- `fn swap(p: Pair(T')) → Pair(T')` -- and may build
-one.  A type may reach itself through a reference, `type Node(T') = value: T' ; next: &Node(T')`.
+one.  A type may reach itself through a reference or a list, `type Node(T') = value: T' ; next: &Node(T')`, `type Tree(T') =
+value: T' ; kids: [Tree(T')]`.
 
 **What a type requires of its types** is written between the list and the `=`, a `pre` clause or a bundle as a generic function
 writes one, and checked wherever the type is named with types (4900) -- in a generic function, against what that function
@@ -4460,9 +4482,12 @@ over an element with `v⟦i⟧ ← x`, and in a join of two lists:
   pool made goes in as it is, giving that back being nothing.
 
 The copy goes all the way down: a list of lists of text is copied list by list and text by text, and a temporary that was copied
-is given back -- and a record or a tuple holding text or a list is copied part by part.  **Some values cannot be copied yet**
-(4623): a sum holding text, a set or a dictionary, a record that is moved and never copied (`@[unique]`, closed, a device) -- and an
-array of text held by another name, which is its elements, so copying it by value would give each element two owners.
+is given back -- and a record or a tuple holding text or a list is copied part by part.  **A sum is copied by the one part its
+tag says it holds**, so a sum holding text or a list -- or a record holding such a sum -- goes into a container as anything else
+does, and a type that reaches itself through a list is copied by a copy that calls itself.  **Some values cannot be copied yet**
+(4623): an array held inside a record or a sum, a set or a dictionary, a record that is moved and never copied (`@[unique]`,
+closed, a device) -- and an array of text held by another name, which is its elements, so copying it by value would give each
+element two owners.
 
 **A value read out of a heap container is the same object, not a copy**, and lives until an element is replaced: after `v⟦i⟧ ←`,
 or after `v` is handed to a call that may replace one, what was read out of it before is dead (4626).  Which element is not asked:

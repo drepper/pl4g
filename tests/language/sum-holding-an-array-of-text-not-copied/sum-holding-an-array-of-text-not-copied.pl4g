@@ -1,0 +1,22 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4623 LANG_CONTAINER_CANNOT_COPY
+
+※ A sum holding text is copied into a container part by part, but an array of
+※ text it holds is not yet: an array held inside something else is its elements
+※ where the something is, and the copy of one would be a walk of its own.  So a
+※ sum holding one, made in an arena the list does not outlast, cannot go in
+※ (4623) -- which is what holds of a record holding one, too.
+
+type Cell = names : str⟦2⟧ | none : void
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let held: mut [Cell] = []
+    foreach i := 0u32…2u32:
+        let pool: mut arena = ⎕arena
+        let made: str = "a" ⧺ ⍕i in pool
+        let c: Cell = Cell(.names ← ⟦made, "c"⟧ in pool)
+        held ⧺← [c]
+    if #held = 2: 0u6 else: 1u6
