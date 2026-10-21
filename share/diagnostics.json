@@ -2847,6 +2847,87 @@
       "option": "always-fails"
     },
     {
+      "number": 4260,
+      "name": "LANG_MASK_NOT_TRUTH_VALUES",
+      "severity": "error",
+      "message": "'{name}' makes a number out of an array of truth values, and '{found}' is not one",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name that was called"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what it was given"
+        }
+      ],
+      "cause": "A mask is one bit for each truth value of a run, the first being the lowest bit.  An array of numbers has no one bit per element to give, a single truth value is a bit already, and anything else has no lanes at all; what is wanted is the comparison that turns such a thing into truth values, written inside the call.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays / A run of truth values as a number",
+        "requirement": "`⎕mask` takes an array of truth values."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4261,
+      "name": "LANG_MASK_SHAPE_NOT_ONE_RUN",
+      "severity": "error",
+      "message": "'{name}' makes a number out of one run of truth values whose length the type states, and '{found}' is not that",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name that was called"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what it was given"
+        }
+      ],
+      "cause": "How wide the answer is depends on how many truth values there are, and the width of a number is part of its type, so the count has to be known while compiling: an array whose type does not state its length has no width to answer with.  A table has more than one dimension, and which of them would be the low bits is a question with no one answer; a row of it, `t⟦i⟧`, is one run.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays / A run of truth values as a number",
+        "requirement": "What `⎕mask` takes is one dimension whose length the type states."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4262,
+      "name": "LANG_MASK_TOO_LONG",
+      "severity": "error",
+      "message": "'{name}' makes a number of at most 64 bits, and this run of truth values is {found} long",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name that was called"
+        },
+        {
+          "name": "found",
+          "type": "integer",
+          "description": "how many truth values the run holds"
+        }
+      ],
+      "cause": "The answer is a whole number with one bit for each truth value, and the widest whole number there is has sixty-four.  A longer run is several masks, one of each part of it: of the rows of a table, or of the two halves of a run copied out apart.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays / A run of truth values as a number",
+        "requirement": "A mask is of at most sixty-four truth values."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4401,
       "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
       "severity": "error",

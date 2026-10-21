@@ -40,7 +40,7 @@ ASSEMBLER = "/usr/bin/riscv64-linux-gnu-as"
 #: builds for by default has, and what the rows below need to assemble.  The
 #: compressed encoding is deliberately not included: nothing emits it, and the
 #: header flag that would announce it stays clear.
-MARCH = "rv64imfd_zfa"
+MARCH = "rv64imfdv_zfa"
 
 
 def assemble(mnemonic: str, *operands: object) -> bytes:
@@ -204,6 +204,59 @@ SAMPLES = [
     ("ebreak", "ebreak"),
     ("unimp", "unimp"),
     ("nop", "nop"),
+    ("srli a0, a1, 3", "srli", MCReg(reg("a0")), MCReg(reg("a1")),
+     MCImm(3, 6, False)),
+    ("andi a0, a1, 255", "andi", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(255, 12)),
+    # The vector extension.  `vtype` is written as the assembler spells it and
+    # carried here as the ten bits it is: tail and inactive elements agnostic,
+    # one register to a group, and the element width.
+    ("vsetivli zero, 16, e8, m1, ta, ma", "vsetivli", MCReg(reg("zero")),
+     MCImm(16, 5, False), MCImm(0xC0, 10, False)),
+    ("vsetivli zero, 1, e64, m1, ta, ma", "vsetivli", MCReg(reg("zero")),
+     MCImm(1, 5, False), MCImm(0xD8, 10, False)),
+    ("vsetivli zero, 4, e16, m1, ta, ma", "vsetivli", MCReg(reg("zero")),
+     MCImm(4, 5, False), MCImm(0xC8, 10, False)),
+    ("vle8.v v1, (a0)", "vle8.v", MCReg(reg("v1")), MCReg(reg("a0"))),
+    ("vse8.v v31, (t6)", "vse8.v", MCReg(reg("v31")), MCReg(reg("t6"))),
+    ("vl1re8.v v2, (t6)", "vl1re8.v", MCReg(reg("v2")), MCReg(reg("t6"))),
+    ("vs1r.v v3, (sp)", "vs1r.v", MCReg(reg("v3")), MCReg(reg("sp"))),
+    ("vmv1r.v v0, v9", "vmv1r.v", MCReg(reg("v0")), MCReg(reg("v9"))),
+    ("vmv.v.x v4, a5", "vmv.v.x", MCReg(reg("v4")), MCReg(reg("a5"))),
+    ("vmv.v.i v4, -3", "vmv.v.i", MCReg(reg("v4")), MCImm(-3, 5)),
+    ("vand.vv v1, v2, v3", "vand.vv", MCReg(reg("v1")), MCReg(reg("v2")),
+     MCReg(reg("v3"))),
+    ("vor.vv v1, v2, v3", "vor.vv", MCReg(reg("v1")), MCReg(reg("v2")),
+     MCReg(reg("v3"))),
+    ("vxor.vv v10, v20, v30", "vxor.vv", MCReg(reg("v10")), MCReg(reg("v20")),
+     MCReg(reg("v30"))),
+    ("vnot.v v5, v6", "vnot.v", MCReg(reg("v5")), MCReg(reg("v6"))),
+    ("vmseq.vv v1, v2, v3", "vmseq.vv", MCReg(reg("v1")), MCReg(reg("v2")),
+     MCReg(reg("v3"))),
+    ("vmsne.vv v1, v2, v3", "vmsne.vv", MCReg(reg("v1")), MCReg(reg("v2")),
+     MCReg(reg("v3"))),
+    ("vmsltu.vv v1, v2, v3", "vmsltu.vv", MCReg(reg("v1")), MCReg(reg("v2")),
+     MCReg(reg("v3"))),
+    ("vmslt.vv v1, v2, v3", "vmslt.vv", MCReg(reg("v1")), MCReg(reg("v2")),
+     MCReg(reg("v3"))),
+    ("vmsleu.vv v1, v2, v3", "vmsleu.vv", MCReg(reg("v1")), MCReg(reg("v2")),
+     MCReg(reg("v3"))),
+    ("vmsle.vv v1, v2, v3", "vmsle.vv", MCReg(reg("v1")), MCReg(reg("v2")),
+     MCReg(reg("v3"))),
+    ("vmsne.vi v7, v8, 0", "vmsne.vi", MCReg(reg("v7")), MCReg(reg("v8")),
+     MCImm(0, 5)),
+    ("vmerge.vim v1, v2, 1, v0", "vmerge.vim", MCReg(reg("v1")), MCReg(reg("v2")),
+     MCImm(1, 5)),
+    ("vmand.mm v1, v2, v3", "vmand.mm", MCReg(reg("v1")), MCReg(reg("v2")),
+     MCReg(reg("v3"))),
+    ("vmor.mm v1, v2, v3", "vmor.mm", MCReg(reg("v1")), MCReg(reg("v2")),
+     MCReg(reg("v3"))),
+    ("vmxor.mm v1, v2, v3", "vmxor.mm", MCReg(reg("v1")), MCReg(reg("v2")),
+     MCReg(reg("v3"))),
+    ("vmnand.mm v1, v2, v2", "vmnand.mm", MCReg(reg("v1")), MCReg(reg("v2")),
+     MCReg(reg("v2"))),
+    ("vmxnor.mm v1, v1, v1", "vmxnor.mm", MCReg(reg("v1")), MCReg(reg("v1")),
+     MCReg(reg("v1"))),
+    ("vmv.x.s a0, v2", "vmv.x.s", MCReg(reg("a0")), MCReg(reg("v2"))),
 ]
 
 needs_binutils = pytest.mark.skipif(

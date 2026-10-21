@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4261
+※ pl4g-test: expect-diag 4261 LANG_MASK_SHAPE_NOT_ONE_RUN
+
+※ How wide a mask is depends on how many truth values there are, and the width
+※ of a number is part of its type: a view whose type does not state its length
+※ has no width to answer with.  Copied into an array that states it, it has.
+
+fn first_bits(b: bool⟦⟧) → u8:
+    ⎕mask(b)
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let b: bool⟦4⟧ = ⟦true, false, true, false⟧ in ⎕static
+    if first_bits(b) = 5u8: 0u6 else: 1u6

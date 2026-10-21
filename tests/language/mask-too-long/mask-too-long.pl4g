@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4262
+※ pl4g-test: expect-diag 4262 LANG_MASK_TOO_LONG
+
+※ The widest whole number there is has sixty-four bits, so a mask is of at most
+※ sixty-four truth values.  A longer run is several masks, one of each part of
+※ it copied out apart.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let c: u8⟦65⟧ = 65 ⍴ 0u8
+    if ⎕mask(c = 0u8) = 0u64: 1u6 else: 0u6

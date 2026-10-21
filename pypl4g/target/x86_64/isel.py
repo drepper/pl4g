@@ -670,6 +670,94 @@ class X86Selector(InstructionSelector):
         """
         return self._run_two_or_three("pcmpeqd", dst, MCReg(dst), MCReg(dst), span)
 
+    #: The orderings asked through the larger or the smaller of two bytes, by
+    #: the condition: which of the two, and whether the answer is turned round.
+    #: `a` is at least `b` exactly where the larger of the two is `a`, and at
+    #: most `b` where the smaller is.
+    _UNSIGNED_BY_EXTREME: Final[dict[Condition, tuple[str, bool]]] = {
+        Condition.UGE: ("pmaxub", False), Condition.ULT: ("pmaxub", True),
+        Condition.ULE: ("pminub", False), Condition.UGT: ("pminub", True),
+    }
+
+    #: The signed orderings, by the condition: whether the operands are
+    #: exchanged before asking "greater", and whether the answer is turned round.
+    _SIGNED_BY_GREATER: Final[dict[Condition, tuple[bool, bool]]] = {
+        Condition.SGT: (False, False), Condition.SLT: (True, False),
+        Condition.SLE: (False, True), Condition.SGE: (True, True),
+    }
+
+    def select_run_compare(self, cond: Condition, dst: Reg, left: MCOperand,
+                           right: MCOperand, bits: int,
+                           span: Span) -> Sequence[MCInst]:
+        """Compare every byte of two runs, each lane of *dst* every bit set where
+        *cond* holds and every bit clear where it does not.
+
+        There are two comparisons, equality and the signed "greater", and every
+        other condition is one of them asked of the operands the other way
+        round or turned round afterwards -- by an exclusive or with every bit
+        set, there being no instruction that does only that.  The unsigned
+        orders have no comparison at all and are asked through the larger or
+        the smaller of the two: `a` is at least `b` exactly where the larger of
+        them is `a`.  Two instructions, and three where the answer is turned
+        round, against the four it would take to move both runs into the signed
+        order by flipping each top bit first.
+        """
+        if bits != 8:
+            raise UnsupportedOperation("".join((
+                "comparing a run of ", str(bits), "-bit elements")), span)
+        made: list[MCInst] = []
+        turned = False
+        if cond in (Condition.EQ, Condition.NE):
+            made.extend(self._run_two_or_three("pcmpeqb", dst, left, right, span))
+            turned = cond is Condition.NE
+        elif cond in self._SIGNED_BY_GREATER:
+            exchanged, turned = self._SIGNED_BY_GREATER[cond]
+            first, second = (right, left) if exchanged else (left, right)
+            made.extend(self._run_two_or_three("pcmpgtb", dst, first, second, span))
+        else:
+            extreme, turned = self._UNSIGNED_BY_EXTREME[cond]
+            either = REGISTERS.new_virtual(VEC, dst.bits)
+            made.extend(self._run_two_or_three(extreme, either, left, right, span))
+            made.extend(self._run_two_or_three("pcmpeqb", dst, MCReg(either),
+                                               left, span))
+        if turned:
+            ones = REGISTERS.new_virtual(VEC, dst.bits)
+            made.extend(self.select_run_ones(ones, span))
+            made.extend(self._run_two_or_three("pxor", dst, MCReg(dst),
+                                               MCReg(ones), span))
+        return tuple(made)
+
+    def select_run_mask(self, dst: Reg, src: MCOperand, lanes: int,
+                        span: Span) -> Sequence[MCInst]:
+        """One bit for each of the first *lanes* bytes of *src*, the first the
+        lowest.
+
+        The instruction that gathers the top bit of every byte is the whole of
+        it: a truth value in a register is every bit of its lane set or clear,
+        so its top bit is it.  A run shorter than the register leaves bytes
+        beyond it that a comparison may have answered true for -- nought is
+        equal to nought -- so their bits are cleared; the instruction writes
+        nothing above the thirty-two it gathers into.
+        """
+        if not isinstance(src, MCReg):
+            raise UnsupportedOperation(
+                "gathering the lanes of something not in a register", span)
+        wide = src.width
+        target = MCReg(dst, bits=32)
+        made = [self._inst("pmovmskb", (target, MCReg(src.reg, bits=wide)), span)]
+        if lanes < wide // 8:
+            made.append(self._inst("and", (target, MCImm((1 << lanes) - 1, 32,
+                                                         signed=False)), span))
+        return tuple(made)
+
+    def select_run_truths(self, dst: Reg, src: MCOperand,
+                          span: Span) -> Sequence[MCInst]:
+        """Every byte of *src* taken from nought: one becomes every bit set, and
+        every bit set becomes one.  The register is cleared first by an
+        exclusive or with itself, which needs no constant."""
+        return (*self._run_two_or_three("pxor", dst, MCReg(dst), MCReg(dst), span),
+                *self._run_two_or_three("psubb", dst, MCReg(dst), src, span))
+
     def select_set(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
                    span: Span) -> Sequence[MCInst]:
         """Instructions that put whether *lhs* and *rhs* stand in *cond* into *dst*.
@@ -1500,24 +1588,72 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     bits = _run_covers(inst.ty)
                     destination = _new_value(inst.ty, registers)
                     held[id(inst)] = destination
-                    asm.run_move(destination,
+                    read = destination
+                    if inst.ty.element is BOOL:
+                        # A truth value is a byte of one or nought in memory and
+                        # a lane of every bit set or clear in a register.
+                        read = _new_value(inst.ty, registers)
+                    asm.run_move(read,
                                  place_of(address, span, size_bits=bits),
                                  bits, inst.span)
+                    if read is not destination:
+                        asm.run_truths(destination,
+                                       MCReg(read, bits=_run_bits(inst.ty)),
+                                       inst.span)
                 case StoreInst() if isinstance(inst.operands[2].ty, VecType):
                     written = inst.operands[2]
                     assert isinstance(written.ty, VecType)
+                    source = operands.register_of(written, inst.span)
+                    if written.ty.element is BOOL:
+                        # And back to a byte of one or nought.
+                        bytes_of = _new_value(written.ty, registers)
+                        asm.run_truths(bytes_of,
+                                       MCReg(source, bits=_run_bits(written.ty)),
+                                       inst.span)
+                        source = bytes_of
                     asm.run_store(place_of(inst.operands[1], span,
                                            size_bits=_run_covers(written.ty)),
-                                  MCReg(operands.register_of(written, inst.span),
-                                        bits=_run_bits(written.ty)),
+                                  MCReg(source, bits=_run_bits(written.ty)),
                                   _run_covers(written.ty), inst.span)
                 case SplatInst():
                     assert isinstance(inst.ty, VecType)
                     destination = _new_value(inst.ty, registers)
                     held[id(inst)] = destination
-                    asm.run_splat(destination,
+                    spread = destination
+                    if inst.ty.element is BOOL:
+                        spread = _new_value(inst.ty, registers)
+                    asm.run_splat(spread,
                                   operands.value(inst.operands[0], inst.span),
                                   _width_of(inst.ty.element), inst.span)
+                    if spread is not destination:
+                        # A truth value spread over every lane is a run of them
+                        # as memory holds one, which the register holds as every
+                        # bit of the lane.
+                        asm.run_truths(destination,
+                                       MCReg(spread, bits=_run_bits(inst.ty)),
+                                       inst.span)
+                case CmpInst() if isinstance(inst.ty, VecType):
+                    compared = inst.operands[0].ty
+                    assert isinstance(compared, VecType)
+                    destination = _new_value(inst.ty, registers)
+                    held[id(inst)] = destination
+                    asm.run_compare(CONDITIONS[inst.pred], destination,
+                                    operands.value(inst.operands[0], inst.span),
+                                    operands.value(inst.operands[1], inst.span),
+                                    _width_of(compared.element), inst.span)
+                case UnaryInst() if inst.op is UnOp.MASK:
+                    gathered = inst.operands[0].ty
+                    assert isinstance(gathered, VecType)
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.run_mask(destination,
+                                 MCReg(operands.register_of(inst.operands[0],
+                                                            inst.span),
+                                       bits=_run_bits(gathered)),
+                                 gathered.lanes, inst.span)
                 case BinaryInst() if isinstance(inst.ty, VecType) \
                         and inst.op in TRAPPING:
                     destination = _new_value(inst.ty, registers)

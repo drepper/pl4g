@@ -10743,6 +10743,55 @@ types are compared by address across everything that holds one.  Compare Lua's `
 holds everything and of which a program may have many; Python's subinterpreters, which took years to separate the state that was
 global; Tcl's `Tcl_CreateInterp`; and V8's isolates, each a heap of its own.
 
+## 2026-10-22T11:00+02:00 — language and compiler
+
+### A run of truth values as a number, comparing bytes at once, and a block read out of a view
+
+Asked for a JSON module as fast as simdjson, which reads its input thirty-two or sixty-four bytes at a time, compares the block
+against the characters that matter and walks the bits of what came out, the language had two of the three pieces: operators
+walked over an array of a fixed length, asked of a whole register at a time where the machine has the operation, and slices.  It
+had no way to make a number of a run of truth values, the comparisons were asked a byte at a time on every machine, and a slice
+could not be given to a name whose type states its length.  The user approved all three, and a lookup of bytes in a table if it
+fitted the language naturally:
+
+- **`⎕mask(b)`**, for `b : bool⟦N⟧` with `N` at most sixty-four, is the narrowest of `u8`, `u16`, `u32` and `u64` that has a bit
+  for every truth value, bit *i* set where `b⟦i⟧` is: `⎕mask(chunk = 34u8)` of a `u8⟦32⟧` is a `u32`.  Three refusals: what is not
+  an array of truth values (4260), what is not one dimension of a stated length (4261), and more than sixty-four (4262).  "The
+  smallest unsigned integer of at least N bits" was read as the machine widths and not as `uN`: masks are put together -- the
+  high half of a block shifted past the low half, one class anded with another turned round -- and that is arithmetic between
+  numbers of one type, which a `u19` beside a `u32` is not.  Zig's `@bitCast` of a vector of `bool` is the other reading, an
+  integer of exactly as many bits; Rust's `Mask::to_bitmask` and C++26's `simd_mask::to_ullong` answer a `u64` whatever the
+  length, which is the machine width taken further; APL and BQN ask it as `2⊥⌽b`, a base decoded.
+- **The comparisons of bytes are asked of a whole register**: `pcmpeqb` and `pcmpgtb` on x86-64, the unsigned orders through
+  `pminub` and `pmaxub`, gathered by `pmovmskb` -- sixteen bytes at the first two levels and thirty-two with AVX2 at the third and
+  fourth; `cmeq`, `cmgt`, `cmge`, `cmhi` and `cmhs` on AArch64, gathered by anding the lanes with their weights and three pairwise
+  additions, the weights being nought beyond the run; on RISC-V `vmseq` and the rest into a mask register, read out whole with
+  `vmv.x.s`, where the build has the vector extension, and a byte at a time on `rv64gc`.  And `∧`, `∨`, `⊕`, `¬` and `=` of runs of
+  truth values, which is how several characters are classified at once.  Elements wider than a byte are still compared an element
+  at a time on all three: a run of truth values is held as a byte per lane, which a comparison of halfwords does not answer.
+- **A block read out of a view is a definition**: `let chunk: u8⟦32⟧ = input⟦at…at + 32⟧`.  The specification already said that
+  giving an array to an array copies it and compares the counts while running where either is unknown; the definition refused it
+  (4203), and now does what an assignment does.  A view that turns out to be one run, which a slice of a buffer is, is read as one
+  value and written as one -- a question about its stride asked while running -- and other views are copied an element at a time.
+  A builtin of its own (`⎕load(v, at, ⌜u8⟦32⟧⌝)`) was the other form, and would have been a second spelling of a slice.
+- **Nothing is read past the end of the input**: the slice is checked as every slice is.  simdjson requires padding after the
+  input so that a block may run past its end; here the scanner copies its last block into an array of its own and pads it, a
+  language that checks every read asking of the program what simdjson asks of its caller.
+- **A lookup of bytes in a table is not done.**  `pshufb` and `tbl` look sixteen bytes up in a table of sixteen; the form that
+  would fit is an array indexed by an array of indices, `t⟦idx⟧` with `idx : u8⟦32⟧` -- APL's indexing, which this language does
+  not have, with a check of every index against the table that is its own question.  It is in the to-do list.
+
+Settled here, the approved list not saying: **the representation of a run of truth values in a register** is every bit of a lane
+set or clear on x86-64 and AArch64, which is what their comparisons answer and lets `and`, `or` and exclusive or be the bitwise
+instructions; a byte of one or nought in memory, as a single truth value is, so a run of them is turned from one into the other
+where it is read or written -- by taking it from nought, which goes either way.  On RISC-V it is a mask register, one bit per lane,
+which is what its comparisons answer and what `vmv.x.s` reads.  **RISC-V with the vector extension now does what it can of a run
+at once** -- moving it, the bitwise three, comparing bytes and gathering masks -- where before it did everything a lane apiece;
+`rva23`, the default, has the extension, and `rv64gc` has not.  **A RISC-V function that works on runs keeps `t6` to itself**,
+to set a vector register aside through and to reach a frame larger than an offset does, which a run done a lane at a time makes
+-- a sixty-four-lane mask at `-O0` on `rv64gc` is a frame of several kilobytes; a function that does not is as it was.  **Ordering
+two runs of truth values** is asked a lane at a time; whether two are equal is the question worth asking of them at once.
+
 Open questions
 --------------
 

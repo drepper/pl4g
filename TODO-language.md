@@ -1321,3 +1321,11 @@ Runtime
     read-only is accepted: the writable type wanted is not matched against the read-only operands when the operator is looked up.
     Done 2026-10-20: the operands are asked for the set, not for one that may be written, and what the operator answers is of
     the writable type, being new.
+
+[ ] look bytes up in a table a register at a time.  simdjson classifies a block of input with two lookups of a nibble each in a
+    table of sixteen bytes, which is one instruction on all three machines -- `pshufb` from the second x86-64 level, `tbl` on
+    AArch64, `vrgather` with the vector extension on RISC-V.  The form that would fit is an array indexed by an array of indices,
+    `t⟦idx⟧` with `idx : u8⟦32⟧` answering a `u8⟦32⟧`, which is APL's indexing; what it needs settled first is the check: every
+    index against the length of the table, which is one comparison of the whole run and a gathering of its answer, or a type
+    whose numbers are known to be in range (`idx & 15u8` over a table of sixteen).  Left out of the masks on purpose: it is a new
+    kind of indexing and not a cheaper way to write an old one.

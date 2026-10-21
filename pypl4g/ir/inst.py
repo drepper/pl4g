@@ -85,6 +85,12 @@ class UnOp(Enum):
     #: the top bit of a `u8` that is nought is eight as well.
     COUNT_ONES = "ones"
     COUNT_LEADING = "lead"
+    #: A run of truth values as the bits of a whole number: bit *i* of the
+    #: answer is lane *i* of the operand, and every bit above the last lane is
+    #: clear.  The one operation that reads a run and answers with something
+    #: that is not one, which is what lets a question asked of every lane at
+    #: once be walked a bit at a time by ordinary arithmetic.
+    MASK = "mask"
     #: The magnitude of a floating-point number, which is the number with its
     #: sign cleared.  There is no integer form: the magnitude of the smallest
     #: signed number is not a number of its type.
