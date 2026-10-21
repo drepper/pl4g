@@ -181,6 +181,10 @@ def pipeline_for(level: int) -> Sequence[str]:
     # a caller inlined, whose parts then fold, settling the next branch.  With
     # them goes writing into a function what every caller hands it alike, which
     # a fold in a caller can be what makes alike.
+    # A division by a constant is made multiplications and shifts once the
+    # graph is simple and before the second folding, which reads through the
+    # result that never fails it leaves; and before values worked out twice
+    # are shared again, which is what makes `x ÷ 10` and `x % 10` one product.
     # A branch on a condition made of parts is made a branch on each part
     # before `facts` looks, so that what each part settled is known on the
     # edge it settled it on -- `at < n` where `bytes⟦at⟧` is read -- and
@@ -193,8 +197,8 @@ def pipeline_for(level: int) -> Sequence[str]:
             "coroutines", "inline",
             "leanvalues",
             "constfold", "samevalues", "purecalls",
-            "simplifycfg",
-            "constfold", "conditions", "facts", "settle", "dce",
+            "simplifycfg", "divisions",
+            "constfold", "samevalues", "conditions", "facts", "settle", "dce",
             "dropunreached", "splitedges")
 
 
@@ -204,6 +208,7 @@ def build_manager(level: int, verifying: bool | None = None) -> PassManager:
     from .passes.constfold import ConstantFolding
     from .passes.coroutines import Coroutines
     from .passes.dce import DeadCodeElimination
+    from .passes.divisions import DivisionByConstants
     from .passes.dropignored import DropIgnoredCalls
     from .passes.dropunreached import DropUnreached
     from .passes.facts import Facts
@@ -223,6 +228,7 @@ def build_manager(level: int, verifying: bool | None = None) -> PassManager:
         "coroutines": Coroutines(),
         "purecalls": PureCalls(),
         "dce": DeadCodeElimination(),
+        "divisions": DivisionByConstants(),
         "dropignored": DropIgnoredCalls(),
         "dropunreached": DropUnreached(),
         "facts": Facts(),

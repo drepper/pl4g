@@ -1,0 +1,691 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A division by a number written down is the upper word of a product and a
+※ shift where the program is optimized, and the machine's division where it
+※ is not; both have to answer what the division answers.  Each quotient and
+※ each remainder by a constant here is compared with the same one by a
+※ divisor the compiler cannot see, which is the machine's division whatever
+※ is asked for -- over the ends of each type, the numbers next to them, every
+※ divisor and its neighbours, and some thousands the program makes up.  The
+※ divisors are the ones each rule is for: one, the powers of two (a shift, and
+※ for a signed number a shift that rounds toward nought), the ones whose
+※ multiplier fits a word, the even ones that fit once their twos are shifted
+※ out, and the ones whose multiplier is a bit too wide; for each type, and
+※ both signs.  The status is the number of the first type that differed.
+
+let std := ⎕import("std")
+
+※ Every quotient and remainder of `x` by a constant of `u64` against the machine's.
+@[inline(never)]
+fn agrees_u64(x: u64, one: u64) → bool:
+    if (x ÷ 1u64 ?? 0u64) ≠ (x ÷ (1u64 × one) ?? 1u64):
+        return false
+    if (x % 1u64 ?? 0u64) ≠ (x % (1u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 2u64 ?? 0u64) ≠ (x ÷ (2u64 × one) ?? 1u64):
+        return false
+    if (x % 2u64 ?? 0u64) ≠ (x % (2u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 3u64 ?? 0u64) ≠ (x ÷ (3u64 × one) ?? 1u64):
+        return false
+    if (x % 3u64 ?? 0u64) ≠ (x % (3u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 5u64 ?? 0u64) ≠ (x ÷ (5u64 × one) ?? 1u64):
+        return false
+    if (x % 5u64 ?? 0u64) ≠ (x % (5u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 7u64 ?? 0u64) ≠ (x ÷ (7u64 × one) ?? 1u64):
+        return false
+    if (x % 7u64 ?? 0u64) ≠ (x % (7u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 10u64 ?? 0u64) ≠ (x ÷ (10u64 × one) ?? 1u64):
+        return false
+    if (x % 10u64 ?? 0u64) ≠ (x % (10u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 14u64 ?? 0u64) ≠ (x ÷ (14u64 × one) ?? 1u64):
+        return false
+    if (x % 14u64 ?? 0u64) ≠ (x % (14u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 25u64 ?? 0u64) ≠ (x ÷ (25u64 × one) ?? 1u64):
+        return false
+    if (x % 25u64 ?? 0u64) ≠ (x % (25u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 100u64 ?? 0u64) ≠ (x ÷ (100u64 × one) ?? 1u64):
+        return false
+    if (x % 100u64 ?? 0u64) ≠ (x % (100u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 641u64 ?? 0u64) ≠ (x ÷ (641u64 × one) ?? 1u64):
+        return false
+    if (x % 641u64 ?? 0u64) ≠ (x % (641u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 1000000007u64 ?? 0u64) ≠ (x ÷ (1000000007u64 × one) ?? 1u64):
+        return false
+    if (x % 1000000007u64 ?? 0u64) ≠ (x % (1000000007u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 6700417u64 ?? 0u64) ≠ (x ÷ (6700417u64 × one) ?? 1u64):
+        return false
+    if (x % 6700417u64 ?? 0u64) ≠ (x % (6700417u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 9223372036854775809u64 ?? 0u64) ≠ (x ÷ (9223372036854775809u64 × one) ?? 1u64):
+        return false
+    if (x % 9223372036854775809u64 ?? 0u64) ≠ (x % (9223372036854775809u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 18446744073709551615u64 ?? 0u64) ≠ (x ÷ (18446744073709551615u64 × one) ?? 1u64):
+        return false
+    if (x % 18446744073709551615u64 ?? 0u64) ≠ (x % (18446744073709551615u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 9223372036854775808u64 ?? 0u64) ≠ (x ÷ (9223372036854775808u64 × one) ?? 1u64):
+        return false
+    if (x % 9223372036854775808u64 ?? 0u64) ≠ (x % (9223372036854775808u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 6148914691236517205u64 ?? 0u64) ≠ (x ÷ (6148914691236517205u64 × one) ?? 1u64):
+        return false
+    if (x % 6148914691236517205u64 ?? 0u64) ≠ (x % (6148914691236517205u64 × one) ?? 1u64):
+        return false
+    if (x ÷ 12345678901234567u64 ?? 0u64) ≠ (x ÷ (12345678901234567u64 × one) ?? 1u64):
+        return false
+    if (x % 12345678901234567u64 ?? 0u64) ≠ (x % (12345678901234567u64 × one) ?? 1u64):
+        return false
+    true
+
+※ The ends of `u64` and the numbers about each divisor, and then a run of
+※ them a xorshift makes.
+@[inline(never)]
+fn every_u64(one: u64) → bool:
+    let edges: u64⟦97⟧ = ⟦0u64, 1u64, 2u64, 3u64, 4u64, 5u64, 6u64, 7u64, 8u64, 9u64, 10u64, 11u64, 13u64, 14u64, 15u64, 19u64, 20u64, 21u64, 24u64, 25u64, 26u64, 27u64, 28u64, 29u64, 30u64, 34u64, 35u64, 41u64, 42u64, 48u64, 49u64, 50u64, 69u64, 70u64, 74u64, 75u64, 97u64, 98u64, 99u64, 100u64, 101u64, 174u64, 175u64, 199u64, 200u64, 299u64, 300u64, 640u64, 641u64, 642u64, 699u64, 700u64, 1281u64, 1282u64, 1922u64, 1923u64, 4486u64, 4487u64, 6700416u64, 6700417u64, 6700418u64, 13400833u64, 13400834u64, 20101250u64, 20101251u64, 46902918u64, 46902919u64, 1000000006u64, 1000000007u64, 1000000008u64, 2000000013u64, 2000000014u64, 3000000020u64, 3000000021u64, 7000000048u64, 7000000049u64, 12345678901234566u64, 12345678901234567u64, 12345678901234568u64, 24691357802469133u64, 24691357802469134u64, 37037036703703700u64, 37037036703703701u64, 86419752308641968u64, 86419752308641969u64, 6148914691236517204u64, 6148914691236517205u64, 6148914691236517206u64, 9223372036854775807u64, 9223372036854775808u64, 9223372036854775809u64, 9223372036854775810u64, 12297829382473034409u64, 12297829382473034410u64, 18446744073709551613u64, 18446744073709551614u64, 18446744073709551615u64⟧ in ⎕static
+    foreach x: u64 = edges:
+        if ¬agrees_u64(x, one):
+            return false
+    let state: mut u64 = 88172645463325252u64
+    let i: mut u64 = 0u64
+    while i < 3000u64:
+        state ← state ^ (state » 12u64)
+        state ← state ^ (state « 25u64)
+        state ← state ^ (state » 27u64)
+        let r: u64 = ⎕wrap(state × 2685821657736338717u64)
+        ※ the top bits, as few as one and as many as the type has, so that
+        ※ numbers of every size are tried, and of both signs
+        let x: u64 = ⎕narrow(r » ((r & 63u64) ⌈ 0u64), ⌜u64⌝) ?? 0u64
+        if ¬agrees_u64(x, one):
+            return false
+        i ← i + 1u64
+    true
+
+※ Every quotient and remainder of `x` by a constant of `i64` against the machine's.
+@[inline(never)]
+fn agrees_i64(x: i64, one: i64) → bool:
+    if (x ÷ 1i64 ?? 0i64) ≠ (x ÷ (1i64 × one) ?? 1i64):
+        return false
+    if (x % 1i64 ?? 0i64) ≠ (x % (1i64 × one) ?? 1i64):
+        return false
+    if (x ÷ 2i64 ?? 0i64) ≠ (x ÷ (2i64 × one) ?? 1i64):
+        return false
+    if (x % 2i64 ?? 0i64) ≠ (x % (2i64 × one) ?? 1i64):
+        return false
+    if (x ÷ 3i64 ?? 0i64) ≠ (x ÷ (3i64 × one) ?? 1i64):
+        return false
+    if (x % 3i64 ?? 0i64) ≠ (x % (3i64 × one) ?? 1i64):
+        return false
+    if (x ÷ ⁻3i64 ?? 0i64) ≠ (x ÷ (⁻3i64 × one) ?? 1i64):
+        return false
+    if (x % ⁻3i64 ?? 0i64) ≠ (x % (⁻3i64 × one) ?? 1i64):
+        return false
+    if (x ÷ 7i64 ?? 0i64) ≠ (x ÷ (7i64 × one) ?? 1i64):
+        return false
+    if (x % 7i64 ?? 0i64) ≠ (x % (7i64 × one) ?? 1i64):
+        return false
+    if (x ÷ ⁻7i64 ?? 0i64) ≠ (x ÷ (⁻7i64 × one) ?? 1i64):
+        return false
+    if (x % ⁻7i64 ?? 0i64) ≠ (x % (⁻7i64 × one) ?? 1i64):
+        return false
+    if (x ÷ 10i64 ?? 0i64) ≠ (x ÷ (10i64 × one) ?? 1i64):
+        return false
+    if (x % 10i64 ?? 0i64) ≠ (x % (10i64 × one) ?? 1i64):
+        return false
+    if (x ÷ ⁻10i64 ?? 0i64) ≠ (x ÷ (⁻10i64 × one) ?? 1i64):
+        return false
+    if (x % ⁻10i64 ?? 0i64) ≠ (x % (⁻10i64 × one) ?? 1i64):
+        return false
+    if (x ÷ 16i64 ?? 0i64) ≠ (x ÷ (16i64 × one) ?? 1i64):
+        return false
+    if (x % 16i64 ?? 0i64) ≠ (x % (16i64 × one) ?? 1i64):
+        return false
+    if (x ÷ ⁻16i64 ?? 0i64) ≠ (x ÷ (⁻16i64 × one) ?? 1i64):
+        return false
+    if (x % ⁻16i64 ?? 0i64) ≠ (x % (⁻16i64 × one) ?? 1i64):
+        return false
+    if (x ÷ 100i64 ?? 0i64) ≠ (x ÷ (100i64 × one) ?? 1i64):
+        return false
+    if (x % 100i64 ?? 0i64) ≠ (x % (100i64 × one) ?? 1i64):
+        return false
+    if (x ÷ 1000i64 ?? 0i64) ≠ (x ÷ (1000i64 × one) ?? 1i64):
+        return false
+    if (x % 1000i64 ?? 0i64) ≠ (x % (1000i64 × one) ?? 1i64):
+        return false
+    if (x ÷ ⁻1000i64 ?? 0i64) ≠ (x ÷ (⁻1000i64 × one) ?? 1i64):
+        return false
+    if (x % ⁻1000i64 ?? 0i64) ≠ (x % (⁻1000i64 × one) ?? 1i64):
+        return false
+    if (x ÷ 641i64 ?? 0i64) ≠ (x ÷ (641i64 × one) ?? 1i64):
+        return false
+    if (x % 641i64 ?? 0i64) ≠ (x % (641i64 × one) ?? 1i64):
+        return false
+    if (x ÷ 4611686018427387907i64 ?? 0i64) ≠ (x ÷ (4611686018427387907i64 × one) ?? 1i64):
+        return false
+    if (x % 4611686018427387907i64 ?? 0i64) ≠ (x % (4611686018427387907i64 × one) ?? 1i64):
+        return false
+    if (x ÷ ⁻9223372036854775808i64 ?? 0i64) ≠ (x ÷ (⁻9223372036854775808i64 × one) ?? 1i64):
+        return false
+    if (x % ⁻9223372036854775808i64 ?? 0i64) ≠ (x % (⁻9223372036854775808i64 × one) ?? 1i64):
+        return false
+    if (x ÷ 9223372036854775807i64 ?? 0i64) ≠ (x ÷ (9223372036854775807i64 × one) ?? 1i64):
+        return false
+    if (x % 9223372036854775807i64 ?? 0i64) ≠ (x % (9223372036854775807i64 × one) ?? 1i64):
+        return false
+    if (x ÷ ⁻9223372036854775807i64 ?? 0i64) ≠ (x ÷ (⁻9223372036854775807i64 × one) ?? 1i64):
+        return false
+    if (x % ⁻9223372036854775807i64 ?? 0i64) ≠ (x % (⁻9223372036854775807i64 × one) ?? 1i64):
+        return false
+    true
+
+※ The ends of `i64` and the numbers about each divisor, and then a run of
+※ them a xorshift makes.
+@[inline(never)]
+fn every_i64(one: i64) → bool:
+    let edges: i64⟦113⟧ = ⟦⁻9223372036854775808i64, ⁻9223372036854775807i64, ⁻9223372036854775806i64, ⁻4611686018427387908i64, ⁻4611686018427387907i64, ⁻4611686018427387906i64, ⁻7001i64, ⁻7000i64, ⁻3001i64, ⁻3000i64, ⁻2001i64, ⁻2000i64, ⁻1001i64, ⁻1000i64, ⁻999i64, ⁻642i64, ⁻641i64, ⁻640i64, ⁻113i64, ⁻112i64, ⁻101i64, ⁻100i64, ⁻99i64, ⁻71i64, ⁻70i64, ⁻50i64, ⁻49i64, ⁻48i64, ⁻33i64, ⁻32i64, ⁻31i64, ⁻30i64, ⁻22i64, ⁻21i64, ⁻20i64, ⁻17i64, ⁻16i64, ⁻15i64, ⁻14i64, ⁻11i64, ⁻10i64, ⁻9i64, ⁻8i64, ⁻7i64, ⁻6i64, ⁻4i64, ⁻3i64, ⁻2i64, ⁻1i64, 0i64, 1i64, 2i64, 3i64, 4i64, 5i64, 6i64, 7i64, 8i64, 9i64, 10i64, 11i64, 13i64, 14i64, 15i64, 16i64, 17i64, 19i64, 20i64, 21i64, 29i64, 30i64, 31i64, 32i64, 47i64, 48i64, 49i64, 69i64, 70i64, 99i64, 100i64, 101i64, 111i64, 112i64, 199i64, 200i64, 299i64, 300i64, 640i64, 641i64, 642i64, 699i64, 700i64, 999i64, 1000i64, 1001i64, 1281i64, 1282i64, 1922i64, 1923i64, 1999i64, 2000i64, 2999i64, 3000i64, 4486i64, 4487i64, 6999i64, 7000i64, 4611686018427387906i64, 4611686018427387907i64, 4611686018427387908i64, 9223372036854775805i64, 9223372036854775806i64, 9223372036854775807i64⟧ in ⎕static
+    foreach x: i64 = edges:
+        if ¬agrees_i64(x, one):
+            return false
+    let state: mut u64 = 88172645463325252u64
+    let i: mut u64 = 0u64
+    while i < 3000u64:
+        state ← state ^ (state » 12u64)
+        state ← state ^ (state « 25u64)
+        state ← state ^ (state » 27u64)
+        let r: u64 = ⎕wrap(state × 2685821657736338717u64)
+        ※ the top bits, as few as one and as many as the type has, so that
+        ※ numbers of every size are tried, and of both signs
+        let m: i64 = ⎕narrow(r » ((r & 63u64) ⌈ 1u64), ⌜i64⌝) ?? 0i64
+        let x: i64 = if r & 64u64 = 0u64: m else: ⁻1i64 - m
+        if ¬agrees_i64(x, one):
+            return false
+        i ← i + 1u64
+    true
+
+※ Every quotient and remainder of `x` by a constant of `u32` against the machine's.
+@[inline(never)]
+fn agrees_u32(x: u32, one: u32) → bool:
+    if (x ÷ 3u32 ?? 0u32) ≠ (x ÷ (3u32 × one) ?? 1u32):
+        return false
+    if (x % 3u32 ?? 0u32) ≠ (x % (3u32 × one) ?? 1u32):
+        return false
+    if (x ÷ 7u32 ?? 0u32) ≠ (x ÷ (7u32 × one) ?? 1u32):
+        return false
+    if (x % 7u32 ?? 0u32) ≠ (x % (7u32 × one) ?? 1u32):
+        return false
+    if (x ÷ 10u32 ?? 0u32) ≠ (x ÷ (10u32 × one) ?? 1u32):
+        return false
+    if (x % 10u32 ?? 0u32) ≠ (x % (10u32 × one) ?? 1u32):
+        return false
+    if (x ÷ 641u32 ?? 0u32) ≠ (x ÷ (641u32 × one) ?? 1u32):
+        return false
+    if (x % 641u32 ?? 0u32) ≠ (x % (641u32 × one) ?? 1u32):
+        return false
+    if (x ÷ 1000u32 ?? 0u32) ≠ (x ÷ (1000u32 × one) ?? 1u32):
+        return false
+    if (x % 1000u32 ?? 0u32) ≠ (x % (1000u32 × one) ?? 1u32):
+        return false
+    if (x ÷ 4294967295u32 ?? 0u32) ≠ (x ÷ (4294967295u32 × one) ?? 1u32):
+        return false
+    if (x % 4294967295u32 ?? 0u32) ≠ (x % (4294967295u32 × one) ?? 1u32):
+        return false
+    if (x ÷ 2147483649u32 ?? 0u32) ≠ (x ÷ (2147483649u32 × one) ?? 1u32):
+        return false
+    if (x % 2147483649u32 ?? 0u32) ≠ (x % (2147483649u32 × one) ?? 1u32):
+        return false
+    if (x ÷ 1048576u32 ?? 0u32) ≠ (x ÷ (1048576u32 × one) ?? 1u32):
+        return false
+    if (x % 1048576u32 ?? 0u32) ≠ (x % (1048576u32 × one) ?? 1u32):
+        return false
+    true
+
+※ The ends of `u32` and the numbers about each divisor, and then a run of
+※ them a xorshift makes.
+@[inline(never)]
+fn every_u32(one: u32) → bool:
+    let edges: u32⟦56⟧ = ⟦0u32, 1u32, 2u32, 3u32, 4u32, 5u32, 6u32, 7u32, 8u32, 9u32, 10u32, 11u32, 13u32, 14u32, 19u32, 20u32, 21u32, 29u32, 30u32, 48u32, 49u32, 69u32, 70u32, 640u32, 641u32, 642u32, 999u32, 1000u32, 1001u32, 1281u32, 1282u32, 1922u32, 1923u32, 1999u32, 2000u32, 2999u32, 3000u32, 4486u32, 4487u32, 6999u32, 7000u32, 1048575u32, 1048576u32, 1048577u32, 2097151u32, 2097152u32, 3145727u32, 3145728u32, 7340031u32, 7340032u32, 2147483648u32, 2147483649u32, 2147483650u32, 4294967293u32, 4294967294u32, 4294967295u32⟧ in ⎕static
+    foreach x: u32 = edges:
+        if ¬agrees_u32(x, one):
+            return false
+    let state: mut u64 = 88172645463325252u64
+    let i: mut u64 = 0u64
+    while i < 3000u64:
+        state ← state ^ (state » 12u64)
+        state ← state ^ (state « 25u64)
+        state ← state ^ (state » 27u64)
+        let r: u64 = ⎕wrap(state × 2685821657736338717u64)
+        ※ the top bits, as few as one and as many as the type has, so that
+        ※ numbers of every size are tried, and of both signs
+        let x: u32 = ⎕narrow(r » ((r & 63u64) ⌈ 32u64), ⌜u32⌝) ?? 0u32
+        if ¬agrees_u32(x, one):
+            return false
+        i ← i + 1u64
+    true
+
+※ Every quotient and remainder of `x` by a constant of `i32` against the machine's.
+@[inline(never)]
+fn agrees_i32(x: i32, one: i32) → bool:
+    if (x ÷ 3i32 ?? 0i32) ≠ (x ÷ (3i32 × one) ?? 1i32):
+        return false
+    if (x % 3i32 ?? 0i32) ≠ (x % (3i32 × one) ?? 1i32):
+        return false
+    if (x ÷ ⁻3i32 ?? 0i32) ≠ (x ÷ (⁻3i32 × one) ?? 1i32):
+        return false
+    if (x % ⁻3i32 ?? 0i32) ≠ (x % (⁻3i32 × one) ?? 1i32):
+        return false
+    if (x ÷ 7i32 ?? 0i32) ≠ (x ÷ (7i32 × one) ?? 1i32):
+        return false
+    if (x % 7i32 ?? 0i32) ≠ (x % (7i32 × one) ?? 1i32):
+        return false
+    if (x ÷ 10i32 ?? 0i32) ≠ (x ÷ (10i32 × one) ?? 1i32):
+        return false
+    if (x % 10i32 ?? 0i32) ≠ (x % (10i32 × one) ?? 1i32):
+        return false
+    if (x ÷ ⁻10i32 ?? 0i32) ≠ (x ÷ (⁻10i32 × one) ?? 1i32):
+        return false
+    if (x % ⁻10i32 ?? 0i32) ≠ (x % (⁻10i32 × one) ?? 1i32):
+        return false
+    if (x ÷ 1000i32 ?? 0i32) ≠ (x ÷ (1000i32 × one) ?? 1i32):
+        return false
+    if (x % 1000i32 ?? 0i32) ≠ (x % (1000i32 × one) ?? 1i32):
+        return false
+    if (x ÷ ⁻2147483648i32 ?? 0i32) ≠ (x ÷ (⁻2147483648i32 × one) ?? 1i32):
+        return false
+    if (x % ⁻2147483648i32 ?? 0i32) ≠ (x % (⁻2147483648i32 × one) ?? 1i32):
+        return false
+    if (x ÷ 2147483647i32 ?? 0i32) ≠ (x ÷ (2147483647i32 × one) ?? 1i32):
+        return false
+    if (x % 2147483647i32 ?? 0i32) ≠ (x % (2147483647i32 × one) ?? 1i32):
+        return false
+    if (x ÷ 4096i32 ?? 0i32) ≠ (x ÷ (4096i32 × one) ?? 1i32):
+        return false
+    if (x % 4096i32 ?? 0i32) ≠ (x % (4096i32 × one) ?? 1i32):
+        return false
+    if (x ÷ ⁻4096i32 ?? 0i32) ≠ (x ÷ (⁻4096i32 × one) ?? 1i32):
+        return false
+    if (x % ⁻4096i32 ?? 0i32) ≠ (x % (⁻4096i32 × one) ?? 1i32):
+        return false
+    true
+
+※ The ends of `i32` and the numbers about each divisor, and then a run of
+※ them a xorshift makes.
+@[inline(never)]
+fn every_i32(one: i32) → bool:
+    let edges: i32⟦75⟧ = ⟦⁻2147483648i32, ⁻2147483647i32, ⁻2147483646i32, ⁻28673i32, ⁻28672i32, ⁻12289i32, ⁻12288i32, ⁻8193i32, ⁻8192i32, ⁻4097i32, ⁻4096i32, ⁻4095i32, ⁻1001i32, ⁻1000i32, ⁻999i32, ⁻71i32, ⁻70i32, ⁻31i32, ⁻30i32, ⁻22i32, ⁻21i32, ⁻20i32, ⁻11i32, ⁻10i32, ⁻9i32, ⁻8i32, ⁻7i32, ⁻6i32, ⁻4i32, ⁻3i32, ⁻2i32, 0i32, 1i32, 2i32, 3i32, 4i32, 5i32, 6i32, 7i32, 8i32, 9i32, 10i32, 11i32, 13i32, 14i32, 19i32, 20i32, 21i32, 29i32, 30i32, 48i32, 49i32, 69i32, 70i32, 999i32, 1000i32, 1001i32, 1999i32, 2000i32, 2999i32, 3000i32, 4095i32, 4096i32, 4097i32, 6999i32, 7000i32, 8191i32, 8192i32, 12287i32, 12288i32, 28671i32, 28672i32, 2147483645i32, 2147483646i32, 2147483647i32⟧ in ⎕static
+    foreach x: i32 = edges:
+        if ¬agrees_i32(x, one):
+            return false
+    let state: mut u64 = 88172645463325252u64
+    let i: mut u64 = 0u64
+    while i < 3000u64:
+        state ← state ^ (state » 12u64)
+        state ← state ^ (state « 25u64)
+        state ← state ^ (state » 27u64)
+        let r: u64 = ⎕wrap(state × 2685821657736338717u64)
+        ※ the top bits, as few as one and as many as the type has, so that
+        ※ numbers of every size are tried, and of both signs
+        let m: i32 = ⎕narrow(r » ((r & 63u64) ⌈ 33u64), ⌜i32⌝) ?? 0i32
+        let x: i32 = if r & 64u64 = 0u64: m else: ⁻1i32 - m
+        if ¬agrees_i32(x, one):
+            return false
+        i ← i + 1u64
+    true
+
+※ Every quotient and remainder of `x` by a constant of `u16` against the machine's.
+@[inline(never)]
+fn agrees_u16(x: u16, one: u16) → bool:
+    if (x ÷ 3u16 ?? 0u16) ≠ (x ÷ (3u16 × one) ?? 1u16):
+        return false
+    if (x % 3u16 ?? 0u16) ≠ (x % (3u16 × one) ?? 1u16):
+        return false
+    if (x ÷ 7u16 ?? 0u16) ≠ (x ÷ (7u16 × one) ?? 1u16):
+        return false
+    if (x % 7u16 ?? 0u16) ≠ (x % (7u16 × one) ?? 1u16):
+        return false
+    if (x ÷ 10u16 ?? 0u16) ≠ (x ÷ (10u16 × one) ?? 1u16):
+        return false
+    if (x % 10u16 ?? 0u16) ≠ (x % (10u16 × one) ?? 1u16):
+        return false
+    if (x ÷ 255u16 ?? 0u16) ≠ (x ÷ (255u16 × one) ?? 1u16):
+        return false
+    if (x % 255u16 ?? 0u16) ≠ (x % (255u16 × one) ?? 1u16):
+        return false
+    if (x ÷ 1000u16 ?? 0u16) ≠ (x ÷ (1000u16 × one) ?? 1u16):
+        return false
+    if (x % 1000u16 ?? 0u16) ≠ (x % (1000u16 × one) ?? 1u16):
+        return false
+    if (x ÷ 65535u16 ?? 0u16) ≠ (x ÷ (65535u16 × one) ?? 1u16):
+        return false
+    if (x % 65535u16 ?? 0u16) ≠ (x % (65535u16 × one) ?? 1u16):
+        return false
+    if (x ÷ 32769u16 ?? 0u16) ≠ (x ÷ (32769u16 × one) ?? 1u16):
+        return false
+    if (x % 32769u16 ?? 0u16) ≠ (x % (32769u16 × one) ?? 1u16):
+        return false
+    true
+
+※ The ends of `u16` and the numbers about each divisor, and then a run of
+※ them a xorshift makes.
+@[inline(never)]
+fn every_u16(one: u16) → bool:
+    let edges: u16⟦47⟧ = ⟦0u16, 1u16, 2u16, 3u16, 4u16, 5u16, 6u16, 7u16, 8u16, 9u16, 10u16, 11u16, 13u16, 14u16, 19u16, 20u16, 21u16, 29u16, 30u16, 48u16, 49u16, 69u16, 70u16, 254u16, 255u16, 256u16, 509u16, 510u16, 764u16, 765u16, 999u16, 1000u16, 1001u16, 1784u16, 1785u16, 1999u16, 2000u16, 2999u16, 3000u16, 6999u16, 7000u16, 32768u16, 32769u16, 32770u16, 65533u16, 65534u16, 65535u16⟧ in ⎕static
+    foreach x: u16 = edges:
+        if ¬agrees_u16(x, one):
+            return false
+    let state: mut u64 = 88172645463325252u64
+    let i: mut u64 = 0u64
+    while i < 3000u64:
+        state ← state ^ (state » 12u64)
+        state ← state ^ (state « 25u64)
+        state ← state ^ (state » 27u64)
+        let r: u64 = ⎕wrap(state × 2685821657736338717u64)
+        ※ the top bits, as few as one and as many as the type has, so that
+        ※ numbers of every size are tried, and of both signs
+        let x: u16 = ⎕narrow(r » ((r & 63u64) ⌈ 48u64), ⌜u16⌝) ?? 0u16
+        if ¬agrees_u16(x, one):
+            return false
+        i ← i + 1u64
+    true
+
+※ Every quotient and remainder of `x` by a constant of `i16` against the machine's.
+@[inline(never)]
+fn agrees_i16(x: i16, one: i16) → bool:
+    if (x ÷ 3i16 ?? 0i16) ≠ (x ÷ (3i16 × one) ?? 1i16):
+        return false
+    if (x % 3i16 ?? 0i16) ≠ (x % (3i16 × one) ?? 1i16):
+        return false
+    if (x ÷ ⁻7i16 ?? 0i16) ≠ (x ÷ (⁻7i16 × one) ?? 1i16):
+        return false
+    if (x % ⁻7i16 ?? 0i16) ≠ (x % (⁻7i16 × one) ?? 1i16):
+        return false
+    if (x ÷ 10i16 ?? 0i16) ≠ (x ÷ (10i16 × one) ?? 1i16):
+        return false
+    if (x % 10i16 ?? 0i16) ≠ (x % (10i16 × one) ?? 1i16):
+        return false
+    if (x ÷ 1000i16 ?? 0i16) ≠ (x ÷ (1000i16 × one) ?? 1i16):
+        return false
+    if (x % 1000i16 ?? 0i16) ≠ (x % (1000i16 × one) ?? 1i16):
+        return false
+    if (x ÷ ⁻32768i16 ?? 0i16) ≠ (x ÷ (⁻32768i16 × one) ?? 1i16):
+        return false
+    if (x % ⁻32768i16 ?? 0i16) ≠ (x % (⁻32768i16 × one) ?? 1i16):
+        return false
+    if (x ÷ 32767i16 ?? 0i16) ≠ (x ÷ (32767i16 × one) ?? 1i16):
+        return false
+    if (x % 32767i16 ?? 0i16) ≠ (x % (32767i16 × one) ?? 1i16):
+        return false
+    if (x ÷ 256i16 ?? 0i16) ≠ (x ÷ (256i16 × one) ?? 1i16):
+        return false
+    if (x % 256i16 ?? 0i16) ≠ (x % (256i16 × one) ?? 1i16):
+        return false
+    true
+
+※ The ends of `i16` and the numbers about each divisor, and then a run of
+※ them a xorshift makes.
+@[inline(never)]
+fn every_i16(one: i16) → bool:
+    let edges: i16⟦64⟧ = ⟦⁻32768i16, ⁻32767i16, ⁻32766i16, ⁻1001i16, ⁻1000i16, ⁻999i16, ⁻257i16, ⁻256i16, ⁻255i16, ⁻50i16, ⁻49i16, ⁻22i16, ⁻21i16, ⁻15i16, ⁻14i16, ⁻11i16, ⁻10i16, ⁻9i16, ⁻8i16, ⁻7i16, ⁻6i16, ⁻4i16, ⁻3i16, ⁻2i16, 0i16, 1i16, 2i16, 3i16, 4i16, 5i16, 6i16, 7i16, 8i16, 9i16, 10i16, 11i16, 19i16, 20i16, 21i16, 29i16, 30i16, 69i16, 70i16, 255i16, 256i16, 257i16, 511i16, 512i16, 767i16, 768i16, 999i16, 1000i16, 1001i16, 1791i16, 1792i16, 1999i16, 2000i16, 2999i16, 3000i16, 6999i16, 7000i16, 32765i16, 32766i16, 32767i16⟧ in ⎕static
+    foreach x: i16 = edges:
+        if ¬agrees_i16(x, one):
+            return false
+    let state: mut u64 = 88172645463325252u64
+    let i: mut u64 = 0u64
+    while i < 3000u64:
+        state ← state ^ (state » 12u64)
+        state ← state ^ (state « 25u64)
+        state ← state ^ (state » 27u64)
+        let r: u64 = ⎕wrap(state × 2685821657736338717u64)
+        ※ the top bits, as few as one and as many as the type has, so that
+        ※ numbers of every size are tried, and of both signs
+        let m: i16 = ⎕narrow(r » ((r & 63u64) ⌈ 49u64), ⌜i16⌝) ?? 0i16
+        let x: i16 = if r & 64u64 = 0u64: m else: ⁻1i16 - m
+        if ¬agrees_i16(x, one):
+            return false
+        i ← i + 1u64
+    true
+
+※ Every quotient and remainder of `x` by a constant of `u8` against the machine's.
+@[inline(never)]
+fn agrees_u8(x: u8, one: u8) → bool:
+    if (x ÷ 3u8 ?? 0u8) ≠ (x ÷ (3u8 × one) ?? 1u8):
+        return false
+    if (x % 3u8 ?? 0u8) ≠ (x % (3u8 × one) ?? 1u8):
+        return false
+    if (x ÷ 7u8 ?? 0u8) ≠ (x ÷ (7u8 × one) ?? 1u8):
+        return false
+    if (x % 7u8 ?? 0u8) ≠ (x % (7u8 × one) ?? 1u8):
+        return false
+    if (x ÷ 10u8 ?? 0u8) ≠ (x ÷ (10u8 × one) ?? 1u8):
+        return false
+    if (x % 10u8 ?? 0u8) ≠ (x % (10u8 × one) ?? 1u8):
+        return false
+    if (x ÷ 100u8 ?? 0u8) ≠ (x ÷ (100u8 × one) ?? 1u8):
+        return false
+    if (x % 100u8 ?? 0u8) ≠ (x % (100u8 × one) ?? 1u8):
+        return false
+    if (x ÷ 200u8 ?? 0u8) ≠ (x ÷ (200u8 × one) ?? 1u8):
+        return false
+    if (x % 200u8 ?? 0u8) ≠ (x % (200u8 × one) ?? 1u8):
+        return false
+    if (x ÷ 255u8 ?? 0u8) ≠ (x ÷ (255u8 × one) ?? 1u8):
+        return false
+    if (x % 255u8 ?? 0u8) ≠ (x % (255u8 × one) ?? 1u8):
+        return false
+    if (x ÷ 128u8 ?? 0u8) ≠ (x ÷ (128u8 × one) ?? 1u8):
+        return false
+    if (x % 128u8 ?? 0u8) ≠ (x % (128u8 × one) ?? 1u8):
+        return false
+    true
+
+※ The ends of `u8` and the numbers about each divisor, and then a run of
+※ them a xorshift makes.
+@[inline(never)]
+fn every_u8(one: u8) → bool:
+    let edges: u8⟦35⟧ = ⟦0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8, 11u8, 13u8, 14u8, 19u8, 20u8, 21u8, 29u8, 30u8, 48u8, 49u8, 69u8, 70u8, 99u8, 100u8, 101u8, 127u8, 128u8, 129u8, 199u8, 200u8, 201u8, 253u8, 254u8, 255u8⟧ in ⎕static
+    foreach x: u8 = edges:
+        if ¬agrees_u8(x, one):
+            return false
+    let state: mut u64 = 88172645463325252u64
+    let i: mut u64 = 0u64
+    while i < 3000u64:
+        state ← state ^ (state » 12u64)
+        state ← state ^ (state « 25u64)
+        state ← state ^ (state » 27u64)
+        let r: u64 = ⎕wrap(state × 2685821657736338717u64)
+        ※ the top bits, as few as one and as many as the type has, so that
+        ※ numbers of every size are tried, and of both signs
+        let x: u8 = ⎕narrow(r » ((r & 63u64) ⌈ 56u64), ⌜u8⌝) ?? 0u8
+        if ¬agrees_u8(x, one):
+            return false
+        i ← i + 1u64
+    true
+
+※ Every quotient and remainder of `x` by a constant of `i8` against the machine's.
+@[inline(never)]
+fn agrees_i8(x: i8, one: i8) → bool:
+    if (x ÷ 3i8 ?? 0i8) ≠ (x ÷ (3i8 × one) ?? 1i8):
+        return false
+    if (x % 3i8 ?? 0i8) ≠ (x % (3i8 × one) ?? 1i8):
+        return false
+    if (x ÷ ⁻7i8 ?? 0i8) ≠ (x ÷ (⁻7i8 × one) ?? 1i8):
+        return false
+    if (x % ⁻7i8 ?? 0i8) ≠ (x % (⁻7i8 × one) ?? 1i8):
+        return false
+    if (x ÷ 10i8 ?? 0i8) ≠ (x ÷ (10i8 × one) ?? 1i8):
+        return false
+    if (x % 10i8 ?? 0i8) ≠ (x % (10i8 × one) ?? 1i8):
+        return false
+    if (x ÷ 64i8 ?? 0i8) ≠ (x ÷ (64i8 × one) ?? 1i8):
+        return false
+    if (x % 64i8 ?? 0i8) ≠ (x % (64i8 × one) ?? 1i8):
+        return false
+    if (x ÷ ⁻128i8 ?? 0i8) ≠ (x ÷ (⁻128i8 × one) ?? 1i8):
+        return false
+    if (x % ⁻128i8 ?? 0i8) ≠ (x % (⁻128i8 × one) ?? 1i8):
+        return false
+    if (x ÷ 127i8 ?? 0i8) ≠ (x ÷ (127i8 × one) ?? 1i8):
+        return false
+    if (x % 127i8 ?? 0i8) ≠ (x % (127i8 × one) ?? 1i8):
+        return false
+    if (x ÷ 5i8 ?? 0i8) ≠ (x ÷ (5i8 × one) ?? 1i8):
+        return false
+    if (x % 5i8 ?? 0i8) ≠ (x % (5i8 × one) ?? 1i8):
+        return false
+    true
+
+※ The ends of `i8` and the numbers about each divisor, and then a run of
+※ them a xorshift makes.
+@[inline(never)]
+fn every_i8(one: i8) → bool:
+    let edges: i8⟦51⟧ = ⟦⁻128i8, ⁻127i8, ⁻126i8, ⁻65i8, ⁻64i8, ⁻63i8, ⁻50i8, ⁻49i8, ⁻22i8, ⁻21i8, ⁻15i8, ⁻14i8, ⁻11i8, ⁻10i8, ⁻9i8, ⁻8i8, ⁻7i8, ⁻6i8, ⁻5i8, ⁻4i8, ⁻3i8, ⁻2i8, 0i8, 1i8, 2i8, 3i8, 4i8, 5i8, 6i8, 7i8, 8i8, 9i8, 10i8, 11i8, 14i8, 15i8, 19i8, 20i8, 21i8, 29i8, 30i8, 34i8, 35i8, 63i8, 64i8, 65i8, 69i8, 70i8, 125i8, 126i8, 127i8⟧ in ⎕static
+    foreach x: i8 = edges:
+        if ¬agrees_i8(x, one):
+            return false
+    let state: mut u64 = 88172645463325252u64
+    let i: mut u64 = 0u64
+    while i < 3000u64:
+        state ← state ^ (state » 12u64)
+        state ← state ^ (state « 25u64)
+        state ← state ^ (state » 27u64)
+        let r: u64 = ⎕wrap(state × 2685821657736338717u64)
+        ※ the top bits, as few as one and as many as the type has, so that
+        ※ numbers of every size are tried, and of both signs
+        let m: i8 = ⎕narrow(r » ((r & 63u64) ⌈ 57u64), ⌜i8⌝) ?? 0i8
+        let x: i8 = if r & 64u64 = 0u64: m else: ⁻1i8 - m
+        if ¬agrees_i8(x, one):
+            return false
+        i ← i + 1u64
+    true
+
+※ Every quotient and remainder of `x` by a constant of `u6` against the machine's.
+@[inline(never)]
+fn agrees_u6(x: u6, one: u6) → bool:
+    if (x ÷ 3u6 ?? 0u6) ≠ (x ÷ (3u6 × one) ?? 1u6):
+        return false
+    if (x % 3u6 ?? 0u6) ≠ (x % (3u6 × one) ?? 1u6):
+        return false
+    if (x ÷ 5u6 ?? 0u6) ≠ (x ÷ (5u6 × one) ?? 1u6):
+        return false
+    if (x % 5u6 ?? 0u6) ≠ (x % (5u6 × one) ?? 1u6):
+        return false
+    if (x ÷ 7u6 ?? 0u6) ≠ (x ÷ (7u6 × one) ?? 1u6):
+        return false
+    if (x % 7u6 ?? 0u6) ≠ (x % (7u6 × one) ?? 1u6):
+        return false
+    if (x ÷ 63u6 ?? 0u6) ≠ (x ÷ (63u6 × one) ?? 1u6):
+        return false
+    if (x % 63u6 ?? 0u6) ≠ (x % (63u6 × one) ?? 1u6):
+        return false
+    if (x ÷ 32u6 ?? 0u6) ≠ (x ÷ (32u6 × one) ?? 1u6):
+        return false
+    if (x % 32u6 ?? 0u6) ≠ (x % (32u6 × one) ?? 1u6):
+        return false
+    true
+
+※ The ends of `u6` and the numbers about each divisor, and then a run of
+※ them a xorshift makes.
+@[inline(never)]
+fn every_u6(one: u6) → bool:
+    let edges: u6⟦26⟧ = ⟦0u6, 1u6, 2u6, 3u6, 4u6, 5u6, 6u6, 7u6, 8u6, 9u6, 10u6, 13u6, 14u6, 15u6, 20u6, 21u6, 31u6, 32u6, 33u6, 34u6, 35u6, 48u6, 49u6, 61u6, 62u6, 63u6⟧ in ⎕static
+    foreach x: u6 = edges:
+        if ¬agrees_u6(x, one):
+            return false
+    let state: mut u64 = 88172645463325252u64
+    let i: mut u64 = 0u64
+    while i < 3000u64:
+        state ← state ^ (state » 12u64)
+        state ← state ^ (state « 25u64)
+        state ← state ^ (state » 27u64)
+        let r: u64 = ⎕wrap(state × 2685821657736338717u64)
+        ※ the top bits, as few as one and as many as the type has, so that
+        ※ numbers of every size are tried, and of both signs
+        let x: u6 = ⎕narrow(r » ((r & 63u64) ⌈ 58u64), ⌜u6⌝) ?? 0u6
+        if ¬agrees_u6(x, one):
+            return false
+        i ← i + 1u64
+    true
+
+※ Every quotient and remainder of `x` by a constant of `i6` against the machine's.
+@[inline(never)]
+fn agrees_i6(x: i6, one: i6) → bool:
+    if (x ÷ 3i6 ?? 0i6) ≠ (x ÷ (3i6 × one) ?? 1i6):
+        return false
+    if (x % 3i6 ?? 0i6) ≠ (x % (3i6 × one) ?? 1i6):
+        return false
+    if (x ÷ ⁻5i6 ?? 0i6) ≠ (x ÷ (⁻5i6 × one) ?? 1i6):
+        return false
+    if (x % ⁻5i6 ?? 0i6) ≠ (x % (⁻5i6 × one) ?? 1i6):
+        return false
+    if (x ÷ 7i6 ?? 0i6) ≠ (x ÷ (7i6 × one) ?? 1i6):
+        return false
+    if (x % 7i6 ?? 0i6) ≠ (x % (7i6 × one) ?? 1i6):
+        return false
+    if (x ÷ ⁻32i6 ?? 0i6) ≠ (x ÷ (⁻32i6 × one) ?? 1i6):
+        return false
+    if (x % ⁻32i6 ?? 0i6) ≠ (x % (⁻32i6 × one) ?? 1i6):
+        return false
+    if (x ÷ 31i6 ?? 0i6) ≠ (x ÷ (31i6 × one) ?? 1i6):
+        return false
+    if (x % 31i6 ?? 0i6) ≠ (x % (31i6 × one) ?? 1i6):
+        return false
+    true
+
+※ The ends of `i6` and the numbers about each divisor, and then a run of
+※ them a xorshift makes.
+@[inline(never)]
+fn every_i6(one: i6) → bool:
+    let edges: i6⟦31⟧ = ⟦⁻32i6, ⁻31i6, ⁻30i6, ⁻16i6, ⁻15i6, ⁻11i6, ⁻10i6, ⁻8i6, ⁻7i6, ⁻6i6, ⁻5i6, ⁻4i6, ⁻3i6, ⁻2i6, 0i6, 1i6, 2i6, 3i6, 4i6, 5i6, 6i6, 7i6, 8i6, 9i6, 13i6, 14i6, 20i6, 21i6, 29i6, 30i6, 31i6⟧ in ⎕static
+    foreach x: i6 = edges:
+        if ¬agrees_i6(x, one):
+            return false
+    let state: mut u64 = 88172645463325252u64
+    let i: mut u64 = 0u64
+    while i < 3000u64:
+        state ← state ^ (state » 12u64)
+        state ← state ^ (state « 25u64)
+        state ← state ^ (state » 27u64)
+        let r: u64 = ⎕wrap(state × 2685821657736338717u64)
+        ※ the top bits, as few as one and as many as the type has, so that
+        ※ numbers of every size are tried, and of both signs
+        let m: i6 = ⎕narrow(r » ((r & 63u64) ⌈ 59u64), ⌜i6⌝) ?? 0i6
+        let x: i6 = if r & 64u64 = 0u64: m else: ⁻1i6 - m
+        if ¬agrees_i6(x, one):
+            return false
+        i ← i + 1u64
+    true
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ one, though the compiler cannot see it
+    let n: u64 = ⎕drop(#init.args)
+    if ¬every_u64(⎕narrow(n, ⌜u64⌝) ?? 1u64):
+        return 1u6
+    if ¬every_i64(⎕narrow(n, ⌜i64⌝) ?? 1i64):
+        return 2u6
+    if ¬every_u32(⎕narrow(n, ⌜u32⌝) ?? 1u32):
+        return 3u6
+    if ¬every_i32(⎕narrow(n, ⌜i32⌝) ?? 1i32):
+        return 4u6
+    if ¬every_u16(⎕narrow(n, ⌜u16⌝) ?? 1u16):
+        return 5u6
+    if ¬every_i16(⎕narrow(n, ⌜i16⌝) ?? 1i16):
+        return 6u6
+    if ¬every_u8(⎕narrow(n, ⌜u8⌝) ?? 1u8):
+        return 7u6
+    if ¬every_i8(⎕narrow(n, ⌜i8⌝) ?? 1i8):
+        return 8u6
+    if ¬every_u6(⎕narrow(n, ⌜u6⌝) ?? 1u6):
+        return 9u6
+    if ¬every_i6(⎕narrow(n, ⌜i6⌝) ?? 1i6):
+        return 10u6
+    0u6
