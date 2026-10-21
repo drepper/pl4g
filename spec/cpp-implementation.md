@@ -78,7 +78,8 @@ src/lib/                    the library, libpl4g.a
     driver/                 the stages up to the IR: read, parse, expand, check
     repl/                   running a program from its source, and the interactive session
     embed/                  pl4g::embed::Interpreter, for a C++ program embedding the interpreter, whose functions
-                            the programs it runs call (dlsym and libffi; details.md)
+                            the programs it runs call (dlsym and libffi; details.md); and the C entry of
+                            libpl4g-embed.so, the same as a shared object a program loads with dlopen
     ts/                     the tree-sitter service: highlighting and folds from the grammar
     lsp/                    the LSP service
 src/repl/main.cc            pl4g-repl: the stand-alone interpreter and session
@@ -103,6 +104,8 @@ through the same ring; the arena allocator the back ends emit as machine code is
 startup function is handed carries the descriptors the embedder chose (`interp::Devices`).  A function the host defines is found
 with `dlsym` at its first call and called through libffi, each value crossing as the x86-64 back end holds it in a register
 (details.md, "The Embedded Interpreter, and Its Calls into the Host"); `src/test/embed_host.cc`, ctest's `embed-host`, embeds it.
+`libpl4g-embed.so` is the interpreter as a shared object offering one C function, `pl4g_embed_run_source`; ctest's
+`embed-example` runs `src/examples/embed/host.c`, which loads it with `dlopen`.
 
 The checker
 -----------

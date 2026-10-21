@@ -1204,6 +1204,17 @@ the declaration, on the error device, and status 92.  `NAME` is the function the
 of one taking a `str`.  The embedding program is not ended with it: the stop unwinds the interpreter, as every stop of a run does,
 and `run_source` or `run_file` answers 92.
 
+**The interpreter is also a shared object**, `libpl4g-embed.so`, for a program that loads it with `dlopen` rather than linking
+with the library.  It offers one function with C's linkage, `pl4g_embed_run_source(text, length, name)` (`src/lib/embed/pl4g-embed.h`),
+which runs a program held in memory with descriptors 0, 1 and 2 and answers its status -- 128 plus a signal's number where it
+would have died of one, and -1 where the interpreter itself failed, nothing being allowed to leave it as an exception.  Everything
+else in the object is hidden, by the visibility it is compiled with and by a version script, which also hides what is visible by
+its own say-so: the grammar's entry point, and the instantiations of the standard library's templates.  The functions the program
+calls with `@[host]` are still found with `dlsym(RTLD_DEFAULT, ...)`, so the loading program is linked with `-rdynamic`.
+`src/examples/embed/host.c` is such a program, in C, and ctest's `embed-example` runs it: it hands the interpreter a program that
+reads its input through two functions of the host, works out a sum, the extremes and a sum of squares, and delivers them through a
+third that only stores them, which the host then checks against what it works out itself.
+
 Diagnostics
 -----------
 

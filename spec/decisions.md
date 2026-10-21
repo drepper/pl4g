@@ -10711,6 +10711,19 @@ of sixteen always on the other two.  A function that calls and would have had no
 Compare GCC and Clang, which keep the same invariant and assume it on entry; Go, whose own convention keeps its own stack aligned
 and switches to a system stack, aligned, to call C; Rust and Zig, which follow LLVM's targets in this as in everything.
 
+## 2026-10-21T19:10+02:00 — implementation
+
+### The interpreter as a shared object, with one C entry
+
+A program that loads the interpreter with `dlopen` needs a symbol to find with `dlsym`, which the C++ API is not: its names are
+mangled, and finding them by their mangled spelling would tie the program to one compiler's mangling and to the library's
+internals.  Asked, the user chose **one function with C's linkage**, `pl4g_embed_run_source`, wrapping `pl4g::embed::Interpreter`,
+in a shared object `libpl4g-embed.so` that hides everything else -- beside the C++ API decided before, which stays the way to
+embed it with more control.  The other two choices were linking the program with the shared object at build time and using the
+C++ API, which needs no `dlopen` at all, and looking the C++ functions up by their mangled names.  Compare Lua's and Python's
+embedding APIs, both C and both what a program written in anything links with; Guile's and Tcl's likewise; and V8's, which is C++
+only and is linked, never looked up.
+
 Open questions
 --------------
 

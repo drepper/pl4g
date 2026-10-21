@@ -8,6 +8,10 @@
 #   pl4g-lsp          the stand-alone language server
 #   pl4g-embed-host   a program embedding the interpreter, whose functions
 #                     the programs it runs call (a test)
+#   pl4g-embed        the interpreter as a shared object, libpl4g-embed.so,
+#                     offering pl4g_embed_run_source with C's linkage
+#   pl4g-embed-example  a C program that loads it with dlopen and runs a
+#                     program calling back into it (src/examples/embed)
 #   pl4g-lexdump      the tokens of a file, for comparing with pypl4g
 #   *-asan            the same, built with the address and undefined-behaviour
 #                     sanitizers (PL4G_SANITIZERS=ON, the default)
@@ -225,24 +229,31 @@ set(PL4G_LIB_SOURCES
   ${PL4G_GENERATED}/diag/catalog_data.cc
 )
 
-# Define the library and the programs linked with it, with `suffix` on every
-# name and `flags` added to compiling and linking.
-function(pl4g_variant suffix)
+# What every build of the library is compiled with: where its headers are,
+# what #embed reads, and what it links with.
+function(pl4g_library_settings target)
   set(flags ${ARGN})
-  add_library(pl4g${suffix} STATIC ${PL4G_LIB_SOURCES})
-  set_target_properties(pl4g${suffix} PROPERTIES OUTPUT_NAME pl4g${suffix})
-  target_include_directories(pl4g${suffix} PUBLIC ${CMAKE_SOURCE_DIR}/src/lib ${PL4G_GENERATED})
-  target_include_directories(pl4g${suffix} PRIVATE ${CMAKE_SOURCE_DIR}/tree-sitter-pl4g/src)
+  target_include_directories(${target} PUBLIC ${CMAKE_SOURCE_DIR}/src/lib ${PL4G_GENERATED})
+  target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/tree-sitter-pl4g/src)
   # Where #embed finds the grammar's queries.
   set_source_files_properties(src/lib/ts/highlight.cc PROPERTIES
     COMPILE_OPTIONS "--embed-dir=${CMAKE_SOURCE_DIR}/tree-sitter-pl4g/queries")
   # And where it finds the shared option table.
   set_source_files_properties(src/lib/driver/options.cc PROPERTIES
     COMPILE_OPTIONS "--embed-dir=${CMAKE_SOURCE_DIR}/share")
-  target_compile_options(pl4g${suffix} PUBLIC ${PL4G_COMMON_FLAGS} ${flags})
-  target_link_options(pl4g${suffix} PUBLIC ${flags})
-  target_link_libraries(pl4g${suffix} PUBLIC simdjson::simdjson ${UNISTRING_LIBRARY} ${EDIT_LIBRARY} ${TREE_SITTER_LIBRARY}
+  target_compile_options(${target} PUBLIC ${PL4G_COMMON_FLAGS} ${flags})
+  target_link_options(${target} PUBLIC ${flags})
+  target_link_libraries(${target} PUBLIC simdjson::simdjson ${UNISTRING_LIBRARY} ${EDIT_LIBRARY} ${TREE_SITTER_LIBRARY}
     PkgConfig::FFI ${CMAKE_DL_LIBS})
+endfunction()
+
+# Define the library and the programs linked with it, with `suffix` on every
+# name and `flags` added to compiling and linking.
+function(pl4g_variant suffix)
+  set(flags ${ARGN})
+  add_library(pl4g${suffix} STATIC ${PL4G_LIB_SOURCES})
+  set_target_properties(pl4g${suffix} PROPERTIES OUTPUT_NAME pl4g${suffix})
+  pl4g_library_settings(pl4g${suffix} ${flags})
 
   # The stand-alone interpreter: the library and a small driver.
   add_executable(pl4g-repl${suffix} src/repl/main.cc)
@@ -382,6 +393,24 @@ add_test(NAME repl-sessions
 # defines, every kind of value crossing both ways, and one that calls what it
 # does not define.  Its symbols are exported, as an embedding program's have
 # to be for dlsym to find them.
+# The interpreter as a shared object a program loads with dlopen, offering
+# one function with C's linkage (src/lib/embed/pl4g-embed.h) and hiding the
+# rest; and the example of a program doing so, whose functions the program it
+# runs calls, which is why its symbols are exported.
+add_library(pl4g-embed SHARED ${PL4G_LIB_SOURCES} src/lib/embed/c-entry.cc)
+set_target_properties(pl4g-embed PROPERTIES POSITION_INDEPENDENT_CODE ON C_VISIBILITY_PRESET hidden
+  CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+pl4g_library_settings(pl4g-embed)
+target_link_options(pl4g-embed PRIVATE -Wl,--version-script=${CMAKE_SOURCE_DIR}/src/lib/embed/pl4g-embed.map)
+set_target_properties(pl4g-embed PROPERTIES LINK_DEPENDS ${CMAKE_SOURCE_DIR}/src/lib/embed/pl4g-embed.map)
+add_executable(pl4g-embed-example src/examples/embed/host.c)
+target_include_directories(pl4g-embed-example PRIVATE ${CMAKE_SOURCE_DIR}/src/lib)
+target_link_libraries(pl4g-embed-example PRIVATE ${CMAKE_DL_LIBS})
+set_target_properties(pl4g-embed-example PROPERTIES ENABLE_EXPORTS ON)
+add_dependencies(pl4g-embed-example pl4g-embed)
+add_test(NAME embed-example
+  COMMAND prlimit --data=536870912 --cpu=120 -- $<TARGET_FILE:pl4g-embed-example> $<TARGET_FILE:pl4g-embed>)
+
 add_executable(pl4g-embed-host src/test/embed_host.cc)
 target_link_libraries(pl4g-embed-host PRIVATE pl4g)
 set_target_properties(pl4g-embed-host PROPERTIES ENABLE_EXPORTS ON)
