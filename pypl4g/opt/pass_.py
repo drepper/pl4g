@@ -181,6 +181,10 @@ def pipeline_for(level: int) -> Sequence[str]:
     # a caller inlined, whose parts then fold, settling the next branch.  With
     # them goes writing into a function what every caller hands it alike, which
     # a fold in a caller can be what makes alike.
+    # A branch on a condition made of parts is made a branch on each part
+    # before `facts` looks, so that what each part settled is known on the
+    # edge it settled it on -- `at < n` where `bytes⟦at⟧` is read -- and
+    # before `settle`, which removes the blocks it leaves nothing reaching.
     # A generator's body is split at its stops as soon as its calls have the
     # shape they keep, and before anything else looks at it: nothing below
     # this pass knows what a stop is, and every pass after it sees ordinary
@@ -190,12 +194,13 @@ def pipeline_for(level: int) -> Sequence[str]:
             "leanvalues",
             "constfold", "samevalues", "purecalls",
             "simplifycfg",
-            "constfold", "facts", "settle", "dce", "dropunreached",
-            "splitedges")
+            "constfold", "conditions", "facts", "settle", "dce",
+            "dropunreached", "splitedges")
 
 
 def build_manager(level: int, verifying: bool | None = None) -> PassManager:
     """Build the pass manager for optimization level *level*."""
+    from .passes.conditions import BranchConditions
     from .passes.constfold import ConstantFolding
     from .passes.coroutines import Coroutines
     from .passes.dce import DeadCodeElimination
@@ -213,6 +218,7 @@ def build_manager(level: int, verifying: bool | None = None) -> PassManager:
     from .passes.tailcalls import TailCalls
 
     available: dict[str, Pass] = {
+        "conditions": BranchConditions(),
         "constfold": ConstantFolding(),
         "coroutines": Coroutines(),
         "purecalls": PureCalls(),

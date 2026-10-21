@@ -1,0 +1,99 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A condition joined with `∧`, `∨` and `¬` is branched on a part at a time: the
+※ branch on the first part goes straight where the whole would have gone where
+※ that part settles it, and only otherwise to the branch on the second.  Both
+※ shapes the checker writes are asked here -- the two parts worked out and
+※ joined, where the second costs nothing, and the second worked out only where
+※ the first says it may be, where it reads an element the first part's index
+※ check guards -- in a branch, a loop's condition and an answer, nested, and
+※ with the parts the other way round.  Every way through is taken, and each
+※ answer is checked: the status is the number of the first one that was wrong.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+
+@[inline(never)]
+fn both(a: u64, b: u64) → u64:
+    if a < 10u64 ∧ b > 3u64:
+        return 1u64
+    2u64
+
+@[inline(never)]
+fn either(a: u64, b: u64) → u64:
+    if a < 10u64 ∨ b > 3u64:
+        return 1u64
+    2u64
+
+@[inline(never)]
+fn neither(a: u64, b: u64) → u64:
+    if ¬(a < 10u64 ∨ b > 3u64):
+        return 1u64
+    2u64
+
+@[inline(never)]
+fn nested(a: u64, b: u64, c: u64) → u64:
+    if (a = 1u64 ∨ b = 2u64) ∧ ¬(c = 3u64) ∧ (a & 1u64 = 1u64 ∨ c > 100u64):
+        return 1u64
+    2u64
+
+@[inline(never)]
+fn as_value(a: u64, b: u64) → bool:
+    a < 10u64 ∧ b > 3u64
+
+※ How far the bytes go before a space: the element is read only where the
+※ index is inside, which is what the first part says.
+@[inline(never)]
+fn word(bytes: u8⟦⟧) → u64 ¤idx:
+    let n: u64 ¤idx = #bytes
+    let at: mut u64 ¤idx = 0
+    while at < n and bytes⟦at⟧ ≠ 32u8:
+        at ← at + 1
+    at
+
+@[inline(never)]
+fn past_or_tab(bytes: u8⟦⟧, k: u64 ¤idx) → u64:
+    let n: u64 ¤idx = #bytes
+    if k ≥ n or bytes⟦k⟧ = 9u8:
+        return 1u64
+    2u64
+
+@[inline(never)]
+fn digits_then(bytes: u8⟦⟧, k: u64 ¤idx) → u64:
+    let n: u64 ¤idx = #bytes
+    if k < n and ¬(bytes⟦k⟧ < 48u8 or bytes⟦k⟧ > 57u8):
+        return 1u64
+    2u64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ nought, though the compiler cannot see it
+    let z: u64 = ⎕drop(#init.args) - 1u64
+    if (both(z + 3u64, z + 5u64) ≠ 1u64 ∨ both(z + 30u64, z + 5u64) ≠ 2u64
+            ∨ both(z + 3u64, z + 1u64) ≠ 2u64):
+        return 1u6
+    if (either(z + 3u64, z) ≠ 1u64 ∨ either(z + 30u64, z + 5u64) ≠ 1u64
+            ∨ either(z + 30u64, z + 1u64) ≠ 2u64):
+        return 2u6
+    if neither(z + 30u64, z + 1u64) ≠ 1u64 ∨ neither(z + 3u64, z) ≠ 2u64:
+        return 3u6
+    if (nested(z + 1u64, z, z) ≠ 1u64 ∨ nested(z + 1u64, z, z + 3u64) ≠ 2u64
+            ∨ nested(z + 4u64, z + 2u64, z + 200u64) ≠ 1u64
+            ∨ nested(z + 4u64, z + 2u64, z + 7u64) ≠ 2u64
+            ∨ nested(z + 4u64, z, z) ≠ 2u64):
+        return 4u6
+    if ¬as_value(z + 3u64, z + 5u64) ∨ as_value(z + 3u64, z):
+        return 5u6
+    let text: u8⟦⟧ = ⎕bytes("two words")
+    if word(text) ≠ 3 ∨ word(text⟦4…9⟧) ≠ 5 ∨ word(text⟦0…0⟧) ≠ 0:
+        return 6u6
+    let tabbed: u8⟦⟧ = ⎕bytes("a\tb")
+    if (past_or_tab(tabbed, 1) ≠ 1u64 ∨ past_or_tab(tabbed, 3) ≠ 1u64
+            ∨ past_or_tab(tabbed, 0) ≠ 2u64):
+        return 7u6
+    let mixed: u8⟦⟧ = ⎕bytes("x7")
+    if (digits_then(mixed, 1) ≠ 1u64 ∨ digits_then(mixed, 0) ≠ 2u64
+            ∨ digits_then(mixed, 2) ≠ 2u64):
+        return 8u6
+    0u6
