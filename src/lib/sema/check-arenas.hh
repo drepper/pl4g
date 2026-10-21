@@ -8,6 +8,11 @@
     KeySet arenas_in(const ast::Node* node);  // check.py:9493
     // The walk `_arenas_in` makes.
     void collect_arenas(const ast::Node* node, KeySet& into);  // check.py:9507
+    // The function a call names where its signature alone says what its answer was made in: one of this
+    // file's top level, named by itself and by nothing a body binds, and not defined somewhere else.
+    ir::Function* read_ahead_callee(const ast::Call* expr);  // check.py:10146
+    // What a call of `func` answers was made in, read off its signature as `where_made` reads it.
+    void answered_in(const ast::Call* expr, ir::Function* func, KeySet& into);  // check.py:10158
     // The key for where an array a name holds has its elements, which a view of it carries: the name's own
     // storage for one this function keeps in its frame, and the parameter for one a caller handed over --
     // whose elements are the caller's, as long as the call is. Nothing for anything else.
