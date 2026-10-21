@@ -497,6 +497,26 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN),
                         Field(FieldKind.IMMEDIATE, 2, 10, 12)),
                 est_size=INSTRUCTION_SIZE),
+    # add Xd, Xn, #imm12, lsl #12 / sub: twelve bits a page at a time, which
+    # with the row above reaches sixteen megabytes into a frame in two
+    # instructions and needs no register to do it.
+    A64InstDesc("add.lsl12", (_r(64), _r(64), _imm(0xFFF)), template=0x91400000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        Field(FieldKind.IMMEDIATE, 2, 10, 12)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("sub.lsl12", (_r(64), _r(64), _imm(0xFFF)), template=0xD1400000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        Field(FieldKind.IMMEDIATE, 2, 10, 12)),
+                est_size=INSTRUCTION_SIZE),
+    # add Xd, Xn, Xm, uxtx / sub: the extended-register form, the one that reads
+    # register 31 as the stack pointer where the shifted-register form above
+    # reads it as nought -- what moves the stack pointer by a register's worth.
+    A64InstDesc("add.uxtx", (_r(64), _r(64), _r(64)), template=0x8B206000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("sub.uxtx", (_r(64), _r(64), _r(64)), template=0xCB206000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
     # eor Wd, Wn, Wm
     A64InstDesc("eor", (_r(32), _r(32), _r(32)), template=0x4A000000,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),

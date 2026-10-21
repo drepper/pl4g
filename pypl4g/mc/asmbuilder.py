@@ -25,6 +25,7 @@ hands the instructions to the streamer.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Callable, Protocol, Sequence
 
 from ..source.location import INVALID_SPAN, Span
@@ -499,6 +500,25 @@ class MachinePass(Protocol):
         ...
 
 
+class FrameOutOfReach(Exception):
+    """A place in the frame lies further from the stack pointer than an
+    instruction can say, and there is no register to build its address in.
+
+    Raised by a selector once the frame stands, and caught by the builder,
+    which then sets a register aside for the purpose and allocates the function
+    again: what is worth a register in every function is not worth one in the
+    few whose frame grows that large.
+    """
+
+
+def _without(order: tuple[RegUnit, ...] | dict[str, tuple[RegUnit, ...]],
+             unit: RegUnit) -> tuple[RegUnit, ...] | dict[str, tuple[RegUnit, ...]]:
+    """An allocation order with *unit* left out of it."""
+    if isinstance(order, dict):
+        return {name: tuple(one for one in units if one is not unit)
+                for name, units in order.items()}
+    return tuple(one for one in order if one is not unit)
+
 class RegisterAssignmentError(Exception):
     """A function still mentions registers the allocator has not assigned."""
 
@@ -688,13 +708,7 @@ class Assembler:
         wrong = function.edges_are_complete()
         if wrong is not None:
             raise MalformedGraph(wrong)
-        self._assign_registers(function)
-        # And again, now that every value has a register: which two of them are
-        # the same one is not a question that can be asked before this, and one
-        # of the rewrites is about exactly that.
-        for machine_pass in self._machine_passes:
-            machine_pass.run(function)
-        self._make_frame(function)
+        self._allocate_and_frame(function)
         self._streamer.emit_align(self._alignment, self._pad_byte)
         # What is not exported is kept in twice over: bound locally, so nothing
         # outside this image can name it, and marked hidden, which is the part
@@ -715,6 +729,53 @@ class Assembler:
         self._function = None
         self._block = None
         return symbol
+
+    def _allocate_and_frame(self, function: MachineFunction) -> None:
+        """Give every value a register and put the frame around the function --
+        twice, where the frame turned out too large to reach without a
+        register to build addresses in.
+
+        Whether it is that large is known only at the end: the allocator's
+        slots are what makes most frames large, and what the allocator spills
+        depends on how many registers it was given.  So the first attempt keeps
+        every register, and the one register the selector names is set aside
+        only where a place in the frame turned out out of reach; the function
+        is then allocated again from where it stood before, which a frame that
+        large can well afford.
+        """
+        blocks = [list(block.insts) for block in function.blocks]
+        frame = replace(function.frame)
+        order = self._order
+        made = len(self.assignments)
+        spare_of = getattr(self._selector, "frame_spare", None)
+        try:
+            self._allocate_once(function)
+            return
+        except FrameOutOfReach:
+            spare = spare_of() if spare_of is not None else None
+            if spare is None or getattr(self._selector, "spare", None) is not None:
+                raise
+        for block, insts in zip(function.blocks, blocks):
+            block.insts = insts
+        function.frame = frame
+        del self.assignments[made:]
+        self._order = _without(order, spare.unit)
+        setattr(self._selector, "spare", spare)
+        try:
+            self._allocate_once(function)
+        finally:
+            setattr(self._selector, "spare", None)
+            self._order = order
+
+    def _allocate_once(self, function: MachineFunction) -> None:
+        """Allocate, rewrite and make the frame, once."""
+        self._assign_registers(function)
+        # And again, now that every value has a register: which two of them are
+        # the same one is not a question that can be asked before this, and one
+        # of the rewrites is about exactly that.
+        for machine_pass in self._machine_passes:
+            machine_pass.run(function)
+        self._make_frame(function)
 
     def _is_branch_target(self, function: MachineFunction,
                           block: MachineBasicBlock) -> bool:
