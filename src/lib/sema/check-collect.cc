@@ -12,6 +12,7 @@
 #include "ir/printer.hh"
 #include "rt/names.hh"
 #include "sema/owned.hh"
+#include "sema/strings.hh"
 #include "target/registry.hh"
 #include "target/statuses.hh"
 
@@ -287,7 +288,7 @@ namespace pl4g::sema {
     made->made_in = made_in;
     made->param_made_in = param_made_in;
     made->exported = is_export(attrs);
-    made->cconv = func_attrs.abi ? *func_attrs.abi : std::string(ir::default_cconv);
+    made->cconv = convention_of(func_attrs);
     made->span = node->span;
     made->name_span = node->name_span;
     made->source_path = std::string(path);
@@ -297,6 +298,8 @@ namespace pl4g::sema {
     if (func_attrs.listable && params.empty())
       diags.emit(D::LANG_LISTABLE_TAKES_NOTHING, node->name_span, { { "name", node->name } });
     check_external(node, func_attrs);
+    check_host(node, func_attrs, params, ret);
+    check_offered(node, func_attrs, linkage);
     // Wherever it stands and whoever wrote it: a record laid out for something
     // else to read travels as a reference or not at all.
     for (std::size_t at = 0; at < std::min(params.size(), node->params.size()); ++at) {
@@ -307,6 +310,7 @@ namespace pl4g::sema {
     if (node->ret_type != nullptr)
       not_by_value(ret, node->ret_type->span);
     module.add_function(std::move(made), key(whole));
+    hand_over_text(func);
     if (! node->held)
       (*top)[std::string(node->name)] = Held(static_cast<ir::Value*>(func));
     else
@@ -536,7 +540,7 @@ namespace pl4g::sema {
   void Checker::check_external(const ast::FuncDef* node, const ir::FuncAttrs& attrs)
   {
     if (! attrs.external) {
-      if (node->body == nullptr && ! attrs.builtin)
+      if (node->body == nullptr && ! attrs.builtin && ! attrs.host)
         diags.emit(D::LANG_FUNCDEF_NO_BODY, node->name_span, { { "name", node->name } });
       return;
     }
@@ -544,6 +548,115 @@ namespace pl4g::sema {
       diags.emit(D::LANG_FUNCDEF_EXTERNAL_HAS_A_BODY, node->name_span, { { "name", node->name } });
     if (! rt::defines(*attrs.external))
       diags.emit(D::LANG_FUNCDEF_EXTERNAL_UNKNOWN, node->name_span, { { "symbol", *attrs.external } });
+  }
+
+
+  std::string Checker::convention_of(const ir::FuncAttrs& attrs) const
+  {
+    if (attrs.abi)
+      return *attrs.abi;
+    // A constructor or a destructor of a shared object is called by the
+    // loader, from the table of them the object carries, which calls the way
+    // the system calls things: there is nothing in between to translate.
+    if (module.output == ir::Output::shared
+        && (attrs.special == ir::SpecialKind::constructor || attrs.special == ir::SpecialKind::destructor))
+      return std::string(ir::system_cconv);
+    return std::string(ir::default_cconv);
+  }
+
+
+  void Checker::check_host(const ast::FuncDef* node, const ir::FuncAttrs& attrs,
+                           std::span<const ir::Type* const> params, const ir::Type* ret)
+  {
+    if (! attrs.host)
+      return;
+    // It has no body, as an external function has none; there has to be a
+    // host, which an executable has not; and what crosses is what C has.
+    if (node->body != nullptr)
+      diags.emit(D::LANG_FUNCDEF_EXTERNAL_HAS_A_BODY, node->name_span, { { "name", node->name } });
+    if (! ir::hosted(module.output))
+      diags.emit(D::LANG_HOST_IN_AN_EXECUTABLE, node->name_span, { { "name", node->name } });
+    for (std::size_t at = 0; at < std::min(params.size(), node->params.size()); ++at) {
+      auto ty = params[at];
+      if (auto record = ir::as<ir::ProductType>(ty); ty == ir::error_type() || (record != nullptr && record->abi))
+        // Not known, or a record laid out for C, which 4596 is about.
+        continue;
+      if (ir::as<ir::IntType>(ty) == nullptr && ir::as<ir::FloatType>(ty) == nullptr
+          && ir::as<ir::BoolType>(ty) == nullptr && ir::as<ir::CharType>(ty) == nullptr
+          && ir::as<ir::PtrType>(ty) == nullptr && ir::as<ir::StrType>(ty) == nullptr)
+        diags.emit(D::LANG_HOST_PARAMETER_TYPE, node->params[at]->type->span,
+                   { { "type", ty->written() }, { "param", node->params[at]->name }, { "name", node->name } });
+    }
+    if (ret != ir::error_type() && ret != ir::void_type() && ir::as<ir::IntType>(ret) == nullptr
+        && ir::as<ir::FloatType>(ret) == nullptr && ir::as<ir::BoolType>(ret) == nullptr
+        && ir::as<ir::CharType>(ret) == nullptr)
+      diags.emit(D::LANG_HOST_RESULT_TYPE, node->ret_type != nullptr ? node->ret_type->span : node->name_span,
+                 { { "name", node->name }, { "type", ret->written() } });
+  }
+
+
+  void Checker::check_offered(const ast::FuncDef* node, const ir::FuncAttrs& attrs, ir::Linkage linkage)
+  {
+    // What calls it was compiled by something else, which calls the way the
+    // system does; a function of this compiler's own convention would be
+    // called in a way it does not expect.
+    if (module.output == ir::Output::shared && linkage == ir::Linkage::visible && ! attrs.abi && node->body != nullptr)
+      diags.emit(D::LANG_SHARED_VISIBLE_CONVENTION, node->name_span, { { "name", node->name } });
+  }
+
+
+  void Checker::hand_over_text(ir::Function* func)
+  {
+    if (! func->attrs.host || std::ranges::none_of(func->fty->params, [](const ir::Type* ty) {
+          return ir::as<ir::StrType>(ty) != nullptr;
+        }))
+      return;
+    // C has no `str`: what it calls text is the address of bytes ending in a
+    // nul.  So the function the program calls is made a function of its own,
+    // whose body makes that copy of each `str` in the heap, calls the host's
+    // function -- a declaration taking an address in its place -- and gives the
+    // copies back.  Made here, in the representation, the copy is made once for
+    // every way the program is run: the interpreter's host call and the
+    // compiled stub see only what C sees.
+    auto bytes = strings::bytes_type(module);
+    std::vector<const ir::Type*> handed;
+    for (auto ty : func->fty->params)
+      handed.push_back(ir::as<ir::StrType>(ty) != nullptr ? bytes : ty);
+    auto made = std::make_unique<ir::Function>(func->name + ".host", ir::func_type(handed, func->fty->ret));
+    made->attrs = func->attrs;
+    made->linkage = ir::Linkage::internal;
+    made->cconv = func->cconv;
+    made->span = func->span;
+    made->name_span = func->name_span;
+    made->source_path = func->source_path;
+    made->module = func->module;
+    made->param_names = func->param_names;
+    ir::Function* crossing = module.add_function(std::move(made));
+    func->attrs.host.reset();
+    func->attrs.abi.reset();
+    func->cconv = std::string(ir::default_cconv);
+    auto entry = func->add_block();
+    ir::Builder builder(module, *func);
+    builder.position_at(entry);
+    std::vector<ir::Value*> given;
+    std::vector<std::pair<ir::Value*, ir::Value*>> copies;
+    for (std::size_t at = 0; at < func->fty->params.size(); ++at) {
+      auto ty = func->fty->params[at];
+      auto param = entry->add_param(ty, func->param_names[at]);
+      if (ir::as<ir::StrType>(ty) == nullptr) {
+        given.push_back(param);
+        continue;
+      }
+      auto text = builder.extract(param, 0, bytes);
+      auto length = builder.extract(param, 1, ir::u64());
+      auto copy = builder.call(strings::c_string_function(module), std::vector<ir::Value*>{ text, length }, bytes);
+      copies.emplace_back(copy, builder.binary(ir::BinOp::wrap_add, length, builder.int_const(ir::u64(), 1)));
+      given.push_back(copy);
+    }
+    auto answer = builder.call(crossing, given, func->fty->ret, func->span);
+    for (auto [copy, size] : copies)
+      builder.call(tables::heap_free_function(module), std::vector<ir::Value*>{ copy, size }, ir::void_type());
+    builder.ret(func->fty->ret == ir::void_type() ? nullptr : answer);
   }
 
 
@@ -1472,6 +1585,14 @@ namespace pl4g::sema {
         attrs.abi = std::string(written.empty() ? ir::system_cconv : written);
         known_convention(*attrs.abi, attr);
         attrs.variadic = attr.as_bool("variadic");
+      } else if (name == "host") {
+        // Defined by the program this one is loaded into, found there by name
+        // at the first call, and called the way the system calls things --
+        // which is the only way the host can be called -- and impure for the
+        // reason an external function is.
+        attrs.host = std::string(attr.as_str("symbol"));
+        attrs.abi = std::string(ir::system_cconv);
+        attrs.impure = true;
       } else if (name == "external") {
         // Defined somewhere else, called the way this system calls things, and
         // impure by being external: nothing here can see what it does.

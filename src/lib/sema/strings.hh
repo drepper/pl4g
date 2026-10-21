@@ -22,6 +22,7 @@ namespace pl4g::sema::strings {
   inline constexpr std::string_view compare_symbol = "__pl4g_str_compare";
   inline constexpr std::string_view char_symbol = "__pl4g_str_of_char";
   inline constexpr std::string_view byte_count_symbol = "__pl4g_str_char_bytes";
+  inline constexpr std::string_view c_string_symbol = "__pl4g_str_c";
 
   // What the bytes of a string are reached by.
   const ir::PtrType* bytes_type(ir::Module& module);
@@ -37,6 +38,9 @@ namespace pl4g::sema::strings {
   // A call of the join, the one for `⎕heap` where `arena` is known to be it.
   ir::Value* joined(ir::Builder& builder, ir::Value* arena, std::span<ir::Value* const> pieces,
                     const ir::Type* answer, Span span = invalid_span);
+  // The one that makes C's text of a string -- a copy in the heap with a nul
+  // after it, which whoever asked gives back -- built on first ask.
+  ir::Function* c_string_function(ir::Module& module);
   // The one that makes a string of one character.
   ir::Function* char_function(ir::Module& module);
   // How many bytes a code point takes.

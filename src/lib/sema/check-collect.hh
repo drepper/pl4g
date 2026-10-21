@@ -27,6 +27,16 @@
     Generator* generator_instance(Generator* template_, const Dict<std::string, const ir::Type*>& bound, Span span);  // check.py:6914
     // Check a function said to be defined somewhere else, and one not.
     void check_external(const ast::FuncDef* node, const ir::FuncAttrs& attrs);  // check.py:6951
+    // The convention a function is called with: the one it names, or the system's for a constructor or a
+    // destructor of a shared object, which the loader calls.
+    std::string convention_of(const ir::FuncAttrs& attrs) const;  // check.py:6973
+    // Check a function the host defines: no body, a host to define it, and only what C has crossing.
+    void check_host(const ast::FuncDef* node, const ir::FuncAttrs& attrs, std::span<const ir::Type* const> params, const ir::Type* ret);  // check.py:6989
+    // Check that what a shared object offers follows the convention its callers use.
+    void check_offered(const ast::FuncDef* node, const ir::FuncAttrs& attrs, ir::Linkage linkage);  // check.py:7018
+    // Make a function the host defines that takes text into two: a body copying each `str` into C's text,
+    // and the declaration of the host's own taking addresses.
+    void hand_over_text(ir::Function* func);  // check.py:7031
     // Report a record laid out for something else crossing a call whole.
     void not_by_value(const ir::Type* ty, Span where);  // check.py:6971
     // What each parameter of `node` is given where a call gives it nothing.

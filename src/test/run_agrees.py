@@ -41,6 +41,9 @@ class Expected:
     run_args: list[str] = field(default_factory=list)
     environment: dict[str, str] = field(default_factory=dict)
     xfail: str | None = None
+    #: The C program that loads what the test builds, where it builds a shared
+    #: object rather than a program.
+    host: str | None = None
     #: The optimization levels the test is run at: nought where it says none.
     levels: list[int] = field(default_factory=lambda: [0])
 
@@ -72,6 +75,8 @@ def directives(path: Path) -> Expected:
                     found.runs = "native" in value or "qemu" in value
                 elif key == "xfail":
                     found.xfail = value
+                elif key == "host":
+                    found.host = value
                 elif key == "opt":
                     found.levels = [int(one) for one in value.split(",")]
     return found
@@ -127,6 +132,10 @@ def main() -> int:
     for path in sorted((root / "tests" / "language").rglob("*.pl4g")):
         expected = directives(path)
         if expected.module or not expected.compiles or not expected.runs or expected.xfail is not None:
+            continue
+        if expected.host is not None or "-shared" in expected.args:
+            # A shared object has no startup to run: what runs it is the
+            # program that loads it, which the test suite builds.
             continue
         if LEVEL not in expected.levels:
             # Run at the levels it names and no other, as the test suite runs it.
