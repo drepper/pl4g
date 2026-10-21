@@ -232,6 +232,23 @@ namespace pl4g::target::aarch64 {
   }
 
 
+  const host::HostABI& host_abi()
+  {
+    // The two the architecture keeps for code between a call and what it
+    // calls, which is what a stub is, and the link register a call to the
+    // finder writes.
+    static const host::HostABI made = [] {
+      host::HostABI abi;
+      abi.slot = reg("x16");
+      abi.name = reg("x17");
+      abi.through = reg("x9");
+      abi.link = mc::Reg(regs().x30);
+      return abi;
+    }();
+    return made;
+  }
+
+
   std::span<const mc::Reg> relocate_regs()
   {
     static const auto made = [] {

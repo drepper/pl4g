@@ -47,7 +47,7 @@ namespace pl4g::target::riscv64 {
     mc::Insts select_store(const mc::MCMem& address, const mc::MCOperand& value, Span span) override;
     mc::Insts select_call(const mc::MCOperand& target, Span span) override;
     mc::Insts select_return(Span span) override;
-    mc::Insts select_jump(const mc::MCSymRef& target, Span span) override;
+    mc::Insts select_jump(const mc::MCOperand& target, Span span) override;
     mc::Insts select_branch(mc::Condition cond, const mc::MCOperand& lhs, const mc::MCOperand& rhs,
                             const mc::MCSymRef& target, Span span) override;
     mc::Insts select_set(mc::Condition cond, mc::Reg dst, const mc::MCOperand& lhs, const mc::MCOperand& rhs,
@@ -80,6 +80,9 @@ namespace pl4g::target::riscv64 {
     mc::Insts select_divide(mc::Reg dst, const mc::MCOperand& left, const mc::MCOperand& right, bool is_signed,
                             bool remainder, int bits, Span span) override;
     std::int64_t link_slot_size() override { return 16; }
+    // How large a frame of `total` bytes is made, the stack aligned as the
+    // system's convention says.
+    std::int64_t frame_size(std::int64_t total, bool calls) override;
     std::pair<std::optional<std::int64_t>, std::int64_t> frame_walk(std::int64_t total, std::int64_t size,
                                                                     std::int64_t link) override;
     mc::Insts select_save_link(std::int64_t offset, Span span) override;

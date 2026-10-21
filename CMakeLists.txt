@@ -114,6 +114,7 @@ set(PL4G_LIB_SOURCES
   src/lib/mc/reg.cc
   src/lib/mc/regalloc.cc
   src/lib/mc/streamer.cc
+  src/lib/elf/dynamic.cc
   src/lib/elf/relr.cc
   src/lib/elf/strtab.cc
   src/lib/elf/structs.cc
@@ -169,6 +170,7 @@ set(PL4G_LIB_SOURCES
   src/lib/target/faults.cc
   src/lib/target/frames.cc
   src/lib/target/globals.cc
+  src/lib/target/host.cc
   src/lib/target/narrow.cc
   src/lib/target/relocate.cc
   src/lib/target/ordering.cc
@@ -177,6 +179,7 @@ set(PL4G_LIB_SOURCES
   src/lib/target/runs.cc
   src/lib/target/runtime.cc
   src/lib/target/saturate.cc
+  src/lib/target/shared.cc
   src/lib/target/stack.cc
   src/lib/target/started.cc
   src/lib/target/aarch64/abi.cc

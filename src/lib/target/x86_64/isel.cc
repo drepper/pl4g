@@ -526,7 +526,11 @@ namespace pl4g::target::x86_64 {
 
   Insts X86Selector::select_return(Span span) { return { inst("ret", {}, span) }; }
 
-  Insts X86Selector::select_jump(const MCSymRef& target, Span span) { return { inst("jmp", { target }, span) }; }
+  Insts X86Selector::select_jump(const MCOperand& target, Span span)
+  {
+    // A symbol or a register: the one mnemonic, and the row by the operand.
+    return { inst("jmp", { target }, span) };
+  }
 
 
   Insts X86Selector::select_branch(Condition cond, const MCOperand& lhs, const MCOperand& rhs,
@@ -992,6 +996,18 @@ namespace pl4g::target::x86_64 {
       return { MCReg{ reg->reg, bits }, {} };
     auto held = new_gpr(bits);
     return { MCReg{ held, bits }, select_move(held, operand, span) };
+  }
+
+
+  std::int64_t X86Selector::frame_size(std::int64_t total, bool calls)
+  {
+    // The stack is aligned to sixteen bytes where a call is made, so it is
+    // eight past that where the called function begins, the return address
+    // having been pushed: a frame of eight past a multiple of sixteen brings it
+    // back.  A function that calls nothing has no call to align for.
+    if (! calls)
+      return total;
+    return total + ((8 - total) % 16 + 16) % 16;
   }
 
 

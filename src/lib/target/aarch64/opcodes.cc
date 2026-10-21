@@ -868,6 +868,12 @@ namespace pl4g::target::aarch64 {
           { reg_field(0, rn) })
           .defs({ regs().x30 })
           .flags(mc::InstFlags::call);
+      // br Xn
+      // A jump through a register, which is how a stub that found what it stands
+      // for goes there, with the arguments and the link register as they came.
+      add("br", { r(64) }, 0xD61F0000,
+          { reg_field(0, rn) })
+          .flags(mc::InstFlags::terminator | mc::InstFlags::barrier);
       // ret   (returns through the link register)
       add("ret", {}, 0xD65F03C0,
           {})

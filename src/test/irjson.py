@@ -425,7 +425,7 @@ class Writer:
 
         out: dict[str, Any] = {
             "format": "pl4g-ir-json 1", "name": module.name, "triple": module.triple,
-            "stack_size": module.stack_size, "guard_size": module.guard_size,
+            "stack_size": module.stack_size, "guard_size": module.guard_size, "output": module.output.value,
             "globals": [self.global_var(v) for v in module.globals.values()],
             "global_keys": list(module.globals),
             "texts": [self.global_var(v) for v in module.texts.values()],

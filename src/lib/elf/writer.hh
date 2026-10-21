@@ -52,17 +52,36 @@ namespace pl4g::elf {
     std::uint64_t function_padding = 0;
     // How much stack the program wants, which PT_GNU_STACK says.
     std::uint64_t stack_size = 0;
+    // For a shared object: the libraries it needs, the symbols it offers, and
+    // the slots the loader fills with where a symbol it needs is -- each the
+    // slot's own symbol and the one it is filled with.
+    std::vector<std::string> needed;
+    std::vector<std::string> exports;
+    std::vector<std::pair<std::string, std::string>> imports;
   };
+
+
+  // The sections a shared object's tables are in, in the order they are
+  // placed.  The first four are read-only and share a segment; the dynamic
+  // section is written by the loader, which adds where the object was put to
+  // the addresses it holds, and is in a segment of its own.
+  inline constexpr std::string_view hash_section = ".hash";
+  inline constexpr std::string_view dynsym_section = ".dynsym";
+  inline constexpr std::string_view dynstr_section = ".dynstr";
+  inline constexpr std::string_view rela_section = ".rela.dyn";
+  inline constexpr std::string_view dynamic_section = ".dynamic";
 
 
   // The table of a position-independent image, in the section of this name.
   inline constexpr std::string_view relr_section = ".relr.dyn";
 
-  // Turns the assembled sections into an ELF executable: one at a fixed
-  // address, or a position-independent one (`ImageKind::pie`) -- linked at
+  // Turns the assembled sections into an ELF image: an executable at a fixed
+  // address, a position-independent one (`ImageKind::pie`) -- linked at
   // nought, with every absolute address it holds named in a table of relative
   // relocations (elf/relr.hh) that its startup code applies, and the symbols
-  // of target/relocate.hh saying where the table and the image are.
+  // of target/relocate.hh saying where the table and the image are -- or a
+  // shared object (`ImageKind::shared`), linked at nought too, whose relative
+  // relocations and dynamic tables (elf/dynamic.hh) are the loader's to read.
   class ElfWriter {
   public:
     ElfWriter(ImageSettings settings, std::span<mc::MCSection* const> sections, std::span<mc::MCSymbol* const> symbols,
@@ -80,7 +99,7 @@ namespace pl4g::elf {
                               std::vector<SegmentPlan>& loads);
     static std::uint64_t section_flags(const mc::MCSection& section);
     static void add_chunk(ImageLayout& layout, const std::string& name, std::uint64_t size, std::uint64_t align,
-                          std::uint64_t offset);
+                          std::uint64_t offset, std::optional<std::uint64_t> vaddr = std::nullopt);
     std::uint64_t add_nonalloc(ImageLayout& layout, const std::string& name, std::uint32_t sh_type,
                                std::uint64_t size, std::uint64_t align, std::uint64_t offset,
                                std::uint64_t entsize = 0);
@@ -98,6 +117,13 @@ namespace pl4g::elf {
     void collect_relocations();
     std::uint64_t place_relocations(ImageLayout& layout, std::uint64_t offset, std::vector<SegmentPlan>& loads);
     void define(std::string_view name, std::uint64_t vaddr);
+    // A shared object's tables: how many entries its dynamic section has,
+    // where they all go, which tables index which, and their bytes.
+    std::size_t dynamic_entries() const;
+    std::pair<std::uint64_t, SegmentPlan> place_dynamic(ImageLayout& layout, std::uint64_t offset,
+                                                        std::vector<SegmentPlan>& loads);
+    static void link_dynamic(ImageLayout& layout);
+    void write_dynamic(mc::Bytes& out, const ImageLayout& layout);
 
     ImageSettings settings;
     std::vector<mc::MCSection*> sections;
@@ -115,6 +141,10 @@ namespace pl4g::elf {
     // relocated them.
     std::vector<mc::MCSection*> relro;
     std::size_t relro_at = 0;
+    // For a shared object: the names of its dynamic symbols, the null one
+    // first, and their strings.
+    std::vector<std::string> dynamic_names;
+    StringTable dynstr;
   };
 
 

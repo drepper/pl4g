@@ -142,6 +142,11 @@ class Fake:
     def link_slot_size(self) -> int:  # noqa: D102
         return 8
 
+    def frame_size(self, total: int, calls: bool) -> int:  # noqa: D102
+        # A multiple of sixteen where the function calls and returns, and the
+        # size as it is where not, so that both ways of a frame are tried.
+        return (total + 15) & ~15 if calls else total
+
     def frame_walk(self, total, size, link):  # noqa: ANN001, ANN201, D102
         return (size if link else None, total)
 

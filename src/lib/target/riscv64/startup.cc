@@ -204,6 +204,23 @@ namespace pl4g::target::riscv64 {
   }
 
 
+  const host::HostABI& host_abi()
+  {
+    // Temporaries no argument is in, and the return address a call to the
+    // finder writes.
+    static const host::HostABI made = [] {
+      const auto& regs = registers();
+      host::HostABI abi;
+      abi.slot = regs.reg("t1");
+      abi.name = regs.reg("t2");
+      abi.through = regs.reg("t0");
+      abi.link = mc::Reg(regs.ra);
+      return abi;
+    }();
+    return made;
+  }
+
+
   std::span<const mc::Reg> relocate_regs()
   {
     static const auto made = [] {

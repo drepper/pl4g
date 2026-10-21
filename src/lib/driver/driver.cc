@@ -43,6 +43,7 @@
 #include "sema/check-helpers.hh"
 #include "sema/modules.hh"
 #include "target/registry.hh"
+#include "target/shared.hh"
 #include "target/target.hh"
 #include "util/fdio.hh"
 #include "util/pyrepr.hh"
@@ -523,7 +524,12 @@ namespace pl4g::driver {
           return exit_code::errors;
         }
       }
-      target->position_independent(options.pie);
+      // A shared object is linked at nought as a position-independent
+      // executable is, but relocated by the loader rather than by itself: the
+      // code is the code of an executable, as pypl4g's is, and `-fpie` beside
+      // `-shared` changes nothing about it.
+      bool shared = module->output == ir::Output::shared;
+      target->position_independent(options.pie && ! shared);
       auto start = Clock::now();
       mc::MCStreamer streamer(target->encoder());
       auto asm_ = target->new_assembler(streamer, options.opt_level);
@@ -555,12 +561,21 @@ namespace pl4g::driver {
       auto defaults = target->image_defaults();
       elf::ImageSettings settings;
       settings.machine = defaults.machine;
-      settings.base_vaddr = options.pie ? 0 : defaults.base_vaddr;
+      settings.base_vaddr = options.pie || shared ? 0 : defaults.base_vaddr;
       settings.page_size = defaults.page_size;
       settings.entry_symbol = std::string(target->entry_symbol());
       settings.header_flags = defaults.header_flags;
-      settings.kind = options.pie ? elf::ImageKind::pie : elf::ImageKind::executable;
-      settings.stack_size = std::uint64_t(options.stack_size.value_or(1 << 20));
+      settings.kind = shared ? elf::ImageKind::shared : options.pie ? elf::ImageKind::pie : elf::ImageKind::executable;
+      settings.stack_size = std::uint64_t(module->stack_size);
+      if (shared) {
+        settings.exports = target::shared::exports(*module);
+        // A shared object needs the C library where it calls what the host
+        // defines, `dlsym` being there, and nothing else ever.
+        if (streamer.symbols.contains(std::string(target::host::dlsym_slot))) {
+          settings.needed = { std::string(target::shared::libc) };
+          settings.imports = { { std::string(target::host::dlsym_slot), std::string(target::host::dlsym) } };
+        }
+      }
       auto sections = streamer.section_list();
       auto symbols = streamer.symbol_list();
       std::vector<std::string> paths(module->source_paths.begin(), module->source_paths.end());

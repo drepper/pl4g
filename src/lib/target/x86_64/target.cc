@@ -19,6 +19,7 @@
 #include "target/pool.hh"
 #include "target/registry.hh"
 #include "target/runtime.hh"
+#include "target/shared.hh"
 #include "target/stack.hh"
 #include "target/started.hh"
 #include "target/relocate.hh"
@@ -201,8 +202,16 @@ namespace pl4g::target {
         // Where the last function ends, which is where the table's sentinel row
         // begins.
         asm_.label(std::string(frames_end_symbol));
-        if (module.startup == nullptr)
+        bool shared = module.output == ir::Output::shared;
+        if (module.startup == nullptr && ! shared)
           return;
+        if (shared)
+          // What the host defines, reached through stubs, and the tables the
+          // loader runs the constructors and destructors from.  Before the
+          // question below: a stub says what it did not find through the same
+          // helper a fault does.
+          shared::emit(asm_, module, host_abi(), lookup_cconv(ir::system_cconv), messages, sources,
+                       image_defaults_of.text_alignment, abort_symbol);
         if (allocator_wanted_by(module))
           // The allocator where something calls it and nowhere else.
           emit_allocator(asm_, syscalls(), allocator_regs(), abort_symbol, messages.symbol(std::string(out_of_memory)));
@@ -224,18 +233,23 @@ namespace pl4g::target {
         if (module.stack_size > 0)
           // What the kernel calls where the program follows a bad address.
           emit_handler(asm_, syscalls(), stack_abi());
-        std::optional<std::string> refused;
-        if (! levels::requirements(mclevel).empty())
-          refused = messages.symbol(levels::described(mclevel));
-        // And what a system that has the processor and has turned off the
-        // registers this program uses is told.
-        std::optional<std::string> turned_off;
-        if (levels::state(mclevel) != 0)
-          turned_off = messages.symbol(levels::disabled(mclevel));
-        if (pie)
-          emit_relocate(asm_, relocate_regs(), syscalls());
-        emit_start(asm_, module, lookup_cconv(module.startup->cconv), mclevel, refused, turned_off, failures, layout,
-                   pie);
+        if (module.startup != nullptr && ! shared) {
+          // What the processor is asked, and told, only where there is an
+          // entry point to ask it: a shared object runs in a program that was
+          // started on this machine already.
+          std::optional<std::string> refused;
+          if (! levels::requirements(mclevel).empty())
+            refused = messages.symbol(levels::described(mclevel));
+          // And what a system that has the processor and has turned off the
+          // registers this program uses is told.
+          std::optional<std::string> turned_off;
+          if (levels::state(mclevel) != 0)
+            turned_off = messages.symbol(levels::disabled(mclevel));
+          if (pie)
+            emit_relocate(asm_, relocate_regs(), syscalls());
+          emit_start(asm_, module, lookup_cconv(module.startup->cconv), mclevel, refused, turned_off, failures,
+                     layout, pie);
+        }
         runtime.emit(asm_, by_name());
         messages.emit(asm_);
         constants.emit(asm_);

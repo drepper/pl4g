@@ -19,6 +19,7 @@
 #include "target/allocator.hh"
 #include "target/backtrace.hh"
 #include "target/callconv.hh"
+#include "target/host.hh"
 #include "target/stack.hh"
 #include "target/tests.hh"
 
@@ -49,6 +50,8 @@ namespace pl4g::target::aarch64 {
   const AllocatorRegs& allocator_regs();
   const StackABI& stack_abi();
   const WalkABI& walk_abi();
+  // The registers a stub for what the host defines works in.
+  const host::HostABI& host_abi();
 
   // The entry point for `module`.
   void emit_start(mc::Assembler& asm_, const ir::Module& module, const CallConvDesc& cconv,

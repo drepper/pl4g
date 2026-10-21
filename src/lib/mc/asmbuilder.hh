@@ -48,7 +48,8 @@ namespace pl4g::mc {
     virtual Insts select_release(const MCMem& address, const MCOperand& value, Span span);
     virtual Insts select_call(const MCOperand& target, Span span);
     virtual Insts select_return(Span span);
-    virtual Insts select_jump(const MCSymRef& target, Span span);
+    // Go to `target`: a symbol, or a register holding where to go.
+    virtual Insts select_jump(const MCOperand& target, Span span);
     // Make room for `size` bytes on the stack, and give it back.
     virtual Insts select_frame(std::int64_t size, Span span);
     virtual Insts select_unframe(std::int64_t size, Span span);
@@ -93,6 +94,10 @@ namespace pl4g::mc {
                                       bool is_signed, Span span);
     // How much room a function that calls sets aside for its return address.
     virtual std::int64_t link_slot_size();
+    // How large a frame of `total` bytes has to be made, for the stack to be as
+    // aligned as the system's convention says where it has to be; `calls` is
+    // whether the function was called and calls in turn.
+    virtual std::int64_t frame_size(std::int64_t total, bool calls);
     // Where a return address lies once the frame stands, and how far above
     // this function's stack pointer its caller's is.
     virtual std::pair<std::optional<std::int64_t>, std::int64_t> frame_walk(std::int64_t total, std::int64_t size,
@@ -258,8 +263,12 @@ namespace pl4g::mc {
     std::int64_t frame_slot(std::int64_t size, std::int64_t alignment);
     // A virtual register of the kind and width of `like`.
     Reg temporary(Reg like);
-    // Go to another function, which returns in this one's place.
-    void tail_jump(const std::string& target, Span span = invalid_span);
+    // Go to another function, which returns in this one's place: a symbol, or
+    // a register holding where to go.  `reads` is the registers the other
+    // function's arguments are in, which keeps them wanted up to here, as a
+    // call's are.
+    void tail_jump(const std::string& target, Span span = invalid_span, std::vector<Reg> reads = {});
+    void tail_jump(const MCOperand& target, Span span = invalid_span, std::vector<Reg> reads = {});
     void frame(std::int64_t size, Span span = invalid_span);
     void unframe(std::int64_t size, Span span = invalid_span);
     void put_aside(std::int64_t slot, Reg source, Span span = invalid_span);

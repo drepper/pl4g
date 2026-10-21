@@ -387,8 +387,11 @@ namespace pl4g::target::riscv64 {
   }
 
 
-  Insts RVSelector::select_jump(const MCSymRef& target, Span span)
+  Insts RVSelector::select_jump(const MCOperand& target, Span span)
   {
+    if (! std::holds_alternative<MCSymRef>(target))
+      // Through a register: wherever it holds.
+      return { inst("jr", { target }, span) };
     return { inst("j", { target }, span) };
   }
 
@@ -701,6 +704,14 @@ namespace pl4g::target::riscv64 {
     auto mnemonic = std::format("{}{}", remainder ? "rem" : "div", is_signed ? "" : "u");
     held.push_back(inst(mnemonic, { mcreg(dst), dividend, divisor }, span));
     return held;
+  }
+
+
+  std::int64_t RVSelector::frame_size(std::int64_t total, bool)
+  {
+    // A multiple of sixteen, which is what the stack pointer is aligned to
+    // everywhere and not only where a call is made.
+    return (total + 15) & ~std::int64_t(15);
   }
 
 

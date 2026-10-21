@@ -298,6 +298,24 @@ namespace pl4g::target::x86_64 {
   }
 
 
+  const host::HostABI& host_abi()
+  {
+    // None of them an argument's.  The call to the finder pushes the return
+    // address, and the eight bytes more the stub makes room for are what align
+    // the stack for it.
+    static const host::HostABI made = [] {
+      auto& r = registers();
+      host::HostABI abi;
+      abi.slot = r.reg("r11");
+      abi.name = r.reg("r10");
+      abi.through = r.rax;
+      abi.room = 8;
+      return abi;
+    }();
+    return made;
+  }
+
+
   void emit_start(mc::Assembler& asm_, const ir::Module& module, const CallConvDesc& cconv, std::string_view level,
                   const std::optional<std::string>& refused, const std::optional<std::string>& turned_off,
                   const std::unordered_map<const ir::Function*, Failure>& failures, const ir::DataLayout& layout,

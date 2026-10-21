@@ -105,7 +105,7 @@ namespace {
 
     Insts select_call(const MCOperand& target, Span span) override { return { inst("call", { target }, span) }; }
     Insts select_return(Span span) override { return { inst("ret", {}, span) }; }
-    Insts select_jump(const MCSymRef& target, Span span) override { return { inst("jmp", { target }, span) }; }
+    Insts select_jump(const MCOperand& target, Span span) override { return { inst("jmp", { target }, span) }; }
 
     Insts select_branch(Condition cond, const MCOperand& lhs, const MCOperand& rhs, const MCSymRef& target,
                         Span span) override
@@ -147,6 +147,13 @@ namespace {
     }
 
     std::int64_t link_slot_size() override { return 8; }
+
+    // A multiple of sixteen where the function calls, and as it is where not,
+    // as src/test/mc_agrees.py's selector has it.
+    std::int64_t frame_size(std::int64_t total, bool calls) override
+    {
+      return calls ? (total + 15) & ~std::int64_t(15) : total;
+    }
 
     std::pair<std::optional<std::int64_t>, std::int64_t> frame_walk(std::int64_t total, std::int64_t size,
                                                                     std::int64_t link) override

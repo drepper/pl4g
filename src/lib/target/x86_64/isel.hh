@@ -48,7 +48,7 @@ namespace pl4g::target::x86_64 {
     mc::Insts select_release(const mc::MCMem& address, const mc::MCOperand& value, Span span) override;
     mc::Insts select_call(const mc::MCOperand& target, Span span) override;
     mc::Insts select_return(Span span) override;
-    mc::Insts select_jump(const mc::MCSymRef& target, Span span) override;
+    mc::Insts select_jump(const mc::MCOperand& target, Span span) override;
     mc::Insts select_branch(mc::Condition cond, const mc::MCOperand& lhs, const mc::MCOperand& rhs,
                             const mc::MCSymRef& target, Span span) override;
     std::set<int> flagged_widths() const override { return { 8, 16, 32, 64 }; }
@@ -94,6 +94,9 @@ namespace pl4g::target::x86_64 {
     mc::Insts select_wide_product(mc::Reg low, mc::Reg high, const mc::MCOperand& left, const mc::MCOperand& right,
                                   bool is_signed, Span span) override;
     std::int64_t link_slot_size() override { return 0; }
+    // How large a frame of `total` bytes is made, the stack aligned as the
+    // system's convention says.
+    std::int64_t frame_size(std::int64_t total, bool calls) override;
     std::pair<std::optional<std::int64_t>, std::int64_t> frame_walk(std::int64_t total, std::int64_t size,
                                                                     std::int64_t link) override;
     mc::Insts select_save_link(std::int64_t offset, Span span) override;

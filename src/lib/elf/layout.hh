@@ -12,9 +12,11 @@
 
 namespace pl4g::elf {
 
-  // The kind of image to produce: an executable at a fixed address, or one
-  // that may be loaded anywhere and relocates itself.
-  enum class ImageKind : std::uint8_t { executable, pie };
+  // The kind of image to produce: an executable at a fixed address, one that
+  // may be loaded anywhere and relocates itself, or a shared object -- linked
+  // at nought, with what it offers and needs in a dynamic section a loader
+  // reads, and no entry point.
+  enum class ImageKind : std::uint8_t { executable, pie, shared };
 
   // One contiguous run of bytes in the image.
   struct Chunk {

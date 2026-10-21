@@ -612,6 +612,11 @@ namespace pl4g::ir {
       out->triple = string_of(doc["triple"]);
       out->stack_size = int_of(doc["stack_size"]);
       out->guard_size = int_of(doc["guard_size"]);
+      // What the program is made into, which the back end writes a shared
+      // object for differently.
+      auto output = maybe_string(doc["output"]).value_or("executable");
+      out->output = output == "shared" ? Output::shared
+                    : output == "interpreted" ? Output::interpreted : Output::executable;
       types = doc["types"].get_array();
       made.assign(types.size(), nullptr);
       making.assign(types.size(), false);

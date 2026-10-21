@@ -721,8 +721,11 @@ namespace pl4g::target::aarch64 {
   }
 
 
-  Insts A64Selector::select_jump(const MCSymRef& target, Span span)
+  Insts A64Selector::select_jump(const MCOperand& target, Span span)
   {
+    if (! std::holds_alternative<MCSymRef>(target))
+      // Through a register: wherever it holds.
+      return { inst("br", { target }, span) };
     return { inst("b", { target }, span) };
   }
 
@@ -1012,6 +1015,14 @@ namespace pl4g::target::aarch64 {
     Reg carried = new_gpr();
     auto moved = select_move(carried, operand, span);
     return { named(carried, bits), std::move(moved) };
+  }
+
+
+  std::int64_t A64Selector::frame_size(std::int64_t total, bool)
+  {
+    // A multiple of sixteen, which is what the stack pointer is aligned to
+    // everywhere and not only where a call is made.
+    return (total + 15) & ~std::int64_t(15);
   }
 
 

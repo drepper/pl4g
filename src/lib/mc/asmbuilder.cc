@@ -27,7 +27,7 @@ namespace pl4g::mc {
   Insts InstructionSelector::select_release(const MCMem&, const MCOperand&, Span) { missing("select_release"); }
   Insts InstructionSelector::select_call(const MCOperand&, Span) { missing("select_call"); }
   Insts InstructionSelector::select_return(Span) { missing("select_return"); }
-  Insts InstructionSelector::select_jump(const MCSymRef&, Span) { missing("select_jump"); }
+  Insts InstructionSelector::select_jump(const MCOperand&, Span) { missing("select_jump"); }
   Insts InstructionSelector::select_frame(std::int64_t, Span) { missing("select_frame"); }
   Insts InstructionSelector::select_unframe(std::int64_t, Span) { missing("select_unframe"); }
   Insts InstructionSelector::select_branch(Condition, const MCOperand&, const MCOperand&, const MCSymRef&, Span)
@@ -105,6 +105,7 @@ namespace pl4g::mc {
     missing("select_wide_product");
   }
   std::int64_t InstructionSelector::link_slot_size() { missing("link_slot_size"); }
+  std::int64_t InstructionSelector::frame_size(std::int64_t, bool) { missing("frame_size"); }
   std::pair<std::optional<std::int64_t>, std::int64_t> InstructionSelector::frame_walk(std::int64_t, std::int64_t,
                                                                                       std::int64_t)
   {
@@ -286,7 +287,12 @@ namespace pl4g::mc {
       }
     std::int64_t link = calls && returns ? selector_.link_slot_size() : 0;
     auto keep = returns ? kept_registers(function) : std::vector<Reg>{};
-    std::int64_t total = size + link + 8 * std::int64_t(keep.size());
+    // And rounded, so that the stack is aligned at every call as the system's
+    // convention has it: what is called may be C, and C keeps what it puts on
+    // the stack aligned by assuming it found it so.  A function that does not
+    // return was not called, or not as one that comes back -- the entry point
+    // is begun by the kernel -- and says how its stack stands for itself.
+    std::int64_t total = selector_.frame_size(size + link + 8 * std::int64_t(keep.size()), calls && returns);
     if (calls)
       std::tie(function.return_at, function.caller_at) = selector_.frame_walk(total, size, link);
     else {
@@ -659,9 +665,18 @@ namespace pl4g::mc {
   }
 
 
-  void Assembler::tail_jump(const std::string& target, Span span)
+  void Assembler::tail_jump(const std::string& target, Span span, std::vector<Reg> reads)
   {
-    emit(selector_.select_jump(symref(target), span));
+    tail_jump(symref(target), span, std::move(reads));
+  }
+
+
+  void Assembler::tail_jump(const MCOperand& target, Span span, std::vector<Reg> reads)
+  {
+    auto selected = selector_.select_jump(target, span);
+    for (const auto& inst : selected)
+      inst->reads = reads;
+    emit(selected);
   }
 
 

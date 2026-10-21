@@ -261,6 +261,10 @@ namespace pl4g::target::riscv64 {
           regs.ra
         };
         add("jalr", { r() }, 0x000000E7, { reg(0, rs1) }, InstFlags::call).implicit_defs = { regs.ra };
+        // jr rs, which is jalr zero, rs, 0: a jump through a register, which is how
+        // a stub that found what it stands for goes there, with the arguments and
+        // the return address as they came.
+        add("jr", { r() }, 0x00000067, { reg(0, rs1) }, InstFlags::terminator | InstFlags::barrier);
         add("ret", {}, 0x00008067, {}, InstFlags::terminator | InstFlags::return_).implicit_uses = { regs.ra };
         add("ecall", {}, 0x00000073, {});
         add("fence", { fence_bits() }, 0x0000000F, { uimm(0, imm12, 12) }, InstFlags::may_load | InstFlags::may_store);
