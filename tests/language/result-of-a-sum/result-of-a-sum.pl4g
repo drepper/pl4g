@@ -1,0 +1,80 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A result whose answer is a sum travels through the caller's room**, as a sum
+※ answered on its own does: what a value held in memory *is*, is where its
+※ bytes are, and the bytes of one a function made are in that function's own
+※ frame, which is gone once it has answered.  So however few registers the
+※ result would take -- a sum's address, the truth value and a byte -- the
+※ caller provides the place and the answer is written there, and what the
+※ caller does before it reads the answer cannot change it.
+※
+※ Here a call answering such a result stands first in a list written out, and
+※ the elements after it call functions of their own, whose frames are where the
+※ first one's was; and a result answering one, and nothing beside it, is held
+※ across another call before it is read.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+
+type Shape = point : void | circle : f64 | named : str | many : [Shape]
+
+※ A shape, or why there is none: a byte.
+fn made(n: u64, a: &mut arena) → Shape ? u8 in a:
+    if n = 0u64:
+        return Shape(.circle ← 2.5f64)
+    if n > 100u64:
+        return ⊥ 7u8
+    let all: mut [Shape] = [] in a
+    all ⧺← [made(n - 1u64, a)?, Shape(.named ← "s" ⧺ ⍕n in a), Shape(.point ← true)]
+    Shape(.many ← all)
+
+※ A shape, or nothing.
+fn maybe(n: u64) → Shape?:
+    if n = 0u64: ⊥ else: Shape(.circle ← 1.5f64 × ⎕float(n, ⌜f64⌝))
+
+※ How many shapes there are, and what their circles add up to.
+fn measured(s: &Shape) → 〈u64, f64〉:
+    match s⌖:
+        f64(r):
+            〈1u64, r〉
+        [Shape](all):
+            let count: mut u64 = 1u64
+            let sum: mut f64 = 0f64
+            foreach &one: Shape = all:
+                let m: 〈u64, f64〉 = measured(one)
+                count ← count + m⟦0⟧
+                sum ← sum + m⟦1⟧
+            〈count, sum〉
+        _:
+            〈1u64, 0f64〉
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let pool: mut arena = ⎕arena
+    match made(3u64, &mut pool):
+        Shape(s):
+            let m: 〈u64, f64〉 = measured(&s)
+            ※ three levels of three, and the circle at the bottom
+            if m⟦0⟧ ≠ 10u64 or m⟦1⟧ ≇ 2.5f64:
+                return 1u6
+        ⊥(_):
+            return 2u6
+    match made(200u64, &mut pool):
+        Shape(_):
+            return 3u6
+        ⊥(why):
+            if why ≠ 7u8:
+                return 4u6
+    ※ held across a call before it is read
+    let kept: Shape? = maybe(4u64)
+    let between: Shape = maybe(2u64) ?? Shape(.point ← true)
+    let other: 〈u64, f64〉 = measured(&between)
+    match kept:
+        Shape(s):
+            let m: 〈u64, f64〉 = measured(&s)
+            if m⟦1⟧ ≇ 6f64 or other⟦1⟧ ≇ 3f64:
+                return 5u6
+        ⊥:
+            return 6u6
+    0u6

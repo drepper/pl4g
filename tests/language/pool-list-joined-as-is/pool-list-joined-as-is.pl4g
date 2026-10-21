@@ -1,0 +1,104 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A list written out and joined onto a list of an arena puts its elements in as
+※ they are**, as a list written out in the arena does: an arena gives nothing
+※ back one element at a time, so what lasts as long as it -- what was made in
+※ it, text in the image, what the heap holds -- goes in without a copy, and the
+※ list written out is never made.  So is an element written over, `l⟦i⟧ ← v`:
+※ what it replaces stays where it is until the arena goes.  A document built
+※ bottom up -- each array made of the values below it -- is then made once and
+※ not copied again at every level it is put into.
+※
+※ And **what such a body answers is what it made in the arena**: a list the loop
+※ joins onto there, a call handed a view whose answer points nowhere, a table
+※ written in the arena -- none of them is anything but the arena's, and the
+※ answer is the arena's as its signature says.
+※
+※ What is put in is still a value: a list joined on and changed afterwards
+※ leaves what went in as it was.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+
+type Tree = leaf : u64 | name : str | kids : [Tree]
+
+enum Why:
+    empty ;
+    odd
+
+※ Why a byte cannot be read: a number read out of the bytes, which is no view
+※ of them.
+fn why_at(bytes: u8⟦⟧, at: u64 ¤idx) → Why:
+    if bytes⟦at⟧ & 1u8 = 1u8: Why.odd else: Why.empty
+
+※ A tree of `levels` levels, each of `width` kids, made bottom up in `a`: every
+※ kid joined onto its parent's list as it is.
+fn grown(bytes: u8⟦⟧, levels: u64, width: u64, a: &mut arena) → Tree ? Why in a:
+    if #bytes = 0:
+        return ⊥ Why.empty
+    if levels = 0u64:
+        return Tree(.leaf ← ⎕widen(bytes⟦0⟧, ⌜u64⌝))
+    let kids: mut [Tree] = [] in a
+    let seen: mut ⸨u64: u64⸩ = ⸨⸩ in a
+    let i: mut u64 = 0u64
+    while i < width:
+        if bytes⟦0⟧ = 255u8:
+            ※ a call handed the view, whose answer points nowhere
+            return ⊥ why_at(bytes, 0)
+        kids ⧺← [grown(bytes⟦1…#bytes⟧, levels - 1u64, width, a)?, Tree(.name ← "n" ⧺ ⍕i in a)]
+        seen⸨i⸩ ← i
+        i ← i + 1u64
+    ※ one written over, which stays a value
+    kids⟦0⟧ ← Tree(.name ← "first")
+    Tree(.kids ← kids)
+
+※ How many leaves and names a tree has, and what its leaves add up to.
+fn counted(t: &Tree) → 〈u64, u64〉:
+    match t⌖:
+        u64(n):
+            〈1u64, n〉
+        str(_):
+            〈1u64, 0u64〉
+        [Tree](kids):
+            let count: mut u64 = 0u64
+            let sum: mut u64 = 0u64
+            foreach &k: Tree = kids:
+                let c: 〈u64, u64〉 = counted(k)
+                count ← count + c⟦0⟧
+                sum ← sum + c⟦1⟧
+            〈count, sum〉
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let pool: mut arena = ⎕arena
+    let bytes: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧ in ⎕static
+    match grown(bytes, 3u64, 3u64, &mut pool):
+        Tree(t):
+            ※ three levels of three kids, each beside a name, the first of each
+            ※ list written over with a name: four names and two trees a level,
+            ※ 4 + 2 × (4 + 2 × (4 + 2 × 1)) things, the leaves at the bottom four
+            let c: 〈u64, u64〉 = counted(&t)
+            if c⟦0⟧ ≠ 36u64:
+                return 1u6
+            if c⟦1⟧ ≠ 32u64:
+                return 2u6
+        ⊥(_):
+            return 3u6
+    ※ a list joined onto one of the arena's and changed afterwards
+    let inner: mut [Tree] = [Tree(.leaf ← 1u64)] in pool
+    let outer: mut [Tree] = [] in pool
+    outer ⧺← [Tree(.kids ← inner)]
+    inner ⧺← [Tree(.leaf ← 2u64)]
+    match outer⟦0⟧:
+        [Tree](kept):
+            if #kept ≠ 1:
+                return 4u6
+        _:
+            return 5u6
+    let refused: u8⟦2⟧ = ⟦255u8, 1u8⟧ in ⎕static
+    match grown(refused, 2u64, 2u64, &mut pool):
+        Tree(_):
+            6u6
+        ⊥(why):
+            if why = Why.odd: 0u6 else: 7u6

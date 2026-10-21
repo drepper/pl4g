@@ -1,0 +1,38 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A floating-point number kept across a call survives it**, whatever the call
+※ is.  A call to a function already compiled destroys what that function was
+※ seen to write; a call to one that has not been -- itself, recursing -- is
+※ taken to destroy everything its convention lets it, and that is every
+※ floating-point register on all three machines: no function's prologue saves
+※ one.  Here a sum carried through a loop lives across a call to the function
+※ the loop is in, whose own loop writes the same register with its own sum;
+※ and an answer of a whole number and a floating-point one comes back in a
+※ register of each kind.
+
+let std := ⎕import("std")
+
+type Shape = point : void | circle : f64 | many : [Shape]
+
+※ How many shapes there are, and what their circles add up to.
+fn measured(s: &Shape) → 〈u64, f64〉:
+    match s⌖:
+        f64(r):
+            〈1u64, r〉
+        [Shape](all):
+            let count: mut u64 = 1u64
+            let sum: mut f64 = 0f64
+            foreach &one: Shape = all:
+                let m: 〈u64, f64〉 = measured(one)
+                count ← count + m⟦0⟧
+                sum ← sum + m⟦1⟧
+            〈count, sum〉
+        _:
+            〈1u64, 0f64〉
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let s: Shape = Shape(.many ← [Shape(.many ← [Shape(.circle ← 2.5f64), Shape(.point ← true)]),
+                                  Shape(.circle ← 0.25f64), Shape(.point ← true)])
+    let p: 〈u64, f64〉 = measured(&s)
+    if p⟦0⟧ ≠ 6u64: 1u6 elif p⟦1⟧ ≇ 2.75f64: 2u6 else: 0u6

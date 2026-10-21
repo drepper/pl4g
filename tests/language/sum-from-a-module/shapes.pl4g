@@ -1,0 +1,20 @@
+※ pl4g-test: module
+※※ A sum and a record another file makes values of.
+
+@[export]
+type Shape = dot : void | circle : f64 | named : str | group : [Shape]
+
+@[export]
+type Labelled = label : str ; shape : Shape
+
+※※ How many shapes there are, all the way down.
+@[export]
+fn count(s: Shape) → u64:
+    match s:
+        [Shape](all):
+            let n: mut u64 = 1u64
+            foreach one: Shape = all:
+                n ← n + count(one)
+            n
+        _:
+            1u64

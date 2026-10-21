@@ -36,6 +36,11 @@ _FLOAT_ORDER = tuple(reg("".join(("f", str(n)))).unit
                      for n in (*range(10, 18), *range(0, 8), *range(28, 32),
                                8, 9, *range(18, 28)))
 
+#: A floating-point register is one no function hands back as it found it -- a
+#: prologue saves only the ordinary registers -- so a call whose callee has not
+#: said what it destroys destroys every one of them.
+_FLOATS_DESTROYED = frozenset(_FLOAT_ORDER)
+
 CC_PL4G: Final[CallConvDesc] = CallConvDesc(
     name="pl4g",
     int_arg_regs=_ARG_REGS,
@@ -46,7 +51,7 @@ CC_PL4G: Final[CallConvDesc] = CallConvDesc(
     float_ret_regs=(reg("f10"), reg("f11"), reg("f12")),
     float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
-    caller_saved=_CALLER_SAVED,
+    caller_saved=_CALLER_SAVED | _FLOATS_DESTROYED,
     stack_align=16,
     # The standard defines no area below the stack pointer a leaf function may
     # use, as on AArch64 and unlike x86-64.
@@ -65,7 +70,7 @@ CC_LP64: Final[CallConvDesc] = CallConvDesc(
     float_ret_regs=(reg("f10"), reg("f11")),
     float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
-    caller_saved=_CALLER_SAVED,
+    caller_saved=_CALLER_SAVED | _FLOATS_DESTROYED,
     stack_align=16,
     allocation_order=_ALLOCATION_ORDER,
     red_zone=0,

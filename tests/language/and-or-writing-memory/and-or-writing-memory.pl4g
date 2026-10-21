@@ -1,0 +1,59 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **`and` and `or` whose right side writes memory**, and a comparison both
+※ tested and carried on.
+※
+※ The right side of `and` and `or` runs only where the left leaves the answer
+※ open, so what it writes -- text joined, a sum made in room of its own, an
+※ answer put in the caller's room -- is written on one way to the join and not
+※ the other; what follows reads memory as whichever way left it, so the two
+※ ways meet with the memory each had, as they do after `if` and `??`.  Every
+※ test here is compiled with that checked.
+※
+※ And a comparison that is the last of an `and` -- handed to the join as the
+※ answer -- and is then tested by a branch of its own is a value held in a
+※ register, and not one the branch may compute where it stands: the branch
+※ that reads it is not the only thing that does.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+
+type Pick = none : void | some : str
+
+※ A sum made in room of its own, and text.
+fn named(n: u64) → Pick:
+    if n = 0u64: Pick(.none ← true) else: Pick(.some ← "n" ⧺ ⍕n)
+
+fn length(p: Pick) → u64:
+    match p:
+        str(s): ⎕drop(#⎕bytes(s))
+        _: 0u64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let found: mut u64 = 0u64
+    let n: mut u64 = 0u64
+    while n < 20u64:
+        ※ the right sides make text and sums, on one way only
+        if n > 3u64 or length(named(n)) = 2u64:
+            found ← found + 1u64
+        if n & 1u64 = 0u64 and length(named(n + 10u64)) = 3u64:
+            found ← found + 100u64
+        let both: bool = n ≠ 7u64 and (⎕text(⎕bytes("x" ⧺ ⍕n)) ?? "") ≠ "x8"
+        if both:
+            found ← found + 10000u64
+        n ← n + 1u64
+    ※ n > 3 sixteen times and n = 1, 2, 3 three; even n with a two-digit n + 10
+    ※ ten times; and every n but 7 and 8
+    if found ≠ 19u64 + 1000u64 + 180000u64:
+        return 1u6
+    ※ a comparison carried on as an answer and tested again
+    let c: u8 = ⎕narrow(found % 7u64 ?? 0u64, ⌜u8⌝) ?? 0u8
+    let low: bool = c ≠ 46u8 and (c | 32u8) ≠ 101u8 and c ≠ 120u8
+    let count: mut u64 = 0u64
+    if low and found > 10u64:
+        count ← count + 1u64
+    if found > 5u64 and low:
+        count ← count + 2u64
+    if count = 3u64: 0u6 else: 2u6
