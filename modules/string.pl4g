@@ -2209,9 +2209,24 @@ fn format_int(n: T', into: mut [u8], base: u8 ← 10u8, digits: u8 ← 1u8,
 fn byte_of(n: u64) → u8:
     ⎕narrow(n, ⌜u8⌝) ?? 0u8
 
+※※ Which of two ways `format_f64` lays out the digits of a number.
+※※
+※※ \details `javascript` is `Number.prototype.toString`'s, which `JSON.stringify`
+※※ writes: no point where the number is whole, up to twenty-one digits before an
+※※ exponent is used and six noughts after the point -- `100`, `1e+21`, `1e-7`.
+※※ `python` is `repr`'s, which Python's `json` writes: a point or an exponent
+※※ always, so that what is read back is not taken for a whole number, the
+※※ exponent from 10¹⁶ on and below 10⁻⁴, and two digits of it at least --
+※※ `100.0`, `1e+16`, `1e-05`, `0.0001`.
+@[export]
+enum Form:
+    javascript ;
+    python
+
 ※※ The shortest text that reads back as the same `f64`, written onto the end of
 ※※ some bytes, in the form JavaScript's `Number.prototype.toString` gives it --
-※※ which is what `JSON.stringify` writes.
+※※ which is what `JSON.stringify` writes -- or with *form* the form Python's
+※※ `repr` gives it.
 ※※
 ※※ \details The digits are the fewest that `parse_f64` reads back as this number,
 ※※ and of several so few the nearest to it, a tie to the even digit.  Where they
@@ -2225,6 +2240,9 @@ fn byte_of(n: u64) → u8:
 ※※ - otherwise one digit, a point and the rest where there are more, `e`, a sign
 ※※   and n - 1 -- `1e+21`, `1.5e-7`, `5e-324`.
 ※※
+※※ Python's rule is the same with 16 for 21 and -4 for -6, `.0` after a whole
+※※ number, `0.0` for nought and at least two digits of exponent: `1e-07`.
+※※
 ※※ A negative number has a `-` in front.  Where JavaScript and this part is
 ※※ nought with its sign, which this writes `-0` and JavaScript `0`: what is written
 ※※ here reads back as the number it was, and `0` is the other nought.  A number
@@ -2234,6 +2252,7 @@ fn byte_of(n: u64) → u8:
 ※※
 ※※ \param x the number
 ※※ \param into what to write onto
+※※ \param form how the digits are laid out
 ※※ \return what was handed in, the text after what it held
 ※
 ※ The digits are Giulietti's Schubfach, which was chosen over Ryu and Dragonbox
@@ -2247,7 +2266,8 @@ fn byte_of(n: u64) → u8:
 ※ interval, one digit fewer tried first.  Trailing noughts are taken off, and the
 ※ digits are laid out in a buffer of the frame's and joined on in one move.
 @[export]
-fn format_f64(x: f64, into: mut [u8]) → [u8]:
+fn format_f64(x: f64, into: mut [u8], form: Form ← Form.javascript) → [u8]:
+    let python: bool = form = Form.python
     let bits: u64 = ⎕bits(x)
     let negative: bool = bits ≥ 0x8000000000000000u64
     let magnitude: u64 = bits & 0x7FFFFFFFFFFFFFFFu64
@@ -2264,6 +2284,8 @@ fn format_f64(x: f64, into: mut [u8]) → [u8]:
             into ⧺← ⎕bytes("-0")
         else:
             into ⧺← ⎕bytes("0")
+        if python:
+            into ⧺← ⎕bytes(".0")
         return into
     let decimal: 〈u64, i64〉 = shortest(magnitude)
     let value: mut u64 = decimal⟦0⟧
@@ -2283,10 +2305,12 @@ fn format_f64(x: f64, into: mut [u8]) → [u8]:
     out⟦0⟧ ← if negative: 45u8 else: 48u8
     ※ JavaScript's four forms, each saying where the digits go -- they end just
     ※ before `stop` -- and how long the text is.  The noughts, before the digits
-    ※ or after them, are the buffer's own.
-    let integer: bool = count ≤ point ∧ point ≤ 21i64
-    let inside: bool = ¬integer ∧ 0i64 < point ∧ point ≤ 21i64
-    let small: bool = ⁻6i64 < point ∧ point ≤ 0i64
+    ※ or after them, are the buffer's own.  Python's are the same four, the first
+    ※ two ending sooner.
+    let widest: i64 = if python: 16i64 else: 21i64
+    let integer: bool = count ≤ point ∧ point ≤ widest
+    let inside: bool = ¬integer ∧ 0i64 < point ∧ point ≤ widest
+    let small: bool = (if python: ⁻4i64 else: ⁻6i64) < point ∧ point ≤ 0i64
     let stop: u64 ¤idx = if integer:
         start + k
     elif small:
@@ -2313,6 +2337,10 @@ fn format_f64(x: f64, into: mut [u8]) → [u8]:
     let length: mut u64 ¤idx = stop
     if integer:
         length ← start + place(point)
+        if python:
+            ※ the nought after the point is the buffer's
+            out⟦length⟧ ← 46u8
+            length ← length + 2
     elif inside:
         ※ the digits before the point move back into the place left for them
         let whole: u64 ¤idx = place(point)
@@ -2343,6 +2371,10 @@ fn format_f64(x: f64, into: mut [u8]) → [u8]:
             let pair: u64 ¤idx = ⎕unit(2u64 × size, ⌜idx⌝)
             out⟦length + 2⟧ ← PAIRS⟦pair⟧
             out⟦length + 3⟧ ← PAIRS⟦pair + 1⟧
+            length ← length + 4
+        elif python:
+            ※ the nought in front of the digit is the buffer's
+            out⟦length + 3⟧ ← byte_of(size + 48u64)
             length ← length + 4
         else:
             out⟦length + 2⟧ ← byte_of(size + 48u64)
