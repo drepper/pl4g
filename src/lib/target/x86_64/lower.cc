@@ -1093,7 +1093,8 @@ namespace pl4g::target::x86_64 {
         asm_.ret(inst->span, { answer });
         return;
       }
-      if (! (ir::is<ir::IntType>(ty) || ir::is<ir::BoolType>(ty) || ir::is<ir::EnumType>(ty) || ir::is<ir::PtrType>(ty)
+      if (! (ir::is<ir::IntType>(ty) || ir::is<ir::BoolType>(ty) || ir::is<ir::CharType>(ty) || ir::is<ir::EnumType>(ty)
+             || ir::is<ir::PtrType>(ty)
              || ir::is<ir::SetType>(ty) || ir::is<ir::DictType>(ty))) [[unlikely]]
         throw UnsupportedOperation(std::format("returning a value of type '{}'", ty->written()), span);
       auto result = result_register(ty, cconv);

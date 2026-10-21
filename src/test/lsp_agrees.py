@@ -195,9 +195,9 @@ def conversations(room: Path) -> dict[str, Conversation]:
     one.open(misnamed, text)
     # Opened, typed and saved: the back end speaks on opening and on saving,
     # and not on typing.
-    refused = room / "answer-a-char-not-yet.pl4g"
-    held = (Path(__file__).resolve().parent.parent.parent / "tests" / "language" / "answer-a-char-not-yet"
-            / "answer-a-char-not-yet.pl4g").read_text(encoding="utf-8")
+    refused = room / "answer-a-char.pl4g"
+    held = (Path(__file__).resolve().parent.parent.parent / "tests" / "language" / "answer-a-char"
+            / "answer-a-char.pl4g").read_text(encoding="utf-8")
     refused.write_text(held, encoding="utf-8")
     one = made["saved"] = Conversation(["utf-32"])
     one.open(refused, held)

@@ -2265,7 +2265,8 @@ namespace pl4g::target::aarch64 {
             asm_.ret(inst->span, { answer });
             break;
           }
-          if (! (ir::is<ir::IntType>(answered) || ir::is<ir::BoolType>(answered) || ir::is<ir::EnumType>(answered)
+          if (! (ir::is<ir::IntType>(answered) || ir::is<ir::BoolType>(answered) || ir::is<ir::CharType>(answered)
+                 || ir::is<ir::EnumType>(answered)
                  || ir::is<ir::PtrType>(answered) || ir::is<ir::SetType>(answered)
                  || ir::is<ir::DictType>(answered)))
             throw UnsupportedOperation(std::format("returning a value of type '{}'", answered->written()), span);

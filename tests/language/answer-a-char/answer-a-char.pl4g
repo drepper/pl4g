@@ -1,0 +1,20 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A function answers with a character in the register a `u32` is answered in:
+※ it is a code point, thirty-two bits wide, in both of the conventions --
+※ the language's own and the system's, which is what a C function answering a
+※ `uint32_t` uses.
+
+@[opaque]
+fn next(c: char) → char:
+    ⎕chr(⎕ord(c) + 1u32)
+
+@[visible, cdecl]
+fn same(c: char) → char:
+    c
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if next('a') = 'b' ∧ same('ω') = 'ω' ∧ next('ω') = 'ϊ' ∧ next('\U0010FFFE') = '\U0010FFFF': 0u6 else: 1u6

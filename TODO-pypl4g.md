@@ -778,10 +778,20 @@ Optimizations
     run: a host for them needs that architecture's C library and loader.  Fedora packages one for AArch64
     (`sysroot-aarch64-fc44-glibc`, run with `qemu-aarch64 -L`); there is none for RISC-V.
 
-[ ] answer with a `char`.  No back end returns one: the return names the kinds of value it hands back and a character is not
+[x] answer with a `char`.  No back end returns one: the return names the kinds of value it hands back and a character is not
     among them, so `fn f(c: char) → char: c` is refused (8501) on all three -- found while stack arguments were added, and the
     program `tests/language/answer-a-char-not-yet` is now the one the language server's test of a back-end refusal reads.  The
     register is the one a `u32` is answered in.
+    Done on 2026-10-23: the return takes a character as it takes a `u32`, on all three and in the C++ port; the test is
+    `tests/language/answer-a-char`.
+
+[ ] find a program the code generator refuses, for the language server's test that what only it can say is said on saving and
+    not on typing.  The character was the last such program the tests had, and none was found in its place: the test now
+    holds only that saving compiles and says nothing of a program that compiles.
+
+[ ] a function marked visible and named `_start` is accepted, beside the entry point the back end adds under that name: the
+    image then has two symbols of one name, and which the kernel starts is the writer's doing.  It should be refused, as any
+    other name the compiler's own image uses is.
 
 [ ] a `÷` of floating-point numbers written as the value of a record's field is not unwrapped: `Point(.x ← (a + b) ÷ 2f64)`
     hands a `f64?` to a field of `f64`, which the IR does not check and the x86-64 back end refuses with a message about an

@@ -1314,7 +1314,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
     from ...ir.function import Function as _Function
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
-    from ...ir.types import (BOOL, BoolType, DictType, EnumType, FloatType,
+    from ...ir.types import (BOOL, BoolType, CharType, DictType, EnumType, FloatType,
                              IntType, MEM, PtrType, ResultType, SetType,
                              VecType, VOID)
     from ...ir.inst import (CastInst, CastKind, ExtractInst, FailedInst,
@@ -1897,7 +1897,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                                     inst.span)
                         asm.ret(inst.span, (answer,))
                         continue
-                    if not isinstance(ty, (IntType, BoolType, EnumType,
+                    if not isinstance(ty, (IntType, BoolType, CharType, EnumType,
                                            PtrType, SetType, DictType)):
                         raise UnsupportedOperation("".join((
                             "returning a value of type '", ty.written(), "'")), span)
