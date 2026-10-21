@@ -406,6 +406,16 @@ namespace pl4g::target::x86_64 {
         // lzcnt r64, r/m64                   F3 REX.W 0F BD /r
         row("lzcnt", { r(64), rm(64) }).opcode(0xBD).map(OpMap::m0f).mandatory_prefix(0xF3).opsize(OpSize::rexw)
           .modrm(ModRMUse::reg_rm).reg_op(0).rm_op(1).implicit_defs({ regs.eflags }).est_size(5),
+        // tzcnt r64, r/m64                   F3 REX.W 0F BC /r
+        // The zeroes below the lowest set bit, the width for nought: BMI1, which
+        // the third level promises beside the count from the top.
+        row("tzcnt", { r(64), rm(64) }).opcode(0xBC).map(OpMap::m0f).mandatory_prefix(0xF3).opsize(OpSize::rexw)
+          .modrm(ModRMUse::reg_rm).reg_op(0).rm_op(1).implicit_defs({ regs.eflags }).est_size(5),
+        // bsf r64, r/m64                     REX.W 0F BC /r
+        // The same count at every level, nought leaving the destination undefined
+        // and saying so in the zero flag, which the conditional move after reads.
+        row("bsf", { r(64), rm(64) }).opcode(0xBC).map(OpMap::m0f).opsize(OpSize::rexw).modrm(ModRMUse::reg_rm)
+          .reg_op(0).rm_op(1).implicit_defs({ regs.eflags }).est_size(4),
         // The one-operand multiplies are the only way to see the upper half of a
         // product on this architecture.  They read one factor in a fixed register
         // and write both halves of the answer to a fixed pair, which is said here
@@ -768,6 +778,22 @@ namespace pl4g::target::x86_64 {
         // cvtss2sd xmm, xmm/m32              F3 0F 5A /r
         row("cvtss2sd", { x(), xm(32) }).opcode(0x5A).map(OpMap::m0f).mandatory_prefix(0xF3).modrm(ModRMUse::reg_rm)
           .reg_op(0).rm_op(1).est_size(4).roles({ OperandRole::def, OperandRole::use }),
+        // cvtsi2sd xmm, r/m64                F2 REX.W 0F 2A /r
+        // cvtsi2ss xmm, r/m64                F3 REX.W 0F 2A /r
+        // A signed 64-bit number as the floating-point number nearest it, rounded
+        // as MXCSR says, which nothing in the language changes.
+        row("cvtsi2sd", { x(), rm(64) }).opcode(0x2A).map(OpMap::m0f).mandatory_prefix(0xF2).opsize(OpSize::rexw)
+          .modrm(ModRMUse::reg_rm).reg_op(0).rm_op(1).est_size(5).roles({ OperandRole::def, OperandRole::use }),
+        row("cvtsi2ss", { x(), rm(64) }).opcode(0x2A).map(OpMap::m0f).mandatory_prefix(0xF3).opsize(OpSize::rexw)
+          .modrm(ModRMUse::reg_rm).reg_op(0).rm_op(1).est_size(5).roles({ OperandRole::def, OperandRole::use }),
+        // cvttsd2si r64, xmm/m64             F2 REX.W 0F 2C /r
+        // cvttss2si r64, xmm/m32             F3 REX.W 0F 2C /r
+        // And back, toward zero; a number with no 64-bit signed value answers the
+        // smallest one, which the sequence for an unsigned conversion reads.
+        row("cvttsd2si", { r(64), xm(64) }).opcode(0x2C).map(OpMap::m0f).mandatory_prefix(0xF2).opsize(OpSize::rexw)
+          .modrm(ModRMUse::reg_rm).reg_op(0).rm_op(1).est_size(5).roles({ OperandRole::def, OperandRole::use }),
+        row("cvttss2si", { r(64), xm(32) }).opcode(0x2C).map(OpMap::m0f).mandatory_prefix(0xF3).opsize(OpSize::rexw)
+          .modrm(ModRMUse::reg_rm).reg_op(0).rm_op(1).est_size(5).roles({ OperandRole::def, OperandRole::use }),
         row("ucomiss", { x(), xm(32) }).opcode(0x2E).map(OpMap::m0f).modrm(ModRMUse::reg_rm).reg_op(0).rm_op(1)
           .implicit_defs({ regs.eflags }).est_size(4).roles(reads_both),
         row("ucomisd", { x(), xm() }).opcode(0x2E).map(OpMap::m0f).mandatory_prefix(0x66).modrm(ModRMUse::reg_rm)

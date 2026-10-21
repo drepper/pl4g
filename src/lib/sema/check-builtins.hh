@@ -13,6 +13,9 @@
     ir::Value* lower_widen(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:26676
     // Lower `⎕narrow(EXPR, ⌜ENUM⌝)`: a number read as one of its values.
     ir::Value* narrowed_to_enum(ir::Builder& builder, const ast::Call* expr, const ir::EnumType* wanted, const ir::Type* expected);  // check.py:26728
+    // Lower `⎕narrow(EXPR, ⌜char⌝)`: a number read as the code point it is the number of, or why it is
+    // none.
+    ir::Value* narrowed_to_char(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:27330
     // The number as a value of the enumeration, cut to its width.
     ir::Value* as_enum(ir::Builder& builder, ir::Value* given, const ir::IntType* found, const ir::EnumType* wanted, Span span);  // check.py:26774
     // The value as the narrower type, whether it fits, and why it does not.
@@ -20,7 +23,8 @@
     // Whether either holds, with a condition that cannot hold dropped.
     ir::Value* either(ir::Builder& builder, ir::Value* one, ir::Value* other, Span span);  // check.py:26827
     // Which condition it was, as a value of the enumeration.
-    ir::Value* reason(ir::Builder& builder, ir::Value* under, ir::Value* wrong_sign, Span span);  // check.py:26836
+    ir::Value* reason(ir::Builder& builder, ir::Value* under, ir::Value* wrong_sign, Span span,
+                      ir::Value* absent = nullptr);  // check.py:26836
     // `given` read as `into`, the value having been checked to fit it.
     ir::Value* as_wide(ir::Builder& builder, ir::Value* given, const ir::IntType* found, const ir::IntType* into, Span span);  // check.py:26858
     // What an array is an array of, however many dimensions deep.

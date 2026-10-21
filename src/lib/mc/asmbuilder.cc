@@ -46,6 +46,15 @@ namespace pl4g::mc {
     missing("select_float_to_int");
   }
   Insts InstructionSelector::select_int_to_float(Reg, const MCOperand&, int, Span) { missing("select_int_to_float"); }
+  Insts InstructionSelector::select_unsigned_to_float(Reg, const MCOperand&, int, Span)
+  {
+    missing("select_unsigned_to_float");
+  }
+  Insts InstructionSelector::select_truncate_to_int(Reg, const MCOperand&, int, bool, Span)
+  {
+    missing("select_truncate_to_int");
+  }
+  Insts InstructionSelector::select_move_bits(Reg, const MCOperand&, int, Span) { missing("select_move_bits"); }
   Insts InstructionSelector::select_float_copysign(Reg, const MCOperand&, const MCOperand&, int, Span)
   {
     missing("select_float_copysign");
@@ -127,6 +136,7 @@ namespace pl4g::mc {
   }
   Insts InstructionSelector::select_count_ones(Reg, const MCOperand&, Span) { missing("select_count_ones"); }
   Insts InstructionSelector::select_count_leading(Reg, const MCOperand&, Span) { missing("select_count_leading"); }
+  Insts InstructionSelector::select_count_trailing(Reg, const MCOperand&, Span) { missing("select_count_trailing"); }
 
 
   RegisterAssignmentError::RegisterAssignmentError(std::string name, std::size_t count)
@@ -505,6 +515,24 @@ namespace pl4g::mc {
   }
 
 
+  void Assembler::unsigned_to_float(Reg dst, const MCOperand& src, int bits, Span span)
+  {
+    emit(selector_.select_unsigned_to_float(dst, src, bits, span));
+  }
+
+
+  void Assembler::truncate_to_int(Reg dst, const MCOperand& src, int bits, bool is_signed, Span span)
+  {
+    emit(selector_.select_truncate_to_int(dst, src, bits, is_signed, span));
+  }
+
+
+  void Assembler::move_bits(Reg dst, const MCOperand& src, int bits, Span span)
+  {
+    emit(selector_.select_move_bits(dst, src, bits, span));
+  }
+
+
   void Assembler::float_copysign(Reg dst, const MCOperand& magnitude, const MCOperand& sign, int bits, Span span)
   {
     emit(selector_.select_float_copysign(dst, magnitude, sign, bits, span));
@@ -533,6 +561,12 @@ namespace pl4g::mc {
   void Assembler::count_leading(Reg dst, const MCOperand& src, Span span)
   {
     emit(selector_.select_count_leading(dst, src, span));
+  }
+
+
+  void Assembler::count_trailing(Reg dst, const MCOperand& src, Span span)
+  {
+    emit(selector_.select_count_trailing(dst, src, span));
   }
 
 

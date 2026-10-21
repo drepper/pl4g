@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <cmath>
 #include <format>
 #include <meta>
 
@@ -3072,9 +3073,63 @@ namespace pl4g::sema {
     auto high = std::uint64_t(bits >> 64);
     if (op == ir::UnOp::count_ones)
       return std::popcount(low) + std::popcount(high);
+    if (op == ir::UnOp::count_trailing) {
+      // The lowest set bit is the one a number shares with its negation.
+      if (bits == 0)
+        return ty->bits;
+      return low != 0 ? std::countr_zero(low) : 64 + std::countr_zero(high);
+    }
     int length = high != 0 ? 128 - std::countl_zero(high) : 64 - std::countl_zero(low);
     return ty->bits - length;
   }
+
+  std::optional<std::size_t> truncated(double value, const ir::IntType* into)
+  {
+    if (std::isnan(value))
+      return 3;
+    if (std::isinf(value))
+      return value > 0 ? 0 : into->is_signed ? 1 : 2;
+    // Compared exactly, as Python compares a float with an int: a number
+    // beyond what 128 bits hold is beyond every end there is, and anything
+    // nearer converts without a loss.
+    auto whole = std::trunc(value);
+    constexpr double edge = 0x1p127;
+    if (whole >= edge)
+      return 0;
+    if (whole < -edge)
+      return into->is_signed ? 1 : 2;
+    auto number = __int128(whole);
+    if (number > into->high())
+      return 0;
+    if (number < into->low())
+      return into->is_signed ? 1 : 2;
+    return std::nullopt;
+  }
+
+
+  std::uint64_t float_bits(double value, unsigned bits)
+  {
+    if (bits == 64)
+      return std::bit_cast<std::uint64_t>(value);
+    return std::bit_cast<std::uint32_t>(float(value));
+  }
+
+
+  double from_bits(std::uint64_t value, unsigned bits)
+  {
+    if (bits == 64)
+      return std::bit_cast<double>(value);
+    return double(std::bit_cast<float>(std::uint32_t(value)));
+  }
+
+
+  double nearest_float(__int128 value, unsigned bits)
+  {
+    if (bits == 64)
+      return double(value);
+    return double(float(value));
+  }
+
 
   ir::GlobalVar* tolerance(ir::Module& module)
   {

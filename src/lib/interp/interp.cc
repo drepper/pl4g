@@ -737,6 +737,9 @@ namespace pl4g::interp {
               op.arith = Arith::floating;
             else if (is<PtrType>(ty))
               op.arith = Arith::address;
+            if (inst->bin == BinOp::wide_mul)
+              // The halves are of the operands' kind, signed or not.
+              op.from = scalar_of(inst->operands[0]->ty);
             if (op.arith == Arith::floating)
               op.message = describe(std::string(operation_name(inst->bin)) + " with no number for an answer", func,
                                     inst->span);
@@ -951,6 +954,16 @@ namespace pl4g::interp {
     void Machine::binary(const Op& op, Cell* dst, const Cell* a, const Cell* b)
     {
       auto bin = BinOp(op.sub);
+      if (bin == BinOp::wide_mul) {
+        // The whole product in 128 bits, the upper half first as the tuple
+        // has it and the lower half the unsigned bits below it.
+        unsigned __int128 whole = op.from.is_signed
+                                    ? (unsigned __int128)(__int128(std::int64_t(a[0])) * __int128(std::int64_t(b[0])))
+                                    : (unsigned __int128)a[0] * (unsigned __int128)b[0];
+        dst[0] = Cell(whole >> 64);
+        dst[1] = Cell(whole);
+        return;
+      }
       if (op.arith == Arith::floating) {
         unsigned bits = op.scalar.bits;
         auto one = [&](Cell x, Cell y, Cell& out) {
@@ -1061,6 +1074,11 @@ namespace pl4g::interp {
         Cell v = extend(a, s.held, false);
         return Cell(std::countl_zero(v) - (64 - int(s.held)));
       }
+      case UnOp::count_trailing: {
+        // Nought counts the width of what holds it, as the back ends do.
+        Cell v = extend(a, s.held, false);
+        return v == 0 ? Cell(s.held) : Cell(std::countr_zero(v));
+      }
       case UnOp::fabs:
         return of_double(std::fabs(as_double(a, s.bits)), s.bits);
       case UnOp::floor:
@@ -1085,6 +1103,31 @@ namespace pl4g::interp {
         return extend(a, to.held, to.is_signed);
       case CastKind::fext:
         return of_double(as_double(a, op.from.bits), to.bits);
+      case CastKind::itof: {
+        // Rounded once into either format, which the host's own conversion
+        // of a 64-bit number does.
+        Cell v = extend(a, op.from.held, op.from.is_signed);
+        if (to.bits == 32)
+          return of_double(op.from.is_signed ? double(float(std::int64_t(v))) : double(float(v)), 32);
+        return of_double(op.from.is_signed ? double(std::int64_t(v)) : double(v), 64);
+      }
+      case CastKind::ftoi: {
+        // Read only where the checker found room; anything else answers
+        // nought, a conversion of it being undefined.
+        double whole = std::trunc(as_double(a, op.from.bits));
+        double top = std::ldexp(1.0, int(to.is_signed ? to.bits - 1 : to.bits));
+        double bottom = to.is_signed ? -top : 0.0;
+        if (! (whole >= bottom && whole < top))
+          return 0;
+        if (to.is_signed)
+          return extend(Cell(std::int64_t(whole)), to.held, true);
+        return extend(Cell(std::uint64_t(whole)), to.held, false);
+      }
+      case CastKind::fbits:
+        // The same bits, read as the other kind.
+        if (to.kind == Scalar::Kind::integer)
+          return extend(a, to.held, false);
+        return to.bits == 32 ? extend(a, 32, false) : a;
       default:
         // The same bits, read as the type now says.
         if (to.kind == Scalar::Kind::integer || to.kind == Scalar::Kind::boolean)

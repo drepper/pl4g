@@ -87,8 +87,19 @@ namespace pl4g::target::x86_64 {
                            int bits, Span span) override;
     bool counts_ones() const override { return counting_ones; }
     bool counts_leading() const override { return counting_leading; }
+    // Every level counts the trailing zeroes, with `tzcnt` from the third and
+    // `bsf` with the zero case put back below it.
+    bool counts_trailing() const override { return true; }
+    // There is no unsigned conversion short of AVX-512, which no level here
+    // assumes; the lowering stands in for both.
+    bool converts_unsigned() const override { return false; }
     mc::Insts select_count_ones(mc::Reg dst, const mc::MCOperand& src, Span span) override;
     mc::Insts select_count_leading(mc::Reg dst, const mc::MCOperand& src, Span span) override;
+    mc::Insts select_count_trailing(mc::Reg dst, const mc::MCOperand& src, Span span) override;
+    mc::Insts select_int_to_float(mc::Reg dst, const mc::MCOperand& src, int bits, Span span) override;
+    mc::Insts select_truncate_to_int(mc::Reg dst, const mc::MCOperand& src, int bits, bool is_signed,
+                                     Span span) override;
+    mc::Insts select_move_bits(mc::Reg dst, const mc::MCOperand& src, int bits, Span span) override;
     mc::Insts select_divide(mc::Reg dst, const mc::MCOperand& left, const mc::MCOperand& right, bool is_signed,
                             bool remainder, int bits, Span span) override;
     mc::Insts select_wide_product(mc::Reg low, mc::Reg high, const mc::MCOperand& left, const mc::MCOperand& right,

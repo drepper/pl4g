@@ -1070,7 +1070,8 @@ namespace pl4g::sema {
       report_mismatch(expr->span, ir::u8(), expected);
       return error_value(module);
     }
-    auto op = name == ones_name ? ir::UnOp::count_ones : ir::UnOp::count_leading;
+    auto op = name == ones_name ? ir::UnOp::count_ones
+              : name == lead_name ? ir::UnOp::count_leading : ir::UnOp::count_trailing;
     if (is_int_const(given))
       // A number the program wrote down is counted here.
       return builder.int_const(ir::u8(), counted_bits(op, static_cast<const ir::IntConst*>(given)->value, integer));
@@ -1108,8 +1109,8 @@ namespace pl4g::sema {
       // down is asked here instead.
       if (is_int_const(given))
         return code_point(builder, std::int64_t(static_cast<const ir::IntConst*>(given)->value), expr->args[0]->span);
-      builder.check(builder.compare(ir::CmpPred::ule, given, builder.int_const(ir::u32(), max_code_point), expr->span),
-                    "a number that is not a code point", target::statuses::NOT_A_CODE_POINT, expr->span);
+      builder.check(is_code_point(builder, given, expr->span), "a number that is not a code point",
+                    target::statuses::NOT_A_CODE_POINT, expr->span);
     }
     return builder.cast(ir::CastKind::bitcast, given, answer, expr->span);
   }
@@ -1235,7 +1236,266 @@ namespace pl4g::sema {
                  { { "value", std::to_string(value) }, { "last", std::format("{:X}", max_code_point) } });
       return used(builder.module().char_const(0));
     }
+    if (is_surrogate(value)) [[unlikely]] {
+      diags.emit(D::LANG_CHAR_IS_A_SURROGATE, span, { { "value", std::format("{:04X}", value) } });
+      return used(builder.module().char_const(0));
+    }
     return used(builder.module().char_const(std::uint32_t(value)));
+  }
+
+
+  ir::Value* Checker::is_code_point(ir::Builder& builder, ir::Value* given, Span span)
+  {
+    // Two questions: no further than the last code point, and not a
+    // surrogate -- one run of numbers, so one subtraction that wraps and one
+    // comparison, what lies below the first of them coming out very large.
+    auto below_the_last = builder.compare(ir::CmpPred::ule, given, builder.int_const(ir::u32(), max_code_point), span);
+    auto moved = builder.binary(ir::BinOp::wrap_sub, given, builder.int_const(ir::u32(), first_surrogate), span);
+    auto not_a_surrogate = builder.compare(ir::CmpPred::uge, moved, builder.int_const(ir::u32(), surrogates), span);
+    return builder.binary(ir::BinOp::and_, below_the_last, not_a_surrogate, span);
+  }
+
+
+  ir::Value* Checker::lower_wide_mul(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected)
+  {
+    if (expr->args.size() != 2) [[unlikely]] {
+      diags.emit(D::LANG_CALL_WRONG_ARGUMENT_COUNT, expr->span,
+                 { { "name", names::wide_mul_name }, { "expected", 2 }, { "found", expr->args.size() } });
+      return error_value(module);
+    }
+    // The two are operands of one multiplication, so they take their type from
+    // each other as an operator's do, and a mismatch is reported as one
+    // between an operator's.
+    auto context = hint_of(expr->args[0]);
+    if (context == nullptr)
+      context = hint_of(expr->args[1]);
+    ir::Value* left = nullptr;
+    ir::Value* right = nullptr;
+    const ir::IntType* found = nullptr;
+    const ir::Type* other = nullptr;
+    {
+      Setting outer(operand_of, std::optional<std::string>(names::wide_mul_name));
+      left = lower_expr(builder, expr->args[0], context);
+      auto found_ty = value_type_of(left);
+      if (found_ty == ir::error_type())
+        return error_value(module);
+      found = ir::as<ir::IntType>(found_ty);
+      if (found == nullptr || found->bits != 64) [[unlikely]] {
+        diags.emit(D::LANG_WIDE_MUL_NOT_A_WORD, expr->args[0]->span, { { "found", found_ty->written() } });
+        return error_value(module);
+      }
+      auto told = diags.error_count;
+      right = lower_expr(builder, expr->args[1], found);
+      other = value_type_of(right);
+      if (other != found && other != ir::error_type() && diags.error_count == told) [[unlikely]]
+        // Not every expression says so itself when it is not of the type it
+        // was asked for, and one that did has been heard.
+        report_mismatch(expr->args[1]->span, other, found);
+    }
+    if (other != found) [[unlikely]]
+      return error_value(module);
+    auto upper = found->bare();
+    auto answer = ir::tuple_type({ upper, ir::u64() });
+    if (! accepts(expected, answer)) [[unlikely]] {
+      report_mismatch(expr->span, answer, expected);
+      return error_value(module);
+    }
+    if (is_int_const(left) && is_int_const(right)) {
+      // Two numbers written down are multiplied here, where 128 bits are all
+      // the room the product needs.
+      auto a = static_cast<const ir::IntConst*>(left)->value;
+      auto b = static_cast<const ir::IntConst*>(right)->value;
+      auto whole = upper->is_signed ? (unsigned __int128)(a * b)
+                                    : (unsigned __int128)a * (unsigned __int128)b;
+      auto high_bits = std::uint64_t(whole >> 64);
+      __int128 high = upper->is_signed ? __int128(std::int64_t(high_bits)) : __int128(high_bits);
+      std::vector<ir::Value*> halves{ builder.int_const(upper, high), builder.int_const(ir::u64(), std::uint64_t(whole)) };
+      return builder.make_tuple(halves, answer, expr->span);
+    }
+    return builder.binary(ir::BinOp::wide_mul, left, right, expr->span, answer);
+  }
+
+
+  const ir::Type* Checker::numeric_target(const ast::Expr* written, std::string_view name)
+  {
+    auto lifted = ast::as<ast::Lifted>(written);
+    auto wanted = lifted != nullptr ? lifted_type(lifted) : nullptr;
+    if (wanted == nullptr) [[unlikely]]
+      diags.emit(D::LANG_NUMBER_NOT_A_TYPE, written->span, { { "name", name } });
+    return wanted;
+  }
+
+
+  ir::Value* Checker::lower_to_float(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected)
+  {
+    if (expr->args.size() != 2) [[unlikely]] {
+      diags.emit(D::LANG_CALL_WRONG_ARGUMENT_COUNT, expr->span,
+                 { { "name", names::float_name }, { "expected", 2 }, { "found", expr->args.size() } });
+      return error_value(module);
+    }
+    auto wanted = numeric_target(expr->args[1], names::float_name);
+    if (wanted == nullptr) [[unlikely]]
+      return error_value(module);
+    if (! ir::is<ir::FloatType>(wanted)) [[unlikely]] {
+      diags.emit(D::LANG_NUMBER_NOT_A_FLOAT, expr->args[1]->span,
+                 { { "name", names::float_name }, { "found", wanted->written() } });
+      return error_value(module);
+    }
+    auto given = lower_expr(builder, expr->args[0], nullptr);
+    auto found_ty = value_type_of(given);
+    if (found_ty == ir::error_type())
+      return error_value(module);
+    auto found = ir::as<ir::IntType>(found_ty);
+    if (found == nullptr) [[unlikely]] {
+      diags.emit(D::LANG_NUMBER_NOT_AN_INTEGER, expr->args[0]->span,
+                 { { "name", names::float_name }, { "found", found_ty->written() } });
+      return error_value(module);
+    }
+    auto into = ir::as<ir::FloatType>(carrying(wanted, found->unit));
+    if (! accepts(expected, into)) [[unlikely]] {
+      report_mismatch(expr->span, into, expected);
+      return error_value(module);
+    }
+    if (is_int_const(given))
+      return builder.float_const(into, nearest_float(static_cast<const ir::IntConst*>(given)->value, into->bits));
+    return builder.cast(ir::CastKind::itof, given, into, expr->span);
+  }
+
+
+  ir::Value* Checker::lower_trunc(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected)
+  {
+    if (expr->args.size() != 2) [[unlikely]] {
+      diags.emit(D::LANG_CALL_WRONG_ARGUMENT_COUNT, expr->span,
+                 { { "name", names::trunc_name }, { "expected", 2 }, { "found", expr->args.size() } });
+      return error_value(module);
+    }
+    auto wanted = numeric_target(expr->args[1], names::trunc_name);
+    if (wanted == nullptr) [[unlikely]]
+      return error_value(module);
+    if (! ir::is<ir::IntType>(wanted)) [[unlikely]] {
+      diags.emit(D::LANG_NUMBER_NOT_AN_INTEGER, expr->args[1]->span,
+                 { { "name", names::trunc_name }, { "found", wanted->written() } });
+      return error_value(module);
+    }
+    auto given = lower_expr(builder, expr->args[0], nullptr);
+    auto found_ty = value_type_of(given);
+    if (found_ty == ir::error_type())
+      return error_value(module);
+    auto found = ir::as<ir::FloatType>(found_ty);
+    if (found == nullptr) [[unlikely]] {
+      diags.emit(D::LANG_NUMBER_NOT_A_FLOAT, expr->args[0]->span,
+                 { { "name", names::trunc_name }, { "found", found_ty->written() } });
+      return error_value(module);
+    }
+    auto into = ir::as<ir::IntType>(carrying(wanted, found->unit));
+    auto answer = ir::result_type(into, ir::narrowing_type());
+    if (! accepts(expected, answer)) [[unlikely]] {
+      report_mismatch(expr->span, answer, expected);
+      return error_value(module);
+    }
+    auto span = expr->span;
+    if (is_float_const(given)) {
+      // A number written down is converted here, and what it comes to -- the
+      // number, or which way it did not fit -- is the result.
+      auto value = static_cast<const ir::FloatConst*>(given)->value;
+      auto why = truncated(value, into);
+      auto number = builder.int_const(into, why ? __int128(0) : __int128(std::trunc(value)));
+      auto reason_value = const_cast<ir::EnumConst*>(module.enum_const(ir::narrowing_type(), why.value_or(0)));
+      return builder.wrap(number, builder.bool_const(why.has_value()), answer, span, reason_value);
+    }
+    auto no = builder.bool_const(false);
+    auto top = builder.float_const(found, std::ldexp(1.0, int(into->is_signed ? into->bits - 1 : into->bits)));
+    auto over = builder.compare(ir::CmpPred::sge, given, top, span);
+    auto under = no;
+    auto wrong_sign = no;
+    if (into->is_signed) {
+      // Below the bottom where it is no further up than the bottom less one,
+      // the truncation of anything above that being in range.
+      auto edge = into->low() - 1;
+      auto nearest = nearest_float(edge, found->bits);
+      if (__int128(nearest) == edge)
+        under = builder.compare(ir::CmpPred::sle, given, builder.float_const(found, double(edge)), span);
+      else
+        under = builder.compare(ir::CmpPred::slt, given, builder.float_const(found, double(into->low())), span);
+    } else
+      wrong_sign = builder.compare(ir::CmpPred::sle, given, builder.float_const(found, -1.0), span);
+    // A not-a-number is the one value that is not equal to itself, and the one
+    // every ordered comparison above is false for.
+    auto absent = builder.compare(ir::CmpPred::ne, given, given, span);
+    auto failed = either(builder, either(builder, either(builder, over, under, span), wrong_sign, span), absent, span);
+    auto why_not = reason(builder, under, wrong_sign, span, absent);
+    auto value = builder.cast(ir::CastKind::ftoi, given, into, span);
+    return builder.wrap(value, failed, answer, span, why_not);
+  }
+
+
+  ir::Value* Checker::lower_bits(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected)
+  {
+    if (expr->args.size() != 1) [[unlikely]] {
+      diags.emit(D::LANG_CALL_WRONG_ARGUMENT_COUNT, expr->span,
+                 { { "name", names::bits_name }, { "expected", 1 }, { "found", expr->args.size() } });
+      return error_value(module);
+    }
+    auto given = lower_expr(builder, expr->args[0], nullptr);
+    auto found_ty = value_type_of(given);
+    if (found_ty == ir::error_type())
+      return error_value(module);
+    auto found = ir::as<ir::FloatType>(found_ty);
+    if (found == nullptr) [[unlikely]] {
+      diags.emit(D::LANG_NUMBER_NOT_A_FLOAT, expr->args[0]->span,
+                 { { "name", names::bits_name }, { "found", found_ty->written() } });
+      return error_value(module);
+    }
+    const ir::Type* into = found->bits == 64 ? ir::u64() : ir::u32();
+    if (! accepts(expected, into)) [[unlikely]] {
+      report_mismatch(expr->span, into, expected);
+      return error_value(module);
+    }
+    if (is_float_const(given))
+      return builder.int_const(into, float_bits(static_cast<const ir::FloatConst*>(given)->value, found->bits));
+    return builder.cast(ir::CastKind::fbits, given, into, expr->span);
+  }
+
+
+  ir::Value* Checker::lower_from_bits(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected)
+  {
+    if (expr->args.size() != 2) [[unlikely]] {
+      diags.emit(D::LANG_CALL_WRONG_ARGUMENT_COUNT, expr->span,
+                 { { "name", names::from_bits_name }, { "expected", 2 }, { "found", expr->args.size() } });
+      return error_value(module);
+    }
+    auto wanted_ty = numeric_target(expr->args[1], names::from_bits_name);
+    if (wanted_ty == nullptr) [[unlikely]]
+      return error_value(module);
+    auto wanted = ir::as<ir::FloatType>(wanted_ty);
+    if (wanted == nullptr) [[unlikely]] {
+      diags.emit(D::LANG_NUMBER_NOT_A_FLOAT, expr->args[1]->span,
+                 { { "name", names::from_bits_name }, { "found", wanted_ty->written() } });
+      return error_value(module);
+    }
+    const ir::Type* holder = wanted->bits == 64 ? ir::u64() : ir::u32();
+    auto told = diags.error_count;
+    auto given = lower_expr(builder, expr->args[0], holder);
+    auto found = value_type_of(given);
+    if (found == ir::error_type())
+      return error_value(module);
+    if (found != holder) [[unlikely]] {
+      if (diags.error_count == told)
+        report_mismatch(expr->args[0]->span, found, holder);
+      return error_value(module);
+    }
+    if (! accepts(expected, wanted)) [[unlikely]] {
+      report_mismatch(expr->span, wanted, expected);
+      return error_value(module);
+    }
+    if (is_int_const(given)) {
+      auto number = from_bits(std::uint64_t(static_cast<const ir::IntConst*>(given)->value), wanted->bits);
+      if (! std::isnan(number))
+        // A number written down is that number, unless it is a not-a-number:
+        // what one of those carries is not something a constant keeps.
+        return builder.float_const(wanted, number);
+    }
+    return builder.cast(ir::CastKind::fbits, given, wanted, expr->span);
   }
 
 
@@ -1270,8 +1530,18 @@ namespace pl4g::sema {
         return lower_wrap(builder, expr, expected);
       if (given == ord_name || given == chr_name)
         return lower_code_point(builder, expr, expected);
-      if (given == ones_name || given == lead_name)
+      if (given == ones_name || given == lead_name || given == names::trail_name)
         return lower_bit_count(builder, expr, expected);
+      if (given == names::wide_mul_name)
+        return lower_wide_mul(builder, expr, expected);
+      if (given == names::float_name)
+        return lower_to_float(builder, expr, expected);
+      if (given == names::trunc_name)
+        return lower_trunc(builder, expr, expected);
+      if (given == names::bits_name)
+        return lower_bits(builder, expr, expected);
+      if (given == names::from_bits_name)
+        return lower_from_bits(builder, expr, expected);
       if (given == drop_name || given == unit_name)
         return lower_unit_call(builder, expr, expected);
       if (given == entry_name)

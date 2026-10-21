@@ -64,6 +64,15 @@ namespace pl4g::mc {
     virtual Insts select_float_round(Rounding how, Reg dst, const MCOperand& src, int bits, Span span);
     virtual Insts select_float_to_int(Rounding how, Reg dst, const MCOperand& src, int bits, Span span);
     virtual Insts select_int_to_float(Reg dst, const MCOperand& src, int bits, Span span);
+    // The unsigned 64-bit number `src` as the floating-point value of `bits`
+    // nearest it, where the target has an instruction for it.
+    virtual Insts select_unsigned_to_float(Reg dst, const MCOperand& src, int bits, Span span);
+    // The floating-point value `src` of `bits` in the 64-bit `dst` as a whole
+    // number, toward zero, read as signed or unsigned.
+    virtual Insts select_truncate_to_int(Reg dst, const MCOperand& src, int bits, bool is_signed, Span span);
+    // The `bits` bits of `src` in `dst`, the one in an ordinary register and
+    // the other in a floating-point one, with nothing converted.
+    virtual Insts select_move_bits(Reg dst, const MCOperand& src, int bits, Span span);
     virtual Insts select_float_copysign(Reg dst, const MCOperand& magnitude, const MCOperand& sign, int bits,
                                         Span span);
     virtual Insts select_float_extend(Reg dst, const MCOperand& src, int from_bits, int to_bits, Span span);
@@ -112,11 +121,17 @@ namespace pl4g::mc {
                                 const MCOperand& if_false, bool floating, int bits, Span span);
     // Put one into `dst` when `lhs` and `rhs` stand in `cond`, zero otherwise.
     virtual Insts select_set(Condition cond, Reg dst, const MCOperand& lhs, const MCOperand& rhs, Span span);
-    // Whether the target counts the bits set, and the leading zeroes.
+    // Whether the target counts the bits set, the leading zeroes and the
+    // trailing ones.
     virtual bool counts_ones() const { return false; }
     virtual bool counts_leading() const { return false; }
+    virtual bool counts_trailing() const { return false; }
+    // Whether the target converts an unsigned 64-bit number to and from a
+    // floating-point one in one instruction.
+    virtual bool converts_unsigned() const { return false; }
     virtual Insts select_count_ones(Reg dst, const MCOperand& src, Span span);
     virtual Insts select_count_leading(Reg dst, const MCOperand& src, Span span);
+    virtual Insts select_count_trailing(Reg dst, const MCOperand& src, Span span);
   };
 
 
@@ -222,14 +237,20 @@ namespace pl4g::mc {
     void float_round(Rounding how, Reg dst, const MCOperand& src, int bits, Span span = invalid_span);
     void float_to_int(Rounding how, Reg dst, const MCOperand& src, int bits, Span span = invalid_span);
     void int_to_float(Reg dst, const MCOperand& src, int bits, Span span = invalid_span);
+    void unsigned_to_float(Reg dst, const MCOperand& src, int bits, Span span = invalid_span);
+    void truncate_to_int(Reg dst, const MCOperand& src, int bits, bool is_signed, Span span = invalid_span);
+    void move_bits(Reg dst, const MCOperand& src, int bits, Span span = invalid_span);
     void float_copysign(Reg dst, const MCOperand& magnitude, const MCOperand& sign, int bits,
                         Span span = invalid_span);
     void float_extend(Reg dst, const MCOperand& src, int from_bits, int to_bits, Span span = invalid_span);
     void branch_if_finite(Reg value, int bits, const std::string& target, Span span = invalid_span);
     bool counts_ones() const { return selector_.counts_ones(); }
     bool counts_leading() const { return selector_.counts_leading(); }
+    bool counts_trailing() const { return selector_.counts_trailing(); }
+    bool converts_unsigned() const { return selector_.converts_unsigned(); }
     void count_ones(Reg dst, const MCOperand& src, Span span = invalid_span);
     void count_leading(Reg dst, const MCOperand& src, Span span = invalid_span);
+    void count_trailing(Reg dst, const MCOperand& src, Span span = invalid_span);
     std::set<int> flagged_widths() const { return selector_.flagged_widths(); }
     void op_at(const Op* op, Reg dst, const MCOperand& left, const MCOperand& right, int bits,
                Span span = invalid_span);

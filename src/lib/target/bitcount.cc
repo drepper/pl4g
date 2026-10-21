@@ -83,6 +83,35 @@ namespace pl4g::target {
       asm_.loadreg(destination, asm_.reg(width), span);
     }
 
+    // How many zeroes stand below the lowest set bit of `value`, counted over
+    // `bits`.  A value narrower than the register has the bit just above its
+    // own set first, which stops the count at the width of the type and keeps
+    // whatever stood above the value in the register out of it.
+    void trailing(mc::Assembler& asm_, mc::Reg held, const mc::MCOperand& value, int bits, mc::Reg destination,
+                  Scratch& scratch, Span span)
+    {
+      if (bits < count_width) {
+        asm_.widen(held, value, bits, false, span);
+        auto stop = scratch.scratch();
+        asm_.loadreg(stop, unsigned_imm(static_cast<__int128>(1) << bits, count_width), span);
+        asm_.op(mc::ops::or_, held, { asm_.reg(held), asm_.reg(stop) }, span);
+      } else
+        asm_.loadreg(held, value, span);
+      if (asm_.counts_trailing()) {
+        asm_.count_trailing(destination, asm_.reg(held), span);
+        return;
+      }
+      // The zeroes below the lowest set bit, made ones and nothing else: the
+      // value less one, with what the value itself has cleared from it.
+      auto below = scratch.scratch();
+      auto one = scratch.scratch();
+      asm_.loadreg(one, unsigned_imm(1, count_width), span);
+      asm_.op(mc::ops::minus, below, { asm_.reg(held), asm_.reg(one) }, span);
+      asm_.op(mc::ops::not_, held, { asm_.reg(held) }, span);
+      asm_.op(mc::ops::and_, held, { asm_.reg(held), asm_.reg(below) }, span);
+      ones(asm_, held, destination, scratch, span);
+    }
+
   } // anonymous namespace
 
 
@@ -90,6 +119,12 @@ namespace pl4g::target {
                    mc::Reg destination, Scratch& scratch, Span span)
   {
     auto held = scratch.scratch();
+    if (op == ir::UnOp::count_trailing) {
+      auto answer = scratch.scratch();
+      trailing(asm_, held, value, bits, answer, scratch, span);
+      asm_.loadreg(destination, mc::MCReg{ answer, destination ? destination.bits() : count_width }, span);
+      return;
+    }
     // The type's own bits and nothing above them.
     if (bits < count_width) {
       asm_.widen(held, value, bits, false, span);

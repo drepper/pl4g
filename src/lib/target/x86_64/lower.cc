@@ -431,6 +431,14 @@ namespace pl4g::target::x86_64 {
 
       void lower(ir::Instruction* inst, std::size_t index);
       void lower_call(ir::Instruction* inst, std::optional<Span> span);
+      // Put the whole number `given`, of `counted`, into `destination` as the
+      // floating-point number of `bits` nearest it.
+      void to_float(const MCOperand& given, const ir::IntType* counted, int bits, const mc::VirtReg* destination,
+                    Span span);
+      // Put the floating-point value `given` of `bits` into `destination` as
+      // the whole number it is toward zero; `limit` holds 2⁶³ for a `u64`.
+      void to_int(const MCOperand& given, int bits, const mc::VirtReg* limit, const mc::VirtReg* destination,
+                  Span span);
       void lower_return(ir::Instruction* inst, std::optional<Span> span);
       void lower_store(ir::Instruction* inst, std::optional<Span> span);
       bool lower_binary(ir::Instruction* inst, std::optional<Span> span);
@@ -837,6 +845,33 @@ namespace pl4g::target::x86_64 {
           asm_.float_extend(destination, given, bits_of(operand(0)->ty), bits_of(inst->ty), inst->span);
           return;
         }
+        case ir::CastKind::itof: {
+          auto destination = computed(inst, inst->ty);
+          auto counted = ir::as<ir::IntType>(operand(0)->ty);
+          auto given = in_register(operand(0), inst->span);
+          to_float(given, counted, bits_of(inst->ty), destination, inst->span);
+          return;
+        }
+        case ir::CastKind::ftoi: {
+          auto destination = computed(inst, inst->ty);
+          auto into = ir::as<ir::IntType>(inst->ty);
+          auto source = operand(0);
+          const mc::VirtReg* limit = nullptr;
+          if (! into->is_signed && width_of(into) == 64)
+            // The one bound the unsigned sequence works from: the first number
+            // the signed conversion has no room for.
+            limit = floating_constant(0x1p63, source->ty, inst->span);
+          auto given = in_register(source, inst->span);
+          to_int(given, bits_of(source->ty), limit, destination, inst->span);
+          return;
+        }
+        case ir::CastKind::fbits: {
+          auto destination = computed(inst, inst->ty);
+          auto given = in_register(operand(0), inst->span);
+          int bits = ir::is<ir::FloatType>(inst->ty) ? bits_of(inst->ty) : int(ir::as<ir::IntType>(inst->ty)->bits);
+          asm_.move_bits(destination, given, bits, inst->span);
+          return;
+        }
         }
         break;
       }
@@ -995,10 +1030,78 @@ namespace pl4g::target::x86_64 {
     }
 
 
+    void Lowering::to_float(const MCOperand& given, const ir::IntType* counted, int bits,
+                            const mc::VirtReg* destination, Span span)
+    {
+      // The conversion takes a signed word, so a narrower number is widened by
+      // its own sign first; a `u64` with its top bit set is halved, the bit
+      // shifted out kept in the lowest place, converted and doubled.
+      auto& r = registers();
+      int width = width_of(counted);
+      auto reg = std::get<MCReg>(given).reg;
+      MCReg number{ reg, 64 };
+      if (width < 64) {
+        auto wide = r.info.new_virtual(r.gpr, 64);
+        asm_.widen(wide, given, width, counted->is_signed, span);
+        number = MCReg{ wide, 64 };
+      }
+      asm_.int_to_float(destination, number, bits, span);
+      if (counted->is_signed || width < 64)
+        return;
+      auto done = asm_.reserve_label("fits.signed");
+      asm_.branch(mc::Condition::sge, number, zero_immediate, done, span);
+      auto halved = r.info.new_virtual(r.gpr, 64);
+      auto lowest = r.info.new_virtual(r.gpr, 64);
+      asm_.shift(mc::ops::shift_right, halved, number, MCImm{ 1, 32, false }, 64, span);
+      asm_.op(mc::ops::and_, lowest, { number, MCImm{ 1, 32, false } }, span);
+      asm_.op(mc::ops::or_, halved, { MCReg{ halved }, MCReg{ lowest } }, span);
+      asm_.int_to_float(destination, MCReg{ halved, 64 }, bits, span);
+      asm_.float_op(mc::ops::plus, destination, MCReg{ destination }, MCReg{ destination }, bits, span);
+      asm_.block(done);
+    }
+
+
+    void Lowering::to_int(const MCOperand& given, int bits, const mc::VirtReg* limit,
+                          const mc::VirtReg* destination, Span span)
+    {
+      // Asked only of a value with room, so the signed conversion to a word
+      // answers every type but `u64`; from 2⁶³ up that one answers the smallest
+      // signed word, and the number less 2⁶³ converted as well is kept, by a
+      // mask made of that answer's sign, exactly where it was.  No branch.
+      auto& r = registers();
+      auto answer = r.info.new_virtual(r.gpr, 64);
+      asm_.truncate_to_int(answer, given, bits, true, span);
+      if (limit != nullptr) {
+        auto moved = r.info.new_virtual(r.vec, float_register_bits);
+        asm_.float_op(mc::ops::minus, moved, given, MCReg{ limit }, bits, span);
+        auto upper = r.info.new_virtual(r.gpr, 64);
+        asm_.truncate_to_int(upper, MCReg{ moved }, bits, true, span);
+        auto sign = r.info.new_virtual(r.gpr, 64);
+        asm_.shift(mc::ops::shift_right_signed, sign, MCReg{ answer }, MCImm{ 63, 32, false }, 64, span);
+        asm_.op(mc::ops::and_, upper, { MCReg{ upper }, MCReg{ sign } }, span);
+        asm_.op(mc::ops::or_, answer, { MCReg{ answer }, MCReg{ upper } }, span);
+      }
+      asm_.loadreg(destination, MCReg{ answer, destination->bits }, span);
+    }
+
+
     bool Lowering::lower_binary(ir::Instruction* inst, std::optional<Span> span)
     {
       auto op = inst->bin;
       auto operand = [&](std::size_t at) { return inst->operands[at]; };
+      if (op == ir::BinOp::wide_mul) {
+        // Both halves at once, the upper one first as the tuple has them: one
+        // instruction answers both here.
+        auto& r = registers();
+        auto high = r.info.new_virtual(r.gpr, 64);
+        auto low = r.info.new_virtual(r.gpr, 64);
+        held[inst] = high;
+        extra[inst] = { low };
+        auto left = value(operand(0), inst->span);
+        auto right = value(operand(1), inst->span);
+        asm_.wide_product(low, high, left, right, is_signed(operand(0)->ty), inst->span);
+        return true;
+      }
       if (is_floating(inst->ty)) {
         auto result = ir::as<ir::ResultType>(inst->ty);
         auto answer = result != nullptr ? result->ok : inst->ty;

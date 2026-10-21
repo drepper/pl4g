@@ -1013,7 +1013,9 @@ namespace pl4g {
           char c = text[pos];
           value = value * 16 + char32_t(c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10);
         }
-        if (got == want && value <= 0x10ffff) {
+        // A surrogate is a number and not a code point, so an escape naming one
+        // names nothing, as one beyond the last does.
+        if (got == want && value <= 0x10ffff && ! (value >= 0xd800 && value <= 0xdfff)) {
           std::string out;
           unicode::append(out, value);
           return out;

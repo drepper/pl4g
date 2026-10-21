@@ -369,9 +369,29 @@ namespace pl4g::sema {
   // Where a probe for a key of text starts, in a table laid out in the image: the hash of its bytes with
   // that table's seed.
   std::int64_t text_hash(Held bits, std::int64_t mask);  // check.py:3318
-  // How many bits of `value` are set, or how many zeroes stand above the highest set one, counted over
-  // `ty`'s own width.
+  // How many bits of `value` are set, or how many zeroes stand above the highest set one or below the
+  // lowest, counted over `ty`'s own width.
   __int128 counted_bits(ir::UnOp op, __int128 value, const ir::IntType* ty);  // check.py:3325
+  // Which way `value` toward zero is no value of `into`, as the number of the `⎕narrowing` condition, or
+  // nothing where it is one.
+  std::optional<std::size_t> truncated(double value, const ir::IntType* into) pre(into != nullptr);  // check.py:3345
+  // The bits `value` is kept in, in the format of `bits`.
+  std::uint64_t float_bits(double value, unsigned bits) pre(bits == 32 || bits == 64);  // check.py:3360
+  // The number of the format of `bits` that is kept in the bits `value`.
+  double from_bits(std::uint64_t value, unsigned bits) pre(bits == 32 || bits == 64);  // check.py:3367
+  // The first of the surrogates, and how many there are: the numbers UTF-16 keeps for itself, which are
+  // no code point.
+  inline constexpr std::uint32_t first_surrogate = 0xD800;
+  inline constexpr std::uint32_t surrogates = 0x800;
+  // Whether `value` is one of the numbers UTF-16 keeps for itself.
+  constexpr bool is_surrogate(__int128 value) noexcept
+  {
+    return first_surrogate <= value && value < first_surrogate + surrogates;
+  }  // check.py:3388
+  // The floating-point number of `bits` nearest the whole number `value`, a tie going to the one whose
+  // last bit is nought -- rounded once, which the host's own conversion of a 128-bit number does for
+  // either format.
+  double nearest_float(__int128 value, unsigned bits) pre(bits == 32 || bits == 64);  // check.py:3393
   // The variable the approximate comparisons read, made once per module.
   ir::GlobalVar* tolerance(ir::Module& module);  // check.py:3339
   // The arena the compiler provides, made once per module.

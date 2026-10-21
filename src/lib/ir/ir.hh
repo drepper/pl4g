@@ -154,17 +154,25 @@ namespace pl4g::ir {
     smax [[=Describe("smax")]], umax [[=Describe("umax")]], smin [[=Describe("smin")]], umin [[=Describe("umin")]],
     wrap_shl [[=Describe("wrap.shl")]], wrap_ashr [[=Describe("wrap.ashr")]], wrap_lshr [[=Describe("wrap.lshr")]],
     wrap_rotl [[=Describe("wrap.rotl")]], wrap_rotr [[=Describe("wrap.rotr")]],
+    // The whole product of two 64-bit numbers, answered as the tuple of its
+    // upper and lower halves: the one operation whose answer is not of its
+    // operands' type.
+    wide_mul [[=Describe("wide.mul")]],
   };
 
   enum class UnOp : std::uint8_t {
     neg [[=Describe("neg")]], not_ [[=Describe("not")]], count_ones [[=Describe("ones")]],
-    count_leading [[=Describe("lead")]], fabs [[=Describe("fabs")]], floor [[=Describe("floor")]],
+    count_leading [[=Describe("lead")]], count_trailing [[=Describe("trail")]], fabs [[=Describe("fabs")]],
+    floor [[=Describe("floor")]],
     ceil [[=Describe("ceil")]], nearest [[=Describe("nearest")]], rounded [[=Describe("rounded")]],
   };
 
   enum class CmpPred : std::uint8_t { eq, ne, slt, sle, sgt, sge, ult, ule, ugt, uge };
 
-  enum class CastKind : std::uint8_t { zext, sext, trunc, bitcast, fext };
+  // `itof` and `ftoi` cross between a whole number and a floating-point one,
+  // the second toward zero; `fbits` reads the bits of one as the other.  All
+  // three move a value between the two kinds of register.
+  enum class CastKind : std::uint8_t { zext, sext, trunc, bitcast, fext, itof, ftoi, fbits };
 
   enum class Ordering : std::uint8_t { plain, acquire, release };
 
