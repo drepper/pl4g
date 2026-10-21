@@ -16496,8 +16496,8 @@ class Checker:
         if isinstance(ty, SetType):
             return self._is_live(builder, place, expr.span)
         # The value is read whether the entry holds a key or not: an entry of
-        # the table is a place either way, and what a table that has not been
-        # written holds is zero.  Reading it unasked is what keeps this to one
+        # the table is a place either way, the one after the last written being
+        # there to be read in every table.  Reading it unasked is what keeps this to one
         # branch fewer than it looks like it needs -- the truth value beside the
         # answer is what says whether the answer means anything, and that is
         # asked of the entry's own first word rather than worked out from the

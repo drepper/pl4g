@@ -224,8 +224,8 @@ def room_for(capacity: int) -> int:
 
     As many as the index may name before the table is rebuilt, and one more: the
     one past the last written is where a key not in the table would go, and a
-    lookup of such a key reads that entry -- empty, every word of it nought --
-    rather than asking a second question of its answer.
+    lookup of such a key reads that entry -- its state written empty -- rather
+    than asking a second question of its answer.
     """
     return capacity * LOAD_NUMERATOR // LOAD_DENOMINATOR + 1
 
@@ -687,9 +687,16 @@ def _build_new(module: Module) -> Function:
 
     Two allocations: the block, which never moves, and the index with the dense
     array of entries straight after it, which are replaced when the table is
-    rebuilt.  Neither is zeroed here -- what the arena hands out has never been
-    handed out before, and what the system gave the arena was zeroed when it
-    gave it.
+    rebuilt.
+
+    **The index is cleared here, and the first entry's state**, which is all of
+    the run a table reads before it writes: `⎕heap` hands out again what was
+    given back, holding whatever it held, and a word of the index that is not
+    nought names an entry nobody wrote.  The rest of the entries are written
+    before they are read -- each `put` marks the entry after the one it fills
+    as empty (`_build_put`) -- so clearing them would be stores nothing reads.
+    The eight words of a first index are one run of zeroes, which each machine
+    stores as wide as its registers are.
     """
     table_ptr = table_type(module)
     arena_ptr = module.types.ptr_type(ARENA, mutable=True)
@@ -720,8 +727,63 @@ def _build_new(module: Module) -> Function:
                                   builder.int_const(U64, FIRST_CAPACITY * WORD)))
     _write(builder, block, SEED_FIELD,
            builder.call(seed_function(module), (), U64))
+    _clear_words(builder, _as(builder, run, U64), FIRST_CAPACITY)
+    _write(builder, _as(builder, builder.binary(
+        BinOp.ADD, run, builder.int_const(U64, FIRST_CAPACITY * WORD)), U64),
+           STATE_AT, builder.int_const(U64, EMPTY))
     builder.ret(block)
     return func
+
+
+#: How many words of an index are cleared at a time: as many as the smallest
+#: index has, which every index is a multiple of, being a larger power of two.
+CLEARED_AT_ONCE: Final[int] = FIRST_CAPACITY
+
+
+def _clear_words(builder: IRBuilder, at: Value, words: int) -> None:
+    """Store nought over *words* words from *at*, as one run.
+
+    A run of one value stored is what the back ends make as wide as a machine's
+    registers are -- four stores of sixteen bytes for eight words where the
+    machine has them, and eight of one word where it has not.
+    """
+    module = builder.module
+    run = module.types.vec_type(U64, words)
+    builder.store(builder.cast(CastKind.BITCAST, at,
+                               module.types.ptr_type(run, mutable=True)),
+                  builder.splat(builder.int_const(U64, 0), run))
+
+
+def _clear_index(func: Function, builder: IRBuilder, index: Value,
+                 words: Value) -> None:
+    """Store nought over the *words* words of an index at *index*.
+
+    A loop of runs of `CLEARED_AT_ONCE` words: an index is a power of two of
+    words and never fewer than that many, so the runs cover it exactly.
+    """
+    loop = func.add_block("clear")
+    body = func.add_block("clearing")
+    done = func.add_block("cleared")
+    end = builder.binary(BinOp.ADD, index,
+                         builder.binary(BinOp.WRAP_MUL, words,
+                                        builder.int_const(U64, WORD)))
+    builder.br(loop, (index, builder.memory()))
+    builder.position_at(loop)
+    at = loop.add_param(index.ty, "at")
+    builder.set_memory(loop.add_param(MEM, "mem"))
+    builder.condbr(builder.compare(CmpPred.ULT,
+                                   builder.cast(CastKind.BITCAST, at, U64),
+                                   builder.cast(CastKind.BITCAST, end, U64)),
+                   body, done, true_args=(builder.memory(),),
+                   false_args=(builder.memory(),))
+    builder.position_at(body)
+    builder.set_memory(body.add_param(MEM, "mem"))
+    _clear_words(builder, at, CLEARED_AT_ONCE)
+    builder.br(loop, (builder.binary(BinOp.ADD, at,
+                                     builder.int_const(U64, CLEARED_AT_ONCE * WORD)),
+                      builder.memory()))
+    builder.position_at(done)
+    builder.set_memory(done.add_param(MEM, "mem"))
 
 
 # -- finding where a key is ------------------------------------------------------
@@ -812,8 +874,11 @@ def _build_slot(module: Module, shape: Shape) -> Function:
     the entry either way.  Where the key is not there, the entry answered is the
     one after the last written -- where a key put in next would go, and empty:
     its first word says nothing is there, and its value, which a lookup reads
-    unasked, is nought.  That entry is always there to be read, the dense array
-    having room for one more than the index may name (`room_for`).
+    unasked, is whatever the room held, which the truth value beside the answer
+    says nobody may read.  That entry is always there to be read, the dense
+    array having room for one more than the index may name (`room_for`), and
+    its first word is written empty whenever it becomes the one after the last
+    (`_build_new`).
     """
     table_ptr = table_type(module)
     held = key_ir_type(shape)
@@ -931,6 +996,9 @@ def _build_grow(module: Module, shape: Shape) -> Function:
     _write_address(builder, table, ENTRIES_FIELD, entries)
     _write(builder, table, MASK_FIELD, mask)
     _write(builder, table, SEED_FIELD, seed)
+    # The room may be the heap's given back and taken again, holding anything:
+    # what the walk below reads of it before writing is the index.
+    _clear_index(func, builder, index, words)
     builder.br(walk, (builder.int_const(U64, 0), builder.int_const(U64, 0),
                       builder.memory()))
 
@@ -993,12 +1061,15 @@ def _build_grow(module: Module, shape: Shape) -> Function:
     builder.br(walk, (builder.binary(BinOp.WRAP_ADD, at, builder.int_const(U64, 1)),
                       kept, builder.memory()))
 
-    # No holes in the new array: as many entries written as there are keys.
+    # No holes in the new array: as many entries written as there are keys,
+    # and the one after them, which a missing key's lookup reads, empty.
     builder.position_at(done)
     total = done.add_param(U64, "total")
     builder.set_memory(done.add_param(MEM, "mem"))
     _write(builder, table, COUNT_FIELD, total)
     _write(builder, table, USED_FIELD, total)
+    _write(builder, _entry(builder, entries, total, stride), STATE_AT,
+           builder.int_const(U64, EMPTY))
     builder.ret()
     return func
 
@@ -1117,6 +1188,14 @@ def _build_put(module: Module, shape: Shape) -> Function:
                   _index_word(builder, hashed, offset))
     _write(builder, made, STATE_AT, builder.int_const(U64, LIVE))
     _store_key(builder, shape, made, key)
+    # The entry after it is where the next key goes and what a lookup of a
+    # missing key reads: empty, whatever the room held before the table had it.
+    # It is there to be written -- the dense array has room for one entry more
+    # than the index may name, and the table was rebuilt above if this one
+    # would have been the last.
+    _write(builder, builder.binary(BinOp.ADD, made,
+                                   builder.int_const(U64, shape.stride)),
+           STATE_AT, builder.int_const(U64, EMPTY))
     _write(builder, table, USED_FIELD,
            builder.binary(BinOp.WRAP_ADD, used, builder.int_const(U64, 1)))
     _write(builder, table, COUNT_FIELD,

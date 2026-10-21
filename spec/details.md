@@ -4101,9 +4101,23 @@ its entry (`(word ^ hash) < 2^40` is one exclusive or and one comparison); only 
 given up, and its key compared.
 
 **The answer for a key that is not there is the entry after the last written**, `entries + used × stride`, which is where `put`
-would write it, and which is empty -- never written, so nought, the room the arena hands out having been nought.  So
-`__pl4g_table_slot` answers an entry either way, as it did, and a lookup reads the entry's first word for whether and the value
-unasked: nothing that calls it changed.  The extra entry is what makes that entry exist when the index is as full as it gets.
+would write it, and whose state word says it is empty.  So `__pl4g_table_slot` answers an entry either way, as it did, and a
+lookup reads the entry's first word for whether and the value unasked -- which is then whatever the room held, and the truth value
+beside it says nobody may read it: nothing that calls it changed.  The extra entry is what makes that entry exist when the index is
+as full as it gets.
+
+**Nothing in a table's room is read before the table has written it.**  The room the arena hands out is the system's, nought; the
+heap's is what was given back, as it was, its first word the free list's link.  So the two things a table reads before writing
+them are written when the room is taken: **the index is cleared** -- in `__pl4g_table_new` one store of a run of eight zero words
+(`_clear_words`), in `__pl4g_table_grow` a loop of such runs over the new index (`_clear_index`), every index being a power of two
+of words no smaller than eight -- and **the state of the entry after the last written is marked empty**: by `new` for the first
+entry, by `grow` for the one after the moved keys, and by `put` for the one after the key it writes, which the load the table is
+rebuilt at leaves inside the room.  A run of a constant stored is what the back ends make wide: two 32-byte stores on x86-64 at
+`v3` and `v4`, four of sixteen at `v1` and on AArch64, eight words on RISC-V.  This costs a store per insertion and an index's worth of
+stores per rebuild, where clearing whole runs would store every entry's bytes again; a zeroing allocation, which cleared only what
+came off a free list, would have cleared the entries as well, and been a second entry into the runtime for one caller.  Nothing
+else the compiler generates reads room before writing it: a list's elements past its count are never read, and a record, a
+closure's environment and a generator's frame are written whole when they are made.
 
 **`put` writes a new key last**: the probe stops at a word of nought, which becomes the new entry's word, and the entry at `used`
 is written with the state and the key; `used` and `count` go up by one.  A key that is there is answered where it is, and its
