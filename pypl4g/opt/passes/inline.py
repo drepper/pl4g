@@ -148,7 +148,9 @@ class Inlining:
             # entry point or the testing machinery calls by name has to be
             # there to be called.
             return False
-        if callee.attrs.inline is InlineHint.NEVER:
+        if callee.attrs.inline is InlineHint.NEVER or callee.attrs.opaque:
+            # What the program said -- `@[opaque]` saying it too, a call of one
+            # being a black box -- whatever the size or the count says.
             return False
         if callee.attrs.inline is InlineHint.ALWAYS:
             return True

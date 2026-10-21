@@ -254,6 +254,19 @@ fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     assert "fn @wide" not in text and "fn @third" not in text
 
 
+def test_an_opaque_function_stays_a_call(compile_source) -> None:  # noqa: ANN001
+    """However small and however often called: `@[opaque]` says every call of
+    it is a black box, and a copy put in place would be none."""
+    text = emitted(compile_source, "".join((SEED, """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[startup]
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
+    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(seed(), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
+""")), "-O1")
+    assert "call" in function_ir(text) and "fn @seed" in text
+
+
 def test_a_leaf_may_be_larger(compile_source) -> None:  # noqa: ANN001
     """Twice the size of what calls something: what a call costs a leaf's
     caller is every register the convention lets the leaf destroy."""
