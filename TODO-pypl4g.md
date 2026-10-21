@@ -777,3 +777,15 @@ Optimizations
 [ ] run the shared objects of AArch64 and RISC-V.  They are checked by `eu-elflint` and by being pypl4g's byte for byte, and not
     run: a host for them needs that architecture's C library and loader.  Fedora packages one for AArch64
     (`sysroot-aarch64-fc44-glibc`, run with `qemu-aarch64 -L`); there is none for RISC-V.
+
+[ ] answer with a `char`.  No back end returns one: the return names the kinds of value it hands back and a character is not
+    among them, so `fn f(c: char) → char: c` is refused (8501) on all three -- found while stack arguments were added, and the
+    program `tests/language/answer-a-char-not-yet` is now the one the language server's test of a back-end refusal reads.  The
+    register is the one a `u32` is answered in.
+
+[ ] a `÷` of floating-point numbers written as the value of a record's field is not unwrapped: `Point(.x ← (a + b) ÷ 2f64)`
+    hands a `f64?` to a field of `f64`, which the IR does not check and the x86-64 back end refuses with a message about an
+    encoding of `movsd`.  The same division answered by a function is right.
+
+[ ] RISC-V saves and restores `sp` in every function that names it: `sp` is among the callee-saved names, and a function whose
+    code addresses its frame names it.  The restore puts back the value it already has; two instructions a function, wasted.

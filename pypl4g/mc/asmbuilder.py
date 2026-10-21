@@ -29,7 +29,7 @@ from typing import Callable, Protocol, Sequence
 
 from ..source.location import INVALID_SPAN, Span
 from .inst import MCInst
-from .desc import InstFlags
+from .desc import InstDesc, InstFlags, OperandKind, OperandSpec
 from .fixup import MCFixup
 from .machine import MachineBasicBlock, MachineFunction, MalformedGraph
 from .operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef, RelocKind, SymExpr
@@ -40,6 +40,20 @@ from .reg import PhysReg, Reg, RegisterInfo, RegUnit
 from .regalloc import Assignment, allocate, registers_of
 from .streamer import MCStreamer
 from .symbol import MCSection, MCSymbol, SymBinding, SymKind, SymVisibility
+
+
+#: What stands for the read of an argument the caller left on the stack, until
+#: the frame is made.  Where the argument is, measured from this function's
+#: stack pointer, is how large the frame is plus where the slot lies above the
+#: caller's -- and the frame's size is known only once the allocator has said
+#: what it spilled.  So the read is written as this, which writes its first
+#: operand and reads nothing, and the frame turns it into the target's load
+#: (`select_incoming`).  The three numbers after the register are the slot's
+#: offset above the caller's stack pointer, how many bits the value is, and
+#: whether it is widened by its sign.  Nothing that encodes ever sees one.
+INCOMING: InstDesc = InstDesc(
+    "incoming", (OperandSpec(OperandKind.REG), OperandSpec(OperandKind.IMM),
+                 OperandSpec(OperandKind.IMM), OperandSpec(OperandKind.IMM)))
 
 
 class InstructionSelector(Protocol):
@@ -422,6 +436,17 @@ class InstructionSelector(Protocol):
         """Instructions that put the return address into the frame at *offset*."""
         ...
 
+    def select_incoming(self, dst: Reg, offset: int, bits: int, signed: bool,
+                        span: Span) -> Sequence[MCInst]:
+        """Instructions that read *bits* of an argument *offset* bytes above
+        the stack pointer into *dst*, widened by its sign where *signed* says.
+
+        Asked once the frame stands, so *offset* is the final one; a load
+        whose offset the instruction cannot carry builds the address in *dst*
+        itself, which is free -- it is about to be written anyway.
+        """
+        ...
+
     def select_restore_link(self, offset: int, span: Span) -> Sequence[MCInst]:
         """Instructions that take it back out again."""
         ...
@@ -756,6 +781,10 @@ class Assembler:
         # an outstanding call, the report itself being one.
         function.return_at, function.caller_at = (
             self._selector.frame_walk(total, size, link) if calls else (None, 0))
+        # The arguments the caller left on the stack are above this frame, and
+        # above where the caller's stack pointer is, which is what the walk
+        # asks as well -- so the same answer says where they are.
+        self._place_incoming(function, self._selector.frame_walk(total, size, link)[1])
         if total == 0:
             return
         # The prologue goes at the top of the first block and the undo before
@@ -788,6 +817,26 @@ class Assembler:
                         out.extend(self._selector.select_restore_link(size, inst.span))
                     out.extend(self._selector.select_unframe(total, inst.span))
                 out.append(inst)
+            block.insts = out
+
+    def _place_incoming(self, function: MachineFunction, above: int) -> None:
+        """Turn every read of an argument on the stack into a load, now that
+        the caller's stack pointer is known to be *above* bytes over this
+        function's own."""
+        for block in function.blocks:
+            if not any(inst.desc is INCOMING for inst in block.insts):
+                continue
+            out: list[MCInst] = []
+            for inst in block.insts:
+                if inst.desc is not INCOMING:
+                    out.append(inst)
+                    continue
+                into, offset, bits, signed = inst.operands
+                assert (isinstance(into, MCReg) and isinstance(offset, MCImm)
+                        and isinstance(bits, MCImm) and isinstance(signed, MCImm))
+                out.extend(self._selector.select_incoming(
+                    into.reg, above + offset.value, bits.value, bool(signed.value),
+                    inst.span))
             block.insts = out
 
     def _kept_registers(self, function: MachineFunction) -> list[Reg]:
@@ -1266,6 +1315,20 @@ class Assembler:
                   span: Span = INVALID_SPAN) -> None:
         """Read what `put_aside` wrote at *slot* back into *destination*."""
         self._emit(self._selector.select_reload(destination, slot, span))
+
+    def incoming(self, dst: Reg, offset: int, bits: int, signed: bool,
+                 span: Span = INVALID_SPAN) -> None:
+        """Read into *dst* the argument the caller left *offset* bytes above
+        its stack pointer, *bits* wide and widened by its sign where *signed*
+        says.
+
+        What is written now is a stand-in (`INCOMING`), which the frame turns
+        into a load once it knows how far above this function's stack pointer
+        the caller's is.
+        """
+        self._emit((MCInst(INCOMING, (MCReg(dst), MCImm(offset, 32, signed=False),
+                                      MCImm(bits, 32, signed=False),
+                                      MCImm(int(signed), 32, signed=False)), span),))
 
     def ret(self, span: Span = INVALID_SPAN,
             reads: Sequence[Reg] = ()) -> None:

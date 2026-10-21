@@ -1,0 +1,64 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none host=host.c
+※ pl4g-test: args -shared
+
+※ More arguments than the system's convention passes in registers, both ways:
+※ to functions the host defines, and from the host to the function this shared
+※ object offers.
+※
+※ **What does not fit in registers goes on the stack, as the system has it.**
+※ Each kind of register is used up on its own, so a whole number past the sixth
+※ on x86-64 -- the eighth on the other two -- is on the stack while the
+※ floating-point numbers beside it are still in registers, and the other way
+※ round.  Each takes eight bytes there, in the order the arguments are written,
+※ the first at the stack pointer where the call is made; a narrow one is the low
+※ bytes of its slot.  On RISC-V a floating-point number with no floating-point
+※ register left takes an ordinary register first, which is that system's rule
+※ and not the other two's.
+※
+※ **The caller makes the room**, at the bottom of its own frame, as large as
+※ the largest call it makes wants: the stack pointer does not move around a
+※ call, so a walk of the stack sees the frames it always did.  The function
+※ the host calls reads what the host left above its own frame.
+※
+※ Compare: **C**, whose convention this is on all three; **Rust**'s and
+※ **Zig**'s `extern` functions, which follow it as well; **Go**, whose own
+※ convention puts what the registers do not hold in the same place, with cgo
+※ bridging to this one.
+
+@[host("ints")]
+fn ints(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64, i: i64, j: i64, k: i64) → i64
+
+@[host("reals")]
+fn reals(a: f64, b: f64, c: f64, d: f64, e: f64, f: f64, g: f64, h: f64, i: f64, j: f32, k: f64) → f64
+
+@[host("mixed")]
+fn mixed(a: u8, b: f64, c: i16, d: f32, e: bool, f: i64, g: u32, h: i8, i: f64, j: i64, k: f64, l: f64, m: f64,
+         n: f64, o: f64, p: f64, q: f64, r: u8, s: i32, t: f64, u: char) → i64
+
+※ What the host calls, with seven whole numbers, nine floating-point ones and
+※ three narrow values after them: on the stack, wherever it is.
+@[visible, cdecl, impure]
+fn run(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: f64, i: f64, j: f64, k: f64, l: f64, m: f64,
+       n: f64, o: f64, p: f64, q: u8, r: i16, s: bool) → i64:
+    let whole: i64 = a + 2i64 × b + 3i64 × c + 4i64 × d + 5i64 × e + 6i64 × f + 7i64 × g
+    let real: f64 = h + i + j + k + l + m + n + o + 2f64 × p
+    ※ A floating-point number kept across a call to the host, which may write
+    ※ every floating-point register.
+    let one: i64 = ints(1i64, 2i64, 3i64, 4i64, 5i64, 6i64, 7i64, 8i64, 9i64, 10i64, 11i64)
+    let two: f64 = reals(1f64, 1f64, 1f64, 1f64, 1f64, 1f64, 1f64, 1f64, 1f64, 0.5f32, 2f64)
+    let three: i64 = mixed(200u8, 1.5f64, ⁻300i16, 2.5f32, true, 7i64, 70000u32, ⁻5i8, 3f64, 9i64, 1f64, 1f64,
+                           1f64, 1f64, 1f64, 1f64, 1f64, 3u8, ⁻40000i32, 8f64, '\u263A')
+    if whole ≠ 140i64:
+        1i64
+    elif real ≇ 49f64:
+        2i64
+    elif q ≠ 200u8 ∨ r ≠ ⁻300i16 ∨ ¬s:
+        3i64
+    elif one ≠ 506i64:
+        4i64
+    elif two ≇ 72f64:
+        5i64
+    elif three ≠ 30936i64:
+        6i64
+    else:
+        0i64

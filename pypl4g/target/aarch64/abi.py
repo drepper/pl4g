@@ -36,7 +36,9 @@ CC_PL4G: Final[CallConvDesc] = CallConvDesc(
     int_arg_regs=_ARG_REGS,
     int_ret_regs=(reg("x0"), reg("x1"), reg("x2")),
     float_arg_regs=_FLOAT_ARGS,
-    float_ret_regs=(reg("d0"),),
+    # As many as it answers values in, so that an answer of floating-point
+    # numbers is answered in registers wherever one of whole numbers is.
+    float_ret_regs=(reg("d0"), reg("d1"), reg("d2")),
     float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
     caller_saved=_CALLER_SAVED,
@@ -56,7 +58,9 @@ CC_AAPCS64: Final[CallConvDesc] = CallConvDesc(
     int_arg_regs=_ARG_REGS,
     int_ret_regs=(reg("x0"), reg("x1")),
     float_arg_regs=_FLOAT_ARGS,
-    float_ret_regs=(reg("d0"),),
+    # What the system answers a pair of `double`s in, the first two of the
+    # four a homogeneous aggregate may take.
+    float_ret_regs=(reg("d0"), reg("d1")),
     float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
     caller_saved=_CALLER_SAVED,

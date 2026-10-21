@@ -1,0 +1,145 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A call with more arguments than the convention has registers for.
+※
+※ **What the registers do not hold goes on the stack.**  Each part of an
+※ argument -- a whole number, a floating-point one, each field of a record, the
+※ three words of a string, the address a sum is -- takes a register of its kind
+※ while there is one, and an eight-byte slot on the stack after that, the slots
+※ in the order the parts come in.  The two kinds run out separately, so the
+※ ninth floating-point number goes on the stack while whole numbers after it
+※ still go in registers.  A record is its fields, so one of three fields where
+※ two registers are left has two of them in registers and the third on the
+※ stack.
+※
+※ **The caller makes the room**, once, at the bottom of its frame, as large as
+※ the largest of its calls wants it; the callee reads its arguments from above
+※ its own frame, where its caller's stack pointer was.  A narrow value is
+※ written as the whole register it would have been passed in, and read back at
+※ its own width.
+※
+※ **The system's convention is followed exactly where it is asked for**, as
+※ `@[cdecl]` asks: there the same rule is what C has on all three, and on
+※ RISC-V a floating-point number with no floating-point register left takes an
+※ ordinary one before the stack.
+※
+※ Compare: **C** and every system convention it is compiled to, which this is;
+※ **Go**, whose register convention of 1.17 sends what the registers do not take
+※ to the stack in the same order; **Rust**, whose own convention is unspecified
+※ and in practice LLVM's, which is this; **Zig** and **Odin**, the same.
+
+type Three = a : i64 ; b : i64 ; c : i64
+type Mixed = x : f64 ; n : u8 ; y : f32
+type Number = whole : i64 | fraction : f64 | none : void
+
+※ Twelve whole numbers: four on the stack on x86-64, where the language's own
+※ convention passes eight in registers, as on the other two.
+@[inline(never)]
+fn twelve(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64, i: i64, j: i64, k: i64, l: i64) → i64:
+    (a + 2i64 × b + 3i64 × c + 4i64 × d + 5i64 × e + 6i64 × f + 7i64 × g + 8i64 × h + 9i64 × i + 10i64 × j
+     + 11i64 × k + 12i64 × l)
+
+※ Narrow values on the stack, each read back at its own width and sign.
+@[inline(never)]
+fn narrow(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64, i: u8, j: i16, k: bool, l: char,
+          m: u32, n: i8) → i64:
+    let base: i64 = ⎕widen(i, ⌜i64⌝) + ⎕widen(j, ⌜i64⌝) + ⎕widen(m, ⌜i64⌝) + ⎕widen(n, ⌜i64⌝)
+    let more: i64 = if k ∧ l = 'q': 1000i64 else: 0i64
+    base + more + a + b + c + d + e + f + g + h
+
+※ More floating-point numbers than floating-point registers, a whole number
+※ among them which still has a register of its own kind.
+@[inline(never)]
+fn floats(a: f64, b: f64, c: f64, d: f64, e: f64, f: f64, g: f64, h: f64, i: f64, j: f32, n: i64, k: f64,
+          l: f32) → f64:
+    let small: f64 = if j + l ≅ 0.75f32: 10f64 else: 0f64
+    (a + 2f64 × b + 3f64 × c + 4f64 × d + 5f64 × e + 6f64 × f + 7f64 × g + 8f64 × h + 9f64 × i + small
+     + ⎕float(n, ⌜f64⌝) + 100f64 × k)
+
+※ Records, spread out into their fields: twelve whole numbers and then three
+※ records of mixed kinds and sizes.
+@[inline(never)]
+fn records(p: Three, q: Three, r: Three, s: Three, m: Mixed, t: Mixed) → i64:
+    let fields: i64 = p.a + q.b + r.c + s.a + s.b + s.c + ⎕widen(m.n, ⌜i64⌝) + ⎕widen(t.n, ⌜i64⌝)
+    fields + (if m.x ≅ 0.5f64 ∧ t.y ≅ 2.5f32: 100i64 else: 0i64)
+
+fn value(n: Number) → i64:
+    match n:
+        i64(w):
+            w
+        f64:
+            1i64
+        void:
+            0i64
+
+※ Sums, each the address of its bytes.
+@[inline(never)]
+fn sums(a: Number, b: Number, c: Number, d: Number, e: Number, f: Number, g: Number, h: Number, i: Number,
+        j: Number) → i64:
+    (value(a) + value(b) + value(c) + value(d) + value(e) + value(f) + value(g) + value(h) + value(i)
+     + 10i64 × value(j))
+
+※ Strings, three words each: the third one's count is the first part on the
+※ stack, and the whole of the fifth.
+@[inline(never)]
+fn texts(a: str, b: str, c: str, d: str, e: str) → bool:
+    #a + #b + #c + #d = #e + #e
+
+※ A call through a value, whose environment takes the chain register and no
+※ argument's place.
+@[inline(never)]
+fn apply(f: fn(i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) → i64) → i64:
+    f(1i64, 2i64, 3i64, 4i64, 5i64, 6i64, 7i64, 8i64, 9i64, 10i64)
+
+※ An answer through storage the caller provides: where it goes is one argument
+※ more, after the ones the program wrote, and here on the stack.
+@[inline(never)]
+fn four(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64, i: i64, j: i64) → 〈i64, i64, i64, i64〉:
+    〈a + b, c + d, e + f, g + h + i + j〉
+
+fn checked(t: 〈i64, i64, i64, i64〉) → bool:
+    t⟦0⟧ = 3i64 ∧ t⟦1⟧ = 7i64 ∧ t⟦2⟧ = 11i64 ∧ t⟦3⟧ = 34i64
+
+※ The system's convention, called and calling both here.
+@[cdecl]
+fn system(a: i64, b: f64, c: i64, d: f64, e: i64, f: f64, g: i64, h: f64, i: i64, j: f64, k: i64, l: f64,
+          m: i64, n: f64, o: i64, p: f64, q: u8, r: f64, s: i16, t: f64, u: f32) → f64:
+    let w: i64 = a + c + e + g + i + k + m + o + ⎕widen(q, ⌜i64⌝) + ⎕widen(s, ⌜i64⌝)
+    ⎕float(w, ⌜f64⌝) + b + d + f + h + j + l + n + p + r + 2f64 × t + (if u ≅ 0.5f32: 1000f64 else: 0f64)
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let one: Three = Three(.a ← 1i64, .b ← 2i64, .c ← 3i64)
+    let two: Three = Three(.a ← 10i64, .b ← 20i64, .c ← 30i64)
+    let m: Mixed = Mixed(.x ← 0.5f64, .n ← 7u8, .y ← 1.5f32)
+    let t: Mixed = Mixed(.x ← 1.5f64, .n ← 9u8, .y ← 2.5f32)
+    let w: Number = Number(.whole ← 4i64)
+    let z: Number = Number(.none ← true)
+    let k: i64 = 100i64
+    let add: fn(i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) → i64 = (
+        λ a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64, i: i64, j: i64 [k] → i64 {
+            a + b + c + d + e + f + g + h + i + 2i64 × j + k })
+    if twelve(1i64, 2i64, 3i64, 4i64, 5i64, 6i64, 7i64, 8i64, 9i64, 10i64, 11i64, 12i64) ≠ 650i64:
+        1u6
+    elif (narrow(1i64, 1i64, 1i64, 1i64, 1i64, 1i64, 1i64, 1i64, 200u8, ⁻3i16, true, 'q', 70000u32, ⁻5i8)
+          ≠ 71200i64):
+        2u6
+    elif floats(1f64, 1f64, 1f64, 1f64, 1f64, 1f64, 1f64, 1f64, 1f64, 0.5f32, 3i64, 2f64, 0.25f32) ≇ 258f64:
+        3u6
+    elif records(one, two, one, two, m, t) ≠ 200i64:
+        4u6
+    elif sums(w, w, z, w, w, z, w, w, w, w) ≠ 68i64:
+        5u6
+    elif ¬texts("a", "bb", "ccc", "dddd", "eeeee"):
+        6u6
+    elif apply(add) ≠ 165i64:
+        7u6
+    elif system(1i64, 1f64, 1i64, 1f64, 1i64, 1f64, 1i64, 1f64, 1i64, 1f64, 1i64, 1f64, 1i64, 1f64, 1i64, 1f64,
+                5u8, 1f64, ⁻7i16, 3f64, 0.5f32) ≇ 1021f64:
+        8u6
+    elif ¬checked(four(1i64, 2i64, 3i64, 4i64, 5i64, 6i64, 7i64, 8i64, 9i64, 10i64)):
+        9u6
+    else:
+        0u6

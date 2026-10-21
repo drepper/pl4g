@@ -1,0 +1,56 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ An answer of several floating-point numbers, in registers.
+※
+※ **A convention answers as many values in floating-point registers as in
+※ ordinary ones**: three for the language's own, two for the system's, each
+※ kind counted on its own as an argument's are.  So a record of two `f64`s
+※ comes back in two floating-point registers, and a tuple of a whole number
+※ between two floating-point ones in one ordinary register and two of the
+※ others; what is larger goes through storage the caller provides, as it
+※ always did.  Before, one floating-point register was all an answer had, and
+※ a function answering a point in the plane was refused.
+※
+※ Compare: **C** on x86-64, which answers a `struct` of two `double`s in `xmm0`
+※ and `xmm1`, and on AArch64 a homogeneous aggregate of up to four in `v0` to
+※ `v3`; **RISC-V**'s, which answers two in `fa0` and `fa1`; **Rust** and
+※ **Go**, whose own conventions answer several floating-point results in
+※ registers too.
+
+type Point = x : f64 ; y : f64
+
+@[inline(never)]
+fn middle(p: Point, q: Point) → Point:
+    Point(.x ← (p.x + q.x) × 0.5f64, .y ← (p.y + q.y) × 0.5f64)
+
+@[inline(never)]
+fn pair() → 〈f64, f64〉:
+    〈1.5f64, 2.5f64〉
+
+@[inline(never)]
+fn triple(x: f64) → 〈f64, i64, f64〉:
+    〈x, 7i64, x + x〉
+
+※ The system's convention answers two.
+@[cdecl]
+fn system(x: f64) → 〈f64, f64〉:
+    〈x, x × 3f64〉
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let m: Point = middle(Point(.x ← 1f64, .y ← 2f64), Point(.x ← 3f64, .y ← 6f64))
+    let p: 〈f64, f64〉 = pair()
+    let t: 〈f64, i64, f64〉 = triple(3f64)
+    let s: 〈f64, f64〉 = system(2f64)
+    if m.x ≇ 2f64 ∨ m.y ≇ 4f64:
+        1u6
+    elif p⟦0⟧ + p⟦1⟧ ≇ 4f64:
+        2u6
+    elif t⟦0⟧ + t⟦2⟧ ≇ 9f64 ∨ t⟦1⟧ ≠ 7i64:
+        3u6
+    elif s⟦0⟧ ≇ 2f64 ∨ s⟦1⟧ ≇ 6f64:
+        4u6
+    else:
+        0u6

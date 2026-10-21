@@ -359,3 +359,114 @@ def test_a_callee_that_has_been_generated_is_asked_instead(triple: str) -> None:
     answered = destroyed_by(callee, cconv, regs.INFO,
                             {symbol_name(callee): frozenset((one,))})
     assert [reg.unit for reg in answered] == [one]
+
+
+# -- what the registers do not hold ---------------------------------------------
+
+def _system_convention(triple: str):  # noqa: ANN202
+    """The system's convention on *triple*'s architecture."""
+    import importlib
+
+    which = triple.split("-")[0]
+    return importlib.import_module("".join(("pypl4g.target.", which, ".abi"))).lookup("cdecl")
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_what_the_registers_do_not_hold_goes_on_the_stack(triple: str) -> None:
+    """Each part takes a register of its kind while there is one and then an
+    eight-byte slot, the slots in the order the parts come in -- and one kind
+    running out does not send the other to the stack."""
+    from pypl4g.ir.types import F64, I64
+    from pypl4g.target.callconv import OnStack, argument_places, stack_bytes
+
+    cconv = _convention(triple)
+    ints = len(cconv.int_arg_regs)
+    floats = len(cconv.float_arg_regs)
+    types = [I64] * (ints + 3) + [F64] * (floats + 2) + [I64]
+    places = argument_places(cconv, types)
+    assert [one[0] for one in places[:ints]] == list(cconv.int_arg_regs)
+    assert [one[0] for one in places[ints:ints + 3]] == [OnStack(0), OnStack(8), OnStack(16)]
+    assert [one[0] for one in places[ints + 3:ints + 3 + floats]] == list(cconv.float_arg_regs)
+    assert [one[0] for one in places[ints + 3 + floats:]] == [OnStack(24), OnStack(32), OnStack(40)]
+    # Six slots are forty-eight bytes, which is a multiple of sixteen already;
+    # one more is rounded up to the next.
+    assert stack_bytes(places) == 48
+    assert stack_bytes(argument_places(cconv, [*types, I64])) == 64
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_a_record_is_spread_over_what_is_left(triple: str) -> None:
+    """A record is its fields, each placed as a value of its type would be: one
+    whose fields outnumber the registers left has the first of them in
+    registers and the rest on the stack."""
+    from pypl4g.ir.types import I64, ProductType
+    from pypl4g.target.callconv import OnStack, argument_places
+
+    cconv = _convention(triple)
+    three = ProductType((("a", I64), ("b", I64), ("c", I64)), name="Three")
+    ints = len(cconv.int_arg_regs)
+    places = argument_places(cconv, [I64] * (ints - 1) + [three])
+    assert places[-1] == [cconv.int_arg_regs[-1], OnStack(0), OnStack(8)]
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_a_floating_point_number_with_no_register_of_its_own(triple: str) -> None:
+    """RISC-V's convention passes one in an ordinary register while there is
+    one, and only then on the stack; the other two systems, and the language's
+    own everywhere, go to the stack at once."""
+    from pypl4g.ir.types import F64, I64
+    from pypl4g.target.callconv import OnStack, argument_places
+
+    system = _system_convention(triple)
+    floats = len(system.float_arg_regs)
+    places = argument_places(system, [I64] + [F64] * (floats + 2))
+    if triple.startswith("riscv64"):
+        assert places[-2:] == [[system.int_arg_regs[1]], [system.int_arg_regs[2]]]
+    else:
+        assert places[-2:] == [[OnStack(0)], [OnStack(8)]]
+    own = _convention(triple)
+    places = argument_places(own, [I64] + [F64] * (floats + 2))
+    assert places[-2:] == [[OnStack(0)], [OnStack(8)]]
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_an_answer_of_floating_point_numbers_has_registers_enough(triple: str) -> None:
+    """Every answer the style sends back in registers finds registers of its
+    kind: as many floating-point ones as the style answers values in."""
+    from pypl4g.ir.types import F64, TupleType
+    from pypl4g.target.callconv import result_places
+
+    assert len(result_places(_convention(triple), TupleType((F64, F64, F64)))) == 3
+    assert len(result_places(_system_convention(triple), TupleType((F64, F64)))) == 2
+
+
+ON_THE_STACK = "".join((
+    "let seed: mut u64 = 1u64\n\n",
+    "@[inline(never)]\n",
+    "fn f(a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64, h: u64, i: u64, j: u64) ", ARROW, " u64:\n",
+    "    a + j\n\n",
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n\n",
+    "@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n",
+    "    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(f(seed, 2u64, 3u64, 4u64, 5u64, 6u64, 7u64, 8u64, 9u64, 32u64) + ",
+    "f(seed, 1u64, 1u64, 1u64, 1u64, 1u64, 1u64, 1u64, 1u64, seed + 7u64), ",
+    "\N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 63u6\n"))
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_the_stack_pointer_does_not_move_around_a_call(triple: str, tmp_path) -> None:  # noqa: ANN001
+    """The room for what goes on the stack is part of the caller's frame, made
+    once where the frame is: the only instructions that move the stack pointer
+    are the frame's own, one on the way in and one before the return, however
+    many calls there are."""
+    import re
+
+    dump = listing(tmp_path, triple, ON_THE_STACK, "-O1")
+    # A label inside the function begins with a dot; the next function's name
+    # does not.
+    lines = dump.split("\nmain(ptr<Init>)u6:\n")[1].splitlines()
+    end = next((at for at, line in enumerate(lines)
+                if line and not line.startswith((" ", "."))), len(lines))
+    moves = [line for line in lines[:end]
+             if re.search(r"\b(sub|add|addi) r?sp, ", line)]
+    assert len(moves) == 2, moves
+    assert run_it(tmp_path, triple, ON_THE_STACK) == 42

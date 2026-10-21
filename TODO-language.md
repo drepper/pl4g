@@ -1338,9 +1338,14 @@ Runtime
     kind of indexing and not a cheaper way to write an old one.
     Done 2026-10-22: lists, sets, dictionaries and sums, through `⎕kindof` and `⎕alternatives`.
 
-[ ] `match` over a sum that is a place, without copying it.  `foreach &e: Json = l` binds a reference to each element, but `match
+[x] `match` over a sum that is a place, without copying it.  `foreach &e: Json = l` binds a reference to each element, but `match
     e⌖` reads the sum, and reading a sum copies its bytes into the frame -- 32 bytes a `Json`, per element, either way.  Taking
     apart a sum where it is wants the tag read there and the part bound as a place, the place lent for the arms.
+    Done 2026-10-22, without the lending: the tag and the part are read where the sum is, both before the arm runs, and a part
+    that is itself a place is copied, that part alone.
+[ ] bind a part of a sum matched in place as a place, the subject lent for the arms' duration, as Rust's `match &v` does: what
+    is left of the copy above is a part held in memory -- a record holding a sum, another sum -- which is copied out today so
+    that an arm writing the subject cannot change what it bound.
 
 [ ] whether text inside a container is quoted by `⍕`.  It is not, as a string field of a record is not (2026-10-22); Python's
     `str` of a list and Rust's `Debug` quote it, and a JSON module's tests may want `⍕` to read back as a program.

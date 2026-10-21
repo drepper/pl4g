@@ -52,7 +52,9 @@ CC_PL4G: Final[CallConvDesc] = CallConvDesc(
     int_arg_regs=_PL4G_ARGS,
     int_ret_regs=(RAX, RDX, RCX),
     float_arg_regs=_FLOAT_ARGS,
-    float_ret_regs=(reg("xmm0"),),
+    # As many as it answers values in, so that an answer of floating-point
+    # numbers is answered in registers wherever one of whole numbers is.
+    float_ret_regs=(reg("xmm0"), reg("xmm1"), reg("xmm2")),
     float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
     caller_saved=_CALLER_SAVED,
@@ -69,7 +71,8 @@ CC_SYSV: Final[CallConvDesc] = CallConvDesc(
     int_arg_regs=(RDI, RSI, RDX, RCX, reg("r8"), reg("r9")),
     int_ret_regs=(RAX, RDX),
     float_arg_regs=_FLOAT_ARGS,
-    float_ret_regs=(reg("xmm0"),),
+    # What the system answers a pair of `double`s in.
+    float_ret_regs=(reg("xmm0"), reg("xmm1")),
     float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
     caller_saved=_CALLER_SAVED,

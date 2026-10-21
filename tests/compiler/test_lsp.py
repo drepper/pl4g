@@ -292,8 +292,8 @@ def test_the_back_end_speaks_when_the_file_is_saved(session: Session,
     is absent while the text is being changed and present when the editor says
     the file was saved -- and this is what that division is for.
     """
-    source = ROOT / "tests" / "language" / "type-value-not-yet" \
-        / "type-value-not-yet.pl4g"
+    source = ROOT / "tests" / "language" / "answer-a-char-not-yet" \
+        / "answer-a-char-not-yet.pl4g"
     text = source.read_text(encoding="utf-8")
     session.start(["utf-32"])
     session.open(source, text)

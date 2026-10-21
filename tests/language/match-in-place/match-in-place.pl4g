@@ -1,0 +1,118 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A `match` on a sum that is somewhere takes it apart where it is.
+※
+※ **What a reference names, an element and a field are places**, and a sum in
+※ one is read there: its tag before any arm runs, and the part the chosen arm
+※ binds as that arm begins -- the number where it carries a number, the three
+※ words of a list or a string where it carries one of those, which say where
+※ the elements are and copy none of them.  Nothing else of the sum is read, so
+※ nothing else of it is copied: walking a recursive value through references
+※ reads a tag and a part at each step, whatever size the sum is.
+※
+※ **What the arm binds is a value, as it always was.**  Both reads come before
+※ anything in the arm could change the place, so a name bound to a number holds
+※ the number the place held when the arm began, whatever the arm then writes
+※ there.  A part that is itself a place -- a record holding a sum, another sum
+※ -- is copied out, that part and nothing more, since the arm may write the
+※ place it was in.
+※
+※ Compare: **Rust**, whose `match &v { Json::Array(items) => ... }` binds a
+※ reference into the enum and checks that nothing writes it while the
+※ reference lives; **C++**'s `std::visit`, which hands the alternative over by
+※ reference; **Haskell**, whose pattern binds the field of the constructor
+※ that is already on the heap; **Go**, whose type switch copies the interface's
+※ word and not what it points at.
+
+let std := ⎕import("std")
+
+type Json = null : void | flag : bool | number : f64 | text : str | items : [Json] | fields : [Member]
+type Member = key : str ; value : Json
+type Holder = name : str ; held : Json
+type Pair = left : i64 ; right : Json
+type Nested = inner : Pair | nothing : void
+
+※ Through a reference, all the way down.
+fn count(j: &Json) → u32:
+    match j⌖:
+        [Json](l):
+            let n: mut u32 = 1u32
+            foreach &e: Json = l:
+                n ← n + count(e)
+            n
+        [Member](m):
+            let n: mut u32 = 1u32
+            foreach &e: Member = m:
+                n ← n + count(&e⌖.value)
+            n
+        _:
+            1u32
+
+※ An element of a list, by index.
+fn at(l: [Json], i: u64 ¤idx) → f64:
+    match l⟦i⟧:
+        f64(x):
+            x
+        _:
+            0f64
+
+※ A field of a record.
+fn named(h: &Holder) → str:
+    match h⌖.held:
+        str(s):
+            s
+        _:
+            ""
+
+※ An element of an array.
+fn flag(a: Json⟦3⟧, i: u64 ¤idx) → u8:
+    match a⟦i⟧:
+        bool(b):
+            if b: 1u8 else: 0u8
+        _:
+            0u8
+
+※ What the arm binds is what the place held when the arm began.
+@[impure]
+fn kept(j: &mut Json) → f64:
+    match j⌖:
+        f64(x):
+            j⌖ ← Json(.number ← 100f64)
+            x
+        _:
+            0f64
+
+※ A part that is itself a place is a copy of that part.
+@[impure]
+fn inner(n: &mut Nested) → i64:
+    match n⌖:
+        Pair(p):
+            n⌖ ← Nested(.nothing ← true)
+            p.left
+        _:
+            0i64
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let leaves: [Json] = [Json(.number ← 1.5f64), Json(.flag ← true), Json(.null ← true),
+                          Json(.number ← 2.5f64)]
+    let deep: Json = Json(.items ← [Json(.items ← leaves), Json(.text ← "x"),
+                                    Json(.fields ← [Member(.key ← "k", .value ← Json(.items ← leaves))])])
+    let h: Holder = Holder(.name ← "h", .held ← Json(.text ← "inside"))
+    let a: Json⟦3⟧ = ⟦Json(.flag ← true), Json(.flag ← false), Json(.flag ← true)⟧
+    let changed: mut Json = Json(.number ← 7f64)
+    let nest: mut Nested = Nested(.inner ← Pair(.left ← 42i64, .right ← Json(.null ← true)))
+    if count(&deep) ≠ 13u32:
+        1u6
+    elif at(leaves, 0) + at(leaves, 3) ≇ 4f64 ∨ at(leaves, 1) ≇ 0f64:
+        2u6
+    elif named(&h) ≠ "inside":
+        3u6
+    elif flag(a, 0) + flag(a, 1) + flag(a, 2) ≠ 2u8:
+        4u6
+    elif kept(&mut changed) ≇ 7f64:
+        5u6
+    elif inner(&mut nest) ≠ 42i64:
+        6u6
+    else:
+        0u6

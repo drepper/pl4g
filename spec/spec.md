@@ -5187,6 +5187,14 @@ question about paths, and that rule is a statement about a straight line of code
 
 Where every arm leaves the function there is no block to join at and none is made.
 
+**A sum that is somewhere is taken apart where it is.**  Where what is matched is a place -- what a reference names, `match e⌖`;
+an element of a list or an array, `match l⟦i⟧`; a field of a record -- its tag is read there before any arm runs, and the part
+the chosen arm binds as that arm begins, and nothing else of the sum is read: matching costs what reading those two costs, and not
+a copy of the sum, whatever its size.  **What an arm binds is the value the part had when the arm began**, as it would be had the
+sum been copied: both reads come before anything in the arm runs, and a part that is itself a place -- a record holding a sum,
+another sum -- is copied out of the place, so that an arm writing the place changes nothing it bound.  A part that is a list or a
+string is the words that say where its elements are, and no element is copied.
+
 Compare: Rust's `match`, which this follows in shape and in insisting on exhaustiveness, and which writes `Pattern => expr` where
 this writes a pattern and a body -- Rust's arms are expressions and these are statements.  Rust names a variant by its
 constructor; here an alternative is named by its type, which is what removes the need for a constructor to exist before a value
@@ -6306,6 +6314,16 @@ program means.  A function answering with `〈u8, u16, u8, u8, u8〉` is called 
 
 A second choice would be a second row of that table and nothing else moved, which is the point of saying that the choice belongs
 to the function: a program that wants one will say so on the function, and every caller will follow.
+
+**A value is counted in the registers of its kind**, for an answer as for an argument: an answer of two floating-point numbers --
+a point in the plane, a `〈f64, f64〉` -- comes back in two floating-point registers, which is where C answers a `struct` of two
+`double`s on all three architectures.
+
+**A function may take any number of arguments.**  What the registers do not hold goes on the stack, in the caller's frame, and
+nothing about it is visible in what the program means: a call with twenty arguments is called and read like one with two.  Where
+`@[cdecl]` or `@[abi]` asks for the system's convention, and for a function the host defines, where each argument goes is exactly
+what the system's convention says for what C has; which register or slot a value C does not have -- a `str`, a record -- takes is
+the compiler's to say, as everything about `pl4g` is.
 
 **What `pl4g` is, is the compiler's business and may change**, which is what makes this worth having: a convention the language
 does not describe is one the compiler can improve without any program being rewritten.  What it is today, on every target, is a

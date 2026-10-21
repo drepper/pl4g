@@ -139,3 +139,45 @@ def test_what_was_inlined_is_not_a_frame(triple: str, tmp_path) -> None:  # noqa
                "-O1").stderr
     assert "in 'main'" in said, said
     assert said.splitlines()[1:] == [], said
+
+
+#: The same four frames, each of the three taking more arguments than the
+#: registers hold: every caller has room for the ones on the stack at the bottom
+#: of its frame, and every callee reads them from above its own.
+ON_THE_STACK = """\
+let factor: u64 = 4294967296u64
+
+@[inline(never)]
+fn inner(a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64, h: u64, i: u64, j: u64, k: u64) {0} u64:
+    k {1} factor + a
+
+@[inline(never)]
+fn middle(a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64, h: u64, i: u64, j: u64, k: u64) {0} u64:
+    inner(b, c, d, e, f, g, h, i, j, k, a) + 1u64
+
+@[inline(never)]
+fn outer(a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64, h: u64, i: u64, j: u64, k: u64) {0} u64:
+    middle(b, c, d, e, f, g, h, i, j, k, a) + 2u64
+
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[startup]
+fn main(init: std.Init) {0} u6:
+    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(outer(1u64, factor, 1u64, 1u64, 1u64, 1u64, 1u64, 1u64, 1u64, 1u64, 1u64), \
+\N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
+""".format(ARROW, TIMES)
+
+
+@pytest.mark.parametrize("opt", ["-O0", "-O1"])
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_arguments_on_the_stack_are_no_frame_of_their_own(triple: str, opt: str,
+                                                          tmp_path) -> None:  # noqa: ANN001
+    """The room a caller writes the arguments the registers do not hold into
+    is the bottom of its own frame, and the stack pointer does not move around
+    the call: so the walk finds every frame where the table says it is, and the
+    value that faults is the one handed down the stack twice."""
+    said = ran(ON_THE_STACK, triple, tmp_path, opt).stderr
+    assert "multiplication that does not fit in 'inner'" in said, said
+    assert said.splitlines()[1:] == ["  called from 'middle'",
+                                     "  called from 'outer'",
+                                     "  called from 'main'"], said

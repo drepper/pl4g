@@ -41,7 +41,9 @@ CC_PL4G: Final[CallConvDesc] = CallConvDesc(
     int_arg_regs=_ARG_REGS,
     int_ret_regs=(reg("a0"), reg("a1"), reg("a2")),
     float_arg_regs=_FLOAT_ARGS,
-    float_ret_regs=(reg("f10"),),
+    # As many as it answers values in, so that an answer of floating-point
+    # numbers is answered in registers wherever one of whole numbers is.
+    float_ret_regs=(reg("f10"), reg("f11"), reg("f12")),
     float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
     caller_saved=_CALLER_SAVED,
@@ -59,13 +61,18 @@ CC_LP64: Final[CallConvDesc] = CallConvDesc(
     int_arg_regs=_ARG_REGS,
     int_ret_regs=(reg("a0"), reg("a1")),
     float_arg_regs=_FLOAT_ARGS,
-    float_ret_regs=(reg("f10"),),
+    # What the system answers a pair of `double`s in, fa0 and fa1.
+    float_ret_regs=(reg("f10"), reg("f11")),
     float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
     caller_saved=_CALLER_SAVED,
     stack_align=16,
     allocation_order=_ALLOCATION_ORDER,
     red_zone=0,
+    # A floating-point argument with no floating-point register left is passed
+    # as the integer convention passes one, in an ordinary register while there
+    # is one and on the stack after that.
+    floats_in_integers=True,
 )
 
 CONVENTIONS: Final[dict[str, CallConvDesc]] = {

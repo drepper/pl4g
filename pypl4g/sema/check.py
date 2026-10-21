@@ -281,6 +281,10 @@ class _ArmPlan:
     #: read is done in the arm's own block, since a part is read as the type
     #: that part has and no other arm's type is that one.
     payload: bool = False
+    #: Whether the place the part is read from is the place the program named
+    #: rather than a copy of the sum made for the match, so that a part that is
+    #: itself a place is copied out rather than answered as where it is.
+    in_place: bool = False
 
 
 @dataclass(slots=True)
@@ -4185,6 +4189,12 @@ class Checker:
         #: The values that are copied where they are lowered, by identity: a list
         #: read out of a place into another, where either may change it in place.
         self._copying: set[int] = set()
+        #: The subjects of a `match` that are to be read where they are, by the
+        #: identity of the expression, and those that were: a read of a place
+        #: holding a sum answers the place rather than a copy of it where the
+        #: expression is among the first, and moves it to the second.
+        self._match_in_place: set[int] = set()
+        self._matched_in_place: set[int] = set()
         #: The operators, by identity, whose answer is wanted as one run of
         #: lanes held as a value rather than as an array in room of its own:
         #: what `\N{APL FUNCTIONAL SYMBOL QUAD}mask` was handed, and every operator walked over arrays
@@ -5392,7 +5402,7 @@ class Checker:
         held = ty.fields[at][1]
         found = (self._record_from(builder, place, held, expr.span)
                  if isinstance(held, ProductType)
-                 else builder.load(place, expr.span))
+                 else self._loaded_or_in_place(builder, place, expr, expr.span))
         if not self._accepts(expected, found.ty):
             self._report_mismatch(expr.span, found.ty, expected)
         return found
@@ -12210,6 +12220,7 @@ class Checker:
         is what the index may be, and that follows from what a tuple is rather
         than from any choice made here -- see `_lower_tuple_member`.
         """
+        as_written = expr
         found = self._paired(builder, expr.base, ARRAY_PAIR, expr.indices,
                              expr.span, expected)
         if found is not None:
@@ -12298,9 +12309,12 @@ class Checker:
             if not self._accepts(expected, found_ty):
                 self._report_mismatch(expr.span, found_ty, expected)
             return row
-        value = builder.load(
+        # Asked of the expression as written, which the index settled above
+        # may have replaced with one of its own.
+        value = self._loaded_or_in_place(
+            builder,
             self._element_place(builder, start, ty.element, offset, expr.span),
-            expr.span)
+            as_written, expr.span)
         if not self._accepts(expected, ty.element):
             self._report_mismatch(expr.span, ty.element, expected)
         return value
@@ -15238,7 +15252,7 @@ class Checker:
             self._diags.emit(D.LANG_DEREF_NOT_A_REFERENCE, expr.span,
                              found=ty.written())
             return UndefConst(ERROR)
-        answer = builder.load(value, expr.span)
+        answer = self._loaded_or_in_place(builder, value, expr, expr.span)
         if not self._accepts(expected, answer.ty):
             self._report_mismatch(expr.span, answer.ty, expected)
         return answer
@@ -16940,13 +16954,17 @@ class Checker:
             ty, span), span)
 
     def _element_of(self, builder: IRBuilder, elements: Value, ty: ListType,
-                    at: Value, span: Span) -> Value:
-        """The element *at* places along, read where the elements are."""
+                    at: Value, span: Span, expr: ast.Expr | None = None) -> Value:
+        """The element *at* places along, read where the elements are -- as
+        *expr* reads it, where it is the expression the element is read for."""
         stride = stride_of(ty.element, _LAYOUT)
-        return builder.load(builder.binary(
+        address = builder.binary(
             BinOp.ADD, elements,
             builder.binary(BinOp.WRAP_MUL, at, builder.int_const(U64, stride),
-                           span), span), span)
+                           span), span)
+        if expr is None:
+            return builder.load(address, span)
+        return self._loaded_or_in_place(builder, address, expr, span)
 
     def _lower_take_at(self, builder: IRBuilder, expr: ast.TakeAt,
                        expected: Type | None) -> Value:
@@ -17385,7 +17403,7 @@ class Checker:
                       "an index outside its list", statuses.OUT_OF_RANGE, expr.span)
         return self._element_of(builder, builder.extract(base, 0, parts_of(ty)[0],
                                                          expr.span),
-                                ty, at, expr.span)
+                                ty, at, expr.span, expr)
 
     def _lower_list_element_assign(self, builder: IRBuilder,
                                    stmt: ast.ElementAssign) -> None:
@@ -21472,7 +21490,17 @@ class Checker:
         the block the arms join at carries it out; where none is, an arm is a
         run of statements like any other body.
         """
-        subject = self._lower_expr(builder, stmt.subject, None)
+        # A sum that is somewhere -- what a reference names, an element, a field
+        # -- is taken apart where it is: its tag is read there before any arm
+        # runs and the part the chosen arm binds as that arm begins, so a copy
+        # of the whole would be bytes nothing else reads.
+        self._match_in_place.add(id(stmt.subject))
+        try:
+            subject = self._lower_expr(builder, stmt.subject, None)
+        finally:
+            self._match_in_place.discard(id(stmt.subject))
+        in_place = id(stmt.subject) in self._matched_in_place
+        self._matched_in_place.discard(id(stmt.subject))
         ty = self._value_type_of(subject)
         if ty is ERROR:
             return UndefConst(ERROR)
@@ -21485,7 +21513,7 @@ class Checker:
             return UndefConst(ERROR)
         if isinstance(ty, SumType):
             return self._lower_match_on_sum(builder, stmt, func, subject, ty,
-                                            taken, wanted, produces)
+                                            taken, wanted, produces, in_place)
         if isinstance(ty, EnumType):
             return self._lower_match_on_enum(builder, stmt, func, subject, ty,
                                              taken, wanted, produces)
@@ -21648,14 +21676,16 @@ class Checker:
     def _lower_match_on_sum(self, builder: IRBuilder, stmt: ast.Match,
                             func: Function, subject: Value, ty: SumType,
                             taken: list[tuple[ast.MatchArm, frozenset[int]]],
-                            wanted: Type | None, produces: bool) -> Value:
+                            wanted: Type | None, produces: bool,
+                            in_place: bool = False) -> Value:
         """Lower a `match` over a sum.
 
         A chain of comparisons over the tag, which is the shape an enumeration
         is taken apart with and for the same reason -- what a value holds is a
         number, and which arm runs follows from it.  What differs is what an arm
         binds: the part is at the start of the place the sum is in, read as the
-        type that part has.
+        type that part has.  *in_place* says that place is the one the program
+        named and not a copy, which `_payload_from` is told.
 
         One arm may take every part, where it is the wildcard: then there is
         nothing to ask, and the arm is the whole of it.
@@ -21694,7 +21724,7 @@ class Checker:
                 binds = (arm.pattern.name, arm.pattern.name_span,
                          arm.pattern.span, place, held)
             plan.append(_ArmPlan(body=arm.body, block=blocks[id(arm)],
-                                 binds=binds, payload=True))
+                                 binds=binds, payload=True, in_place=in_place))
         return self._run_arms(builder, stmt, func, plan, wanted, produces)
 
     def _lower_match_on_enum(self, builder: IRBuilder, stmt: ast.Match,
@@ -21779,7 +21809,8 @@ class Checker:
             if arm.binds is not None:
                 name, name_span, where_span, value, answer_ty = arm.binds
                 bound = (
-                    self._payload_from(builder, value, answer_ty, where_span)
+                    self._payload_from(builder, value, answer_ty, where_span,
+                                       arm.in_place)
                     if arm.payload else
                     builder.error(value, answer_ty, where_span) if arm.carried
                     else builder.unwrap(value, answer_ty, where_span))
@@ -27038,21 +27069,43 @@ class Checker:
                               builder.int_const(U64, offset), span)
 
     def _payload_from(self, builder: IRBuilder, place: Value, held: Type,
-                      span: Span) -> Value:
+                      span: Span, in_place: bool = False) -> Value:
         """Read what a part carries out of the place holding a sum.
 
         A part that is itself a place -- a record, another sum -- is read as
         where it is and not copied out: that is what a value of such a type is,
         and the arm that took it apart is what decides whether it keeps one.
+        Except where the sum is the place the program named (*in_place*): that
+        place may be written while the arm runs, and the part has to be the
+        value it was when the arm began, so it is copied -- the part, and not
+        the whole sum a copy for the match would have been.
         """
         where = builder.cast(CastKind.BITCAST, place,
                              self._module.types.ptr_type(held, mutable=True),
                              span)
         if isinstance(held, ProductType):
             return self._record_from(builder, where, held, span)
-        if _held_in_memory(held):
+        if _held_in_memory(held) and not in_place:
             return builder.cast(CastKind.BITCAST, place, held, span)
         return builder.load(where, span)
+
+    def _loaded_or_in_place(self, builder: IRBuilder, address: Value,
+                            expr: ast.Expr, span: Span) -> Value:
+        """What is at *address*, read as *expr* reads it -- or, where *expr* is
+        the subject of a `match` asking to be read in place and what is there is
+        a sum, the place itself, which is what a value of a sum is.
+
+        A sum read out of a place is copied into room of its own (the builder's
+        `load`); one a `match` takes apart is read twice, its tag and its part,
+        both before anything else can write there, so the copy is skipped.
+        """
+        ty = self._value_type_of(address)
+        if id(expr) in self._match_in_place and isinstance(ty, PtrType) \
+                and isinstance(ty.pointee, SumType):
+            self._match_in_place.discard(id(expr))
+            self._matched_in_place.add(id(expr))
+            return builder.cast(CastKind.BITCAST, address, ty.pointee, span)
+        return builder.load(address, span)
 
     def _lower_syscall(self, builder: IRBuilder, expr: ast.Call,
                        expected: Type | None) -> Value:

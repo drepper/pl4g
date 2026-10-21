@@ -11055,6 +11055,82 @@ avoided: a 32-byte `Json` is copied once per element either way.  Avoiding it wa
 the tag read where it is, the part bound as a place -- with the place lent for the arms' duration; that is a change to `match`,
 not small, and is left in the to-do list.
 
+## 2026-10-22T21:00+02:00 — compiler
+
+### Arguments on the stack, answers in floating-point registers, and a sum matched where it is
+
+The JSON module works on a recursive sum of thirty-two bytes and on records holding one, handed to recursive functions and
+answered from them, and two limits of the back ends stood in its way.  A call with more arguments than the convention passes in
+registers was refused (8501), and so was a record wider than the registers left, which is what a record is at `-O0` where nothing
+has taken it apart into its fields.  And a `match` on a sum copied the whole sum into the frame before reading two things of it,
+also where it reached the sum through a reference or as an element of a list.  The user approved closing both with the rest of the
+list; what follows is how, and what was settled along the way.
+
+**What the registers do not hold goes on the stack.**  Each part of an argument -- a whole number, a floating-point number, a
+field of a record, a word of a string or a list, the address a sum is -- takes a register of its own kind while there is one, and
+an eight-byte slot on the stack after that, the slots in the order the parts come in, the first at the stack pointer where the
+call is made.  The two kinds run out separately, so a whole number after the ninth floating-point one still goes in a register.
+That is the rule of all three systems' conventions for what C has -- SysV on x86-64, AAPCS64, RISC-V's LP64D -- so `@[cdecl]`,
+`@[abi]` and a host function follow it exactly, with the one difference between them: **on RISC-V a floating-point number with no
+floating-point register left takes an ordinary register before the stack**, as LP64D says, its bits moved across unchanged.
+
+- **The language's own convention is the same rule without RISC-V's step**, on all three.  The brief asked for the simplest scheme
+  consistent with what `pl4g` already was, and that is one rule rather than three: what `pl4g` already did with registers -- per
+  part, per kind -- continued onto the stack.  Taking an ordinary register for a floating-point number would save a store and a
+  load and cost a move each way and a rule that differs by target.
+- **A record is its fields here too, and may be split**: one of three fields where one register is left has the first in it and
+  the other two on the stack.  The systems keep an aggregate whole -- SysV sends one to memory if any of its eightbytes finds no
+  register, AAPCS64 likewise, RISC-V splits one of two words -- but they say so of C's aggregates, and a record reaches this
+  convention as the values it is made of: that is what `parts_of` answers, and a rule about the whole would be a second answer.
+  The same holds where the system's convention is asked for and the value is one C does not have, a `str` or a record: it travels
+  as its parts, each placed as a scalar would be.  What C does have crosses exactly, and an `@[abi]` record crosses only by
+  reference (4596).
+- **The caller makes the room, once**, at the bottom of its frame and as large as the largest of its calls wants, the stack
+  pointer never moving around a call.  That is what AArch64 and RISC-V compilers always do and GCC's `-maccumulate-outgoing-args`
+  on x86-64; pushing at each call is the other way, shorter on x86-64 and wrong for the walk of the stack, whose table says how far
+  above a function's stack pointer its caller's is -- one number per function, which a stack pointer that moved around each call
+  would make several.
+- **A narrow value is written as the whole register it would have been passed in**, and read back at its own width and sign.  The
+  systems say what the bits above a narrow value are by saying it of the register, RISC-V's extending even on the stack, so writing
+  the register says the same of the slot; reading only the value's own bytes is right whatever the caller wrote.
+- **The callee reads its arguments from above its frame**, where its caller's stack pointer was, and that is only known once the
+  allocator has said what it spilled.  The read is a stand-in until the frame is made, which then makes it the target's load with
+  the final offset.  An offset too large for AArch64's twelve scaled bits is refused rather than built in a register, which only a
+  byte read past four kilobytes of frame would need.
+- **Tail calls need nothing new.**  A call of a function to itself in tail position was already a loop, its arguments the loop's
+  values, so nothing is written to the stack whatever it passes; and no other call is turned into a jump.  The host's stubs jump
+  to what they found with the stack as the caller left it, which is what the arguments on it need.
+
+**An answer of floating-point numbers is answered in floating-point registers**, as many as the convention answers values in: three
+for `pl4g` (`xmm0` to `xmm2`, `d0` to `d2`, `fa0` to `fa2`), two for the systems' -- which is where C on all three answers a `struct`
+of two `double`s.  One register was all there was before, so a function answering a point in the plane was refused (8501), as was
+a `〈f64, f64〉`; nothing else was refused for want of answer registers, `largeanswers` sending anything larger through storage.
+The test of the refusal was that program, and is now one answering with a `char`, which no back end returns yet (in the to-do
+list).
+
+**A `match` on a sum that is somewhere reads it there.**  What a reference names (`match e⌖`), an element of a list or an array
+(`match l⟦i⟧`) and a field of a record (`match r⌖.value`) are places; a sum in one has its tag read before any arm runs and the
+part the chosen arm binds read as that arm begins, and nothing else of it is read or copied.  So `foreach &e: Json = l` with
+`match e⌖` walks a document reading a tag and a part per node, which is what a hand-written C walk over a tagged union does.
+
+- **What an arm binds is still a value**, the part as it was when the arm began.  Both reads come before anything of the arm runs,
+  so there is no window in which the place could change between them; that is what makes this the copy it replaces, minus the
+  bytes nobody read.  A number is loaded, a list or a string is its three words, which say where the elements are and copy none.
+- **A part that is itself a place is copied, that part and no more.**  Matching a copy, such a part was answered as where it was
+  in the copy; matching the place the program named, the arm may write that place, and the name it bound must not change with it.
+  Rust binds a reference into the enum and has the borrow checker keep the place unwritten while the reference lives; that would
+  be a new rule for `match` -- the subject lent for the arms' duration -- and nothing in the JSON module asks for it: none of
+  `Json`'s parts is held in memory.  It is the step to take if a program wants to walk records of sums without copying the record.
+- **Nothing a program writes changes.**  Which subjects are read in place is a matter of the expression's form -- a dereference,
+  an element, a field -- and of its type being a sum, and the answer of every program is the one a copy gave.
+
+Compare: **C**, whose conventions this is, and whose `switch` on a tagged union's tag reads the member it names in place; **Go**,
+whose register convention of 1.17 spills what the registers do not take to the stack in order, an aggregate too large going whole;
+**Rust**, whose `extern "Rust"` is unspecified and in practice LLVM's lowering of the C one, and whose `match &v` binds references
+into the enum; **Zig**, whose `switch` on a pointer to a tagged union binds the payload by pointer with `|*p|`; **C++**, whose
+`std::visit` hands the alternative over by reference; **Haskell**, whose pattern binds the field of a constructor already on the
+heap; **Swift**, whose `indirect enum` is a box and whose `switch` binds what is in it.
+
 Open questions
 --------------
 

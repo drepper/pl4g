@@ -1,0 +1,52 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A function that calls itself with arguments on the stack.
+※
+※ **Every frame has its own room for what it passes**, at its bottom, and reads
+※ what it was passed from its caller's: so a function recursing with eleven
+※ arguments reads the ones its caller wrote while writing the ones its callee
+※ will read, and neither overwrites the other.  Rotating the arguments at
+※ every turn is what shows it: a slot read from the wrong frame is a value
+※ from the wrong turn.
+※
+※ **A call to itself in tail position is a loop** whatever it passes, as it
+※ always was: the arguments become the loop's values, and nothing is written
+※ to the stack at all.
+※
+※ Compare: **C** compilers that keep an outgoing area of the largest size a
+※ function's calls need -- GCC's `-maccumulate-outgoing-args` on x86-64, and what
+※ GCC and LLVM do on AArch64 and RISC-V -- rather than pushing at each call;
+※ **Scheme**, whose tail calls are this loop by requirement.
+
+type Pair = low : i64 ; high : i64
+
+※ Not a tail call: the answer is added to after the call comes back.
+fn deep(n: i64, a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64, i: i64, j: i64) → i64:
+    if n = 0i64: a + b + c + d + e + f + g + h + i + j else: j + deep(n - 1i64, b, c, d, e, f, g, h, i, j, a)
+
+※ Records passed down, five of them, so that one is split between the last
+※ registers and the stack.
+fn spread(n: i64, p: Pair, q: Pair, r: Pair, s: Pair, t: Pair) → i64:
+    if n = 0i64:
+        p.low + q.high + r.low + s.high + t.low
+    else:
+        p.high + spread(n - 1i64, q, r, s, t, Pair(.low ← p.high, .high ← p.low))
+
+※ And a tail call: the same rotation, a loop of any length.
+fn tail(n: i64, a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64, i: i64, j: i64) → i64:
+    if n = 0i64: a + 2i64 × b + 3i64 × j else: tail(n - 1i64, b, c, d, e, f, g, h, i, j, a)
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let one: Pair = Pair(.low ← 1i64, .high ← 2i64)
+    let two: Pair = Pair(.low ← 3i64, .high ← 4i64)
+    if deep(25i64, 1i64, 2i64, 3i64, 4i64, 5i64, 6i64, 7i64, 8i64, 9i64, 10i64) ≠ 185i64:
+        1u6
+    elif spread(7i64, one, two, one, two, one) ≠ 30i64:
+        2u6
+    elif tail(1000000i64, 1i64, 2i64, 3i64, 4i64, 5i64, 6i64, 7i64, 8i64, 9i64, 10i64) ≠ 35i64:
+        3u6
+    else:
+        0u6

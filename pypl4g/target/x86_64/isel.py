@@ -37,8 +37,8 @@ from ...ir.layout import (DataLayout, align_of, leaf_offsets_of, size_of,
                           tag_offset_of)
 from ...ir.types import (ResultType, leaves_of, VecType, made_of_parts,
                          parts_of, held_in_memory)
-from ..callconv import (TooManyArguments, argument_places, destroyed_by,
-                        result_places)
+from ..callconv import (OnStack, TooManyArguments, argument_places, calls_placed,
+                        destroyed_by, result_places, stack_bytes)
 from ..bitcount import COUNTING, lower_count
 from ..saturate import (DIVISION, EXTREMA, NAMES, SATURATING, TRAPPING,
                         Unsupported,
@@ -1248,6 +1248,12 @@ class X86Selector(InstructionSelector):
         del offset, span
         return ()
 
+    def select_incoming(self, dst: Reg, offset: int, bits: int, signed: bool,
+                        span: Span) -> Sequence[MCInst]:
+        """A load from the stack pointer and the offset, which any offset fits."""
+        return self.select_move(dst, MCMem(base=RSP, disp=offset, size_bits=bits,
+                                           signed=signed), span)
+
     def select_restore_link(self, offset: int, span: Span) -> Sequence[MCInst]:
         """Nothing to do; the return instruction takes it from the stack."""
         del offset, span
@@ -1542,14 +1548,19 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
     # else by then.  The hint usually makes the copy disappear where there is
     # no call to make it necessary.
     entry = func.blocks[0] if func.blocks else None
-    try:
-        arriving = (argument_places(cconv, [p.ty for p in entry.params],
-                                    chained=func.attrs.chained)
-                    if entry is not None else [])
-    except TooManyArguments as many:
-        raise UnsupportedOperation(
-            "a function with more arguments than the convention passes in "
-            "registers", None) from many
+    arriving = (argument_places(cconv, [p.ty for p in entry.params],
+                                chained=func.attrs.chained)
+                if entry is not None else [])
+    # What each call passes where, asked once here rather than at the call:
+    # the room the arguments that go on the stack are written into is at the
+    # bottom of this function's frame, where the stack pointer is at every
+    # call, so it is taken before anything else of the frame is -- at offset
+    # nought -- and as large as the largest call wants it.
+    placed = calls_placed(func, lookup_cconv)
+    outgoing = max((stack_bytes(going) for _, going in placed.values()), default=0)
+    if outgoing:
+        taken = asm.frame_slot(outgoing, 16)
+        assert taken == 0, "the room for outgoing arguments is not at the bottom"
     for index, block in enumerate(func.blocks):
         for position, param in enumerate(block.params):
             if index != 0:
@@ -1565,7 +1576,8 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                 continue
             pieces = leaves_of(param.ty)
             given = [_new_value(part, registers,
-                                hint=_as_argument(place, part, registers))
+                                hint=(None if isinstance(place, OnStack)
+                                      else _as_argument(place, part, registers)))
                      for part, place in zip(pieces, arriving[position])]
             held[id(param)] = given[0]
             if len(given) > 1:
@@ -1574,6 +1586,11 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
         for position, param in enumerate(entry.params):
             pieces = leaves_of(param.ty)
             for at, (part, place) in enumerate(zip(pieces, arriving[position])):
+                if isinstance(place, OnStack):
+                    # Read where the caller left it, in its own frame.
+                    asm.incoming(operands.part_of(param, at, None), place.offset,
+                                 _width_of(part), _is_signed(part), func.span)
+                    continue
                 asm.loadreg(operands.part_of(param, at, None),
                             MCReg(_as_argument(place, part, registers)), func.span)
 
@@ -2399,36 +2416,38 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     # what the function being called says, and the specification
                     # lets two functions of one compilation say different
                     # things.
-                    theirs = lookup_cconv(DEFAULT_CCONV if through is not None
-                                          else callee.cconv)
-                    try:
-                        going = argument_places(
-                            theirs, [a.ty for a in given],
-                            chained=through is not None or bool(getattr(
-                                getattr(callee, "attrs", None), "chained", False)))
-                    except TooManyArguments as many:
-                        raise UnsupportedOperation(
-                            "a call with more arguments than the convention passes "
-                            "in registers", span) from many
+                    theirs, going = placed[id(inst)]
                     # The arguments are a parallel copy, for the reason a
                     # branch's are: a value may already be in the register
                     # another argument is being moved into, which is likelier
                     # the more a convention's argument registers are ones the
-                    # allocator prefers.
+                    # allocator prefers.  What goes on the stack is written
+                    # first, into the room at the bottom of the frame; that
+                    # reads values and writes no register, so it is no part of
+                    # the copy.
                     handed: list[Move] = []
                     for position, argument in enumerate(given):
                         pieces = leaves_of(argument.ty)
                         if made_of_parts(argument.ty):
                             for at, (part, place) in enumerate(
                                     zip(pieces, going[position])):
+                                source = MCReg(operands.part_of(argument, at, span))
+                                if isinstance(place, OnStack):
+                                    _pass_on_stack(asm, place, part, source,
+                                                   inst.span)
+                                    continue
                                 handed.append(Move(
                                     into=_as_argument(place, part, registers),
-                                    source=MCReg(operands.part_of(argument, at,
-                                                                  span))))
+                                    source=source))
+                            continue
+                        place = going[position][0]
+                        if isinstance(place, OnStack):
+                            _pass_on_stack(asm, place, argument.ty,
+                                           operands.in_register(argument, inst.span),
+                                           inst.span)
                             continue
                         handed.append(Move(
-                            into=_as_argument(going[position][0], argument.ty,
-                                              registers),
+                            into=_as_argument(place, argument.ty, registers),
                             source=operands.value(argument, inst.span)))
                     if through is not None:
                         # The register the callee is in is read by the call, so
@@ -2499,6 +2518,27 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     raise UnsupportedOperation("".join((
                         "the instruction '", inst.opcode, "'")), span)
     asm.end_function()
+
+def _pass_on_stack(asm: Assembler, place: OnStack, ty: Type, source: MCOperand,
+                   span: Span) -> None:
+    """Write one part of an argument into its slot at the bottom of the frame.
+
+    A whole number is written as the whole register, which is what it would
+    have been in a register of the convention -- the systems' conventions say
+    what the bits above a narrow one are by saying it of the register -- and
+    a floating-point one at its own width.  The callee reads only as much as
+    the type holds.
+    """
+    from ...ir.types import FloatType
+
+    assert isinstance(source, MCReg)
+    if isinstance(ty, FloatType):
+        asm.store(asm.mem(base=RSP, disp=place.offset, size_bits=ty.bits), source,
+                  span)
+        return
+    asm.store(asm.mem(base=RSP, disp=place.offset, size_bits=64),
+              MCReg(source.reg, bits=64), span)
+
 
 def _is_floating(ty: Type) -> bool:
     """Whether *ty* is a floating-point type, or a result answering with one."""

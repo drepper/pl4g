@@ -2385,6 +2385,11 @@ without that test the rewritten call is found again and handed a second place to
 anywhere counts registers per part recursively -- `parts_of` gives a tuple its members and stops -- so routing such an answer
 through storage would only move where it goes wrong.  Those are refused as they were before.
 
+**The style counts values and the registers are counted per kind**, so every convention has as many floating-point registers to
+answer in as values it answers: three for `pl4g`, two for the systems' (`xmm0`/`xmm1`, `d0`/`d1`, `fa0`/`fa1`, where C answers a
+pair of `double`s).  With one, as there was, an answer the style kept in registers could still find none of its kind -- a
+`〈f64, f64〉`, a record of two -- and was refused (8501).
+
 Calling conventions
 -------------------
 
@@ -2457,6 +2462,34 @@ pointer is held to everywhere there and not only at a call.  AArch64 checks it o
 would have stopped there with an alignment fault; QEMU does not check, which is why the tests did not see it.  A function that
 does not return -- the entry point, the fault helper, a stub -- was not called as one that comes back and says how its stack stands
 for itself.
+
+**What the registers do not hold goes on the stack.**  `argument_places` answers a place per part, and a place is a register or
+an `OnStack(offset)`: a part takes a register of its kind while the convention has one left, and an eight-byte slot after that
+(`STACK_SLOT`), the slots numbered in the order the parts come in.  The two kinds are counted apart, as they always were, so
+running out of one sends nothing of the other to the stack.  `CallConvDesc.floats_in_integers` is the one difference the three
+systems have: RISC-V's LP64D passes a floating-point part with no floating-point register left in an ordinary register before
+the stack, and its convention says so; the language's own does not, on any target, and is the same rule everywhere.  A record is
+its leaves here as in registers, so one may be split between the two.  `TooManyArguments` is left to `result_places` only, an
+answer having no second route at code generation -- `largeanswers` has sent everything too large through storage by then.
+
+**The caller makes the room, at the bottom of its frame.**  `calls_placed` asks where every call of a function puts what, before
+any code is generated, and the largest stack share of them (`stack_bytes`, rounded to sixteen) is the first slot the frame gives
+out -- at offset nought, where the stack pointer is at each call.  A part is written there with a store of the whole register for a
+whole number, which is what it would have been in a register, and at its own width for a floating-point one.  The stack pointer
+does not move around a call, so `frame_walk`'s "how far above this function's stack pointer its caller's is" is still one number
+per function and the walk of the stack needed no change; the stack is aligned at every call by the rounding it already had.
+
+**The callee reads above its frame**, where its caller's stack pointer was -- which is `frame_walk`'s second number again: the
+frame's size, and on x86-64 the return address above it.  That is known only once the allocator has said what it spilled, so
+isel writes `Assembler.incoming`, a stand-in (`INCOMING`) that defines the parameter's register and reads nothing, and
+`_make_frame` turns each into `select_incoming` with the final offset -- a load of the value's own width and sign, read as a `load`
+of its type would be.  x86-64 reaches any offset; AArch64 refuses one past its twelve scaled bits rather than building the address,
+which only a byte past four kilobytes of frame would need and for which a floating-point register has no register to build it in;
+RISC-V builds a larger one in the destination itself, or for a floating-point one in the register a function working on runs keeps.
+
+**Nothing else needed to change.**  A call of a function to itself in tail position is a loop (`tailcalls`), so its arguments are
+the loop's values and never on the stack; no other call is made a jump.  A host function's stub jumps to what it found with the
+stack as the caller left it.  The interpreter's calls and its host calls through libffi already took any number of arguments.
 
 The allocator
 -------------
@@ -3991,6 +4024,20 @@ room, read as the type that part has -- a record read out field by field, a
 number loaded, and a part held in memory answered as the address it already is.
 The read is done in the arm's own block, since each arm reads a different type
 out of the same place.
+
+**A sum that is somewhere is matched there.**  `_lower_match` puts the subject's
+identity in `_match_in_place` while it lowers it, and the four reads that would
+copy a sum out of a place -- `_lower_deref`, `_element_of` for a list,
+`_lower_element` for an array, `_field_of_place` -- ask `_loaded_or_in_place`,
+which answers the place bitcast to the sum, as making one does, and moves the
+identity to `_matched_in_place` to say it did.  Everything after that is the
+match it was: the tag is read from the place, the part from the place in the
+arm's block.  `_payload_from` is told the place is the program's
+(`_ArmPlan.in_place`) and copies a part held in memory where it answered the
+copy's address before -- the arm may write the place, and the name it bound
+must not change with it.  The expression asked about is the one written:
+`_lower_element` may replace an index with one it settled, so it keeps the
+original to ask with.
 
 **Answering with one** is the caller's room.  `ReturnStyle.in_registers` says no
 for anything held in memory whatever its size, so `largeanswers` gives the
