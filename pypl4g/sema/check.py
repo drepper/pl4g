@@ -545,6 +545,58 @@ def _referenced(node: object, name: str) -> bool:
     return False
 
 
+def _given_its_own(name: str, body: ast.Block) -> bool:
+    """Whether the list *name* holds in *body* is room nothing else holds: a
+    `mut` variable bound once, and given only lists made where it is given them.
+
+    What it may be given is a list written out, a join, or what a function of
+    the program answers -- each a list nothing else names.  Not another name,
+    which a binding may leave holding the same room, and not what the language's
+    own functions answer, some of which are their argument.  Nothing else in the
+    body may bind the name, which would make two variables one name, nor reach it
+    a second way (`_referenced`), nor put off something that names it: what is
+    put off runs after the answer is made and could change the room under it."""
+    def made_here(value: ast.Expr) -> bool:
+        while isinstance(value, ast.Allocated):
+            value = value.value
+        if isinstance(value, ast.Call):
+            return not (isinstance(value.callee, ast.NameRef)
+                        and value.callee.name.startswith(BUILTIN_GLYPH))
+        return isinstance(value, ast.ListLit) or (
+            isinstance(value, ast.Binary) and value.op is ast.BinaryOp.CONCAT)
+
+    bound = 0
+    fine = True
+
+    def visit(one: object) -> None:
+        nonlocal bound, fine
+        if not fine:
+            return
+        match one:
+            case ast.VarDef() if one.name == name:
+                bound += 1
+                fine = one.mutable and not one.more and made_here(one.value)
+            case ast.VarDef() | ast.AssignStmt() \
+                    if any(other == name for other, _ in one.more):
+                fine = False
+            case ast.AssignStmt() if one.name == name:
+                fine = made_here(one.value)
+            case ast.ForEach() | ast.Param() | ast.Pattern() | ast.Capture() \
+                    if one.name == name:
+                fine = False
+            case ast.Defer() if _mentions(one, name):
+                fine = False
+        if isinstance(one, ast.Node):
+            for field_ in fields_of(one):
+                visit(getattr(one, field_.name))
+        elif isinstance(one, (tuple, list)):
+            for item in one:
+                visit(item)
+
+    visit(body)
+    return fine and bound == 1 and not _referenced(body, name)
+
+
 def _read_through(node: object, into: set[int]) -> None:
     """Add to *into* every name read through with `⌖` below *node*: `r⌖`, and the
     target of `r⌖ ← v`.  Such a read is a use of the place the reference names,
@@ -10723,10 +10775,12 @@ class Checker:
                              type=ty.written())
             return UndefConst(ERROR)
         if target == _HEAP and isinstance(ty, ListType) \
-                and self._owned_parameter(written, func):
+                and (self._owned_parameter(written, func)
+                     or self._owned_local(written, func)):
             # A parameter taken as this call's own is nobody else's room and
             # goes when the call does: where it is the heap's already it is
-            # answered as it is, which is how `v ← f(v)` moves both ways.
+            # answered as it is, which is how `v ← f(v)` moves both ways.  So
+            # does a variable of the body's own that holds room of its own.
             self._answer_kinds.append("heap")
             return self._heaps_or_copied(builder, value, ty, span)
         copied = builder.call(owned.own_function(self._module, ty),
@@ -17277,6 +17331,19 @@ class Checker:
         return local is not None and local.named_parameter \
             and written.name in func.param_names \
             and func.param_names.index(written.name) in func.takes_owned
+
+    def _owned_local(self, written: ast.Expr, func: Function) -> bool:
+        """Whether *written*, which *func* answers, is a variable of its body's
+        own whose room nothing else holds (`_given_its_own`) -- which, the
+        call ending, nothing will hold but the caller."""
+        if not isinstance(written, ast.NameRef):
+            return False
+        local = self._find_local(written.name)
+        node = self._node_of_func.get(id(func))
+        if local is None or not local.mutable or local.named_parameter \
+                or node is None or node.body is None:
+            return False
+        return _given_its_own(written.name, node.body)
 
     def _heaps_or_copied(self, builder: IRBuilder, value: Value, ty: ListType,
                          span: Span) -> Value:

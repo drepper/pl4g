@@ -2286,12 +2286,28 @@ its `pick` block out before its body for that reason.  `constfold` drops what le
 `x & ~0`, a bitcast to the type it has) and answers a comparison of a value with itself for integers, truth values, characters and
 pointers -- not for floating point.
 
-**What a branch settled is used where it holds** (`opt/passes/facts.py`, after the second folding).  The edge into a block that
-it is the only way into says which way its conditional branch went, and that comparison -- with the unit-only casts between
-`u64 ¤idx`, `u64` and `u64 ¤size` looked through -- holds in every block it dominates.  A check of a comparison known to hold goes,
-which is an index into the array whose length the loop counts to; and a saturating step of one over a value known to be below (or
-above) something cannot reach an end of its type, so it is the plain add (or subtraction).  A check whose condition is a
-comparison only it reads is a `cmp` and a conditional jump, as a branch's is (`branches.condition_of`).
+**What a branch settled, and what a value can be, is used where it holds** (`opt/passes/facts.py`, after the second folding; the
+C++ is `opt/facts.cc`).  A function holding a check, a checked or saturating operation or a comparison of whole numbers is walked
+in reverse postorder, each block with a `_Known`: its dominator's, shared where the block learns nothing, copied where it does.
+**Facts** are learned on the edge into a block that edge is the only way into (`_facts_of` of the branch's condition, the
+unit-only casts between `u64 ¤idx`, `u64` and `u64 ¤size` looked through by `_plain`, `∧`, `∨` and `¬` looked into), after a
+check that does not only observe, and -- `_joined` -- where the branch is on a truth-value parameter of the block it ends and only
+one way in can hand it the value the edge needs: that way's facts at its end and the argument's.  A `_Known` holds the facts as a
+set; the values each is known to differ from; and `bounds`, `x - y` at most a number for the values `_offset` finds under each side
+-- a value and a constant added by `add`, `sub`, or a wrapping one whose range says it fits -- the tightest kept, indexed both ways.
+**Ranges** are `(lo, hi)` in the value's own reading, `_reread` between signed and unsigned (a range whose top bits differ reads as
+every value).  `_range_of` works one out per instruction from its operands' ranges at that point (`_at`, which narrows by
+`_narrowed`: each bound of the value or of what it is a constant away from, read in the bound's domain, then the values it differs
+from moving an end); `_hand_on` widens each parameter of a successor by its argument narrowed on the edge, `_widen` taking a bound
+still moving after `_WIDENINGS` (one) growth to the end of the type.  The function is walked again while a parameter of a block
+already walked changed, at most `_ROUNDS` times (forty; a function not settled by then is left as it was), and **what the last
+walk found is changed**: a check `_answer` says holds goes; `add`, `sub`, `mul`, the saturating three and the checked shifts whose
+range fits (`fits`) become the wrapping ones -- a shift only where the width is a power of two, the wrapping shift masking its
+distance; and a comparison `_answer` settles is replaced by the truth value, `settle` folding what follows.  `_answer` asks: the
+same value on both sides; the fact or its negation; the two ranges (`_compared`); and the two offsets, `a - b` at most `below +
+at_x - at_y` from `bounds`.  A shift of a narrow value is done in the whole register, so a right shift bringing in the other kind
+of bit than the type's reading has a range only where the top bit is clear; a division or remainder of a signed type has none.  A
+check whose condition is a comparison only it reads is a `cmp` and a conditional jump, as a branch's is (`branches.condition_of`).
 
 **An answer whose allocator is fixed travels as two words** (`opt/passes/thinanswers.py`, run as the first half of `largeanswers` at
 every level, so the module is verified once for both).
@@ -5576,3 +5592,22 @@ x86-64 at `-O1` and some 190 000 each on AArch64 and RISC-V under QEMU and at `-
 point between random neighbours written out exactly and a digit past it, random long digit strings, every power of ten and of two,
 hexadecimal numbers of up to 120 bits, the flags.  What `format_f64` writes was compared with `node`'s `String(x)` for 200 000
 numbers.  None differed.
+
+
+Checks a program cannot fail, and a list a body made answered as it is
+-----------------------------------------------------------------------
+
+**The ranges and facts are `facts`'s** -- the paragraph on that pass in the optimizer's section says what is kept and how it is
+asked.  What it leaves in `examples/numbers` is what neither can say: an index a call answered (`place`, not inlined), a slice whose
+ends a loop moved (`bytes⟦begin…mantissa_end⟧`, which wants `begin ≤ at ≤ n` carried round the loop, an invariant and not a
+range), and a difference of two counters.  The language tests `checks-settled-by-ranges` and `checks-unsettled-*` run at `-O0` and
+`-O1` on all three machines, the second set stopping where the program can fail; `tests/compiler/test_ranges.py` reads the IR.
+
+**A local answered as it is.**  `_answered`'s case for a parameter taken as the body's own (`_owned_parameter`) takes
+`_owned_local(written, func)` beside it: a `NameRef` to a `_Local` that is `mutable` and not `named_parameter`, in a function with a
+node in `_node_of_func` (so not a lambda's), whose body `_given_its_own(name, body)` passes -- one `VarDef` of the name, `mut`, not
+taking a tuple apart; every `AssignStmt` to it, likewise; each value a `ListLit`, a `⧺`, or a `Call` whose callee is not a builtin
+(`Allocated` looked through); no `ForEach`, `Param`, `Pattern` or `Capture` of the name and none in a `more`; no `Defer` that
+`_mentions` it; and not `_referenced`.  The answer then goes through `_heaps_or_copied`, as the parameter's does: the allocator the
+value carries compared with `⎕heap`'s address, the room answered where they are one and `__pl4g_own` of it where not.  The C++ is
+`given_its_own` and `owned_local` in `sema/check.cc`.

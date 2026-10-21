@@ -810,13 +810,31 @@ Optimizations
     would do; an index is checked against a length the loop condition has just compared it with; `at + 1` asks whether it
     overflowed where `at < n` says it cannot; a small function (`tenth`, `decimal_count`, `to_odd`) is called rather than put where
     it is called; and the parsing loops keep values in the frame.  Each is visible in `perf annotate` of `examples/numbers`.
+    **Partly done (2026-10-23):** the index and the `at + 1` are not checked where what holds says they cannot fail (`facts`'
+    ranges, spec/details.md); the `and`, the calls and the frame are still as they were.
 
 [ ] divide by a constant with a multiplication.  `÷ 10u64` and `÷ 100u64` are the machine's division -- some thirty times the
     multiplication by the inverse and the shift every C compiler emits, which `std.string` writes out by hand (`tenth`).
 
-[ ] answer a local list without copying it.  `fn f() → [u8]: let out: mut [u8] = [] … out` copies the whole list on the way out,
+[x] answer a local list without copying it.  `fn f() → [u8]: let out: mut [u8] = [] … out` copies the whole list on the way out,
     only a temporary of the heap's being answered as it is; a `mut` local changed in place has room no other name shares, and a
     last use of it could go as it is, as a parameter taken as the body's own already does.
+    Done on 2026-10-23, for a variable given only lists made where it is given them (`_given_its_own`): "changed in place" was
+    not enough, as the next entry says.
+
+[ ] a `mut` variable bound to a non-`mut` one shares its room.  `fn g(x: [u8]) → u8: let y: [u8] = x; let out: mut [u8] = y;
+    out⟦0⟧ ← 9u8; …` writes the caller's list: `y` shares `x`'s room, neither changing, and `out` is handed `y`'s room as a
+    local's that is done with -- which it is not, being the parameter's.  The specification says a list read into a place that
+    may change it gets elements of its own; this one does not.  Found writing the answer of a local list without a copy.
+
+[ ] `⎕wrap` of a shift of a width that is not a power of two.  The wrapping shift takes its distance modulo the width as `and`
+    with the width less one, which is the modulo only for a power of two: `⎕wrap(1u3 « 1u3)` shifts by nought.  It wants `%`, or
+    a comparison and a subtraction, for the other widths.  `facts` makes a checked shift the wrapping one only for a power of two.
+
+[ ] carry a relation round a loop.  `begin ≤ at` where `at` starts at `begin` and only grows, and `at ≤ n` where it grows only
+    where `at < n`, are what `bytes⟦begin…at⟧` after the loops of `parse_f64` asks, and `facts` knows neither: a range of a
+    loop's parameter is one number at each end, not a relation with another value.  What it wants is the facts a loop's head
+    knows on every way in, kept where every way round keeps them.
 
 [ ] the compile-time evaluator works out `⍴`, `⎕unit` and `⎕drop` (7000 today).  A table built by a loop for the image is the
     obvious use; `std.string` writes its tables out instead.

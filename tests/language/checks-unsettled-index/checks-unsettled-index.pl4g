@@ -1,0 +1,25 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=82 diag=none
+
+※ What the compiler settles is only what the program can never fail.  A loop
+※ that goes on while its index is *at most* the length reads one past the end on
+※ its last turn, and that read stops the program at every level: the test
+※ compared the index with the length, but the comparison was not the one the
+※ check asks.
+
+let std := ⎕import("std")
+
+unit ¤size → ¤idx
+
+fn summed(v: u8⟦⟧) → u64:
+    let n: u64 ¤idx = #v
+    let total: mut u64 = 0u64
+    let at: mut u64 ¤idx = 0
+    while at ≤ n:
+        total ← total + ⎕widen(v⟦at⟧, ⌜u64⌝)
+        at ← at + 1
+    total
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let some: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
+    if summed(some) = 6u64: 0u6 else: 1u6

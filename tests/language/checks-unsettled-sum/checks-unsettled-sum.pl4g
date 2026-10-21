@@ -1,0 +1,22 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=80 diag=none
+
+※ A sum known to fit is a plain addition; one that may not is still checked.
+※ Here the byte is known to be at most 255 -- which is every byte -- so the one
+※ added to it may go past the end, and with the program run with no words after
+※ its name it does.  Below the one sum that is checked, `x < 255u8` is what puts
+※ the other out of reach of the end, and that one the compiler does not check.
+
+let std := ⎕import("std")
+
+fn edge(x: u8) → u8:
+    if x < 255u8:
+        x + 1u8
+    elif x ≤ 255u8:
+        x + 1u8
+    else:
+        0u8
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let x: u8 = ⎕narrow(⎕drop(#init.args) + 253u64, ⌜u8⌝) ?? 0u8
+    if edge(x) = 255u8 ∧ edge(x + 1u8) = 0u8: 1u6 else: 2u6

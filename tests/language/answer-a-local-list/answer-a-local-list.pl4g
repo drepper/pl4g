@@ -1,0 +1,57 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A list a function makes in a variable of its own and answers goes out as it
+※ is: the variable is the only name the room has, and the call ending leaves the
+※ caller the only one.  So `build` hands back the room its joins grew rather
+※ than a copy of it -- where that room is the heap's, which is what an answer
+※ is in, and a copy in the heap where it is not.
+※
+※ What has to stay the same is everything a copy kept apart.  Two calls answer
+※ two rooms, and writing one leaves the other as it was.  A variable bound to
+※ another name may share that name's room -- `aliased` binds one to a
+※ parameter's -- and so its answer is copied, and the caller's list is not
+※ written through it.  And what a `defer` puts off runs after the answer is
+※ worked out: the list answered is the one before the deferred join, which
+※ only a copy can be.
+
+let std := ⎕import("std")
+
+unit ¤size → ¤idx
+
+fn build(n: u64) → [u8]:
+    let out: mut [u8] = []
+    let i: mut u64 = 0u64
+    while i < n:
+        out ⧺← ⟦⎕narrow(i, ⌜u8⌝) ?? 0u8⟧
+        i ← i + 1u64
+    out
+
+fn aliased(x: [u8]) → [u8]:
+    let y: [u8] = x
+    let out: mut [u8] = y
+    out ⧺← ⟦5u8⟧
+    out
+
+fn put_off(n: u64) → [u8]:
+    let out: mut [u8] = build(n)
+    defer out ⧺← ⟦99u8⟧
+    out
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let a: mut [u8] = build(3u64)
+    let b: [u8] = build(3u64)
+    a⟦0⟧ ← 9u8
+    let c: mut [u8] = aliased(b)
+    c⟦1⟧ ← 7u8
+    let d: [u8] = put_off(2u64)
+    if #a ≠ 3 ∨ a⟦0⟧ ≠ 9u8 ∨ a⟦2⟧ ≠ 2u8:
+        1u6
+    elif b⟦0⟧ ≠ 0u8 ∨ b⟦1⟧ ≠ 1u8:
+        2u6
+    elif c⟦1⟧ ≠ 7u8 ∨ #c ≠ 4 ∨ c⟦3⟧ ≠ 5u8:
+        3u6
+    elif #d ≠ 2 ∨ d⟦1⟧ ≠ 1u8:
+        4u6
+    else:
+        0u6

@@ -1454,6 +1454,15 @@ know to look for it.  A program that dies of a signal really did die of one, and
 Where an overflow can be shown at compile time it is a compilation error rather than a fault, since a program that must stop every
 time it runs is a program that need not be run.
 
+**A check the program can never fail is not made.**  Whether an answer fits, whether an index is inside what it names, whether a
+distance is below the width: where what holds at that point of the program says yes, there is nothing to ask, and an optimizing
+build does not ask it.  `at + 1` where `at < n` held fits, whatever `n` is; `v⟦at⟧` where the loop's test just compared `at` with
+`#v` is inside; a byte less 48 and masked is below 256.  What holds is only what the program established -- a comparison it
+branched on, a check it got past, what its operations can answer -- so what the program does is what it did, and a check that can
+fail is made at every level: `at ≤ n` does not put `at` below `n`.  Compare **Go**, whose compiler proves bounds checks away from
+the facts its branches establish; **Rust** and **Zig**, where LLVM does, as far as its analyses reach; **Java**'s HotSpot, which
+eliminates range checks in loops; **C**, which has no checks to remove and assumes, of a signed sum, that it fits.
+
 **Division truncates toward zero**, and `%` is what is left over after it, so what is left over carries the sign of what was
 divided: `⁻7i8 ÷ 2i8` is `⁻3i8` and `⁻7i8 % 2i8` is `⁻1i8`.  That is what all three architectures' instructions do and what C, Rust, Go,
 Java and Zig all say; Python floors instead, and would answer `⁻4` and `1`.  Taking the hardware's answer costs nothing and means
@@ -4530,6 +4539,13 @@ over to it as above, and it hands the room on, the parameter not being read agai
 calls between the one that made it and the one that grows it, `std.string`'s writers among them, and nothing on the way copies
 it.  A parameter joined onto in place is a place of the body's own and is handed on all the same; one a reference is taken of, a
 lambda brings in by reference or a cursor walks is reached a second way, and is copied.
+
+**A list a body made in a variable of its own and answers goes out as it is**, as such a parameter does: the room is the heap's and
+nobody else's, and the call ending leaves the caller the only one holding it.  So `let out: mut [u8] = []`, joined onto and
+answered, is answered without a copy.  The variable has to be bound once and given only lists made where it is given them -- a list
+written out, a join, what a function of the program answers -- and be reached no other way and named by nothing put off with
+`defer`, which runs after the answer is worked out.  Anything else is copied as before: a variable given another name's list may
+share that name's room.  Compare **C++**'s implicit move of a returned local, **Rust**'s move of a returned `Vec`.
 
 ```
 let l: mut [u8] = [1u8, 2u8, 3u8]

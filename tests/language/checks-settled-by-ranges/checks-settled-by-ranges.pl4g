@@ -1,0 +1,83 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A check the program can never fail is not made: an index below the length the
+※ loop just compared it with, a sum of a number below something and one, a
+※ product of two small numbers, a shift by less than the width, a narrowing of
+※ a number that fits.  What is left is the answer the checks would have let
+※ through, and this is the program that says the answers are still the ones
+※ the checks guarded -- at every level, and so whether the checks are made or
+※ not.
+※
+※ Each function here is one shape the compiler settles while optimizing:
+※ `summed`, the loop's own test; `digits`, a count of noughts and a product
+※ and a shift that put an index below the length of a table; `pairs`, a
+※ counter stepping down by two from the end of an array; `scanned`, `at + 1`
+※ compared before `v⟦at + 1⟧` is read, and an index tested in the first half
+※ of an `and`; `narrowed`, a byte that fits.
+
+let std := ⎕import("std")
+
+unit ¤size → ¤idx
+
+let TABLE: u64⟦20⟧ = ⟦1u64, 10u64, 100u64, 1000u64, 10000u64, 100000u64, 1000000u64,
+                     10000000u64, 100000000u64, 1000000000u64, 10000000000u64,
+                     100000000000u64, 1000000000000u64, 10000000000000u64,
+                     100000000000000u64, 1000000000000000u64, 10000000000000000u64,
+                     100000000000000000u64, 1000000000000000000u64,
+                     10000000000000000000u64⟧ in ⎕static
+
+fn summed(v: u8⟦⟧) → u64:
+    let n: u64 ¤idx = #v
+    let total: mut u64 = 0u64
+    let at: mut u64 ¤idx = 0
+    while at < n:
+        total ← total + ⎕widen(v⟦at⟧, ⌜u64⌝)
+        at ← at + 1
+    total
+
+fn digits(x: u64) → u64 ¤idx:
+    let bits: u64 = 64u64 - ⎕widen(⎕lead(x), ⌜u64⌝)
+    let t: u64 ¤idx = ⎕unit((bits × 1233u64) » 12u64, ⌜idx⌝)
+    if x ≥ TABLE⟦t⟧: t + 1 else: t
+
+fn pairs(x: u64) → u64:
+    let text: mut u8⟦24⟧ = 24 ⍴ 48u8
+    let at: mut u64 ¤idx = 24
+    let rest: mut u64 = x
+    while rest ≥ 10u64:
+        at ← at - 2
+        text⟦at⟧ ← ⎕narrow(rest % 10u64 ?? 0u64, ⌜u8⌝) ?? 0u8
+        text⟦at + 1⟧ ← 1u8
+        rest ← rest ÷ 100u64 ?? 0u64
+    ⎕widen(text⟦at⟧, ⌜u64⌝) + ⎕drop(24 - at)
+
+fn scanned(v: u8⟦⟧) → u64:
+    let n: u64 ¤idx = #v
+    let found: mut u64 = 0u64
+    let at: mut u64 ¤idx = 0
+    while at < n:
+        if at + 1 < n and v⟦at + 1⟧ = v⟦at⟧:
+            found ← found + 1u64
+        if at < n and v⟦at⟧ = 0u8:
+            found ← found + 10u64
+        at ← at + 1
+    found
+
+fn narrowed(x: u64) → u8:
+    ⎕narrow(x & 255u64, ⌜u8⌝) ?? 1u8
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let some: u8⟦6⟧ = ⟦1u8, 2u8, 2u8, 0u8, 5u8, 5u8⟧ in ⎕static
+    if summed(some) ≠ 15u64:
+        1u6
+    elif digits(1u64) ≠ 1 ∨ digits(9u64) ≠ 1 ∨ digits(10u64) ≠ 2 ∨ digits(18446744073709551615u64) ≠ 20:
+        2u6
+    elif pairs(12345u64) ≠ 7u64:
+        3u6
+    elif scanned(some) ≠ 12u64:
+        4u6
+    elif narrowed(0x1234u64) ≠ 0x34u8:
+        5u6
+    else:
+        0u6

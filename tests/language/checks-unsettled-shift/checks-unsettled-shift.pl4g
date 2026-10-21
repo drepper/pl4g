@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=80 diag=none
+
+※ A shift by a distance known to be below the width is the plain shift; one by a
+※ distance that may be the width is still asked about.  The distance here is at
+※ most eight, which a `u8` cannot be shifted by, and with the program run with no
+※ words after its name it is eight.  The shift by the same distance less one is
+※ the one the compiler does not ask about.
+
+let std := ⎕import("std")
+
+fn moved(x: u8, by: u8) → u8:
+    let d: u8 = by ⌊ 8u8
+    if d < 8u8:
+        x « d
+    else:
+        x « (d - 1u8) | x « d
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let by: u8 = ⎕narrow(⎕drop(#init.args) + 7u64, ⌜u8⌝) ?? 0u8
+    if moved(1u8, by) = 0u8: 1u6 else: 2u6

@@ -1,0 +1,18 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=80 diag=none
+
+※ A difference whose right side is known to be at most its left is a plain
+※ subtraction; one whose right side may be the larger still stops the program
+※ where it is.  `from ≤ at` settles the first difference here, and nothing
+※ settles the second, which with the program run with no words after its name
+※ is one less two.
+
+let std := ⎕import("std")
+
+fn apart(at: u64, from: u64) → u64:
+    let near: u64 = if from ≤ at: at - from else: 0u64
+    near + (at - from)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let at: u64 = ⎕drop(#init.args)
+    if apart(at, at + 1u64) = 0u64: 1u6 else: 2u6

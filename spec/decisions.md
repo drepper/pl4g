@@ -11256,6 +11256,78 @@ and `FormatFloat(x, 'g', -1, 64)`, Ryu's; **Zig**'s `std.fmt.parseFloat`, Eisel 
 **BQN**'s `•ParseFloat` and `•Repr`, **Uiua**'s `parse`, **Lisp**'s `read-from-string` and **Wolfram**'s `ToExpression`, which read
 their own notations.  What is unusual is only that all of it, tables included, is written in the language the program is.
 
+## 2026-10-23T09:00+02:00 — compiler
+
+### Checks a program cannot fail, and a list a body made answered as it is
+
+The measurements of `std.string` (the entry before this one) put part of the gap to C on checks the compiler could not prove
+away: an index checked against a length the loop condition had just compared it with, `at + 1` asked whether it overflowed where
+`at < n` says it cannot, and a list a function made answered as a copy of itself.  The user approved closing these with the rest of
+the list ("go ahead with all points"); what follows is how, and what was settled along the way.
+
+**A check the program can never fail is not made, and nothing else changes.**  Whether an answer fits, whether an index is inside
+what it names, whether a distance is below the width -- where what holds at that point of the program says yes, the check is not
+there and the operation is the plain one.  What a program does is what it did: a check that holds was never what stopped it.
+Nothing is assumed that the program did not establish itself, by a comparison it branched on, a check it got past, or what its
+operations can answer -- which is what keeps this from being C's undefined overflow, where the compiler assumes what nobody
+checked.  A check that can fail is made at every level: `at ≤ n` does not put `at` below `n`, and a byte plus one may not be a byte.
+
+**How it is known is a range for every whole number and facts about pairs of them**, over the SSA form, in the pass that already
+used what a branch settled (`facts`).  The questions it answers and the choices made in answering them:
+
+- **A range is the smallest and the largest a value can be**, worked out from what each operation does to its operands' ranges --
+  a byte less 48 masked is below 256, a count of noughts 64 at most, a product of two bytes below 2¹⁶ -- each operand's range
+  narrowed by the facts that hold where the operation is.  A block's parameter is every value handed to it, each narrowed by what
+  holds on its edge, so a counter tested against 24 is below 24 in the body whatever it is in the loop's head.  **A bound still
+  moving after one widening goes to the end of its type**: a loop is walked twice or three times and not once a turn, and what a
+  counter is in the body is settled by the body's test, which narrows it whatever its range in the head.  A range is of the bits,
+  read signed or unsigned as a comparison asks.  Compare **GCC**'s value range propagation and **LLVM**'s
+  `CorrelatedValuePropagation` and `LazyValueInfo`, which this is in kind, and the widening of abstract interpretation (Cousot and
+  Cousot), whose simplest form this takes.
+- **A fact is a comparison that went one way**: on the edge into a block that edge is the only way into, after a check the program
+  got past, and through `a ∧ b` that held and `a and b` joined from the one way that can make it true.  It holds in every block
+  that block dominates.  **Facts about two values are kept as how far apart they are**: `at + 1 < n` says `at - n` is at most minus
+  two, which answers `v⟦at⟧` (`at < n`) and `v⟦at + 1…n⟧` (`at + 1 ≤ n`) and puts `n - at` at one or more.  That wants a sum known
+  not to wrap, which a checked one is and a wrapping one is where its range says so.  Compare **Go**'s `prove` pass, which keeps
+  facts of this kind -- a partial order of values with constant offsets -- to remove bounds checks; **HotSpot**'s range check
+  elimination; **Rust** and **Zig**, which leave the same work to LLVM and get it where LLVM's analyses reach.
+- **A comparison whose answer is known is that answer**, which takes the test out of a narrowing of a value known to fit and the
+  arm nobody reaches out of an `if`; what is left is folded as any constant is.  Not doing it would leave the branch the
+  checks were removed from.
+- **A shift by a distance known to be below the width is the wrapping shift**, which takes the distance modulo the width with one
+  `and` -- and so only where the width is a power of two.  A `u3` shifted wrapping by one is shifted by one masked with two, which
+  the language says should be one: that is a defect of `⎕wrap` over shifts of such widths, recorded in the to-do list, and a reason
+  not to lean on it here.
+- **Everything is order-free**: the tightest of several bounds wins whatever order they were learned in, and a value known to differ
+  from an end moves past it until it can move no further.  That is what lets the C++ port keep its facts in another order and
+  come to the same image.
+
+Every image changes where a check goes.  Measured on `examples/numbers` at `-O1` on x86-64 (instructions counted by `perf stat`,
+which a loaded machine does not move): reading a long number is 1034 instructions where it was 1093, a short one 680 where it was
+693, and writing the million and joining them up 1522 a number where it was 1871 -- the last mostly the copy of twenty megabytes
+the answer was.  The reading gains little because the hot loops of `parse_f64` had been written with `⎕wrap` to have none of these
+checks; what is left of the gap is the code generator's -- `and` as a truth value, calls not inlined, values kept in the frame --
+which another change addresses.
+
+**A list a body made in a `mut` variable of its own and answers goes out as it is**, as a `mut` parameter the body takes as its own
+already did: where its room is the heap's it is answered, and where it is not -- an arena's, the image's -- it is copied into the
+heap, which is asked while running because the value says.  `fn f() → [u8]: let out: mut [u8] = [] … out` copied the whole list on
+the way out, which for `examples/numbers` was twenty megabytes.  **The room has to be the variable's alone**, and the rule that
+says so is read off what is written: the variable is bound once in the body, and everything it is given -- by its definition and by
+every assignment -- is a list made there: written out, a join, or what a function of the program answers.  Not another name, which
+may leave the two sharing room (a variable bound to a parameter bound to another shares the caller's), and not what the language's
+own functions answer, some of which answer their argument.  Nothing else in the body may bind the name, reach it a second way
+(`&`, a lambda by reference, a cursor) or put off something naming it -- what is put off runs after the answer is worked out, and
+could change the room under it.  Compare **C++**'s copy elision and implicit move of a returned local (NRVO, C++11's rule that a
+returned local is an rvalue), which is this; **Rust**, where returning a `Vec` moves it always; **Swift**, whose returned array is
+not copied while nobody else holds it; **Go**, where a returned slice shares its room with nobody being the programmer's
+business.
+
+**Found on the way**: a `mut` variable bound to a non-`mut` one that was bound to a parameter shares the caller's room, and
+writing an element through it writes the caller's list (`let y: [u8] = x; let out: mut [u8] = y; out⟦0⟧ ← 9u8`).  The
+specification says the variable gets elements of its own where either place may change; it does not.  It is in the to-do list,
+and it is why the rule above does not trust a name.
+
 Open questions
 --------------
 
