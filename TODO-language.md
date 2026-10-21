@@ -1321,3 +1321,10 @@ Runtime
     read-only is accepted: the writable type wanted is not matched against the read-only operands when the operator is looked up.
     Done 2026-10-20: the operands are asked for the set, not for one that may be written, and what the operator answers is of
     the writable type, being new.
+
+[ ] write a field of an element of a list in place, `l⟦i⟧.name ← v`.  Reading one works since a type could reach itself through a
+    list (2026-10-22); writing is still refused (4449), the element being perhaps shared with another name until it is written,
+    which `l⟦i⟧ ← v` settles by copying and a field write would have to settle the same way.
+
+[ ] `⍕` of a list, so that a record or a sum reaching itself through one can be written as text.  `std.text` walks a record's
+    fields and stops at a list, which has no notation of its own there yet.

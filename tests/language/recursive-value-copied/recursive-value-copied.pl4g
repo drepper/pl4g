@@ -1,0 +1,106 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A value of a type that reaches itself through a list is a value like any other:
+※ **copied into a place that may change it, it gets lists of its own**, all the way
+※ down, and changing the copy leaves the original as it was.
+※
+※ **The copy is one function per type, and for such a type it calls itself.**  The
+※ copy of a `Tree` copies its label and then its list of children, and the copy of
+※ that list copies each child -- with the copy of a `Tree`, which is the function
+※ being written.  It exists before its body does, so the circle closes on a call
+※ and not on the compiler.  A sum is copied by the one part its tag says it holds,
+※ and a record by every part that points somewhere.
+※
+※ **Putting one into a list copies it where the list cannot own it otherwise**: a
+※ value another name still holds goes in as a copy, since the list gives back
+※ what it replaces -- and replacing the element below gives back the copy, all
+※ the way down, while the name goes on holding what it held.
+※
+※ Compare: **Rust**, where `#[derive(Clone)]` on a type holding `Vec<Self>` is
+※ the same recursive function, written by the compiler for the same reason;
+※ **C++**, whose copy constructor of a `std::vector<Node>` member is that one too;
+※ **Swift**, whose arrays of a recursive `indirect enum` share their room until a
+※ write, which is a copy made later rather than one never made.
+
+let std := ⎕import("std")
+
+type Tree = label : str ; kids : [Tree]
+type Json = null : void | text : str | items : [Json] | fields : [Member]
+type Member = key : str ; value : Json
+
+fn leaf(s: str) → Tree:
+    Tree(.label ← s, .kids ← [])
+
+fn size(t: Tree) → u32:
+    let n: mut u32 = 1u32
+    foreach k: Tree = t.kids:
+        n ← n + size(k)
+    n
+
+fn first(t: Tree) → str:
+    t.kids⟦0⟧.label
+
+fn count(j: Json) → u32:
+    match j:
+        [Json](l):
+            let n: mut u32 = 1u32
+            foreach e: Json = l:
+                n ← n + count(e)
+            n
+        [Member](m):
+            let n: mut u32 = 1u32
+            foreach e: Member = m:
+                n ← n + count(e.value)
+            n
+        _:
+            1u32
+
+fn said(j: Json) → str:
+    match j:
+        str(s):
+            s
+        [Json](l):
+            if #l = 0: "" else: said(l⟦0⟧)
+        [Member](m):
+            if #m = 0: "" else: said(m⟦0⟧.value)
+        _:
+            ""
+
+fn word(k: u32) → Json:
+    Json(.text ← "w" ⧺ ⍕k)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ a record holding a list of itself, copied and changed at two levels
+    let a: Tree = Tree(.label ← "a" ⧺ "", .kids ← [leaf("b"), leaf("c" ⧺ "")])
+    let t: Tree = Tree(.label ← "root", .kids ← [a, leaf("d")])
+    let u: mut Tree = t
+    u.kids⟦0⟧ ← leaf("e" ⧺ "f")
+    u.kids ⧺← [a, a]
+    if size(t) ≠ 5u32 ∨ size(u) ≠ 9u32 ∨ size(a) ≠ 3u32:
+        return 1u6
+    if first(t) ≠ "a" ∨ first(u) ≠ "ef" ∨ first(a) ≠ "b":
+        return 2u6
+    sums()
+
+fn sums() → u6:
+    ※ a sum holding text and lists of itself, which a name still holds when it is
+    ※ put in a list -- so the list holds a copy, given back when it is replaced
+    let doc: Json = Json(.items ← [word(1u32), Json(.fields ← [Member(.key ← "k",
+                                                               .value ← word(2u32))])])
+    let held: mut [Json] = [doc, Json(.null ← true)]
+    held⟦0⟧ ← word(99u32)
+    held ⧺← [doc, doc]
+    held⟦2⟧ ← Json(.null ← true)
+    let fresh: Json = word(1234567u32)
+    if count(doc) ≠ 4u32 ∨ said(doc) ≠ "w1" ∨ #held ≠ 4:
+        return 3u6
+    if said(held⟦0⟧) ≠ "w99" ∨ count(held⟦1⟧) ≠ 1u32 ∨ count(held⟦3⟧) ≠ 4u32:
+        return 4u6
+    if said(Json(.items ← [held⟦3⟧])) ≠ "w1" ∨ said(fresh) ≠ "w1234567":
+        return 5u6
+    match doc:
+        [Json](l):
+            if said(l⟦1⟧) ≠ "w2": 6u6 else: 0u6
+        _:
+            7u6

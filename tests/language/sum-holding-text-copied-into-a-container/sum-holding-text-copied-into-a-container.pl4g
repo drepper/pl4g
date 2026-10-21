@@ -1,0 +1,54 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A sum holding text or a list is copied into a container like any other value**
+※ where the container cannot hold it as it is: made in an arena the container
+※ does not outlast, or held by a name while the container gives back what it
+※ replaces.  What is copied is the one part the tag says the sum holds -- the
+※ text, the list and everything in it -- into the container's own allocator; a
+※ part that points nowhere is copied by the bytes alone.  A record holding such
+※ a sum is copied the same way, part by part.
+※
+※ Here the text is made in a pool bound inside the loop, which is given back at
+※ the end of every turn while the list is still read: so the list gets copies,
+※ and after the last pool is gone what the list holds still reads as it did.
+※
+※ Compare: **Rust**, where putting an enum holding a `String` into a `Vec` moves
+※ it and `clone()` is the copy, written by `#[derive]`; **C++**, whose
+※ `std::variant<std::string, …>` copy constructor visits the alternative held;
+※ **Swift**, whose enums with payloads are copied the same way, by the case.
+
+let std := ⎕import("std")
+
+type Value = number : u32 | text : str | many : [str]
+type Named = name : str ; value : Value
+
+fn said(v: Value) → str:
+    match v:
+        str(s):
+            s
+        [str](l):
+            if #l < 2: "" else: l⟦1⟧
+        u32:
+            "number"
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let held: mut [Value] = [Value(.number ← 3u32)]
+    let named: mut [Named] = []
+    foreach i := 0u32…4u32:
+        ※ given back at the end of every turn, and made again on the next
+        let pool: mut arena = ⎕arena
+        let t: str = "t" ⧺ ⍕i in pool
+        let v: Value = Value(.text ← t)
+        let w: Value = Value(.many ← ["x", t] in pool)
+        held ⧺← [v, w]
+        named ⧺← [Named(.name ← t, .value ← w)]
+    if #held ≠ 9 ∨ said(held⟦0⟧) ≠ "number" ∨ said(held⟦1⟧) ≠ "t0":
+        return 1u6
+    if said(held⟦8⟧) ≠ "t3" ∨ said(held⟦6⟧) ≠ "t2":
+        return 2u6
+    if #named ≠ 4 ∨ named⟦2⟧.name ≠ "t2" ∨ said(named⟦3⟧.value) ≠ "t3":
+        return 3u6
+    ※ an element replaced: the copy it held given back, the others as they were
+    held⟦1⟧ ← Value(.many ← ["y", "y" ⧺ "z"])
+    if said(held⟦1⟧) ≠ "yz" ∨ said(held⟦3⟧) ≠ "t1": 4u6 else: 0u6

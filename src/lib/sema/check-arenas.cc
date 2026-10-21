@@ -767,7 +767,10 @@ namespace pl4g::sema {
     else {
       if (only(made, heap_key) && is_temporary(written))
         return { value, made, nullptr };
-      fits = std::ranges::all_of(made, [&](std::int64_t one) { return lasts(one, holder, depth, local); });
+      // The heap is the holder here, and what else holds the heap's would give
+      // it back too, or read it after this one had: it is copied.
+      fits = std::ranges::all_of(made,
+                                 [&](std::int64_t one) { return one != heap_key && lasts(one, holder, depth, local); });
     }
     if (fits)
       return { value, made, nullptr };

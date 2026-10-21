@@ -3,8 +3,8 @@
 
 ※ A product holds its fields and a sum holds one of its variants, so a type
 ※ that reaches itself through either would need room for a value of itself
-※ inside a value of itself, without end.  What makes such a shape possible
-※ elsewhere is an indirection, and the language has no way to write one.
+※ inside a value of itself, without end.  What makes such a shape possible is
+※ an indirection -- a reference, a list, a table -- and there is none here.
 ※ A chain through several definitions counts as much as a direct one.
 
 type Chain = next : Link

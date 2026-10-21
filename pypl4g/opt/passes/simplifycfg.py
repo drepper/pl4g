@@ -16,10 +16,16 @@ a parameter with one incoming argument; a parameter replaced by its argument
 leaves a block that is nothing but a jump.  So the four run until nothing
 changes rather than once each.
 
-What none of this does is reorder blocks.  The order they are laid out in is the
-order the backend walks, and a value has to be computed in a block standing
-before the one that reads it; merging removes a block and moves nothing, which
-keeps that true without having to reason about it.
+What none of this does is reorder blocks, with one exception.  The order they
+are laid out in is the order the backend walks, and a value has to be computed
+in a block standing before the one that reads it; merging a block into one
+standing before it removes a block and moves nothing, which keeps that true
+without having to reason about it.  The exception is a block written into a
+predecessor standing *after* it -- the join of a `match` whose other arms all
+returned, laid out before the arm that reaches it.  What it computed moves down
+to the predecessor, so the blocks it dominated, which stood after it and may
+read what it computed, move down too: to just after the predecessor, in the
+order they had.
 """
 
 from __future__ import annotations
@@ -31,6 +37,7 @@ from ...ir.inst import BlockTarget, BrInst, CondBrInst, SwitchInst
 from ...ir.module import Module
 from ...ir.rewrite import incoming_edges, stands_for
 from ...ir.value import BoolConst, EnumConst, IntConst
+from ..flow import dominators
 
 #: How many times the four are run before it is taken to be a defect rather than
 #: a program.  Each round that changes anything removes a block or a parameter,
@@ -191,6 +198,8 @@ class SimplifyCFG:
     def _absorb(self, func: Function, block: BasicBlock, target: BasicBlock,
                 branch: BrInst) -> None:
         """Move everything of *target* into *block* and remove it."""
+        first = func.blocks.index(target)
+        ahead = first < func.blocks.index(block)
         for param, arg in zip(target.params, branch.target.args):
             stands_for(func, param, arg)
         block.insts.pop()
@@ -200,6 +209,27 @@ class SimplifyCFG:
         target.params = []
         target.insts = []
         func.blocks.remove(target)
+        if ahead:
+            _follow(func, block, first)
+
+
+def _follow(func: Function, block: BasicBlock, first: int) -> None:
+    """Move the blocks from *first* up to *block* that *block* now dominates to
+    just after it, in the order they stand in.
+
+    They are what the block written into *block* reached, and they may read what
+    it computed, which is now computed where *block* stands.  Everything else
+    there stays: what *block* does not dominate reads nothing it computed.
+    """
+    tree = dominators(func)
+    at = func.blocks.index(block)
+    moved = [one for one in func.blocks[first:at] if tree.dominates(block, one)]
+    if not moved:
+        return
+    gone = {id(one) for one in moved}
+    rest = [one for one in func.blocks if id(one) not in gone]
+    at = rest.index(block) + 1
+    func.blocks = [*rest[:at], *moved, *rest[at:]]
 
 
 def _known_case(switch: SwitchInst) -> BlockTarget | None:

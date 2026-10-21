@@ -4,8 +4,10 @@
 // branch reaches go; a parameter every way in supplies alike is that value;
 // and a block with one way in, from a block with one way out, is written into
 // that block.  Each leaves work for the next, so the four run until none
-// changes anything.  Nothing is reordered: the order of the blocks is the
-// order the back ends walk them in.
+// changes anything.  Nothing is reordered, the order of the blocks being the
+// order the back ends walk them in -- except where a block is written into a
+// predecessor standing after it, and the blocks it dominated, which may read
+// what it computed, follow it down to just after that predecessor.
 #include "opt/passes.hh"
 
 #include <algorithm>
@@ -140,8 +142,48 @@ namespace pl4g::opt {
     }
 
     // Move everything of `target` into `block` and take it out.
+    // Where `block` stands among the blocks of `func`.
+    std::size_t position_of(const Function& func, const BasicBlock* block)
+    {
+      auto it = std::ranges::find_if(func.blocks, [&](const auto& one) { return one.get() == block; });
+      contract_assert(it != func.blocks.end());
+      return std::size_t(it - func.blocks.begin());
+    }
+
+
+    // Move the blocks from `first` up to `block` that `block` now dominates to
+    // just after it, in the order they stand in: what was written into `block`
+    // reached them, and they may read what it computed.
+    void follow(Function& func, BasicBlock* block, std::size_t first)
+    {
+      auto tree = dominators(func);
+      auto at = position_of(func, block);
+      std::vector<std::unique_ptr<BasicBlock>> moved;
+      std::vector<std::unique_ptr<BasicBlock>> rest;
+      for (std::size_t index = 0; index < func.blocks.size(); ++index)
+        if (index >= first && index < at && tree.dominates(block, func.blocks[index].get()))
+          moved.push_back(std::move(func.blocks[index]));
+        else
+          rest.push_back(std::move(func.blocks[index]));
+      if (moved.empty()) {
+        func.blocks = std::move(rest);
+        return;
+      }
+      func.blocks.clear();
+      for (auto& one : rest) {
+        bool here = one.get() == block;
+        func.blocks.push_back(std::move(one));
+        if (here)
+          for (auto& each : moved)
+            func.blocks.push_back(std::move(each));
+      }
+    }
+
+
     void absorb(Function& func, BasicBlock* block, BasicBlock* target, Instruction* branch)
     {
+      auto first = position_of(func, target);
+      bool ahead = first < position_of(func, block);
       auto args = branch->targets[0].args;
       for (std::size_t at = 0; at < target->params.size() && at < args.size(); ++at)
         stands_for(func, target->params[at].get(), args[at]);
@@ -155,6 +197,8 @@ namespace pl4g::opt {
       target->params.clear();
       target->insts.clear();
       retire_block(func, target);
+      if (ahead)
+        follow(func, block, first);
     }
 
     bool merge_blocks(Function& func)

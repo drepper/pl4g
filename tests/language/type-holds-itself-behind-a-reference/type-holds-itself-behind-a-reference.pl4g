@@ -1,0 +1,21 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4408 LANG_TYPEDEF_CONTAINS_ITSELF
+
+※ **What is asked is whether an indirection stands on the way round**, and not
+※ whether one stands somewhere on the way in.  `Far` reaches `Near` through a
+※ reference, which is finite whatever `Near` is; but `Inner` holds an `Inner`
+※ inline, and reaching it from behind a reference does not make that finite.
+※ So `Inner` is refused (4408), as it is where nothing names it from afar.
+※
+※ The same holds of a list: `[Inner]` somewhere else is room for some `Inner`s,
+※ and each of them would still have to hold another.
+
+type Far = r : &Near
+type Near = n : Inner
+type Inner = d : u8 ; again : Inner
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

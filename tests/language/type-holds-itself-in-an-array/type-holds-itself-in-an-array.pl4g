@@ -1,0 +1,16 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4408 LANG_TYPEDEF_CONTAINS_ITSELF
+
+※ An array whose type says its length is its elements, held where the array is:
+※ a `Grid⟦2⟧` inside a `Grid` is two of them inside one, without end.  A list
+※ would do -- `cells : [Grid]` is where some are and how many -- and so would a
+※ reference, but an array is no indirection and is refused (4408) as a field of
+※ the type itself would be.
+
+type Grid = cells : Grid⟦2⟧ | empty : void
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

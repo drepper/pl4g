@@ -10803,7 +10803,6 @@ the standard; **PHP**'s arrays, the same layout since PHP 7; **Rust**'s `indexma
 `swap_remove` is what this does not do: a removal here leaves the other keys where they are); **Java**'s `LinkedHashMap`, which
 keeps the order with a list threaded through the entries; **Go**, whose maps are walked in a deliberately random order; and **C++**'s
 `unordered_map` and **Rust**'s `HashMap`, which promise no order at all.
-||||||| 6e0070c
 
 ## 2026-10-22T10:00+02:00 — language
 
@@ -10842,6 +10841,49 @@ Taken without asking, each the choice most like the rest of the language:
   first word that is not; **the copy a word at a time**.  Both read words where they are, whatever their alignment, as C's
   `memcpy` does on all three machines (RISC-V's kernel finishing a misaligned access where the hardware does not); a vector at a
   time, simdjson's way, is the next step and wants a load whose length is a value.
+## 2026-10-22T09:00+02:00 — language
+
+**A type may reach itself through a list or a table, and a sum holding text goes into a container**
+
+Asked for by the JSON module: a decoded document is `type Json = null : void | flag : bool | number : f64 | text : str | items :
+[Json] | fields : [Member]` with `type Member = key : str ; value : Json`, which reaches itself through a list and passes through a
+record on the way, and which puts sums holding text into lists.  Both were refused -- the first with 4408, the second with 4623 --
+and the user approved lifting both.
+
+**A list, and a table as its value, is an indirection as a reference is.**  The rule of 2026-09-16 asked whether a reference
+stands on the way round, because what a reference occupies does not depend on what it names.  A list is where its elements are,
+how many and the allocator, three words whatever the elements are; a table is a handle to entries kept elsewhere.  Each holds its
+elements out of line, so admitting them costs no change of layout and the same depth answers the question.  A set counts too and
+never matters: its element is a key, and no type a program defines can be one.  **An array whose type says its length is still
+refused**: it is its elements, held where it is, and is no indirection at all.  `T⟦⟧` -- a view -- is left refused as well, a view
+being a borrowed run and not a place to keep a document in.
+
+**The question is about the way round, and now asks it.**  Settling this found that the rule as implemented asked whether a depth
+was above zero, which let `type Inner = d : u8 ; again : Inner` through whenever `Inner` was first reached from behind a
+reference.  The depth is now compared with the depth at which the definition's own resolving began, so an indirection counts only
+where it was opened between the type and itself.
+
+**A sum is copied by the one part its tag says it holds.**  A container copies what it cannot own as it is, and a sum could not be
+copied, so a sum holding text could go into a container only where it was provably the container's.  The copy is now a function
+per sum type like the one per record: the bytes, then the part the tag names copied where it stands -- and for a type reaching
+itself through a list, the function calls itself, the list's copy calling the element's.  Giving back takes the same walk.  What
+is still refused (4623) is what was refused of a record: an array held inside it, a set or a dictionary, and a record that is
+moved and never copied.
+
+**Comparisons with other languages.**  **Haskell** and **ML** box every value, so `data Json = … | Items [Json]` never asks the
+question; **Rust** accepts `Vec<Self>` and `Box<Self>` and refuses a bare `Self` by this very rule, and `#[derive(Clone)]` writes
+the recursive copy; **Go** accepts a slice or a pointer of the struct itself; **C++** has allowed `std::vector` of an incomplete
+type since C++17, and `std::variant`'s copy constructor visits the alternative held, which is the sum's copy here; **Zig**'s
+`std.ArrayList(Self)` works for the same reason; **Swift** needs `indirect` for an enum naming itself inline and nothing for one
+naming itself through an array; **Odin** and **D** accept a dynamic array of the struct itself; **Lisp**, **Scheme**, **Python** and
+**Wolfram** have no layout to ask about, every value being a reference; **APL**, **BQN** and **Uiua** write a document as nested
+arrays, whose boxes are the indirection.
+
+Found on the way and fixed, being wrong for every program: a heap container held a heap value another name still held, against
+the rule the specification states, and gave it back on replacing it; `EXPR ?? DEFAULT` with a default writing memory -- a sum --
+lost the memory token at the join; a block merged into a predecessor laid out after it left the blocks it dominated reading values
+computed below them; `l⟦i⟧.name` was refused for a list; and giving back a list of records holding text failed an assertion.  None
+changes what a correct program means.
 
 Open questions
 --------------

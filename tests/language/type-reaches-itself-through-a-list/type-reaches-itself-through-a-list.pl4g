@@ -1,0 +1,168 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A type may reach itself through a list**, as it may through a reference, and
+※ for the same reason: a list is where its elements are, how many there are and
+※ the allocator they came from -- three words, whatever the elements are -- so a
+※ value of the type holds no value of itself, only where some are.  A table, as
+※ its value, is the same: a handle to entries kept out of line.
+※
+※ That is the document of JSON, YAML and every syntax tree: a sum one of whose
+※ parts is a list of itself, and a record holding one, reaching back into the sum.
+※ The circle may pass through several definitions -- `Json` holds `[Member]` and
+※ `Member` holds a `Json` inline -- and what is asked is only that somewhere on
+※ the way round there is a list, a table or a reference.
+※
+※ **Everything that works over a type works over one of these**: it is built, taken
+※ apart by `match`, walked by `foreach`, read a field at a time out of a list,
+※ joined onto, answered from a generator, and written down in the image.
+※
+※ Compare: **Haskell** and **ML**, where a `data` type naming itself is the usual
+※ thing because every value is behind a pointer; **Rust**, where `Vec<Self>` is
+※ accepted and a bare `Self` is not, by this rule; **Go**, likewise with a slice;
+※ **C++**, where `std::vector<T>` of an incomplete `T` has been allowed since C++17
+※ for the same reason; **Zig**, where `std.ArrayList(Self)` works because it is a
+※ pointer and a length.
+
+let std := ⎕import("std")
+
+type Json = null : void | flag : bool | number : f64 | text : str | items : [Json] | fields : [Member]
+type Member = key : str ; value : Json
+
+※ through a table's value, and a generic one through a list of its own instance
+type Doc = leaf : u32 | object : ⸨str: Doc⸩
+type Tree(T') = value : T' ; kids : [Tree(T')]
+
+※ written in the image, three levels deep
+let fixed: Json = Json(.items ← [Json(.text ← "a"),
+                                 Json(.items ← [Json(.number ← 1.0), Json(.items ← [])])])
+
+※ How many values there are, all the way down.
+fn count(j: Json) → u32:
+    match j:
+        [Json](l):
+            let n: mut u32 = 1u32
+            foreach e: Json = l:
+                n ← n + count(e)
+            n
+        [Member](m):
+            let n: mut u32 = 1u32
+            foreach e: Member = m:
+                n ← n + count(e.value)
+            n
+        _:
+            1u32
+
+※ How many bytes of text, the keys included.
+fn letters(j: Json) → u64 ¤size:
+    match j:
+        str(s):
+            #s
+        [Json](l):
+            let n: mut u64 ¤size = 0
+            foreach e: Json = l:
+                n ← n + letters(e)
+            n
+        [Member](m):
+            let n: mut u64 ¤size = 0
+            foreach e: Member = m:
+                n ← n + #e.key + letters(e.value)
+            n
+        _:
+            0
+
+fn depth(j: Json) → u32:
+    match j:
+        [Json](l):
+            let d: mut u32 = 0u32
+            foreach e: Json = l:
+                d ← d ⌈ depth(e)
+            d + 1u32
+        [Member](m):
+            let d: mut u32 = 0u32
+            foreach e: Member = m:
+                d ← d ⌈ depth(e.value)
+            d + 1u32
+        _:
+            0u32
+
+fn word(k: u32) → Json:
+    Json(.text ← "w" ⧺ ⍕k)
+
+※ Each level a word, the level below, and an object holding the level below again:
+※ eight deep at four, with sixty-one values and seventy-seven bytes of text.
+fn nested(k: u32) → Json:
+    if k = 0u32:
+        word(0u32)
+    else:
+        Json(.items ← [word(k), nested(k - 1u32),
+                       Json(.fields ← [Member(.key ← "k", .value ← nested(k - 1u32))])])
+
+※ Made in an arena the caller hands over, the text and the lists both.
+fn pooled(a: &mut arena, k: u32) → Json in a:
+    Json(.items ← [Json(.text ← "p" ⧺ ⍕k in a), Json(.null ← true)] in a)
+
+fn each(l: [Json]) ⇉ Json:
+    foreach e: Json = l:
+        yield e
+
+fn total(t: Tree(u32)) → u32:
+    let n: mut u32 = t.value
+    foreach k: Tree(u32) = t.kids:
+        n ← n + total(k)
+    n
+
+fn leaves(d: Doc) → u32:
+    match d:
+        u32(n):
+            n
+        ⸨str: Doc⸩(o):
+            let n: mut u32 = 0u32
+            foreach k, v := o:
+                if k ≠ "":
+                    n ← n + leaves(v)
+            n
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let doc: Json = nested(4u32)
+    if count(doc) ≠ 61u32 ∨ depth(doc) ≠ 8u32 ∨ letters(doc) ≠ 77:
+        return 1u6
+    if count(fixed) ≠ 5u32 ∨ depth(fixed) ≠ 3u32:
+        return 2u6
+    match doc:
+        [Json](l):
+            ※ a field read out of an element of a list, where the element is
+            match l⟦2⟧:
+                [Member](m):
+                    if m⟦0⟧.key ≠ "k" ∨ count(m⟦0⟧.value) ≠ 29u32:
+                        return 3u6
+                _:
+                    return 4u6
+        _:
+            return 5u6
+    elsewhere()
+
+fn elsewhere() → u6:
+    let pool: mut arena = ⎕arena
+    let p: Json = pooled(&mut pool, 3u32)
+    let held: mut [Json] = []
+    held ⧺← [p, p]
+    let both: [Json] = held ⧺ held
+    if #both ≠ 4 ∨ count(Json(.items ← both)) ≠ 13u32:
+        return 6u6
+    let n: mut u32 = 0u32
+    foreach e := each(both):
+        n ← n + count(e)
+    if n ≠ 12u32 ∨ letters(p) ≠ 2:
+        return 7u6
+    let t: Tree(u32) = Tree(.value ← 1u32, .kids ← [Tree(.value ← 2u32, .kids ← []),
+                                                     Tree(.value ← 3u32, .kids ← [])])
+    if total(t) ≠ 6u32:
+        return 8u6
+    let inner: mut ⸨str: Doc⸩ = ⸨⸩
+    inner⸨"a"⸩ ← Doc(.leaf ← 4u32)
+    inner⸨"b"⸩ ← Doc(.leaf ← 5u32)
+    let outer: mut ⸨str: Doc⸩ = ⸨⸩
+    outer⸨"in"⸩ ← Doc(.object ← inner)
+    outer⸨"c"⸩ ← Doc(.leaf ← 6u32)
+    if leaves(Doc(.object ← outer)) ≠ 15u32: 9u6 else: 0u6

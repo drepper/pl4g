@@ -1682,6 +1682,7 @@ namespace pl4g::sema {
     auto joined_block = builder.new_block("joined");
     auto answer = joined_block->add_param(result->ok, "answer");
     builder.condbr(builder.failed(value, expr->span), instead, answered_block, {}, {}, expr->span);
+    auto before = builder.memory_so_far();
     builder.position_at(instead);
     auto fallback = lower_expr(builder, expr->right, result->ok);
     auto found = value_type_of(fallback);
@@ -1690,10 +1691,26 @@ namespace pl4g::sema {
       fallback = fresh_undef(result->ok);
     } else if (found == error_ty())
       fallback = fresh_undef(result->ok);
-    builder.br(joined_block, std::vector<ir::Value*>{ fallback }, expr->span);
+    auto after = builder.memory_so_far();
+    if (after == before) {
+      builder.br(joined_block, std::vector<ir::Value*>{ fallback }, expr->span);
+      builder.position_at(answered_block);
+      builder.br(joined_block, std::vector<ir::Value*>{ builder.unwrap(value, result->ok, expr->span) }, expr->span);
+      builder.position_at(joined_block);
+      return answer;
+    }
+    // The default wrote memory -- a sum made in room of its own -- so the two
+    // tokens meet where the ways do, as they meet after an `if`.
+    auto token = joined_block->add_param(ir::mem_type(), "mem");
+    builder.br(joined_block, std::vector<ir::Value*>{ fallback, after }, expr->span);
     builder.position_at(answered_block);
-    builder.br(joined_block, std::vector<ir::Value*>{ builder.unwrap(value, result->ok, expr->span) }, expr->span);
+    {
+      auto unwrapped = builder.unwrap(value, result->ok, expr->span);
+      auto mem = before != nullptr ? before : builder.memory();
+      builder.br(joined_block, std::vector<ir::Value*>{ unwrapped, mem }, expr->span);
+    }
     builder.position_at(joined_block);
+    builder.set_memory(token);
     return answer;
   }
 

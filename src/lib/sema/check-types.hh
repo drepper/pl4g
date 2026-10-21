@@ -234,6 +234,9 @@ namespace pl4g::sema {
     std::string closed_by;
     const ir::Type* ty = nullptr;
     bool resolving = false;
+    // How many indirections were open when its resolving began: only one
+    // opened since then lets it reach itself.
+    std::int64_t opened_at = 0;
     ir::Type* shell = nullptr;
     // For an instance: what each parameter was given, and its definition.
     std::optional<Dict<std::string, const ir::Type*>> bound;

@@ -754,12 +754,28 @@ namespace pl4g::sema {
   }
 
 
-  std::optional<Checker::PlaceTaken> Checker::place_of_an_element(ir::Builder& builder, const ast::Element* expr)
+  std::optional<Checker::PlaceTaken> Checker::place_of_an_element(ir::Builder& builder, const ast::Element* expr,
+                                                                  bool of_a_list)
   {
     ir::Value* base = lower_expr(builder, expr->base, nullptr);
     const ir::Type* ty = value_type_of(base);
     if (ty == ir::error_type())
       return std::nullopt;
+    if (auto list = ir::as<ir::ListType>(ty);
+        of_a_list && list != nullptr && expr->indices.size() == 1 && ! ast::is<ast::Range>(expr->indices[0])) {
+      // A record that is an element is read a field at a time, so `l⟦i⟧.name`
+      // asks where the element is.  No reference is taken this way -- the run
+      // moves when the list grows -- and no field is written.
+      ir::Value* at = index_into(builder, expr->indices[0], expr->span);
+      if (at == nullptr)
+        return std::nullopt;
+      ir::Value* count = builder.extract(base, 1, ir::u64(), expr->span);
+      builder.check(builder.compare(ir::CmpPred::ult, at, count, expr->span), "an index outside its list",
+                    target::statuses::OUT_OF_RANGE, expr->span);
+      ir::Value* start = builder.extract(base, 0, ir::parts_of(list)[0], expr->span);
+      return PlaceTaken{ element_place(builder, start, list->element, at, expr->span), list->element, false,
+                         "an element", false };
+    }
     auto array = ir::as<ir::ArrayType>(ty);
     if (array == nullptr) [[unlikely]] {
       diags.emit(D::LANG_ARRAY_NOT_AN_ARRAY, expr->base->span, { { "found", ty->written() } });

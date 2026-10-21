@@ -31,11 +31,13 @@ from typing import Final
 from ..ir.builder import IRBuilder
 from ..ir.function import Function
 from ..ir.inst import BinOp, CastKind, CmpPred
-from ..ir.layout import DataLayout, parts_of, stride_of
+from ..ir.layout import (DataLayout, member_offsets_of, offsets_of, parts_of,
+                         stride_of, tag_offset_of)
 from ..ir.module import Module
 from ..ir.types import (ARENA, MEM, ArrayType, DictType, FuncType, IterType,
                         ListType, ProductType, PtrType, RunningType, SetType,
-                        StrType, TupleType, Type, U8, U64, VOID)
+                        StrType, SumType, TupleType, Type, U8, U64, VOID,
+                        held_in_memory)
 from ..ir.value import Value
 from . import lists, strings, tables
 
@@ -45,27 +47,40 @@ OWN_SYMBOL: Final[str] = "__pl4g_own"
 _LAYOUT: Final[DataLayout] = DataLayout(pointer_size=8)
 
 
-def can_own(ty: Type) -> bool:
+def can_own(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
     """Whether a value of *ty* can be copied into an allocator and given back.
 
     Text, and a list of anything that can, or of anything that points nowhere; and
-    a record or a tuple each part of which can, or points nowhere -- copied part by
-    part, which is all a copy of one is.  A record that is moved and never copied
-    -- `@[unique]`, closed, a device -- is not, nor is a sum, an array held inside
-    something else or a table: what they point into would need a walk of its own.
+    a record, a tuple or a sum each part of which can, or points nowhere -- copied
+    part by part, or by the one part a sum holds, which is all a copy of one is.  A
+    record that is moved and never copied -- `@[unique]`, closed, a device -- is
+    not, nor is an array held inside something else or a table: what they point
+    into would need a walk of its own.
+
+    A type that reaches itself through a list is asked about once: met again on
+    the way down, it is taken to be what the rest of the walk finds it to be,
+    since the copy of it is the one function calling itself.
     """
+    if id(ty) in seen:
+        return True
+    deeper = seen | {id(ty)}
     match ty:
         case StrType():
             return True
         case ListType():
-            return not points(ty.element) or can_own(ty.element)
+            return not points(ty.element) or can_own(ty.element, deeper)
         case ProductType() if not (ty.unique or ty.closed_by or ty.device):
-            return all(not points(part) or can_own(part) for _, part in ty.fields)
+            return all(not points(part) or can_own(part, deeper)
+                       for _, part in ty.fields)
         case TupleType():
-            return all(not points(part) or can_own(part) for part in ty.members)
+            return all(not points(part) or can_own(part, deeper)
+                       for part in ty.members)
+        case SumType():
+            return all(not points(part) or can_own(part, deeper)
+                       for _, part in ty.variants)
         case ArrayType() if not ty.fixed and ty.rank == 1:
             # A view of one dimension: its elements copied into a run of their own.
-            return not points(ty.element) or can_own(ty.element)
+            return not points(ty.element) or can_own(ty.element, deeper)
     return False
 
 
@@ -179,6 +194,9 @@ def _build_own(module: Module, func: Function, ty: Type) -> None:
     builder.position_at(entry)
     arena = entry.add_param(module.types.ptr_type(ARENA, mutable=True), "arena")
     value = entry.add_param(ty, "v")
+    if held_in_memory(ty) and isinstance(ty, (ProductType, TupleType, SumType)):
+        _build_own_in_memory(builder, func, arena, value, ty)
+        return
     if isinstance(ty, (ProductType, TupleType)):
         builder.ret(builder.make_tuple(
             _owned_leaves(builder, arena, builder.leaves(value, ty), ty), ty))
@@ -210,6 +228,72 @@ def _build_own(module: Module, func: Function, ty: Type) -> None:
 
         _each(builder, func, count, "own", turn)
     builder.ret(builder.make_tuple((copied, count, arena), ty))
+
+
+def _build_own_in_memory(builder: IRBuilder, func: Function, arena: Value,
+                         value: Value, ty: ProductType | TupleType | SumType) -> None:
+    """A value held in memory -- a sum, or a record or a tuple holding one --
+    copied into room of this function's own, and then every part of the copy
+    that points somewhere copied into *arena* where it stands.  Of a sum that is
+    the one part its tag says it holds, chosen by a switch over the tag.
+
+    The answer is that room, which the caller's storage receives as every
+    answer held in memory does.  A sum reaching itself through a list is a copy
+    that calls the list's, which calls this one for every element: the function
+    exists before its body is written, so the circle closes on a call."""
+    module = builder.module
+    room = builder.frame(ty)
+    builder.copy(room, builder.cast(CastKind.BITCAST, value,
+                                    module.types.ptr_type(ty, mutable=True)), ty)
+    if isinstance(ty, SumType):
+        tag = builder.load(builder.cast(
+            CastKind.BITCAST,
+            builder.binary(BinOp.ADD, room,
+                           builder.int_const(U64, tag_offset_of(ty, _LAYOUT))),
+            module.types.ptr_type(U8, mutable=True)))
+        # A chain of comparisons, one per part that points anywhere, which is
+        # what a `match` is lowered to and for the same reason: each way carries
+        # the memory, and a part pointing nowhere is copied by the bytes alone.
+        done = func.add_block("owned")
+        for at, (_, part) in enumerate(ty.variants):
+            if not points(part):
+                continue
+            arm = func.add_block("own")
+            other = func.add_block("other")
+            builder.condbr(builder.compare(CmpPred.EQ, tag, builder.int_const(U8, at)),
+                           arm, other, true_args=(builder.memory(),),
+                           false_args=(builder.memory(),))
+            builder.position_at(arm)
+            builder.set_memory(arm.add_param(MEM, "mem"))
+            _own_where_it_stands(builder, arena, room, 0, part)
+            builder.br(done, (builder.memory(),))
+            builder.position_at(other)
+            builder.set_memory(other.add_param(MEM, "mem"))
+        builder.br(done, (builder.memory(),))
+        builder.position_at(done)
+        builder.set_memory(done.add_param(MEM, "mem"))
+    else:
+        parts = [part for _, part in ty.fields] if isinstance(ty, ProductType) \
+            else list(ty.members)
+        offsets = offsets_of(ty, _LAYOUT) if isinstance(ty, ProductType) \
+            else member_offsets_of(ty, _LAYOUT)
+        for part, offset in zip(parts, offsets):
+            if points(part):
+                _own_where_it_stands(builder, arena, room, offset, part)
+    builder.ret(builder.cast(CastKind.BITCAST, room, ty))
+
+
+def _own_where_it_stands(builder: IRBuilder, arena: Value, room: Value,
+                         offset: int, part: Type) -> None:
+    """The part of *part*'s type at *offset* in *room*, copied into *arena* and
+    written back where it was read."""
+    module = builder.module
+    place = builder.cast(CastKind.BITCAST, room,
+                         module.types.ptr_type(part, mutable=True))
+    if offset:
+        place = builder.binary(BinOp.ADD, place, builder.int_const(U64, offset))
+    builder.store(place, builder.call(own_function(module, part),
+                                      (arena, builder.load(place)), part))
 
 
 def _build_own_view(builder: IRBuilder, func: Function, arena: Value, value: Value,
@@ -262,19 +346,104 @@ def disown_function(module: Module, ty: Type) -> Function:
     builder = IRBuilder(module, func)
     builder.position_at(entry)
     value = entry.add_param(ty, "v")
+    if isinstance(ty, (ProductType, TupleType, SumType)):
+        # A record, a tuple or a sum: what it owns is what its parts own, and
+        # it has no storage of its own to give back -- it is in whatever holds
+        # it, a list's run or a frame.
+        if held_in_memory(ty):
+            _disown_in_memory(builder, func, builder.cast(
+                CastKind.BITCAST, value, module.types.ptr_type(ty, mutable=True)),
+                ty)
+        else:
+            _disown_leaves(builder, builder.leaves(value, ty), ty)
+        builder.ret()
+        return func
     start, count = _parts(builder, value, ty)
     if isinstance(ty, ListType) and points(ty.element):
         inner = disown_function(module, ty.element)
         element = ty.element
 
         def turn(at: Value) -> None:
-            builder.call(inner, (builder.load(_element(builder, start, element,
-                                                       at)),), VOID)
+            place = _element(builder, start, element, at)
+            # An element held in memory is where it is, which is what a value of
+            # it is: read, it would be copied into a frame to be given back.
+            read = builder.cast(CastKind.BITCAST, place, element) \
+                if held_in_memory(element) else builder.load(place)
+            builder.call(inner, (read,), VOID)
 
         _each(builder, func, count, "disown", turn)
     _dispose(builder, builder.extract(value, 2, parts_of(ty)[2]), start, count, ty)
     builder.ret()
     return func
+
+
+def _disown_leaves(builder: IRBuilder, leaves: list[Value], ty: Type) -> None:
+    """Give back what the parts of a value travelling in registers own, a
+    record's and a tuple's taken field by field as `_owned_leaves` copies them."""
+    module = builder.module
+    if isinstance(ty, (ProductType, TupleType)) and not held_in_memory(ty):
+        parts = [part for _, part in ty.fields] if isinstance(ty, ProductType) \
+            else list(ty.members)
+        at = 0
+        for part in parts:
+            count = len(parts_of(part))
+            if points(part):
+                _disown_leaves(builder, leaves[at:at + count], part)
+            at += count
+        return
+    whole = leaves[0] if parts_of(ty) == (ty,) else builder.make_tuple(leaves, ty)
+    builder.call(disown_function(module, ty), (whole,), VOID)
+
+
+def _disown_in_memory(builder: IRBuilder, func: Function, place: Value,
+                      ty: ProductType | TupleType | SumType) -> None:
+    """Give back what the parts of a value held in memory own, read where they
+    stand: every part of a record or a tuple that points somewhere, and of a sum
+    the one part its tag says it holds."""
+    module = builder.module
+
+    def one(offset: int, part: Type) -> None:
+        where = builder.cast(CastKind.BITCAST, place,
+                             module.types.ptr_type(part, mutable=True))
+        if offset:
+            where = builder.binary(BinOp.ADD, where, builder.int_const(U64, offset))
+        # A part held in memory is where it is, which is what a value of it is.
+        read = builder.cast(CastKind.BITCAST, where, part) if held_in_memory(part) \
+            else builder.load(where)
+        builder.call(disown_function(module, part), (read,), VOID)
+
+    if isinstance(ty, SumType):
+        tag = builder.load(builder.cast(
+            CastKind.BITCAST,
+            builder.binary(BinOp.ADD, place,
+                           builder.int_const(U64, tag_offset_of(ty, _LAYOUT))),
+            module.types.ptr_type(U8, mutable=True)))
+        done = func.add_block("disowned")
+        for at, (_, part) in enumerate(ty.variants):
+            if not points(part):
+                continue
+            arm = func.add_block("disown")
+            other = func.add_block("other")
+            builder.condbr(builder.compare(CmpPred.EQ, tag, builder.int_const(U8, at)),
+                           arm, other, true_args=(builder.memory(),),
+                           false_args=(builder.memory(),))
+            builder.position_at(arm)
+            builder.set_memory(arm.add_param(MEM, "mem"))
+            one(0, part)
+            builder.br(done, (builder.memory(),))
+            builder.position_at(other)
+            builder.set_memory(other.add_param(MEM, "mem"))
+        builder.br(done, (builder.memory(),))
+        builder.position_at(done)
+        builder.set_memory(done.add_param(MEM, "mem"))
+        return
+    parts = [part for _, part in ty.fields] if isinstance(ty, ProductType) \
+        else list(ty.members)
+    offsets = offsets_of(ty, _LAYOUT) if isinstance(ty, ProductType) \
+        else member_offsets_of(ty, _LAYOUT)
+    for part, offset in zip(parts, offsets):
+        if points(part):
+            one(offset, part)
 
 
 def _stride(builder: IRBuilder, ty: ListType) -> Value:
@@ -315,7 +484,8 @@ def give_back(builder: IRBuilder, value: Value, ty: Type,
                      (builder.cast(CastKind.BITCAST, start, _bytes(module)),
                       _size(builder, ty, count)), VOID)
         return
-    if known == "heap" and not points(ty.element):
+    if known == "heap" and isinstance(ty, (ListType, ArrayType)) \
+            and not points(ty.element):
         start, count = _parts(builder, value, ty)
         _dispose(builder, builder.extract(value, 2, parts_of(ty)[2]), start, count,
                  ty)
