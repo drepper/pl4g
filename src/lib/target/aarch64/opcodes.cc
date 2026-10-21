@@ -451,6 +451,15 @@ namespace pl4g::target::aarch64 {
       // sub Xd, Xn, #imm12
       add("sub", { r(64), r(64), imm(0xFFF) }, 0xD1000000,
           { reg_field(0, rd), reg_field(1, rn), field(immediate, 2, 10, 12) });
+      // add Xd, Xn, #imm12, lsl #12 / sub: twelve bits a page at a time.
+      add("add.lsl12", { r(64), r(64), imm(0xFFF) }, 0x91400000,
+          { reg_field(0, rd), reg_field(1, rn), field(immediate, 2, 10, 12) });
+      add("sub.lsl12", { r(64), r(64), imm(0xFFF) }, 0xD1400000,
+          { reg_field(0, rd), reg_field(1, rn), field(immediate, 2, 10, 12) });
+      // add Xd, Xn, Xm, uxtx / sub: the extended-register form, which reads
+      // register 31 as the stack pointer.
+      add("add.uxtx", { r(64), r(64), r(64) }, 0x8B206000, { reg_field(0, rd), reg_field(1, rn), reg_field(2, rm) });
+      add("sub.uxtx", { r(64), r(64), r(64) }, 0xCB206000, { reg_field(0, rd), reg_field(1, rn), reg_field(2, rm) });
       // eor Wd, Wn, Wm
       add("eor", { r(32), r(32), r(32) }, 0x4A000000,
           { reg_field(0, rd), reg_field(1, rn), reg_field(2, rm) })

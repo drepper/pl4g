@@ -261,11 +261,7 @@ namespace pl4g::mc {
       pass->run(function);
     if (auto wrong = function.edges_are_complete()) [[unlikely]]
       throw MalformedGraph(*wrong);
-    assign_registers(function);
-    // And again, now that every value has a register.
-    for (auto pass : machine_passes)
-      pass->run(function);
-    make_frame(function);
+    allocate_and_frame(function);
     streamer_.emit_align(alignment, pad_byte);
     auto binding = function.exported ? SymBinding::global : SymBinding::local;
     auto visibility = function.exported ? SymVisibility::default_ : SymVisibility::hidden;
@@ -290,6 +286,67 @@ namespace pl4g::mc {
       if (std::ranges::find(other->successors, block.label) != other->successors.end())
         return true;
     return false;
+  }
+
+
+  namespace {
+
+    // An allocation order with `unit` left out of it.
+    AllocationOrder without(const AllocationOrder& order, const RegUnit* unit)
+    {
+      AllocationOrder made = order;
+      for (auto& [_, units] : made.classes)
+        std::erase(units, unit);
+      return made;
+    }
+
+  } // anonymous namespace
+
+
+  void Assembler::allocate_and_frame(MachineFunction& function)
+  {
+    // The first attempt keeps every register; one set aside is wanted only
+    // where the frame grew too large to reach, which the allocator's slots
+    // are what decides.
+    std::vector<Insts> blocks;
+    for (const auto& block : function.blocks)
+      blocks.push_back(block->insts);
+    auto frame = function.frame;
+    auto kept_order = order;
+    auto made = assignments.size();
+    try {
+      allocate_once(function);
+      return;
+    } catch (const FrameOutOfReach&) {
+      if (selector_.frame_spare() == nullptr || selector_.held_spare() != nullptr)
+        throw;
+    }
+    auto spare = selector_.frame_spare();
+    for (std::size_t at = 0; at < function.blocks.size() && at < blocks.size(); ++at)
+      function.blocks[at]->insts = std::move(blocks[at]);
+    function.frame = frame;
+    assignments.resize(made);
+    order = without(kept_order, spare->unit);
+    selector_.hold_spare(spare);
+    try {
+      allocate_once(function);
+    } catch (...) {
+      selector_.hold_spare(nullptr);
+      order = std::move(kept_order);
+      throw;
+    }
+    selector_.hold_spare(nullptr);
+    order = std::move(kept_order);
+  }
+
+
+  void Assembler::allocate_once(MachineFunction& function)
+  {
+    assign_registers(function);
+    // And again, now that every value has a register.
+    for (auto pass : machine_passes)
+      pass->run(function);
+    make_frame(function);
   }
 
 

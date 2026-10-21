@@ -36,6 +36,13 @@ namespace pl4g::mc {
   // not have refuses, as Python's missing attribute would.
   class InstructionSelector : public SpillSelector {
   public:
+    // The register to set aside where a place in the frame turns out out of
+    // an offset's reach, or nothing where every offset reaches: pypl4g's
+    // `frame_spare`.
+    virtual const PhysReg* frame_spare() const { return nullptr; }
+    // The register set aside for the function being built, and setting it.
+    virtual const PhysReg* held_spare() const { return nullptr; }
+    virtual void hold_spare(const PhysReg* spare) { (void) spare; }
     // Instructions that place `src` into `dst`.
     Insts select_move(Reg dst, const MCOperand& src, Span span) override;
     bool moves() const noexcept override { return true; }
@@ -161,6 +168,15 @@ namespace pl4g::mc {
 
 
   // A function still mentions registers the allocator has not assigned.
+  // A place in the frame lies further from the stack pointer than an
+  // instruction can say, and no register is set aside to build its address
+  // in: raised by a selector once the frame stands, and caught by the builder,
+  // which sets one aside and allocates the function again.
+  struct FrameOutOfReach : std::runtime_error {
+    using std::runtime_error::runtime_error;
+  };
+
+
   struct RegisterAssignmentError : std::runtime_error {
     std::string function_name;
     std::size_t count;
@@ -332,6 +348,10 @@ namespace pl4g::mc {
     MCSymRef block_ref(const std::string& label);
     static bool is_branch_target(const MachineFunction& function, const MachineBasicBlock& block);
     void assign_registers(MachineFunction& function);
+    // Allocate and make the frame -- again, with the selector's spare set
+    // aside, where the frame turned out out of an offset's reach.
+    void allocate_and_frame(MachineFunction& function);
+    void allocate_once(MachineFunction& function);
     void make_frame(MachineFunction& function);
     void place_incoming(MachineFunction& function, std::int64_t above);
     std::vector<Reg> kept_registers(const MachineFunction& function);

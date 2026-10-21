@@ -799,11 +799,24 @@ namespace pl4g::target::riscv64 {
     // keeps to itself.
     if (imm12_min <= offset && offset <= imm12_max)
       return { Insts{}, mcreg(registers().sp), offset };
+    auto held = spare_for(offset);
+    auto made = materialize(held, offset, span);
+    made.push_back(inst("add", { mcreg(held), mcreg(held), mcreg(registers().sp) }, span));
+    return { std::move(made), mcreg(held), 0 };
+  }
+
+
+  const mc::PhysReg* RVSelector::frame_spare() const
+  {
+    return registers().spare;
+  }
+
+
+  const mc::PhysReg* RVSelector::spare_for(std::int64_t offset) const
+  {
     if (spare == nullptr) [[unlikely]]
-      throw UnsupportedOperation(std::format("a place {} bytes into the frame", offset), span);
-    auto made = materialize(spare, offset, span);
-    made.push_back(inst("add", { mcreg(spare), mcreg(spare), mcreg(registers().sp) }, span));
-    return { std::move(made), mcreg(spare), 0 };
+      throw mc::FrameOutOfReach(std::format("a place {} bytes into the frame", offset));
+    return spare;
   }
 
 
@@ -883,20 +896,22 @@ namespace pl4g::target::riscv64 {
 
   Insts RVSelector::select_frame(std::int64_t size, Span span)
   {
-    if (size <= imm12_max + 1 || spare == nullptr)
+    if (size <= imm12_max + 1)
       return { inst("addi", { mcreg(registers().sp), mcreg(registers().sp), imm(-size, 12) }, span) };
-    auto made = materialize(spare, size, span);
-    made.push_back(inst("sub", { mcreg(registers().sp), mcreg(registers().sp), mcreg(spare) }, span));
+    auto held = spare_for(size);
+    auto made = materialize(held, size, span);
+    made.push_back(inst("sub", { mcreg(registers().sp), mcreg(registers().sp), mcreg(held) }, span));
     return made;
   }
 
 
   Insts RVSelector::select_unframe(std::int64_t size, Span span)
   {
-    if (size <= imm12_max || spare == nullptr)
+    if (size <= imm12_max)
       return { inst("addi", { mcreg(registers().sp), mcreg(registers().sp), imm(size, 12) }, span) };
-    auto made = materialize(spare, size, span);
-    made.push_back(inst("add", { mcreg(registers().sp), mcreg(registers().sp), mcreg(spare) }, span));
+    auto held = spare_for(size);
+    auto made = materialize(held, size, span);
+    made.push_back(inst("add", { mcreg(registers().sp), mcreg(registers().sp), mcreg(held) }, span));
     return made;
   }
 

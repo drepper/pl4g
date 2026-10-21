@@ -118,8 +118,24 @@ namespace pl4g::target::aarch64 {
     mc::Insts select_move_bits(mc::Reg dst, const mc::MCOperand& src, int bits, Span span) override;
     mc::Insts select_spill(std::int64_t slot, mc::Reg source, Span span) override;
     mc::Insts select_reload(mc::Reg destination, std::int64_t slot, Span span) override;
+    // x16, set aside in a function whose frame no offset reaches.
+    const mc::PhysReg* frame_spare() const override;
+    const mc::PhysReg* held_spare() const override { return spare; }
+    void hold_spare(const mc::PhysReg* held) override { spare = held; }
 
   private:
+    // The register set aside to build a place in, or the signal to the
+    // builder that one is wanted.
+    const mc::PhysReg* spare_for(std::int64_t offset) const;
+    // `dst` made the stack pointer and `offset`, however large; `dst` may be
+    // the stack pointer itself.
+    mc::Insts stack_plus(mc::Reg dst, std::int64_t offset, Span span);
+    // How a place `offset` bytes into the frame is reached by an access of
+    // `bytes`: what is done first, the register measured from, and how far.
+    std::tuple<mc::Insts, mc::MCReg, std::int64_t> frame_place(std::int64_t offset, int bytes, Span span,
+                                                               mc::Reg base = mc::Reg());
+
+    const mc::PhysReg* spare = nullptr;
     mc::InstRef inst(std::string_view mnemonic, std::vector<mc::MCOperand> operands, Span span) const;
     mc::Insts select_float_move(mc::Reg dst, const mc::MCOperand& src, Span span);
     mc::Insts run_place(std::string_view mnemonic, const mc::MCReg& held, const mc::MCMem& place, Span span);
