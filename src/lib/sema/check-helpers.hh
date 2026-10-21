@@ -361,14 +361,15 @@ namespace pl4g::sema {
   bool a_container_written(const ast::Expr* expr);  // check.py:3228
   // Whether everything `expr` says is known while compiling.
   bool known_while_compiling(const ast::Expr* expr, const std::function<bool(const ast::Member*)>& enum_named);  // check.py:3236
-  // Where each entry of a table goes, worked out the way the program would.
-  std::tuple<std::int64_t, std::vector<std::optional<std::tuple<const ir::Value*, const ir::Value*>>>, std::int64_t> table_laid_out(std::span<const std::tuple<Held, const ir::Value*, const ir::Value*>> keys, const std::function<std::int64_t(const Held&, std::int64_t)>& hashed);  // check.py:3270
-  // Where a probe for a key of one word starts, in a table laid out in the image: its hash with that
-  // table's seed, as the runtime works it out.
-  std::int64_t word_hash(Held bits, std::int64_t mask);  // check.py:3311
-  // Where a probe for a key of text starts, in a table laid out in the image: the hash of its bytes with
-  // that table's seed.
-  std::int64_t text_hash(Held bits, std::int64_t mask);  // check.py:3318
+  // Where each entry of a table goes, worked out the way the program would: the size of the index, its
+  // words, and the entries in the order their keys were first written, a key written twice keeping its
+  // place and taking the later value.
+  std::tuple<std::int64_t, std::vector<std::uint64_t>, std::vector<std::tuple<const ir::Value*, const ir::Value*>>> table_laid_out(std::span<const std::tuple<Held, const ir::Value*, const ir::Value*>> keys, const std::function<std::uint64_t(const Held&)>& hashed, std::int64_t stride);  // check.py:3270
+  // The hash of a key of one word, in a table laid out in the image: with that table's seed, as the
+  // runtime works it out.
+  std::uint64_t word_hash(Held bits);  // check.py:3305
+  // The hash of a key of text, in a table laid out in the image: of its bytes, with that table's seed.
+  std::uint64_t text_hash(Held bits);  // check.py:3312
   // How many bits of `value` are set, or how many zeroes stand above the highest set one, counted over
   // `ty`'s own width.
   __int128 counted_bits(ir::UnOp op, __int128 value, const ir::IntType* ty);  // check.py:3325

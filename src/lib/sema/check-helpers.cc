@@ -7,6 +7,7 @@
 #include <bit>
 #include <format>
 #include <meta>
+#include <unordered_map>
 
 #include "diag/ids.hh"
 #include "front/lexer.hh"
@@ -3002,66 +3003,62 @@ namespace pl4g::sema {
     }
   }
 
-  std::tuple<std::int64_t, std::vector<std::optional<std::tuple<const ir::Value*, const ir::Value*>>>, std::int64_t>
+  std::tuple<std::int64_t, std::vector<std::uint64_t>, std::vector<std::tuple<const ir::Value*, const ir::Value*>>>
   table_laid_out(std::span<const std::tuple<Held, const ir::Value*, const ir::Value*>> keys,
-                 const std::function<std::int64_t(const Held&, std::int64_t)>& hashed)
+                 const std::function<std::uint64_t(const Held&)>& hashed, std::int64_t stride)
   {
-    using Slot = std::optional<std::tuple<Held, const ir::Value*, const ir::Value*>>;
     std::int64_t capacity = tables::first_capacity;
-    std::vector<Slot> slots(capacity);
-    std::int64_t count = 0;
-    std::int64_t used = 0;
-    auto slot_of = [&](const Held& bits) {
-      auto at = hashed(bits, capacity - 1);
-      for (;;) {
-        const auto& held = slots[at];
-        if (! held || std::get<0>(*held) == bits)
-          return at;
-        at = (at + 1) & (capacity - 1);
-      }
-    };
+    std::vector<std::tuple<const ir::Value*, const ir::Value*>> dense;
+    std::vector<Held> written;
+    std::vector<std::uint64_t> full;
+    // Where each key written so far is among the entries, by its hash, so that
+    // one written twice is found without comparing it with every other.
+    std::unordered_multimap<std::uint64_t, std::size_t> seen;
     for (const auto& [bits, key, value] : keys) {
-      if ((used + 1) * tables::load_denominator > capacity * tables::load_numerator) {
-        auto room = (count + 1) * tables::load_denominator > capacity * tables::load_numerator ? capacity * 2 : capacity;
-        auto old = std::move(slots);
-        slots.assign(room, std::nullopt);
-        capacity = room;
-        count = used = 0;
-        for (auto& one : old)
-          if (one) {
-            slots[slot_of(std::get<0>(*one))] = std::move(one);
-            ++count;
-            ++used;
-          }
+      // Nothing is taken out of a table written down, so every rebuild is one
+      // that doubles; a key written again asks for room as a new one does.
+      if ((std::int64_t(dense.size()) + 1) * tables::load_denominator > capacity * tables::load_numerator)
+        capacity *= 2;
+      auto hash = hashed(bits);
+      auto [from, to] = seen.equal_range(hash);
+      auto found = std::find_if(from, to, [&](const auto& one) { return written[one.second] == bits; });
+      if (found != to)
+        std::get<1>(dense[found->second]) = value;
+      else {
+        seen.emplace(hash, dense.size());
+        dense.emplace_back(key, value);
+        written.push_back(bits);
+        full.push_back(hash);
       }
-      auto at = slot_of(bits);
-      if (! slots[at]) {
-        ++count;
-        ++used;
-      }
-      slots[at] = std::tuple{ bits, key, value };
     }
-    std::vector<std::optional<std::tuple<const ir::Value*, const ir::Value*>>> laid;
-    for (const auto& one : slots)
-      laid.push_back(one ? std::optional(std::tuple{ std::get<1>(*one), std::get<2>(*one) }) : std::nullopt);
-    return { capacity, std::move(laid), count };
+    // The index, filled in the order the entries are in, which is the order
+    // the program's own insertions -- and every rebuild -- fill it in.
+    std::vector<std::uint64_t> words(capacity, 0);
+    auto mask = std::uint64_t(capacity - 1);
+    for (std::size_t at = 0; at < dense.size(); ++at) {
+      auto where = full[at] & mask;
+      while (words[where] != 0)
+        where = (where + 1) & mask;
+      words[where] = (full[at] & tables::hash_top) | std::uint64_t(capacity * tables::word + std::int64_t(at) * stride);
+    }
+    return { capacity, std::move(words), std::move(dense) };
   }
 
-  std::int64_t word_hash(Held bits, std::int64_t mask)
+  std::uint64_t word_hash(Held bits)
   {
     auto number = bits.number();
     if (number == nullptr) [[unlikely]]
       throw InternalError("a word key that is no number");
-    return std::int64_t(sema::word_hash(std::uint64_t(*number), tables::image_seed) & std::uint64_t(mask));
+    return sema::word_hash(std::uint64_t(*number), tables::image_seed);
   }
 
-  std::int64_t text_hash(Held bits, std::int64_t mask)
+  std::uint64_t text_hash(Held bits)
   {
     auto text = bits.text();
     if (text == nullptr) [[unlikely]]
       throw InternalError("a text key that is no bytes");
     auto bytes = std::span(reinterpret_cast<const unsigned char*>(text->data()), text->size());
-    return std::int64_t(rapidhash(bytes, tables::image_seed) & std::uint64_t(mask));
+    return rapidhash(bytes, tables::image_seed);
   }
 
   __int128 counted_bits(ir::UnOp op, __int128 value, const ir::IntType* ty)

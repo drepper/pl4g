@@ -1,8 +1,9 @@
 // The hash table a set and a dictionary are, written in the representation.
 //
 // A port of pypl4g's sema/tables.py.  A collection is a table: a block of
-// memory in an arena holding how much room it has and where its entries are,
-// open-addressed with linear probing, its keys hashed with a seed of its own.
+// memory in an arena holding how much room it has and where its entries are:
+// a dense array of them in the order their keys were put in, and an index of
+// words naming them, probed linearly, its keys hashed with a seed of its own.
 // What a table needs is generated as functions of the IR, once per module and,
 // where the key or the value decides, once per shape; and beside it the
 // allocators every other kind of room is taken from.
@@ -47,8 +48,15 @@ namespace pl4g::sema::tables {
   inline constexpr std::int64_t entries_field = 4 * word;
   inline constexpr std::int64_t used_field = 5 * word;
   inline constexpr std::int64_t seed_field = 6 * word;
+  inline constexpr std::int64_t index_field = 7 * word;
   // How much room a block takes.
-  inline constexpr std::int64_t block_size = 7 * word;
+  inline constexpr std::int64_t block_size = 8 * word;
+
+  // What a word of the index holds: the offset of its entry from the start of
+  // the index in the low bits, and the top bits of the key's hash above them.
+  inline constexpr int offset_bits = 40;
+  inline constexpr std::uint64_t offset_mask = (std::uint64_t(1) << offset_bits) - 1;
+  inline constexpr std::uint64_t hash_top = ~offset_mask;
 
   // The fields of one entry that are where they are whatever it holds.
   inline constexpr std::int64_t state_at = 0;
@@ -59,10 +67,19 @@ namespace pl4g::sema::tables {
   inline constexpr std::int64_t live = 1;
   inline constexpr std::int64_t gone = 2;
 
-  // How many entries a table has to begin with, and how full it gets.
+  // How many words the index of a table has to begin with, and how full it
+  // gets.
   inline constexpr std::int64_t first_capacity = 8;
   inline constexpr std::int64_t load_numerator = 3;
   inline constexpr std::int64_t load_denominator = 4;
+
+  // How many entries the dense array of an index of `capacity` words holds:
+  // as many as the index may name, and one more for a lookup of a key that is
+  // not there to read.
+  constexpr std::int64_t room_for(std::int64_t capacity)
+  {
+    return capacity * load_numerator / load_denominator + 1;
+  }
 
   // The seed of a table laid out in the image with its keys in it.
   inline constexpr std::uint64_t image_seed = 0x6A09E667F3BCC908;
@@ -71,6 +88,7 @@ namespace pl4g::sema::tables {
   inline constexpr std::string_view new_symbol = "__pl4g_table_new";
   inline constexpr std::string_view slot_symbol = "__pl4g_table_slot";
   inline constexpr std::string_view put_symbol = "__pl4g_table_put";
+  inline constexpr std::string_view grow_symbol = "__pl4g_table_grow";
   inline constexpr std::string_view arena_of_symbol = "__pl4g_table_arena";
   inline constexpr std::string_view select_symbol = "__pl4g_table_select";
   inline constexpr std::string_view give_up_symbol = "__pl4g_table_give_up";

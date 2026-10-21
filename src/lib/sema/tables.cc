@@ -167,19 +167,16 @@ namespace pl4g::sema::tables {
     }
 
 
-    // Where a probe for `key` starts: its hash with the table's seed, masked.
-    ir::Value* hash_of(ir::Builder& builder, const Shape& shape, ir::Value* key, ir::Value* mask, ir::Value* seed)
+    // The hash of `key` with the table's seed, all sixty-four bits: the low
+    // ones say where a probe starts, the top ones are what the index keeps.
+    ir::Value* hashed_key(ir::Builder& builder, const Shape& shape, ir::Value* key, ir::Value* seed)
     {
       auto& module = builder.module();
-      ir::Value* hashed;
       if (key_ir_type(shape) == ir::u64())
-        hashed = builder.call(hash_word_function(module), Args{ key, seed }, ir::u64());
-      else {
-        auto callee = hash_function(module);
-        auto [bytes, count] = taken_apart(builder, key);
-        hashed = builder.call(callee, Args{ bytes, count, seed }, ir::u64());
-      }
-      return builder.binary(BinOp::and_, hashed, mask);
+        return builder.call(hash_word_function(module), Args{ key, seed }, ir::u64());
+      auto callee = hash_function(module);
+      auto [bytes, count] = taken_apart(builder, key);
+      return builder.call(callee, Args{ bytes, count, seed }, ir::u64());
     }
 
 
@@ -227,7 +224,9 @@ namespace pl4g::sema::tables {
     }
 
 
-    // `__pl4g_table_new(arena, stride)`: a table with room for a few entries.
+    // `__pl4g_table_new(arena, stride)`: a table with room for a few entries,
+    // the block and, in a second allocation, the index with the dense array of
+    // entries straight after it.
     ir::Function* build_new(ir::Module& module)
     {
       auto table_ptr = table_type(module);
@@ -243,21 +242,115 @@ namespace pl4g::sema::tables {
       auto stride = entry->add_param(ir::u64(), "stride");
       auto block = as(builder, builder.call(alloc, Args{ arena, number(builder, block_size) }, mut_ptr(ir::u8())),
                       ir::u64());
-      auto room = builder.binary(BinOp::wrap_mul, stride, number(builder, first_capacity));
-      auto entries = builder.call(alloc, Args{ arena, room }, mut_ptr(ir::u8()));
+      auto entries_room = builder.binary(BinOp::wrap_mul, stride, number(builder, room_for(first_capacity)));
+      auto room = builder.binary(BinOp::wrap_add, entries_room, number(builder, first_capacity * word));
+      auto run = builder.call(alloc, Args{ arena, room }, mut_ptr(ir::u8()));
       write_address(builder, block, arena_field, arena);
       write(builder, block, mask_field, number(builder, first_capacity - 1));
       write(builder, block, count_field, number(builder, 0));
       write(builder, block, used_field, number(builder, 0));
       write(builder, block, stride_field, stride);
-      write_address(builder, block, entries_field, entries);
+      write_address(builder, block, index_field, run);
+      write_address(builder, block, entries_field,
+                    builder.binary(BinOp::add, run, number(builder, first_capacity * word)));
       write(builder, block, seed_field, builder.call(seed_function(module), {}, ir::u64()));
       builder.ret(block);
       return func;
     }
 
 
-    // `__pl4g_table_slot(table, key)`: the entry the key is in, or would go in.
+    // Where a walk of the index ends: the entry holding the key, or the word
+    // of the index nothing holds.
+    struct Probed {
+      ir::BasicBlock* found = nullptr;
+      ir::Value* place = nullptr;
+      ir::BasicBlock* missing = nullptr;
+      ir::Value* at = nullptr;
+    };
+
+
+    // Walk the index from where `hashed` puts `key`, to the entry holding it
+    // or to the first word of the index nothing holds, the memory token carried
+    // along where `threaded` says.  A word is asked three things, the cheapest
+    // first: whether it is nought, whether the top bits of the hash it keeps
+    // are the key's, and only then whether its entry still holds a key and that
+    // key is this one.
+    Probed probe(ir::Function& func, ir::Builder& builder, const Shape& shape, ir::Value* key, ir::Value* hashed,
+                 ir::Value* index, ir::Value* mask, bool threaded)
+    {
+      auto probe_block = func.add_block("probe");
+      auto tagged = func.add_block("tagged");
+      auto near = func.add_block("near");
+      auto live_block = func.add_block("live");
+      auto onward = func.add_block("onward");
+      auto found = func.add_block("found");
+      auto missing = func.add_block("missing");
+
+      auto carried = [&](Args first) {
+        if (threaded)
+          first.push_back(builder.memory());
+        return first;
+      };
+      auto taken = [&](ir::BasicBlock* block) {
+        if (threaded)
+          take_memory(builder, block);
+      };
+
+      {
+        auto start = builder.binary(BinOp::and_, hashed, mask);
+        builder.br(probe_block, carried(Args{ start }));
+      }
+
+      builder.position_at(probe_block);
+      auto at = probe_block->add_param(ir::u64(), "at");
+      taken(probe_block);
+      auto word_value = builder.load(entry_of(builder, index, at, number(builder, word)));
+      {
+        auto cond = builder.compare(CmpPred::eq, word_value, number(builder, 0));
+        builder.condbr(cond, missing, tagged, carried(Args{ at }), carried({}));
+      }
+
+      builder.position_at(tagged);
+      taken(tagged);
+      {
+        auto apart = builder.binary(BinOp::xor_, word_value, hashed);
+        auto cond = builder.compare(CmpPred::ult, apart, number(builder, __int128(1) << offset_bits));
+        builder.condbr(cond, near, onward, carried({}), carried({}));
+      }
+
+      builder.position_at(near);
+      taken(near);
+      auto offset = builder.binary(BinOp::and_, word_value, number(builder, __int128(offset_mask)));
+      auto place = builder.binary(BinOp::add, index, offset);
+      {
+        auto cond = builder.compare(CmpPred::eq, builder.load(place), number(builder, live));
+        builder.condbr(cond, live_block, onward, carried({}), carried({}));
+      }
+
+      builder.position_at(live_block);
+      taken(live_block);
+      {
+        auto cond = same_key(builder, shape, load_key(builder, shape, place), key);
+        builder.condbr(cond, found, onward, carried(Args{ place }), carried({}));
+      }
+
+      builder.position_at(onward);
+      taken(onward);
+      builder.br(probe_block, carried(Args{ stepped(builder, at, mask) }));
+
+      Probed made;
+      made.found = found;
+      made.place = found->add_param(table_type(builder.module()), "place");
+      taken(found);
+      made.missing = missing;
+      made.at = missing->add_param(ir::u64(), "at");
+      taken(missing);
+      return made;
+    }
+
+
+    // `__pl4g_table_slot(table, key)`: the entry the key is in, or -- the one
+    // after the last written, empty -- the one it would go in.
     ir::Function* build_slot(ir::Module& module, const Shape& shape)
     {
       auto table_ptr = table_type(module);
@@ -266,67 +359,182 @@ namespace pl4g::sema::tables {
       if (! fresh)
         return func;
       auto entry = func->add_block();
-      auto loop = func->add_block("probe");
-      auto free = func->add_block("free");
-      auto here = func->add_block("here");
-      auto reused = func->add_block("reused");
-      auto occupied = func->add_block("occupied");
-      auto same = func->add_block("same");
-      auto other = func->add_block("other");
-      auto given_up = func->add_block("given_up");
-      auto first = func->add_block("first");
-      auto onward = func->add_block("onward");
       ir::Builder builder(module, *func);
       builder.position_at(entry);
       auto table = entry->add_param(table_ptr, "table");
       auto key = entry->add_param(held, "key");
       auto mask = read(builder, table, mask_field);
-      auto stride = read(builder, table, stride_field);
-      auto entries = read_address(builder, table, entries_field, ir::u64());
-      // One past the last index: "nothing given up yet".
-      auto none = builder.binary(BinOp::wrap_add, mask, number(builder, 1));
+      auto index = read_address(builder, table, index_field, ir::u64());
       auto seed = read(builder, table, seed_field);
-      auto start = hash_of(builder, shape, key, mask, seed);
-      builder.br(loop, Args{ start, none });
+      auto hashed = hashed_key(builder, shape, key, seed);
+      auto probed = probe(*func, builder, shape, key, hashed, index, mask, false);
 
-      builder.position_at(loop);
-      auto index = loop->add_param(ir::u64(), "at");
-      auto kept = loop->add_param(ir::u64(), "kept");
-      auto place = entry_of(builder, entries, index, stride);
-      auto state = builder.load(place);
-      builder.condbr(builder.compare(CmpPred::eq, state, number(builder, empty)), free, occupied);
+      builder.position_at(probed.found);
+      builder.ret(probed.place);
 
-      builder.position_at(free);
-      builder.condbr(builder.compare(CmpPred::eq, kept, none), here, reused);
-
-      builder.position_at(here);
-      builder.ret(place);
-
-      builder.position_at(reused);
-      builder.ret(entry_of(builder, entries, kept, stride));
-
-      builder.position_at(occupied);
-      builder.condbr(same_key(builder, shape, load_key(builder, shape, place), key), same, other);
-
-      builder.position_at(same);
-      builder.ret(place);
-
-      builder.position_at(other);
-      builder.condbr(builder.compare(CmpPred::eq, state, number(builder, gone)), given_up, onward);
-
-      builder.position_at(given_up);
-      builder.condbr(builder.compare(CmpPred::eq, kept, none), first, onward);
-
-      builder.position_at(onward);
-      builder.br(loop, Args{ stepped(builder, index, mask), kept });
-
-      builder.position_at(first);
-      builder.br(loop, Args{ stepped(builder, index, mask), index });
+      builder.position_at(probed.missing);
+      auto entries = read_address(builder, table, entries_field, ir::u64());
+      auto used = read(builder, table, used_field);
+      builder.ret(entry_of(builder, entries, used, number(builder, shape.stride())));
       return func;
     }
 
 
-    // `__pl4g_table_put(table, key)`: the entry for the key, made if it is new.
+    // The word of the index naming the entry `offset` bytes past its start,
+    // whose key hashed to `hashed`.
+    ir::Value* index_word(ir::Builder& builder, ir::Value* hashed, ir::Value* offset)
+    {
+      auto top = builder.binary(BinOp::and_, hashed, number(builder, __int128(hash_top)));
+      return builder.binary(BinOp::or_, top, offset);
+    }
+
+
+    // `__pl4g_table_grow(table)`: the table rebuilt, with room for more -- the
+    // live entries moved in order to a new dense array, the holes left behind,
+    // the index built afresh with a new seed; twice the room where the keys
+    // would fill more than half of the index, the same room otherwise.
+    ir::Function* build_grow(ir::Module& module, const Shape& shape)
+    {
+      auto table_ptr = table_type(module);
+      auto [func, fresh] = generated(module, named(grow_symbol, shape), Types{ table_ptr }, ir::void_type());
+      if (! fresh)
+        return func;
+      auto alloc = allocator_function(module);
+      auto entry = func->add_block();
+      auto bigger = func->add_block("bigger");
+      auto afresh = func->add_block("afresh");
+      auto sized = func->add_block("sized");
+      auto walk = func->add_block("walk");
+      auto look = func->add_block("look");
+      auto move = func->add_block("move");
+      auto seek = func->add_block("seek");
+      auto skip = func->add_block("skip");
+      auto settle = func->add_block("settle");
+      auto onward = func->add_block("onward");
+      auto done = func->add_block("done");
+      ir::Builder builder(module, *func);
+      builder.position_at(entry);
+      auto table = entry->add_param(table_ptr, "table");
+      auto stride = number(builder, shape.stride());
+      auto capacity = builder.binary(BinOp::wrap_add, read(builder, table, mask_field), number(builder, 1));
+      auto old_used = read(builder, table, used_field);
+      auto old_entries = read_address(builder, table, entries_field, ir::u64());
+      auto keys = builder.binary(BinOp::wrap_add, read(builder, table, count_field), number(builder, 1));
+      {
+        auto doubled = builder.binary(BinOp::wrap_mul, keys, number(builder, 2));
+        builder.condbr(builder.compare(CmpPred::ugt, doubled, capacity), bigger, afresh);
+      }
+
+      builder.position_at(bigger);
+      builder.br(sized, Args{ builder.binary(BinOp::wrap_mul, capacity, number(builder, 2)) });
+
+      builder.position_at(afresh);
+      builder.br(sized, Args{ capacity });
+
+      builder.position_at(sized);
+      auto words = sized->add_param(ir::u64(), "words");
+      // Three quarters of the index and one more, as `room_for` says.
+      auto quarter = builder.binary(BinOp::lshr, words, number(builder, 2));
+      auto rest = builder.binary(BinOp::wrap_sub, words, quarter);
+      auto room = builder.binary(BinOp::wrap_add, rest, number(builder, 1));
+      auto first = builder.binary(BinOp::wrap_mul, words, number(builder, word));
+      ir::Value* run;
+      {
+        auto from = read_address(builder, table, arena_field, ir::arena_type());
+        auto dense = builder.binary(BinOp::wrap_mul, room, stride);
+        auto size = builder.binary(BinOp::wrap_add, first, dense);
+        run = builder.call(alloc, Args{ from, size }, mut_ptr(ir::u8()));
+      }
+      auto index = as(builder, run, ir::u64());
+      auto entries = as(builder, builder.binary(BinOp::add, run, first), ir::u64());
+      auto mask = builder.binary(BinOp::wrap_sub, words, number(builder, 1));
+      // A seed of its own again: the keys are all being put somewhere new.
+      auto seed = builder.call(seed_function(module), {}, ir::u64());
+      write_address(builder, table, index_field, index);
+      write_address(builder, table, entries_field, entries);
+      write(builder, table, mask_field, mask);
+      write(builder, table, seed_field, seed);
+      builder.br(walk, Args{ number(builder, 0), number(builder, 0), builder.memory() });
+
+      // Every entry of the old dense array, in order.
+      builder.position_at(walk);
+      auto at = walk->add_param(ir::u64(), "at");
+      auto moved = walk->add_param(ir::u64(), "moved");
+      take_memory(builder, walk);
+      {
+        auto cond = builder.compare(CmpPred::uge, at, old_used);
+        auto mem = builder.memory();
+        builder.condbr(cond, done, look, Args{ moved, mem }, Args{ mem });
+      }
+
+      builder.position_at(look);
+      take_memory(builder, look);
+      auto old_place = entry_of(builder, old_entries, at, stride);
+      {
+        auto cond = builder.compare(CmpPred::eq, builder.load(old_place), number(builder, live));
+        auto mem = builder.memory();
+        builder.condbr(cond, move, onward, Args{ mem }, Args{ moved, mem });
+      }
+
+      builder.position_at(move);
+      take_memory(builder, move);
+      auto moved_key = load_key(builder, shape, old_place);
+      auto into = entry_of(builder, entries, moved, stride);
+      write(builder, into, state_at, number(builder, live));
+      store_key(builder, shape, into, moved_key);
+      if (shape.value != nullptr)
+        store_value(builder, shape, into, load_value(builder, shape, old_place));
+      auto hashed = hashed_key(builder, shape, moved_key, seed);
+      {
+        auto start = builder.binary(BinOp::and_, hashed, mask);
+        builder.br(seek, Args{ start, builder.memory() });
+      }
+
+      builder.position_at(seek);
+      auto where = seek->add_param(ir::u64(), "where");
+      take_memory(builder, seek);
+      auto word_place = entry_of(builder, index, where, number(builder, word));
+      branch_with_memory(builder, builder.compare(CmpPred::eq, builder.load(word_place), number(builder, 0)), settle,
+                         skip);
+
+      builder.position_at(skip);
+      take_memory(builder, skip);
+      {
+        auto next = stepped(builder, where, mask);
+        builder.br(seek, Args{ next, builder.memory() });
+      }
+
+      builder.position_at(settle);
+      take_memory(builder, settle);
+      {
+        auto at_entry = builder.binary(BinOp::wrap_mul, moved, stride);
+        auto offset = builder.binary(BinOp::wrap_add, first, at_entry);
+        builder.store(word_place, index_word(builder, hashed, offset));
+        auto next = builder.binary(BinOp::wrap_add, moved, number(builder, 1));
+        builder.br(onward, Args{ next, builder.memory() });
+      }
+
+      builder.position_at(onward);
+      auto kept = onward->add_param(ir::u64(), "kept");
+      take_memory(builder, onward);
+      {
+        auto next = builder.binary(BinOp::wrap_add, at, number(builder, 1));
+        builder.br(walk, Args{ next, kept, builder.memory() });
+      }
+
+      // No holes in the new array: as many entries written as there are keys.
+      builder.position_at(done);
+      auto total = done->add_param(ir::u64(), "total");
+      take_memory(builder, done);
+      write(builder, table, count_field, total);
+      write(builder, table, used_field, total);
+      builder.ret();
+      return func;
+    }
+
+
+    // `__pl4g_table_put(table, key)`: the entry for the key, made -- last --
+    // if it is new.
     ir::Function* build_put(ir::Module& module, const Shape& shape)
     {
       auto table_ptr = table_type(module);
@@ -334,25 +542,12 @@ namespace pl4g::sema::tables {
       auto [func, made_now] = generated(module, named(put_symbol, shape), Types{ table_ptr, held }, table_ptr);
       if (! made_now)
         return func;
-      auto slot_of = build_slot(module, shape);
-      auto alloc = allocator_function(module);
+      auto grow_it = build_grow(module, shape);
       auto entry = func->add_block();
       auto seeding = func->add_block("seeding");
       auto seeded = func->add_block("seeded");
       auto grow = func->add_block("grow");
-      auto bigger = func->add_block("bigger");
-      auto afresh = func->add_block("afresh");
-      auto sized = func->add_block("sized");
-      auto rehash = func->add_block("rehash");
-      auto one = func->add_block("one");
-      auto move = func->add_block("move");
-      auto step = func->add_block("stepped");
-      auto grown = func->add_block("grown");
       auto ready = func->add_block("ready");
-      auto there = func->add_block("there");
-      auto added = func->add_block("added");
-      auto fresh = func->add_block("fresh");
-      auto taken = func->add_block("taken");
       ir::Builder builder(module, *func);
       builder.position_at(entry);
       auto table = entry->add_param(table_ptr, "table");
@@ -374,111 +569,46 @@ namespace pl4g::sema::tables {
       auto capacity = builder.binary(BinOp::wrap_add, read(builder, table, mask_field), number(builder, 1));
       auto wanted_load = builder.binary(BinOp::wrap_mul, wanted, number(builder, load_denominator));
       auto capacity_load = builder.binary(BinOp::wrap_mul, capacity, number(builder, load_numerator));
-      auto crowded = builder.compare(CmpPred::ugt, wanted_load, capacity_load);
-      {
-        auto mem = builder.memory();
-        builder.condbr(crowded, grow, ready, {}, Args{ mem });
-      }
+      branch_with_memory(builder, builder.compare(CmpPred::ugt, wanted_load, capacity_load), grow, ready);
 
-      // -- room for it, and everything moved into that --
       builder.position_at(grow);
-      auto stride = read(builder, table, stride_field);
-      auto old_mask = read(builder, table, mask_field);
-      auto old_entries = read_address(builder, table, entries_field, ir::u64());
-      auto keys = builder.binary(BinOp::wrap_add, read(builder, table, count_field), number(builder, 1));
-      {
-        auto keys_load = builder.binary(BinOp::wrap_mul, keys, number(builder, load_denominator));
-        auto room_load = builder.binary(BinOp::wrap_mul, capacity, number(builder, load_numerator));
-        builder.condbr(builder.compare(CmpPred::ugt, keys_load, room_load), bigger, afresh);
-      }
-
-      builder.position_at(bigger);
-      builder.br(sized, Args{ builder.binary(BinOp::wrap_mul, capacity, number(builder, 2)) });
-
-      builder.position_at(afresh);
-      builder.br(sized, Args{ capacity });
-
-      builder.position_at(sized);
-      auto room = sized->add_param(ir::u64(), "room");
-      {
-        auto from = read_address(builder, table, arena_field, ir::arena_type());
-        auto size = builder.binary(BinOp::wrap_mul, room, stride);
-        auto roomier = builder.call(alloc, Args{ from, size }, mut_ptr(ir::u8()));
-        write_address(builder, table, entries_field, roomier);
-      }
-      write(builder, table, mask_field, builder.binary(BinOp::wrap_sub, room, number(builder, 1)));
-      write(builder, table, count_field, number(builder, 0));
-      write(builder, table, used_field, number(builder, 0));
-      write(builder, table, seed_field, builder.call(seed_function(module), {}, ir::u64()));
-      builder.br(rehash, Args{ number(builder, 0), builder.memory() });
-
-      // Every entry of the old array, put where the new array's own probe says.
-      builder.position_at(rehash);
-      auto at = rehash->add_param(ir::u64(), "at");
-      take_memory(builder, rehash);
-      branch_with_memory(builder, builder.compare(CmpPred::ugt, at, old_mask), grown, one);
-
-      builder.position_at(one);
-      take_memory(builder, one);
-      auto old_place = entry_of(builder, old_entries, at, stride);
-      branch_with_memory(builder, builder.compare(CmpPred::eq, builder.load(old_place), number(builder, live)), move,
-                         step);
-
-      builder.position_at(move);
-      take_memory(builder, move);
-      auto moved_key = load_key(builder, shape, old_place);
-      auto into = builder.call(slot_of, Args{ table, moved_key }, table_ptr);
-      write(builder, into, state_at, number(builder, live));
-      store_key(builder, shape, into, moved_key);
-      write(builder, table, count_field,
-            builder.binary(BinOp::wrap_add, read(builder, table, count_field), number(builder, 1)));
-      write(builder, table, used_field,
-            builder.binary(BinOp::wrap_add, read(builder, table, used_field), number(builder, 1)));
-      if (shape.value != nullptr)
-        store_value(builder, shape, into, load_value(builder, shape, old_place));
-      builder.br(step, Args{ builder.memory() });
-
-      builder.position_at(step);
-      take_memory(builder, step);
-      {
-        auto next = builder.binary(BinOp::wrap_add, at, number(builder, 1));
-        builder.br(rehash, Args{ next, builder.memory() });
-      }
-
-      builder.position_at(grown);
-      take_memory(builder, grown);
+      take_memory(builder, grow);
+      builder.call(grow_it, Args{ table }, ir::void_type());
       builder.br(ready, Args{ builder.memory() });
 
       // -- and now the entry itself --
       builder.position_at(ready);
       take_memory(builder, ready);
-      auto place = builder.call(slot_of, Args{ table, key }, table_ptr);
-      branch_with_memory(builder, builder.compare(CmpPred::eq, builder.load(place), number(builder, live)), there,
-                         added);
+      auto mask = read(builder, table, mask_field);
+      auto index = read_address(builder, table, index_field, ir::u64());
+      auto seed = read(builder, table, seed_field);
+      auto hashed = hashed_key(builder, shape, key, seed);
+      auto probed = probe(*func, builder, shape, key, hashed, index, mask, true);
 
-      builder.position_at(there);
-      there->add_param(ir::mem_type(), "mem");
-      builder.ret(place);
+      builder.position_at(probed.found);
+      builder.ret(probed.place);
 
-      builder.position_at(added);
-      take_memory(builder, added);
-      // A given-up entry taken back is one more key and not one more of those.
-      auto was = builder.load(place);
-      write(builder, place, state_at, number(builder, live));
-      store_key(builder, shape, place, key);
+      // Where the next entry is is how far past the index it is.
+      builder.position_at(probed.missing);
+      auto used = read(builder, table, used_field);
+      ir::Value* offset;
+      {
+        auto words = builder.binary(BinOp::wrap_add, mask, number(builder, 1));
+        auto first = builder.binary(BinOp::wrap_mul, words, number(builder, word));
+        auto before = builder.binary(BinOp::wrap_mul, used, number(builder, shape.stride()));
+        offset = builder.binary(BinOp::wrap_add, first, before);
+      }
+      auto made = builder.binary(BinOp::add, index, offset);
+      {
+        auto word_place = entry_of(builder, index, probed.at, number(builder, word));
+        builder.store(word_place, index_word(builder, hashed, offset));
+      }
+      write(builder, made, state_at, number(builder, live));
+      store_key(builder, shape, made, key);
+      write(builder, table, used_field, builder.binary(BinOp::wrap_add, used, number(builder, 1)));
       write(builder, table, count_field,
             builder.binary(BinOp::wrap_add, read(builder, table, count_field), number(builder, 1)));
-      branch_with_memory(builder, builder.compare(CmpPred::eq, was, number(builder, gone)), taken, fresh);
-
-      builder.position_at(fresh);
-      take_memory(builder, fresh);
-      write(builder, table, used_field,
-            builder.binary(BinOp::wrap_add, read(builder, table, used_field), number(builder, 1)));
-      builder.br(taken, Args{ builder.memory() });
-
-      builder.position_at(taken);
-      take_memory(builder, taken);
-      builder.ret(place);
+      builder.ret(made);
       return func;
     }
 
@@ -511,15 +641,17 @@ namespace pl4g::sema::tables {
       auto walked = entry->add_param(table_ptr, "walked");
       auto other = entry->add_param(table_ptr, "other");
       auto want = entry->add_param(ir::u64(), "want");
-      auto mask = read(builder, walked, mask_field);
-      auto stride = read(builder, walked, stride_field);
+      // The walked table's entries in the order they were put in, which is the
+      // order the answer gets them in.
+      auto used = read(builder, walked, used_field);
+      auto stride = number(builder, shape.stride());
       auto entries = read_address(builder, walked, entries_field, ir::u64());
       builder.br(walk, Args{ number(builder, 0), builder.memory() });
 
       builder.position_at(walk);
       auto at = walk->add_param(ir::u64(), "at");
       take_memory(builder, walk);
-      branch_with_memory(builder, builder.compare(CmpPred::ugt, at, mask), done, look);
+      branch_with_memory(builder, builder.compare(CmpPred::uge, at, used), done, look);
 
       builder.position_at(look);
       take_memory(builder, look);
@@ -565,7 +697,8 @@ namespace pl4g::sema::tables {
     }
 
 
-    // `__pl4g_table_give_up(table, place)`: the entry holds no key any more.
+    // `__pl4g_table_give_up(table, place)`: the entry holds no key any more, a
+    // hole the walk steps past, the word of the index naming it left as it is.
     ir::Function* build_give_up(ir::Module& module)
     {
       auto table_ptr = table_type(module);
@@ -595,8 +728,9 @@ namespace pl4g::sema::tables {
     }
 
 
-    // `__pl4g_table_next(table, from)`: where the next entry holding a key is,
-    // or one past the last place where there is none.
+    // `__pl4g_table_next(table, from)`: where in the dense array the next entry
+    // holding a key is, or how many are written where there is none -- the
+    // walk being in the order the keys were put in.
     ir::Function* build_next(ir::Module& module)
     {
       auto table_ptr = table_type(module);
@@ -612,14 +746,14 @@ namespace pl4g::sema::tables {
       builder.position_at(entry);
       auto table = entry->add_param(table_ptr, "table");
       auto start = entry->add_param(ir::u64(), "from");
-      auto capacity = builder.binary(BinOp::wrap_add, read(builder, table, mask_field), number(builder, 1));
+      auto used = read(builder, table, used_field);
       auto stride = read(builder, table, stride_field);
       auto entries = read_address(builder, table, entries_field, ir::u64());
       builder.br(walk, Args{ start });
 
       builder.position_at(walk);
       auto at = walk->add_param(ir::u64(), "at");
-      builder.condbr(builder.compare(CmpPred::uge, at, capacity), done, look);
+      builder.condbr(builder.compare(CmpPred::uge, at, used), done, look);
 
       builder.position_at(look);
       builder.condbr(

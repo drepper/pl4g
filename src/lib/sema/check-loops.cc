@@ -2734,9 +2734,10 @@ namespace pl4g::sema {
     tables::ensure_runtime(module, shape);
     auto table = builder.cast(ir::CastKind::bitcast, value, tables::table_type(module), span);
     auto finder = module.function(tables::next_symbol);
-    auto mask_at = builder.binary(ir::BinOp::add, table, builder.int_const(ir::u64(), tables::mask_field), span);
-    auto capacity = builder.binary(ir::BinOp::wrap_add, builder.load(mask_at, span), builder.int_const(ir::u64(), 1),
-                                   span);
+    // How many entries are written, read once: the walk is of the dense array,
+    // in the order the keys were put in, and ends where it does.
+    auto used_at = builder.binary(ir::BinOp::add, table, builder.int_const(ir::u64(), tables::used_field), span);
+    auto written = builder.load(used_at, span);
     auto set = ir::as<ir::SetType>(ty);
     auto dict = ir::as<ir::DictType>(ty);
     auto key_ty = set != nullptr ? set->element : dict->key;
@@ -2751,8 +2752,8 @@ namespace pl4g::sema {
     Iteration made;
     made.element = element;
     made.start = { builder.call(finder, std::vector{ table, builder.int_const(ir::u64(), 0) }, ir::u64(), span) };
-    made.more = [capacity, span](ir::Builder& b, std::span<ir::Value* const> s) {
-      return b.compare(ir::CmpPred::ult, s[0], capacity, span);
+    made.more = [written, span](ir::Builder& b, std::span<ir::Value* const> s) {
+      return b.compare(ir::CmpPred::ult, s[0], written, span);
     };
     made.take = [this, table, read, key_ty, set, dict, shape, element, span](ir::Builder& b,
                                                                             std::span<ir::Value* const> s) {

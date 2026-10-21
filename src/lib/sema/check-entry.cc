@@ -110,7 +110,8 @@ namespace pl4g::sema {
                         { "stride", ir::u64() },
                         { "entries", ir::ptr_type(ir::u8(), true) },
                         { "used", ir::u64() },
-                        { "seed", ir::u64() } };
+                        { "seed", ir::u64() },
+                        { "index", ir::ptr_type(ir::u8(), true) } };
       block->name = "table";
       return block;
     }
@@ -1932,10 +1933,6 @@ namespace pl4g::sema {
         stored = module.int_const(ir::u64(), *bits.number());
       keys.emplace_back(bits, stored, given);
     }
-    auto hashed = held == ir::u64()
-      ? std::function<std::int64_t(const Held&, std::int64_t)>([](const Held& b, std::int64_t m) { return word_hash(b, m); })
-      : std::function<std::int64_t(const Held&, std::int64_t)>([](const Held& b, std::int64_t m) { return text_hash(b, m); });
-    auto [capacity, slots, count] = table_laid_out(keys, hashed);
     auto entry = ir::new_product();
     entry->fields = { { "state", ir::u64() }, { "key", held } };
     if (shape.value != nullptr)
@@ -1946,28 +1943,43 @@ namespace pl4g::sema {
       diags.emit(D::IMPL_UNIMPLEMENTED_FEATURE, node->value->span, { { "feature", "a table of this shape in the image" } });
       return nullptr;
     }
+    auto hashed = held == ir::u64()
+      ? std::function<std::uint64_t(const Held&)>([](const Held& b) { return word_hash(b); })
+      : std::function<std::uint64_t(const Held&)>([](const Held& b) { return text_hash(b); });
+    auto [capacity, words, dense] = table_laid_out(keys, hashed, shape.stride());
     auto live = module.int_const(ir::u64(), tables::live);
-    auto run_ty = ir::array_type(entry, { std::uint64_t(capacity) });
+    // The index and the entries are one variable, the entries straight after
+    // the index, and after the last entry one more, empty, which is what a
+    // lookup of a key that is not there reads.
+    auto index_ty = ir::array_type(ir::u64(), { std::uint64_t(capacity) });
+    auto dense_ty = ir::array_type(entry, { std::uint64_t(dense.size() + 1) });
+    auto run_ty = ir::new_product();
+    run_ty->fields = { { "index", index_ty }, { "entries", dense_ty } };
+    run_ty->name = "run";
+    std::vector<const ir::Value*> index_words;
+    for (auto one : words)
+      index_words.push_back(module.int_const(ir::u64(), __int128(one)));
+    auto index = module.array_const(index_ty, index_words);
     std::vector<const ir::Value*> laid;
-    for (const auto& one : slots)
-      if (! one)
-        laid.push_back(module.constant<ir::UndefConst>(entry));
-      else {
-        std::vector<const ir::Value*> fields{ live, std::get<0>(*one) };
-        if (std::get<1>(*one) != nullptr)
-          fields.push_back(std::get<1>(*one));
-        laid.push_back(module.record_const(entry, fields));
-      }
-    auto entries = image_variable(run_ty, module.array_const(run_ty, laid));
+    for (const auto& [key, value] : dense) {
+      std::vector<const ir::Value*> fields{ live, key };
+      if (value != nullptr)
+        fields.push_back(value);
+      laid.push_back(module.record_const(entry, fields));
+    }
+    laid.push_back(module.constant<ir::UndefConst>(entry));
+    auto entries = module.array_const(dense_ty, laid);
+    auto run = image_variable(run_ty, module.record_const(run_ty, { index, entries }));
     auto block = table_block(ir::ptr_type(ir::arena_type(), true));
     auto made = image_variable(block, module.record_const(block, {
       module.constant<ir::AddressConst>(block->fields[0].second, nullptr, 0),
       module.int_const(ir::u64(), capacity - 1),
-      module.int_const(ir::u64(), count),
+      module.int_const(ir::u64(), std::int64_t(dense.size())),
       module.int_const(ir::u64(), shape.stride()),
-      module.constant<ir::AddressConst>(block->fields[4].second, entries, 0),
-      module.int_const(ir::u64(), count),
+      module.constant<ir::AddressConst>(block->fields[4].second, run, capacity * tables::word),
+      module.int_const(ir::u64(), std::int64_t(dense.size())),
       module.int_const(ir::u64(), __int128(tables::image_seed)),
+      module.constant<ir::AddressConst>(block->fields[7].second, run, 0),
     }));
     return module.constant<ir::AddressConst>(ty, made, 0);
   }
@@ -1984,10 +1996,10 @@ namespace pl4g::sema {
       shape.value = dict->value;
     }
     auto capacity = tables::first_capacity;
-    auto size = std::uint64_t(capacity * shape.stride());
+    auto size = std::uint64_t(capacity * tables::word + tables::room_for(capacity) * shape.stride());
     auto run_ty = ir::array_type(ir::u8(), { size });
     std::vector<const ir::Value*> zeroes(size, module.int_const(ir::u8(), 0));
-    auto entries = image_variable(run_ty, module.array_const(run_ty, zeroes), true);
+    auto run = image_variable(run_ty, module.array_const(run_ty, zeroes), true);
     auto arena = ir::ptr_type(ir::arena_type(), true);
     auto block = table_block(arena);
     // No seed yet: the first key put in is what the table takes one for.
@@ -1996,9 +2008,10 @@ namespace pl4g::sema {
       module.int_const(ir::u64(), capacity - 1),
       module.int_const(ir::u64(), 0),
       module.int_const(ir::u64(), shape.stride()),
-      module.constant<ir::AddressConst>(block->fields[4].second, entries, 0),
+      module.constant<ir::AddressConst>(block->fields[4].second, run, capacity * tables::word),
       module.int_const(ir::u64(), 0),
       module.int_const(ir::u64(), 0),
+      module.constant<ir::AddressConst>(block->fields[7].second, run, 0),
     }), true);
     return module.constant<ir::AddressConst>(ty, made, 0);
   }
