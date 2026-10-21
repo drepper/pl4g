@@ -162,7 +162,7 @@ namespace pl4g::opt {
           return false;
         if (callee->cconv != default_cconv || callee->attrs.special)
           return false;
-        if (callee->attrs.inline_ == InlineHint::never)
+        if (callee->attrs.inline_ == InlineHint::never || callee->attrs.opaque)
           return false;
         if (callee->attrs.inline_ == InlineHint::always)
           return true;
