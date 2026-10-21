@@ -1676,13 +1676,15 @@ namespace pl4g::sema {
     Span name_span = ast::is<ast::TypeDef>(defined->node) ? ast::as<ast::TypeDef>(defined->node)->name_span
                                                           : ast::as<ast::EnumDef>(defined->node)->name_span;
     if (defined->resolving) {
-      if (behind_a_reference == 0 || defined->shell == nullptr) {
+      if (behind_a_reference <= defined->opened_at || defined->shell == nullptr) {
         diags.emit(D::LANG_TYPEDEF_CONTAINS_ITSELF, name_span, { { "name", defined->name } });
         defined->ty = ir::error_type();
         return defined->ty;
       }
-      // A reference stands between the type and itself, which makes it
-      // finite: the object being built is handed back and filled in later.
+      // A reference, a list or a table stands between the type and itself,
+      // which makes it finite: the object being built is handed back and
+      // filled in later.  It has to have been opened since this resolving
+      // began -- on the way round, and not merely around it.
       return defined->shell;
     }
     if (defined->takes_types())
@@ -1690,6 +1692,7 @@ namespace pl4g::sema {
       // said; nothing is made of it.
       return ir::error_type();
     defined->resolving = true;
+    defined->opened_at = behind_a_reference;
     defined->shell = const_cast<ir::Type*>(shell_for(defined));
     const ir::Type* made = nullptr;
     {
@@ -2071,7 +2074,9 @@ namespace pl4g::sema {
     if (array_ref != nullptr)
       return array_type(array_ref);
     if (list_ref != nullptr) {
-      const ir::Type* element = resolve_type(list_ref->element);
+      // A list is a few words whatever it holds, so a definition may reach
+      // itself through one as it may through a reference.
+      const ir::Type* element = behind_an_indirection(list_ref->element);
       if (element == ir::error_type())
         return ir::error_type();
       if (element == ir::void_type()) {
@@ -2261,6 +2266,14 @@ namespace pl4g::sema {
   }
 
 
+  const ir::Type* Checker::behind_an_indirection(const ast::TypeExpr* ref)
+  {
+    ++behind_a_reference;
+    Finally restore{ [&] { --behind_a_reference; } };
+    return resolve_type(ref);
+  }
+
+
   const ir::Type* Checker::array_type(const ast::ArrayTypeRef* ref)
   {
     if (ref->element == nullptr) {
@@ -2307,7 +2320,9 @@ namespace pl4g::sema {
     if (ref->value == nullptr)
       return element != ir::error_type() ? static_cast<const ir::Type*>(ir::set_type(element, ref->mutable_))
                                          : ir::error_type();
-    const ir::Type* value = resolve_type(ref->value);
+    // A table holds its entries out of line, so its value is behind an
+    // indirection as a list's element is; its key need not be.
+    const ir::Type* value = behind_an_indirection(ref->value);
     if (element == ir::error_type() || value == ir::error_type())
       return ir::error_type();
     if (value == ir::void_type()) {

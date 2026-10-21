@@ -59,6 +59,9 @@ namespace pl4g::ir {
     // The memory token in force, starting the chain at the top of the
     // function the first time it is asked for.
     Value* memory();
+    // The memory token in force, or nothing where the chain has not begun --
+    // asked without beginning it.
+    Value* memory_so_far() const noexcept { return memory_; }
     void set_memory(Value* token) noexcept { memory_ = token; }
     Value* frame(const Type* held, Span span = invalid_span);
     Value* size_of(const Type* held, Span span = invalid_span);

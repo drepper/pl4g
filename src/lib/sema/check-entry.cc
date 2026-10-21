@@ -1102,8 +1102,9 @@ namespace pl4g::sema {
       return std::nullopt;
     }
     case ast::NodeKind::Element: {
-      // An array's elements are where the array is.
-      auto place = place_of_an_element(builder, static_cast<const ast::Element*>(expr));
+      // An array's elements are where the array is, and so are a list's, for
+      // a field only read.
+      auto place = place_of_an_element(builder, static_cast<const ast::Element*>(expr), ! writing);
       if (! place)
         return std::nullopt;
       auto record = ir::as<ir::ProductType>(place->held);

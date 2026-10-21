@@ -145,6 +145,9 @@
     bool stands_for(const ir::Unit* found, const ir::Unit* wanted);  // check.py:8487
     // Resolve `&T` or `&mut T`, checking that a place can hold a `T`.
     const ir::Type* reference_type(const ast::RefTypeRef* ref);  // check.py:8507
+    // Resolve a type held out of line -- a list's element, a table's value --
+    // through which a definition may reach itself.
+    const ir::Type* behind_an_indirection(const ast::TypeExpr* ref);  // check.py:8540
     // Resolve `T⟦N⟧` or `T⟦⟧`.
     const ir::Type* array_type(const ast::ArrayTypeRef* ref);  // check.py:8532
     // Resolve `⸨T⸩` or `⸨K: V⸩`, checking that the key can be one.

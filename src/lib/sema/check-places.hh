@@ -106,7 +106,11 @@
     // Where one field of a record is, for a reference being taken of it.
     std::optional<PlaceTaken> place_of_a_field(ir::Builder& builder, const ast::Member* expr);  // check.py:15740
     // Where one element of an array is, for a reference being taken of it.
-    std::optional<PlaceTaken> place_of_an_element(ir::Builder& builder, const ast::Element* expr);  // check.py:15769
+    // Where one element of an array is, for a reference being taken of it --
+    // or of a list, where `of_a_list` says the place is only read, there and
+    // then, a field at a time.
+    std::optional<PlaceTaken> place_of_an_element(ir::Builder& builder, const ast::Element* expr,
+                                                  bool of_a_list = false);  // check.py:15934
     // Whether the field `name` of the record `base` is writable whatever the record is: it, or a field on
     // the way to it, is written `mut NAME`, and no `&` that only reads lies on the way -- what a `&` lends
     // is read-only however it is made.
