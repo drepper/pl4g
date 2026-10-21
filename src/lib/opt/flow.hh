@@ -93,4 +93,7 @@ namespace pl4g::opt {
   std::int64_t cost_of(const ir::Instruction* inst);
   std::int64_t cost_of_body(const ir::Function& func);
 
+  // Whether `func` calls nothing: no call and no system call in its body.
+  bool is_leaf(const ir::Function& func);
+
 } // namespace pl4g::opt

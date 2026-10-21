@@ -25,9 +25,16 @@ namespace pl4g::opt {
   namespace {
 
     // What a function may come to where generated and still be copied where
-    // it is called, and how much a caller may grow in total.
+    // it is called, more for a leaf, whose caller keeps every register the
+    // leaf does not write; and how much a caller may grow in total, a copy of
+    // a function called once or of one no larger than a call not counting.
     constexpr std::int64_t small = 16;
+    constexpr std::int64_t small_leaf = 32;
     constexpr std::int64_t budget = 300;
+    constexpr std::int64_t call_cost = 4;
+
+    // How large `callee` may be and still be small.
+    std::int64_t limit_of(const Function& callee) { return is_leaf(callee) ? small_leaf : small; }
 
     Span where_of(const Function* func) { return func->name_span.is_valid() ? func->name_span : func->span; }
 
@@ -159,19 +166,40 @@ namespace pl4g::opt {
           return false;
         if (callee->attrs.inline_ == InlineHint::always)
           return true;
+        // The copy of a function called once is the only one there is, and
+        // one no larger than the call costs nothing: the budget is for neither.
+        if (called_once(callee))
+          return true;
+        auto cost = cost_of_body(*callee);
+        if (cost <= call_cost)
+          return true;
         if (grown >= budget)
           return false;
-        if (cost_of_body(*callee) <= small)
-          return true;
+        return cost <= limit_of(*callee);
+      }
+
+      // Whether `callee` is named by one call of the whole program and can be
+      // reached from nowhere outside it.
+      bool called_once(const Function* callee)
+      {
         auto it = counted.find(callee);
         return it != counted.end() && it->second == 1 && callee->linkage != Linkage::visible;
+      }
+
+      // What a copy of `callee` adds to the program, in the budget's measure.
+      std::int64_t growth(const Function* callee)
+      {
+        auto cost = cost_of_body(*callee);
+        if (callee->attrs.inline_ != InlineHint::always && (called_once(callee) || cost <= call_cost))
+          return 0;
+        return cost;
       }
 
       std::string because(const Function* callee)
       {
         if (callee->attrs.inline_ == InlineHint::always)
           return "which the program asked for";
-        if (auto cost = cost_of_body(*callee); cost <= small)
+        if (auto cost = cost_of_body(*callee); cost <= limit_of(*callee))
           return "coming to about " + std::to_string(cost) + " machine instructions";
         return "the whole program calling it once";
       }
@@ -187,7 +215,7 @@ namespace pl4g::opt {
             auto callee = inst->kind == InstKind::CallInst ? inst->callee : nullptr;
             if (callee == nullptr || ! worth_it(caller, callee, grown))
               continue;
-            grown += cost_of_body(*callee);
+            grown += growth(callee);
             module.record("inline", callee->name, "put where " + caller.name + " calls it, " + because(callee),
                           where_of(callee));
             splice(caller, block, at, *callee);
