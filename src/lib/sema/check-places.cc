@@ -1657,13 +1657,33 @@ namespace pl4g::sema {
       room_kept(builder, place, ty, made, builder.binary(ir::BinOp::wrap_add, made.count, count, span), span);
       return;
     }
+    auto pool = owned::points(ty->element) ? pool_joined_onto(stmt->target) : std::nullopt;
     if (auto list = ast::as<ast::ListLit>(written);
-        list != nullptr && ! list->elements.empty() && ! owned::points(ty->element)) {
+        list != nullptr && ! list->elements.empty() && (! owned::points(ty->element) || pool)) {
       std::vector<ir::Value*> values;
       for (auto one : list->elements)
         values.push_back(lower_into(builder, one, ty->element, one->span));
       if (std::ranges::any_of(values, [this](ir::Value* one) { return value_type_of(one) == ir::error_type(); }))
         return;
+      if (pool) {
+        // Into a pool, each element is put where the list's elements are as an
+        // element of a list written in the pool is: as it is where what it
+        // points into lasts as long as the list, and copied in where not --
+        // and the list written out is never made.
+        auto [holder, container] = *pool;
+        for (std::size_t index = 0; index < values.size(); ++index) {
+          auto one = list->elements[index];
+          auto [kept, added, spare] = stored(builder, one, values[index], ty->element, holder, container->depth,
+                                             ! container->is_parameter, one->span);
+          if (value_type_of(kept) == ir::error_type()) [[unlikely]]
+            return;
+          if (spare != nullptr)
+            owned::give_back(builder, spare, ty->element,
+                             freshly_heap(one) ? std::optional<std::string_view>("heap") : std::nullopt);
+          container->arenas.insert(added.begin(), added.end());
+          values[index] = kept;
+        }
+      }
       Room made = room_made(builder, place, ty, builder.int_const(ir::u64(), values.size()), span);
       ir::Value* at = builder.cast(ir::CastKind::bitcast, made.grown, ir::ptr_type(ty->element, true), span);
       for (std::size_t index = 0; index < values.size(); ++index) {
@@ -1698,6 +1718,21 @@ namespace pl4g::sema {
       owned::give_back_storage(builder, more, ty,
                                freshly_heap(written) ? std::optional<std::string_view>("heap") : std::nullopt);
     room_kept(builder, place, ty, made, builder.binary(ir::BinOp::wrap_add, made.count, joined, span), span);
+  }
+
+
+  std::optional<std::tuple<std::int64_t, Local*>> Checker::pool_joined_onto(const ast::Expr* target)
+  {
+    auto name = ast::as<ast::NameRef>(target);
+    if (name == nullptr)
+      return std::nullopt;
+    Local* local = find_local(name->name);
+    if (local == nullptr || local->is_parameter || is_arena(local))
+      return std::nullopt;
+    auto owner = owner_of(local->arenas);
+    if (! owner || *owner == heap_key)
+      return std::nullopt;
+    return std::tuple(*owner, local);
   }
 
 
@@ -1820,6 +1855,22 @@ namespace pl4g::sema {
     auto stride = std::int64_t(ir::stride_of(ty->element, layout()));
     ir::Value* offset = builder.binary(ir::BinOp::wrap_mul, at, builder.int_const(ir::u64(), stride), span);
     ir::Value* where = builder.binary(ir::BinOp::add, elements, offset, span);
+    if (auto pool = owned::points(ty->element) ? pool_joined_onto(stmt->base) : std::nullopt) {
+      // Into a pool, as an element joined on is put in: as it is where what it
+      // points into lasts as long as the list, copied in where not -- and what
+      // it replaces stays where it is until the pool goes.
+      auto [holder, container] = *pool;
+      auto [kept, added, spare] = stored(builder, stmt->value, value, ty->element, holder, container->depth,
+                                         ! container->is_parameter, span);
+      if (value_type_of(kept) == ir::error_type()) [[unlikely]]
+        return;
+      if (spare != nullptr)
+        owned::give_back(builder, spare, ty->element,
+                         freshly_heap(stmt->value) ? std::optional<std::string_view>("heap") : std::nullopt);
+      container->arenas.insert(added.begin(), added.end());
+      builder.store(where, kept, span);
+      return;
+    }
     if (owned::points(ty->element) && owned::can_own(ty->element)) {
       ir::Value* replaced = builder.load(where, span);
       ir::Value* from = builder.extract(held, 2, ir::parts_of(ty)[2], span);

@@ -212,6 +212,9 @@
     // Lower `l ⧺← more`: `more` joined onto the end of the list in the place `l`, in the room it has to
     // spare and in new room twice as large where it has not enough.
     void lower_join_assign(ir::Builder& builder, const ast::JoinAssign* stmt);  // check.py:16673
+    /// The arena a list joined onto keeps its elements in, and the name it is, where it is a name of
+    /// this body's whose list is known to be the arena's: made in it, and in nothing else.
+    std::optional<std::tuple<std::int64_t, Local*>> pool_joined_onto(const ast::Expr* target);  // check.py:17460
     /// Whether what is joined onto a list is, by the look of it, an array and not a list: a name or a
     /// call that says so, a slice, the bytes of a string.  Anything else is lowered as the list it has
     /// to be, which is what lets `[]` and the arms of an `if` take the list's type.

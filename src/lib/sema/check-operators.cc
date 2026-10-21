@@ -1698,6 +1698,9 @@ namespace pl4g::sema {
       auto through_type = type_exported(member);
       if (ir::is<ir::ProductType>(through_type))
         return lower_record(builder, expr, through_type, expected);
+      // And a sum, which is made the same way wherever it was defined.
+      if (ir::is<ir::SumType>(through_type))
+        return lower_sum(builder, expr, through_type, expected);
       auto written = through_a_value(builder, expr);
       if (written.is_refused()) [[unlikely]]
         return error_value(module);

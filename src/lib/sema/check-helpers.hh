@@ -300,6 +300,10 @@ namespace pl4g::sema {
   /// is where somebody else's elements are -- a list's among them, which is lent for as long as the
   /// view is kept.
   bool holds_a_view(const ir::Type* ty);  // check.py:2514
+  /// Whether a value of `ty` may reach where an array's elements are: a view, or anything that may
+  /// hold one, a reference and a lambda among them -- where text, a list, a table, a number and
+  /// whatever is made only of those never do, an array's elements being copied into them.
+  bool may_hold_a_view(const ir::Type* ty, const KeySet& seen = {});  // check.py:2647
   // Whether an array of `found` stands where one of `wanted` is asked for.
   bool lets_go_of(const ir::ArrayType* found, const ir::ArrayType* wanted);  // check.py:2514
   // Which element of each dimension the `at`-th of the run is.

@@ -2529,6 +2529,41 @@ namespace pl4g::sema {
   }
 
 
+  bool may_hold_a_view(const ir::Type* ty, const KeySet& seen)
+  {
+    if (seen.contains(id_of(ty)))
+      return false;
+    auto deeper = deeper_than(seen, ty);
+    switch (ty->kind) {
+    case ir::TypeKind::array: {
+      auto array = ir::as<ir::ArrayType>(ty);
+      return ! array->fixed() || may_hold_a_view(array->element, deeper);
+    }
+    case ir::TypeKind::list:
+      return may_hold_a_view(ir::as<ir::ListType>(ty)->element, deeper);
+    case ir::TypeKind::tuple:
+      return std::ranges::any_of(ir::as<ir::TupleType>(ty)->members,
+                                 [&](auto m) { return may_hold_a_view(m, deeper); });
+    case ir::TypeKind::result: {
+      auto r = ir::as<ir::ResultType>(ty);
+      return may_hold_a_view(r->ok, deeper) || (r->err != nullptr && may_hold_a_view(r->err, deeper));
+    }
+    case ir::TypeKind::product:
+      return std::ranges::any_of(ir::as<ir::ProductType>(ty)->fields,
+                                 [&](const auto& f) { return may_hold_a_view(f.second, deeper); });
+    case ir::TypeKind::sum:
+      return std::ranges::any_of(ir::as<ir::SumType>(ty)->variants,
+                                 [&](const auto& v) { return may_hold_a_view(v.second, deeper); });
+    case ir::TypeKind::str:
+    case ir::TypeKind::set:
+    case ir::TypeKind::dict:
+      return false;
+    default:
+      return points_somewhere(ty);
+    }
+  }
+
+
   bool holds_a_reference(const ir::Type* ty, const KeySet& seen)
   {
     if (ir::is<ir::PtrType>(ty))

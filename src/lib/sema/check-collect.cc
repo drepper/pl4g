@@ -1028,8 +1028,13 @@ namespace pl4g::sema {
           changed_here->emplace(name->name);
       }
     }
-    if (! (owned::points(func->fty->ret) || holds_a_lambda(func->fty->ret)))
+    if (! (owned::points(func->fty->ret) || holds_a_lambda(func->fty->ret))) {
+      if (! points_somewhere(func->fty->ret))
+        // An answer that points nowhere was made in nothing, whatever the
+        // call was handed: a number read out of a view is not the view.
+        made_from[id_of(expr)] = std::tuple(static_cast<const ast::Expr*>(expr), KeySet{});
       return;
+    }
     if (func->attrs.external) {
       // What the outside answers is the outside's.
       made_from[id_of(expr)] = std::tuple(static_cast<const ast::Expr*>(expr), KeySet{});

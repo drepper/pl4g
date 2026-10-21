@@ -432,7 +432,9 @@ namespace pl4g::opt {
 
     bool in_registers(ReturnStyle style, const Type* ty)
     {
-      if (held_in_memory(ty))
+      // Nor an answer with such a value among its parts -- a result answering a sum -- since the part
+      // in a register would be where the bytes were, in room the call has given up.
+      if (held_in_memory(ty) || std::ranges::any_of(leaves_of(ty), [](auto one) { return held_in_memory(one); }))
         return false;
       return leaves_of(ty).size() <= (style == ReturnStyle::two_in_registers ? 2 : 3);
     }
@@ -468,8 +470,12 @@ namespace pl4g::opt {
 
     std::vector<std::uint64_t> answer_offsets(const Type* answer)
     {
-      if (auto result = as<ResultType>(answer))
+      if (auto result = as<ResultType>(answer)) {
+        if (result->err == nullptr)
+          // Nothing carried with the error: the answer and the truth value.
+          return { 0, tag_offset_of(result, host()) };
         return { 0, tag_offset_of(result, host()), error_offset_of(result, host()) };
+      }
       if (! is<TupleType>(answer) && ! is<ProductType>(answer)) {
         std::vector<std::uint64_t> out;
         for (std::size_t at = 0; at < parts_of(answer).size(); ++at)
@@ -526,6 +532,8 @@ namespace pl4g::opt {
     {
       if (! is<ResultType>(answer))
         return made(func, InstKind::TupleInst, answer, taken, span);
+      if (taken.size() == 2)
+        return made(func, InstKind::WrapInst, answer, { taken[0], taken[1] }, span);
       return made(func, InstKind::WrapInst, answer, { taken[0], taken[1], taken[2] }, span);
     }
 
@@ -702,7 +710,10 @@ namespace pl4g::opt {
             auto offsets = answer_offsets(answer);
             for (std::size_t i = 0; i < pieces.size(); ++i) {
               auto where = at_in(*func, slot, pieces[i], offsets[i], made_insts, span, module);
-              auto read = made(*func, InstKind::LoadInst, pieces[i], { token, where }, span);
+              // A part held in memory -- the sum a result answers -- is where its bytes are in the
+              // room the caller made, as the whole is where the whole is held in memory.
+              auto read = held_in_memory(pieces[i]) ? bitcast(*func, where, pieces[i], span)
+                                                    : made(*func, InstKind::LoadInst, pieces[i], { token, where }, span);
               made_insts.push_back(read);
               taken.push_back(read);
             }
@@ -736,6 +747,19 @@ namespace pl4g::opt {
             auto taken = part_of(*func, value, i, pieces[i], answer, last->span);
             made_insts.push_back(taken);
             auto where = at_in(*func, place, pieces[i], offsets[i], made_insts, last->span, module);
+            if (held_in_memory(pieces[i])) {
+              // A part held in memory -- the sum a result answers -- is where its bytes are, and it is the
+              // bytes that go.  An error has no answer to be read, and where it is stands nothing: the place
+              // is copied onto itself instead, which reads nothing that is not there.
+              auto bytes = ptr_type(u8(), true);
+              auto held = bitcast(*func, taken, bytes, last->span);
+              auto failed = made(*func, InstKind::FailedInst, bool_type(), { value }, last->span);
+              auto itself = bitcast(*func, where, bytes, last->span);
+              auto source = made(*func, InstKind::SelectInst, bytes, { failed, itself, held }, last->span);
+              made_insts.insert(made_insts.end(), { held, failed, itself, source });
+              token = copied(*func, module, where, source, size_of(pieces[i], host()), token, made_insts, last->span);
+              continue;
+            }
             auto write = made(*func, InstKind::StoreInst, mem_type(), { token, where, taken }, last->span);
             made_insts.push_back(write);
             token = write;

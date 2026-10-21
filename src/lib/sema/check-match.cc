@@ -1852,8 +1852,7 @@ namespace pl4g::sema {
     auto answer = joined_block->add_param(bool_ty(), "answer");
     // The left side being what decides sends control straight to the answer.
     builder.condbr(left, decides ? decided : rest, decides ? rest : decided, {}, {}, expr->span);
-    builder.position_at(decided);
-    builder.br(joined_block, std::vector<ir::Value*>{ builder.bool_const(decides) }, expr->span);
+    auto before = builder.memory_so_far();
     builder.position_at(rest);
     outer = operand_of;
     operand_of = std::string(describe(expr->op));
@@ -1869,8 +1868,25 @@ namespace pl4g::sema {
       // Giving the join something of the right type keeps the representation
       // well formed while the error is reported.
       right = fresh_undef(bool_ty());
-    builder.br(joined_block, std::vector<ir::Value*>{ right }, expr->span);
+    auto after = builder.memory_so_far();
+    if (after == before) {
+      builder.br(joined_block, std::vector<ir::Value*>{ right }, expr->span);
+      builder.position_at(decided);
+      builder.br(joined_block, std::vector<ir::Value*>{ builder.bool_const(decides) }, expr->span);
+      builder.position_at(joined_block);
+      return answer;
+    }
+    // The right side wrote memory -- an answer put in room of its own, text
+    // made -- so the two tokens meet where the ways do, as they do after `??`.
+    auto token = joined_block->add_param(ir::mem_type(), "mem");
+    builder.br(joined_block, std::vector<ir::Value*>{ right, after }, expr->span);
+    builder.position_at(decided);
+    {
+      auto mem = before != nullptr ? before : builder.memory();
+      builder.br(joined_block, std::vector<ir::Value*>{ builder.bool_const(decides), mem }, expr->span);
+    }
     builder.position_at(joined_block);
+    builder.set_memory(token);
     return answer;
   }
 

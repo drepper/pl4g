@@ -247,9 +247,29 @@ namespace pl4g::sema {
         into.insert(heap_key);
       break;
     case ast::NodeKind::ListLit:
-    case ast::NodeKind::SetLit:
-    case ast::NodeKind::DictLit:
       into.insert(heap_key);
+      break;
+    case ast::NodeKind::JoinAssign: {
+      // A list written out and joined onto a pool's list is never made: its
+      // elements go in as they are, with what they were made in, and the list
+      // joined onto keeps what it had.
+      auto join = static_cast<const ast::JoinAssign*>(node);
+      if (auto list = ast::as<ast::ListLit>(join->value); list != nullptr && pool_joined_onto(join->target)) {
+        collect_arenas(join->target, into);
+        for (auto one : list->elements)
+          collect_arenas(one, into);
+        return;
+      }
+      break;
+    }
+    case ast::NodeKind::SetLit:
+      // Made in the arena it names, which the walk below finds.
+      if (static_cast<const ast::SetLit*>(node)->arena == nullptr)
+        into.insert(heap_key);
+      break;
+    case ast::NodeKind::DictLit:
+      if (static_cast<const ast::DictLit*>(node)->arena == nullptr)
+        into.insert(heap_key);
       break;
     case ast::NodeKind::Element: {
       // Where the container's elements were made, without the keys that name
@@ -606,8 +626,17 @@ namespace pl4g::sema {
         if (local == nullptr || is_arena(local) || ! points_somewhere(held_by(local)))
           continue;
         // An array whose elements the body writes may, at the top of a turn,
-        // hold what a later line of the body put in it.
-        local->arenas = unite(local->arenas, anything);
+        // hold what a later line of the body put in it -- but nothing that
+        // holds no view holds where an array's elements are.
+        if (may_hold_a_view(held_by(local)))
+          local->arenas = unite(local->arenas, anything);
+        else {
+          KeySet reach;
+          for (auto one : anything)
+            if (! array_frames.contains(one))
+              reach.insert(one);
+          local->arenas = unite(local->arenas, reach);
+        }
       }
     }
     before_a_turn(body);

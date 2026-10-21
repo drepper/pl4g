@@ -148,8 +148,13 @@ namespace pl4g::target {
   {
     std::size_t users = 0;
     for (const auto& block : func.blocks)
-      for (auto inst : block->insts)
+      for (auto inst : block->insts) {
         users += std::size_t(std::ranges::count(inst->operands, value));
+        // What a branch hands the block it goes to is read as much as an
+        // operand is, and wants the value in a register.
+        for (const auto& edge : inst->targets)
+          users += std::size_t(std::ranges::count(edge.args, value));
+      }
     return users == 1;
   }
 
