@@ -28,6 +28,15 @@ namespace pl4g::sema {
     constexpr std::string_view tolerance_name = "\N{APL FUNCTIONAL SYMBOL QUAD}tolerance";
 
     const ir::Type* error_ty() { return ir::error_type(); }
+
+    // The token the memory chain began with, at the top of the entry block: what a
+    // way that wrote nothing hands a join where the other way began the chain.
+    ir::Value* chain_start(ir::Builder& builder)
+    {
+      auto first = builder.function().blocks[0]->insts[0];
+      contract_assert(first->kind == ir::InstKind::MemStartInst);
+      return first;
+    }
     const ir::Type* void_ty() { return ir::void_type(); }
     const ir::Type* bool_ty() { return ir::bool_type(); }
 
@@ -1819,7 +1828,7 @@ namespace pl4g::sema {
     builder.position_at(answered_block);
     {
       auto unwrapped = builder.unwrap(value, result->ok, expr->span);
-      auto mem = before != nullptr ? before : builder.memory();
+      auto mem = before != nullptr ? before : chain_start(builder);
       builder.br(joined_block, std::vector<ir::Value*>{ unwrapped, mem }, expr->span);
     }
     builder.position_at(joined_block);
@@ -1882,7 +1891,7 @@ namespace pl4g::sema {
     builder.br(joined_block, std::vector<ir::Value*>{ right, after }, expr->span);
     builder.position_at(decided);
     {
-      auto mem = before != nullptr ? before : builder.memory();
+      auto mem = before != nullptr ? before : chain_start(builder);
       builder.br(joined_block, std::vector<ir::Value*>{ builder.bool_const(decides), mem }, expr->span);
     }
     builder.position_at(joined_block);
