@@ -190,6 +190,16 @@ def cost_of_body(func: Function) -> int:
     return sum(cost_of(inst) for block in func.blocks for inst in block.insts)
 
 
+def is_leaf(func: Function) -> bool:
+    """Whether *func* calls nothing: no call and no system call in its body.
+
+    What a leaf's caller has across the call is every register the leaf does
+    not write, which is what makes copying one in worth more than its size.
+    """
+    return not any(isinstance(inst, (CallInst, SyscallInst))
+                   for block in func.blocks for inst in block.insts)
+
+
 def names(functions: Sequence[Function]) -> list[str]:
     """What each of them is called, for a log that says what the order was."""
     return [func.name for func in functions]

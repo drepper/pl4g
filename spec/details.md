@@ -3975,10 +3975,26 @@ a cycle is looked at at all.
 
 **What it inlines**: what the program said to (`@[inline]`), whatever the size;
 what the whole program calls once and nothing outside can reach, since the copy
-is then the only one there is; and what is small -- twelve instructions, a
-handful more than a call is made of.  A caller may grow by two hundred
-instructions in total, so that a function calling many small ones does not
-become one enormous one.  What it never inlines: a function that can reach
+is then the only one there is; and what is small -- sixteen machine
+instructions as `cost_of_body` counts them, a handful more than a call is made
+of, and thirty-two for a leaf, a function that calls nothing.  A leaf is worth
+more than its size: across a call its caller keeps nothing in a register the
+convention lets the callee destroy, and a leaf copied in destroys only what it
+uses.  A caller may grow by three hundred in total, so that a function calling
+many small ones does not become one enormous one -- and what it grows by is only
+what makes the program larger: a copy of a function called once is the only
+copy there is, and a copy no larger than the call it replaces costs nothing, so
+neither is counted and neither is ever refused for the budget's sake.
+
+That last part was found by measuring `std.string`.  Counted, the copy of
+`shortest` that `format_f64` is the one caller of spent the whole budget, and
+`tenth`, `decimal_count`, `byte_of` and `to_odd` -- three instructions, a
+handful, six, nineteen -- were then called on every number written; reading the
+number back was the same story with `parse_f64`.  With nothing counted that does
+not grow the program, the writer took 87 ns a number rather than 126, and the
+reader 49 rather than 87.
+
+What it never inlines: a function that can reach
 itself, one that follows another convention -- the call *is* the convention --
 one the entry point or the testing machinery calls by name, and one the program
 marked `@[inline(never)]`.

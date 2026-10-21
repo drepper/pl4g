@@ -231,6 +231,48 @@ fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
     assert "call" in function_ir(text) and "fn @wide" in text
 
 
+def test_a_copy_that_grows_nothing_spends_no_budget(compile_source) -> None:  # noqa: ANN001
+    """A function called once, however long, takes nothing from what the caller
+    may grow by: the small ones called after it are put in place as well."""
+    body = "\n".join("    let n{0}: u8 = a + {0}u8".format(at)
+                     for at in range(1, 70))
+    text = emitted(compile_source, "".join((SEED, """\
+fn wide(a: u8) \N{RIGHTWARDS ARROW} u8:
+""", body, """
+    n1
+
+fn third(a: u8) \N{RIGHTWARDS ARROW} u8:
+    \N{APL FUNCTIONAL SYMBOL QUAD}wrap(a \N{MULTIPLICATION SIGN} 3u8 + 1u8)
+
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[startup]
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
+    let w: u8 = wide(seed())
+    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(third(w) & third(seed()), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
+""")), "-O1")
+    assert "fn @wide" not in text and "fn @third" not in text
+
+
+def test_a_leaf_may_be_larger(compile_source) -> None:  # noqa: ANN001
+    """Twice the size of what calls something: what a call costs a leaf's
+    caller is every register the convention lets the leaf destroy."""
+    body = "\n".join("    let n{0}: u8 = \N{APL FUNCTIONAL SYMBOL QUAD}wrap(a + {0}u8)".format(at)
+                      for at in range(1, 25))
+    text = emitted(compile_source, "".join((SEED, """\
+fn leaf(a: u8) \N{RIGHTWARDS ARROW} u8:
+""", body, """
+    n1 ^ n24
+
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[startup]
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
+    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(leaf(seed()) & leaf(seed()), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
+""")), "-O1")
+    assert "fn @leaf" not in text
+
+
 def test_a_function_that_calls_itself_is_left_alone(compile_source) -> None:  # noqa: ANN001
     """Inlining round a ring does not finish, so nothing of one is inlined.
 
