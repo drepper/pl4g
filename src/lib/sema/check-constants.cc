@@ -1747,6 +1747,16 @@ namespace pl4g::sema {
         }
         if (! read)
           return error_value(module);
+        const ir::Type* settled_now;
+        {
+          auto scope = in_scope_of(Held(written));
+          settled_now = worked_out(param->type, bound_now);
+        }
+        auto tabled = [](const ir::Type* ty) { return ir::is<ir::SetType>(ty) || ir::is<ir::DictType>(ty); };
+        if (tabled(settled_now) && settled_now != found && tabled(found) && table_read_only_of(found) == settled_now)
+          // A table that may be written handed where one that may only be read
+          // is wanted: the same handle, nothing generated for it.
+          value = builder.cast(ir::CastKind::bitcast, value, settled_now, one->span);
       }
       args.push_back(value);
     }

@@ -156,6 +156,8 @@
     ir::Value* lower_typename(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:25904
     // Lower `⎕fields(v)`: a record's fields as a tuple of name and value.
     ir::Value* lower_fields(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:25928
+    // `⎕alternatives(v)`: a sum's parts as a tuple of name and view.
+    ir::Value* lower_alternatives(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);
     // The type `⎕fields(⌜T⌝)` asks about, where it asks about a type rather than a value: an enumeration's
     // or a record's; nothing for anything else.
     const ir::Type* fields_of_a_type(const ast::Expr* expr);  // check.py:26004

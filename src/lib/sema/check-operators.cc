@@ -1316,6 +1316,12 @@ namespace pl4g::sema {
         diags.emit(D::LANG_ISRECORD_OUTSIDE_COMPTIME, expr->span);
         return error_value(module);
       }
+      if (given == names::kind_of_name) [[unlikely]] {
+        diags.emit(D::LANG_KIND_ASKED_OUTSIDE_COMPTIME, expr->span);
+        return error_value(module);
+      }
+      if (given == names::alternatives_name)
+        return lower_alternatives(builder, expr, expected);
       if (sema::asks_about_a_piece().contains(std::string(given)))
         return lower_asked(builder, expr, given, expected);
       if (given == typeof_name) [[unlikely]] {
@@ -2587,6 +2593,59 @@ namespace pl4g::sema {
       return error_value(module);
     }
     return builder.make_tuple(leaves, answer, expr->span);
+  }
+
+
+  ir::Value* Checker::lower_alternatives(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected)
+  {
+    if (expr->args.size() != 1) [[unlikely]] {
+      diags.emit(D::LANG_CALL_WRONG_ARGUMENT_COUNT, expr->span,
+                 { { "name", names::alternatives_name }, { "expected", 1 }, { "found", expr->args.size() } });
+      return error_value(module);
+    }
+    auto given = lower_expr(builder, expr->args[0], nullptr);
+    auto found = value_type_of(given);
+    if (found == ir::error_type()) [[unlikely]]
+      return error_value(module);
+    auto sum = ir::as<ir::SumType>(found);
+    if (sum == nullptr) [[unlikely]] {
+      diags.emit(D::LANG_ALTERNATIVES_NOT_A_SUM, expr->args[0]->span, { { "found", found->written() } });
+      return error_value(module);
+    }
+    Span span = expr->span;
+    auto place = builder.cast(ir::CastKind::bitcast, given, ir::ptr_type(sum, true), span);
+    auto tag = builder.load(tag_place(builder, place, sum, span), span);
+    ir::Value* truth = nullptr;
+    std::vector<ir::Value*> pairs;
+    for (std::size_t at = 0; at < sum->variants.size(); ++at) {
+      const auto& [name, held] = sum->variants[at];
+      bool nothing = held == ir::void_type();
+      auto shown = nothing ? ir::bool_type() : held;
+      auto view_ty = ir::array_type(shown);
+      if (nothing && truth == nullptr) {
+        truth = builder.frame(ir::bool_type(), span);
+        builder.store(truth, builder.bool_const(true), span);
+      }
+      auto where = nothing ? truth : place;
+      auto start = builder.cast(ir::CastKind::bitcast, where, ir::parts_of(view_ty)[0], span);
+      auto holds = builder.compare(ir::CmpPred::eq, tag, builder.int_const(ir::u8(), std::int64_t(at)), span);
+      auto count = builder.cast(ir::CastKind::zext, holds, ir::u64(), span);
+      auto text = written_text(builder, name, span);
+      std::vector<ir::Value*> lengths{ count };
+      std::vector<ir::Value*> strides{ builder.int_const(ir::u64(), 1) };
+      auto seen = view(builder, start, lengths, strides, view_ty, span);
+      pairs.push_back(made_tuple(builder, std::vector<ir::Value*>{ text, seen },
+                                 ir::tuple_type({ ir::str_type(), view_ty }), span));
+    }
+    std::vector<const ir::Type*> types;
+    for (auto one : pairs)
+      types.push_back(one->ty);
+    auto whole = ir::tuple_type(std::move(types));
+    if (! accepts(expected, whole)) [[unlikely]] {
+      report_mismatch(span, whole, expected);
+      return error_value(module);
+    }
+    return made_tuple(builder, pairs, whole, span);
   }
 
 

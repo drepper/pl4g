@@ -256,6 +256,8 @@
     // compiler can settle.
     std::optional<bool> settled(const ast::Expr* condition);  // check.py:17024
     // Whether `⎕isrecord` was asked of a record.
+    // Whether `⎕kindof(⌜T⌝) = "KIND"` holds, where `condition` asks it.
+    std::optional<bool> settled_kind(const ast::Binary* condition);
     std::optional<bool> settled_is_record(const ast::Call* call);  // check.py:17060
     // Both sides of a logical operator, where both are settled.
     std::optional<bool> both_settled(const ast::Binary* condition, const std::function<bool(std::span<const bool>)>& joined);  // check.py:17079

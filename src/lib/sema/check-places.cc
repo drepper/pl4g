@@ -2030,6 +2030,8 @@ namespace pl4g::sema {
         return both_settled(binary, [](std::span<const bool> sides) { return std::ranges::any_of(sides, std::identity{}); });
       case ast::BinaryOp::equal:
       case ast::BinaryOp::not_equal: {
+        if (auto kind = settled_kind(binary))
+          return binary->op == ast::BinaryOp::equal ? *kind : ! *kind;
         const ir::Type* left = type_stood_for(binary->left);
         const ir::Type* right = type_stood_for(binary->right);
         if (left == nullptr || right == nullptr)
@@ -2045,6 +2047,94 @@ namespace pl4g::sema {
       if (auto callee = ast::as<ast::NameRef>(call->callee); callee != nullptr && callee->name == is_record_name)
         return settled_is_record(call);
     return std::nullopt;
+  }
+
+
+  namespace {
+
+    // What `⎕kindof` answers, for each kind of type there is, in the words the
+    // specification uses; "other" is everything a program cannot hold as a
+    // value of its own.
+    std::span<const std::string_view> kinds()
+  {
+    static constexpr std::string_view every[] = { "integer", "float", "bool",       "char",   "str",    "enumeration",
+                                                  "record",  "sum",   "tuple",      "array",  "list",   "set",
+                                                  "dictionary", "result", "reference", "function", "other" };
+    return every;
+  }
+
+
+    // The kind `⎕kindof` names for `ty`.
+    std::string_view kind_of(const ir::Type* ty)
+  {
+    if (ir::is<ir::IntType>(ty))
+      return "integer";
+    if (ir::is<ir::FloatType>(ty))
+      return "float";
+    if (ty == ir::bool_type())
+      return "bool";
+    if (ty == ir::char_type())
+      return "char";
+    if (ty == ir::str_type())
+      return "str";
+    if (ir::is<ir::EnumType>(ty))
+      return "enumeration";
+    if (ir::is<ir::ProductType>(ty))
+      return "record";
+    if (ir::is<ir::SumType>(ty))
+      return "sum";
+    if (ir::is<ir::TupleType>(ty))
+      return "tuple";
+    if (ir::is<ir::ArrayType>(ty))
+      return "array";
+    if (ir::is<ir::ListType>(ty))
+      return "list";
+    if (ir::is<ir::SetType>(ty))
+      return "set";
+    if (ir::is<ir::DictType>(ty))
+      return "dictionary";
+    if (ir::is<ir::ResultType>(ty))
+      return "result";
+    if (ir::is<ir::PtrType>(ty))
+      return "reference";
+    if (ir::is<ir::FuncType>(ty))
+      return "function";
+    return "other";
+  }
+
+  } // namespace
+
+
+  std::optional<bool> Checker::settled_kind(const ast::Binary* condition)
+  {
+    const ast::Expr* asked = condition->left;
+    const ast::Expr* said = condition->right;
+    if (ast::is<ast::StringLit>(asked))
+      std::swap(asked, said);
+    auto call = ast::as<ast::Call>(asked);
+    auto callee = call != nullptr ? ast::as<ast::NameRef>(call->callee) : nullptr;
+    auto literal = ast::as<ast::StringLit>(said);
+    if (callee == nullptr || callee->name != names::kind_of_name || literal == nullptr)
+      return std::nullopt;
+    if (call->args.size() != 1) [[unlikely]] {
+      diags.emit(D::LANG_CALL_WRONG_ARGUMENT_COUNT, call->span,
+                 { { "name", names::kind_of_name }, { "expected", 1 }, { "found", call->args.size() } });
+      return false;
+    }
+    if (std::ranges::find(kinds(), literal->value) == kinds().end()) [[unlikely]] {
+      std::string every;
+      for (auto one : kinds()) {
+        if (! every.empty())
+          every += ", ";
+        every += one;
+      }
+      diags.emit(D::LANG_KIND_UNKNOWN, literal->span, { { "found", std::string(literal->value) }, { "kinds", every } });
+      return false;
+    }
+    const ir::Type* found = type_stood_for(call->args[0]);
+    if (found == nullptr)
+      return std::nullopt;
+    return kind_of(found) == literal->value;
   }
 
 
