@@ -1,0 +1,87 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A string of JSON is UTF-8 in and UTF-8 out.**  `json.decode` reads the escapes
+※ -- the eight of one character, and `\u` with four hexadecimal digits, either
+※ case -- a pair of `\u` escapes of the two halves of a surrogate pair being the
+※ one character beyond U+FFFF they encode, and checks what is not an escape as
+※ UTF-8, as `⎕text` does: the text a `json.Value` holds is a `str`, well formed
+※ by construction.  A string is read thirty-two bytes at a time to its first
+※ quote, backslash or control character, so strings around that length, with
+※ the special byte at every place in a block, are here.
+※
+※ `json.encode` writes `"`, `\` and the control characters as escapes -- the five
+※ named ones by name, the rest as `\u` and four small digits, as Python does --
+※ and everything else as it is, or with `.ascii ← true` every character above
+※ ASCII as `\u` escapes, a surrogate pair beyond U+FFFF.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+let json := ⎕import("json")
+
+※ The text `document`, a JSON string, stands for; "?" where it is refused.
+fn read(document: str) → str:
+    let pool: mut arena = ⎕arena
+    match json.decode(⎕bytes(document), &mut pool):
+        json.Value(v):
+            match v:
+                str(s): s
+                _: "?"
+        ⊥(_):
+            "?"
+
+※ `text` written as a JSON string.
+fn written(text: str, ascii: bool) → str:
+    let pool: mut arena = ⎕arena
+    ⎕text(json.encode(json.Value(.text ← text), &mut pool, .ascii ← ascii) ?? []) ?? "?"
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ every escape
+    if read("\"\\\"\\\\\\/\\b\\f\\n\\r\\t\"") ≠ "\"\\/\u0008\u000C\n\r\t":
+        return 1u6
+    if read("\"\\u0041\\u00e9\\u00E9\\u20AC\\uFFFF\\u0000\"") ≠ "Aéé€￿\u0000":
+        return 2u6
+    ※ a surrogate pair is one character
+    if read("\"\\ud83d\\ude00 \\uD834\\uDD1E\"") ≠ "\U0001F600 \U0001D11E":
+        return 3u6
+    ※ UTF-8 as it is, of every length
+    if read("\"aé€😀\"") ≠ "aé€😀":
+        return 4u6
+    ※ and long strings: the special byte at every place of the blocks read
+    let i: mut u64 = 0u64
+    while i < 70u64:
+        let body: mut str = ""
+        let j: mut u64 = 0u64
+        while j < i:
+            body ← body ⧺ "x"
+            j ← j + 1u64
+        if read("\"" ⧺ body ⧺ "\"") ≠ body or read("\"" ⧺ body ⧺ "\\n" ⧺ body ⧺ "\"") ≠ body ⧺ "\n" ⧺ body:
+            return 5u6
+        if read("\"" ⧺ body ⧺ "é\\u00e9\\\\\"") ≠ body ⧺ "éé\\":
+            return 6u6
+        i ← i + 1u64
+    ※ written: what needs an escape, and what does not
+    if written("a\"b\\c/\n\r\t\u0008\u000C\u0001\u001F\u007F", false) ≠ "\"a\\\"b\\\\c/\\n\\r\\t\\b\\f\\u0001\\u001f\u007F\"":
+        return 7u6
+    if written("é€😀 ", false) ≠ "\"é€😀 \"":
+        return 8u6
+    if written("é€😀", true) ≠ "\"\\u00e9\\u20ac\\ud83d\\ude00\"":
+        return 9u6
+    ※ and long ones, with what needs an escape at every place
+    i ← 0u64
+    while i < 70u64:
+        let body: mut str = ""
+        let j: mut u64 = 0u64
+        while j < i:
+            body ← body ⧺ "y"
+            j ← j + 1u64
+        if written(body ⧺ "\n" ⧺ body ⧺ "é", false) ≠ "\"" ⧺ body ⧺ "\\n" ⧺ body ⧺ "é\"":
+            return 10u6
+        if written(body ⧺ "é" ⧺ body, true) ≠ "\"" ⧺ body ⧺ "\\u00e9" ⧺ body ⧺ "\"":
+            return 11u6
+        ※ and read back as it was
+        if read(written(body ⧺ "\u0001😀\"" ⧺ body, true)) ≠ body ⧺ "\u0001😀\"" ⧺ body:
+            return 12u6
+        i ← i + 1u64
+    0u6

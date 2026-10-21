@@ -1,0 +1,63 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **An object is its members in the order the document wrote them**, a list and
+※ not a table, so a key written twice is two members unless `json.decode` is
+※ told otherwise: `json.Duplicates.keep`, the default, keeps every member as
+※ written, and what is decoded is written back byte for byte; `first` keeps the
+※ first of them; `last` keeps the first one's place with the last one's value,
+※ which is what Python and JavaScript do; `refuse` refuses the document at the
+※ second key.  RFC 8259 says only that the names "SHOULD be unique" and that
+※ what a reader does otherwise is not predictable; the default is the one that
+※ loses nothing.
+※
+※ And `json.equal` compares two values kind by kind, members in order.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+let json := ⎕import("json")
+
+※ The document read with `duplicates`, written back compactly; "!" where refused.
+fn read(text: str, duplicates: json.Duplicates) → str:
+    let pool: mut arena = ⎕arena
+    match json.decode(⎕bytes(text), &mut pool, json.Extensions.strict, 1024u64, duplicates):
+        json.Value(v):
+            ⎕text(json.encode(v, &mut pool) ?? []) ?? "?"
+        ⊥(e):
+            "!" ⧺ ⍕⎕drop(e.at)
+
+※ Whether two documents decode to equal values.
+fn same(a: str, b: str) → bool:
+    let pool: mut arena = ⎕arena
+    match json.decode(⎕bytes(a), &mut pool):
+        json.Value(x):
+            match json.decode(⎕bytes(b), &mut pool):
+                json.Value(y):
+                    json.equal(x, y)
+                ⊥(_):
+                    false
+        ⊥(_):
+            false
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let text: str = "{\"a\":1,\"b\":{\"x\":1,\"x\":[2]},\"a\":3,\"c\":4,\"a\":5}"
+    if read(text, json.Duplicates.keep) ≠ text:
+        return 1u6
+    if read(text, json.Duplicates.first) ≠ "{\"a\":1,\"b\":{\"x\":1},\"c\":4}":
+        return 2u6
+    if read(text, json.Duplicates.last) ≠ "{\"a\":5,\"b\":{\"x\":[2]},\"c\":4}":
+        return 3u6
+    ※ the first key written a second time is where it is refused: the inner one
+    if read(text, json.Duplicates.refuse) ≠ "!18":
+        return 4u6
+    if read("{\"a\":1,\"b\":2}", json.Duplicates.refuse) ≠ "{\"a\":1,\"b\":2}":
+        return 5u6
+    ※ equal: kind by kind, in order
+    if ¬same("[1, {\"a\": [true, null, \"x\"]}]", " [1,{\"a\":[true,null,\"x\"]}] "):
+        return 6u6
+    if same("[1]", "[1.0]") or same("{\"a\":1,\"b\":2}", "{\"b\":2,\"a\":1}") or same("[0.0]", "[-0.0]"):
+        return 7u6
+    if same("\"a\"", "\"b\"") or same("[1,2]", "[1]") or same("{\"a\":1}", "{\"b\":1}") or same("null", "false"):
+        return 8u6
+    0u6

@@ -1,0 +1,137 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A large document, and the two ways of finding where things begin.**  The
+※ first stage of `json.decode` reads sixty-four bytes at a time where the
+※ document is written as RFC 8259 writes strings and white space, and a byte at
+※ a time where an extension changes that -- comments, single quotes, JSON5's
+※ white space.  Both are to find the same places in the same bytes: the escapes
+※ a run of backslashes makes, a quote that is escaped and one that is not, where
+※ a run of something that is not a string begins.  So a document of several
+※ hundred kilobytes, made by mixing a counter -- arrays and objects nested,
+※ strings of every length with every escape and characters of every UTF-8
+※ length, numbers and literals -- is read both ways and must come to the same
+※ value, which is then written, read again and compared.  And bytes of it are
+※ changed, one at a time and many times over, to what breaks it or does not:
+※ each changed document is read both ways again, and both must refuse it at the
+※ same byte for the same reason, or both read it as the same value.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+let json := ⎕import("json")
+
+※ A number from another: splitmix64's mixing, which spreads every bit of the
+※ one over the other.
+fn mixed(x: u64) → u64:
+    let z: mut u64 = ⎕wrap(x + 0x9E3779B97F4A7C15u64)
+    z ← ⎕wrap((z ^ (z » 30u64)) × 0xBF58476D1CE4E5B9u64)
+    z ← ⎕wrap((z ^ (z » 27u64)) × 0x94D049BB133111EBu64)
+    z ^ (z » 31u64)
+
+※ What goes into the strings: plain letters, the bytes that want an escape, and
+※ characters of two, three and four bytes.
+let PIECES: str⟦12⟧ = ⟦"a", "bc", " ", "\\\"", "\\\\", "\\n", "\\u00e9", "\\ud83d\\ude00", "é", "€", "😀", "\\/"⟧ in ⎕static
+
+※ A value `depth` levels deep at most, made from `seed`, written onto `out`.
+fn value(seed: u64, depth: u64, out: mut [u8]) → [u8]:
+    let n: u64 = mixed(seed)
+    let pick: u64 = n % (if depth = 0u64: 6u64 else: 9u64) ?? 0u64
+    if pick = 0u64:
+        out ⧺← ⎕bytes("null")
+    elif pick = 1u64:
+        out ⧺← ⎕bytes(if n & 1024u64 = 0u64: "true" else: "false")
+    elif pick = 2u64:
+        out ← std.string.format_int((n » 3u64) % 2000000u64 ?? 0u64, out)
+    elif pick = 3u64:
+        out ← std.string.format_f64(⎕from_bits(n & 0x3FFFFFFFFFFFFFFFu64, ⌜f64⌝), out)
+    elif pick ≤ 5u64:
+        out ⧺← ⟦34u8⟧
+        let count: u64 = (n » 8u64) % 40u64 ?? 0u64
+        let i: mut u64 = 0u64
+        while i < count:
+            out ⧺← ⎕bytes(PIECES⟦⎕unit(mixed(n + i) % 12u64 ?? 0u64, ⌜idx⌝)⟧)
+            i ← i + 1u64
+        out ⧺← ⟦34u8⟧
+    else:
+        let object: bool = pick = 8u64
+        out ⧺← ⎕bytes(if object: "{" else: "[")
+        let count: u64 = (n » 8u64) % 7u64 ?? 0u64
+        let i: mut u64 = 0u64
+        while i < count:
+            if i > 0u64:
+                out ⧺← ⎕bytes(", ")
+            if object:
+                out ⧺← ⎕bytes("\"k")
+                out ← std.string.format_int(i, out)
+                out ⧺← ⎕bytes("\" : ")
+            out ← value(mixed(n ^ i), depth - 1u64, out)
+            i ← i + 1u64
+        out ⧺← ⎕bytes(if object: "}" else: "]")
+    out
+
+※ What a document comes to, read with `allow`: the value written back compactly,
+※ or the offset it is refused at.
+fn reading(bytes: u8⟦⟧, allow: json.Extensions) → str:
+    let pool: mut arena = ⎕arena
+    match json.decode(bytes, &mut pool, allow):
+        json.Value(v):
+            ⎕text(json.encode(v, &mut pool) ?? []) ?? "?"
+        ⊥(e):
+            "!" ⧺ ⍕⎕drop(e.at)
+
+※ Whether the two ways read a document alike: both refuse it, at the same byte
+※ for the same reason, or both read it as the same value.
+fn agree(bytes: u8⟦⟧) → bool:
+    let pool: mut arena = ⎕arena
+    match json.decode(bytes, &mut pool, json.Extensions.strict):
+        json.Value(quick):
+            match json.decode(bytes, &mut pool, json.Extensions.whitespace):
+                json.Value(slow):
+                    json.equal(quick, slow)
+                ⊥(_):
+                    false
+        ⊥(e):
+            match json.decode(bytes, &mut pool, json.Extensions.whitespace):
+                json.Value(_):
+                    false
+                ⊥(f):
+                    e.problem = f.problem and e.at = f.at
+
+※ Bytes a document is changed to: some that break it, some that do not.
+let CHANGES: u8⟦12⟧ = ⟦34u8, 92u8, 123u8, 125u8, 91u8, 93u8, 44u8, 58u8, 32u8, 49u8, 120u8, 0x80u8⟧ in ⎕static
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ a document of several hundred kilobytes
+    let document: mut [u8] = []
+    document ⧺← ⎕bytes("[")
+    let i: mut u64 = 0u64
+    while i < 1500u64:
+        if i > 0u64:
+            document ⧺← ⎕bytes(",\n")
+        document ← value(i, 5u64, document)
+        i ← i + 1u64
+    document ⧺← ⎕bytes("]")
+    if #document < 50000:
+        return 1u6
+    ※ read both ways, the same value, and written and read again
+    let quick: str = reading(document, json.Extensions.strict)
+    if quick = "" or ⎕bytes(quick)⟦0⟧ = 33u8:
+        return 2u6
+    if reading(document, json.Extensions.whitespace) ≠ quick:
+        return 3u6
+    if reading(⎕bytes(quick), json.Extensions.strict) ≠ quick:
+        return 4u6
+    ※ and changed, a byte at a time
+    let n: u64 = ⎕drop(#document)
+    let k: mut u64 = 0u64
+    while k < 150u64:
+        let m: u64 = mixed(k + 1000000u64)
+        let at: u64 ¤idx = ⎕unit(m % n ?? 0u64, ⌜idx⌝)
+        let was: u8 = document⟦at⟧
+        document⟦at⟧ ← CHANGES⟦⎕unit((m » 32u64) % 12u64 ?? 0u64, ⌜idx⌝)⟧
+        if ¬agree(document):
+            return 5u6
+        document⟦at⟧ ← was
+        k ← k + 1u64
+    0u6

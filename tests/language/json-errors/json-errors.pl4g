@@ -1,0 +1,97 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A document `json.decode` refuses is refused with why and where**: a
+※ `json.Problem`, the offset of the byte it was found at, and the line and
+※ the column that byte is on -- counted from one, a column being a character
+※ and not a byte, as an editor shows it.  The first problem is the one told,
+※ every kind of them here but `too_large`, which is four gigabytes of input.
+※
+※ Compare: **Python**'s `json.JSONDecodeError`, whose `pos`, `lineno` and
+※ `colno` are these three; **serde_json**'s `Error::line` and `column`, the
+※ column there counted in bytes; **simdjson**, which says what and not where.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+let json := ⎕import("json")
+
+※ Whether `bytes` is refused for `problem` at `at`, read as deep as `depth`
+※ says, and a key twice refused where `refuse` says so.
+fn refused(bytes: u8⟦⟧, problem: json.Problem, at: u64 ¤idx, depth: u64 ← 1024u64,
+           refuse: bool ← false) → bool:
+    let pool: mut arena = ⎕arena
+    let duplicates: json.Duplicates = if refuse: json.Duplicates.refuse else: json.Duplicates.keep
+    match json.decode(bytes, &mut pool, json.Extensions.strict, depth, duplicates):
+        json.Value(_):
+            false
+        ⊥(e):
+            e.problem = problem and e.at = at
+
+※ Whether `text` is refused at line `line` and column `column`.
+fn placed(text: str, line: u64, column: u64) → bool:
+    let pool: mut arena = ⎕arena
+    match json.decode(⎕bytes(text), &mut pool):
+        json.Value(_):
+            false
+        ⊥(e):
+            e.line = line and e.column = column
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ the bytes ending where more was wanted
+    if (¬refused(⎕bytes(""), json.Problem.truncated, 0) or ¬refused(⎕bytes("   "), json.Problem.truncated, 3)
+            or ¬refused(⎕bytes("[1,"), json.Problem.truncated, 3) or ¬refused(⎕bytes("[1"), json.Problem.truncated, 2)
+            or ¬refused(⎕bytes("{\"a\""), json.Problem.truncated, 4)
+            or ¬refused(⎕bytes("{\"a\":"), json.Problem.truncated, 5)
+            or ¬refused(⎕bytes("\"abc"), json.Problem.truncated, 4)
+            or ¬refused(⎕bytes("\"a\\"), json.Problem.truncated, 3) or ¬refused(⎕bytes("-"), json.Problem.truncated, 1)):
+        return 1u6
+    ※ a byte where it cannot stand
+    if (¬refused(⎕bytes("[1 2]"), json.Problem.unexpected, 3) or ¬refused(⎕bytes("{1:2}"), json.Problem.unexpected, 1)
+            or ¬refused(⎕bytes("tru"), json.Problem.unexpected, 0) or ¬refused(⎕bytes("[1,]"), json.Problem.unexpected, 3)
+            or ¬refused(⎕bytes("{\"a\" 1}"), json.Problem.unexpected, 5)
+            or ¬refused(⎕bytes("[true1]"), json.Problem.unexpected, 5)
+            or ¬refused(⎕bytes("[\"a\"\"b\"]"), json.Problem.unexpected, 4)
+            or ¬refused(⎕bytes("[1.5x]"), json.Problem.unexpected, 4)
+            or ¬refused(⎕bytes("-a"), json.Problem.unexpected, 1) or ¬refused(⎕bytes("]"), json.Problem.unexpected, 0)
+            or ¬refused(⎕bytes("[1}"), json.Problem.unexpected, 2) or ¬refused(⎕bytes("{\"a\":1]"), json.Problem.unexpected, 6)
+            or ¬refused(⎕bytes("NaN"), json.Problem.unexpected, 0)):
+        return 2u6
+    ※ a number broken off, or written as JSON does not write one
+    if (¬refused(⎕bytes("01"), json.Problem.malformed_number, 0) or ¬refused(⎕bytes("[-01]"), json.Problem.malformed_number, 1)
+            or ¬refused(⎕bytes("1."), json.Problem.malformed_number, 0) or ¬refused(⎕bytes("[1e]"), json.Problem.malformed_number, 1)
+            or ¬refused(⎕bytes("1e+"), json.Problem.malformed_number, 0) or ¬refused(⎕bytes(".5"), json.Problem.malformed_number, 0)):
+        return 3u6
+    ※ and one beyond every f64
+    if ¬refused(⎕bytes("[1e400]"), json.Problem.out_of_range, 1) or ¬refused(⎕bytes("-2e308"), json.Problem.out_of_range, 0):
+        return 4u6
+    ※ escapes
+    if (¬refused(⎕bytes("\"\\q\""), json.Problem.bad_escape, 1) or ¬refused(⎕bytes("\"ab\\u12G4\""), json.Problem.bad_escape, 3)
+            or ¬refused(⎕bytes("\"\\u12\""), json.Problem.bad_escape, 1) or ¬refused(⎕bytes("\"\\'\""), json.Problem.bad_escape, 1)):
+        return 5u6
+    if (¬refused(⎕bytes("\"\\udc00\""), json.Problem.lone_surrogate, 1)
+            or ¬refused(⎕bytes("\"x\\ud800\\u0041\""), json.Problem.lone_surrogate, 2)
+            or ¬refused(⎕bytes("\"\\ud800\""), json.Problem.lone_surrogate, 1)):
+        return 6u6
+    if ¬refused(⎕bytes("\"a\nb\""), json.Problem.control_character, 2) or ¬refused(⎕bytes("[\"\\n\u0001\"]"), json.Problem.control_character, 4):
+        return 7u6
+    ※ bytes that are not UTF-8, plain and after an escape
+    let bad: u8⟦3⟧ = ⟦34u8, 0xFFu8, 34u8⟧ in ⎕static
+    let late: u8⟦7⟧ = ⟦34u8, 92u8, 110u8, 97u8, 0xC3u8, 0x28u8, 34u8⟧ in ⎕static
+    let cut: u8⟦6⟧ = ⟦91u8, 34u8, 0xE2u8, 0x82u8, 34u8, 93u8⟧ in ⎕static
+    if (¬refused(bad, json.Problem.not_utf8, 1) or ¬refused(late, json.Problem.not_utf8, 4)
+            or ¬refused(cut, json.Problem.not_utf8, 2)):
+        return 8u6
+    ※ something after the value
+    if ¬refused(⎕bytes("1 2"), json.Problem.trailing, 2) or ¬refused(⎕bytes("[] x"), json.Problem.trailing, 3):
+        return 9u6
+    ※ deeper than asked
+    if ¬refused(⎕bytes("[[[]]]"), json.Problem.too_deep, 2, .depth ← 2u64) or ¬refused(⎕bytes("{\"a\":{}}"), json.Problem.too_deep, 5, .depth ← 1u64):
+        return 10u6
+    ※ a key twice, where that is refused
+    if ¬refused(⎕bytes("{\"a\":1, \"b\":2, \"a\":3}"), json.Problem.duplicate_key, 15, .refuse ← true):
+        return 11u6
+    ※ lines and columns: a line ends at a line feed, a column is a character
+    if ¬placed("[\n  1,\n  x]", 3u64, 3u64) or ¬placed("[\"é\", x]", 1u64, 7u64) or ¬placed("", 1u64, 1u64):
+        return 12u6
+    0u6

@@ -1,0 +1,98 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **What `json.decode` reads besides RFC 8259 is what `json.Extensions` says**,
+※ a flag at a time: each document here is refused without its flag, at the byte
+※ where the grammar stops it, and read with it -- and what it was read as is
+※ written back as strict JSON, which is what a program reading a configuration
+※ file of JSON5 and writing it out again gets.  `json5` is the set JSON5 adds;
+※ `byte_order_mark`, `control_characters`, `several`, `lone_surrogates` and
+※ `hash_comments` are outside it, as JSON5 has none of them.
+※
+※ Compare: **JSON5**, whose grammar the flags are; **Python**'s `json`, which
+※ reads `NaN` and `Infinity` unasked and a control character only with
+※ `strict=False`; **serde_json**, which reads none of these; **simdjson**, likewise;
+※ **RapidJSON**, whose `kParseCommentsFlag`, `kParseTrailingCommasFlag` and
+※ `kParseNanAndInfFlag` are this way of asking.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+let json := ⎕import("json")
+
+※ What `text` reads as, written back compactly; or the problem and the offset,
+※ as `!problem@offset`.
+fn read(text: str, allow: json.Extensions) → str:
+    let pool: mut arena = ⎕arena
+    match json.decode(⎕bytes(text), &mut pool, allow):
+        json.Value(v):
+            ⎕text(json.encode(v, &mut pool, .special ← true) ?? []) ?? "?"
+        ⊥(e):
+            "!" ⧺ name(e.problem) ⧺ "@" ⧺ ⍕⎕drop(e.at)
+
+※ What a problem is called.
+fn name(p: json.Problem) → str:
+    match p:
+        truncated: "truncated"
+        unexpected: "unexpected"
+        malformed_number: "malformed_number"
+        out_of_range: "out_of_range"
+        bad_escape: "bad_escape"
+        lone_surrogate: "lone_surrogate"
+        control_character: "control_character"
+        not_utf8: "not_utf8"
+        trailing: "trailing"
+        too_deep: "too_deep"
+        duplicate_key: "duplicate_key"
+        too_large: "too_large"
+
+※ Whether `text` is refused as `refused` without `flag` and read as `read_as`
+※ with it.
+fn needs(text: str, flag: json.Extensions, refused: str, read_as: str) → bool:
+    read(text, json.Extensions.strict) = refused and read(text, flag) = read_as
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if ¬needs("[1, // one\n 2 /* two */]", json.Extensions.comments, "!unexpected@4", "[1,2]"):
+        return 1u6
+    if ¬needs("# a comment\n{\"a\": 1 # and another\n}", json.Extensions.hash_comments,
+              "!unexpected@0", "{\"a\":1}"):
+        return 2u6
+    if ¬needs("[1, 2, {\"a\": 3,},]", json.Extensions.trailing_commas, "!unexpected@15", "[1,2,{\"a\":3}]"):
+        return 3u6
+    if ¬needs("['a\"b', 'it\\'s']", json.Extensions.single_quotes, "!unexpected@1", "[\"a\\\"b\",\"it's\"]"):
+        return 4u6
+    if ¬needs("{a: 1, $b_2: 2, é: 3}", json.Extensions.unquoted_keys, "!unexpected@1",
+              "{\"a\":1,\"$b_2\":2,\"é\":3}"):
+        return 5u6
+    if ¬needs("[NaN, Infinity, -Infinity]", json.Extensions.special_numbers, "!unexpected@1",
+              "[NaN,Infinity,-Infinity]"):
+        return 6u6
+    if ¬needs("[0x1F, -0xff, 0xFFFFFFFFFFFFFFFF]", json.Extensions.hex_numbers, "!unexpected@2",
+              "[31,-255,18446744073709551615]"):
+        return 7u6
+    if ¬needs("[+1, +2.5]", json.Extensions.leading_plus, "!unexpected@1", "[1,2.5]"):
+        return 8u6
+    if ¬needs("[.5, 5., -.5]", json.Extensions.loose_points, "!malformed_number@1", "[0.5,5.0,-0.5]"):
+        return 9u6
+    if ¬needs("\uFEFF[1]", json.Extensions.byte_order_mark, "!unexpected@0", "[1]"):
+        return 10u6
+    if ¬needs("[\"a\tb\"]", json.Extensions.control_characters, "!control_character@3", "[\"a\\tb\"]"):
+        return 11u6
+    if ¬needs("{\"a\":1}\n{\"b\":2}\n[3]", json.Extensions.several, "!trailing@8",
+              "[{\"a\":1},{\"b\":2},[3]]"):
+        return 12u6
+    if ¬needs("[\"\\ud800x\", \"\\udc00\"]", json.Extensions.lone_surrogates, "!lone_surrogate@2",
+              "[\"\uFFFDx\",\"\uFFFD\"]"):
+        return 13u6
+    if ¬needs("[\"\\x41\\v\\0\\q\\\n!\"]", json.Extensions.escapes, "!bad_escape@2", "[\"A\\u000b\\u0000q!\"]"):
+        return 14u6
+    if ¬needs("[1,\u00A02\u2028]", json.Extensions.whitespace, "!unexpected@3", "[1,2]"):
+        return 15u6
+    ※ everything JSON5 adds, at once
+    if read("// JSON5\n{unquoted: 'and you can quote me on that', hex: 0xDECAF,\n leading: .8675309, and: +1,\n positive: +Infinity, trailing: 'comma',}",
+            json.Extensions.json5) ≠ "{\"unquoted\":\"and you can quote me on that\",\"hex\":912559,\"leading\":0.8675309,\"and\":1,\"positive\":Infinity,\"trailing\":\"comma\"}":
+        return 16u6
+    ※ and the empty document of several is an empty array
+    if read("  \n", json.Extensions.several) ≠ "[]":
+        return 17u6
+    0u6

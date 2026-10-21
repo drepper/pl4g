@@ -1,0 +1,96 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **How deeply a document may nest is a parameter of `json.decode`**, 1024 unless
+※ the caller says otherwise, and an array or an object that would go deeper is
+※ refused as `too_deep` at its bracket.  Reading is recursive, a call or two for
+※ each level, so this is what keeps a hostile document of a million `[` from
+※ running the program off its stack: refused, at the bracket past the limit,
+※ having taken as much stack as the limit allows and no more.  Exactly as deep
+※ as the limit is read, written back and read again.
+※
+※ Compare: **serde_json**'s recursion limit of 128, on by default; **simdjson**'s
+※ `max_depth` of 1024, the default here; **Python**'s `json`, which runs into
+※ the interpreter's recursion limit and raises `RecursionError`; **RapidJSON**,
+※ whose recursive parser has no limit and whose iterative one has the heap's.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+let json := ⎕import("json")
+
+※ `levels` arrays, or objects of one member, one inside the other.
+fn nested(levels: u64, objects: bool) → [u8]:
+    let out: mut [u8] = []
+    let i: mut u64 = 0u64
+    while i < levels:
+        if objects:
+            out ⧺← ⎕bytes("{\"k\":")
+        else:
+            out ⧺← ⟦91u8⟧
+        i ← i + 1u64
+    out ⧺← ⎕bytes("0")
+    i ← 0u64
+    while i < levels:
+        if objects:
+            out ⧺← ⟦125u8⟧
+        else:
+            out ⧺← ⟦93u8⟧
+        i ← i + 1u64
+    out
+
+※ How deep a value goes: nought for one that is neither an array nor an object.
+fn depth(v: &json.Value) → u64:
+    match v⌖:
+        [json.Value](items):
+            let deepest: mut u64 = 0u64
+            foreach &e: json.Value = items:
+                deepest ← deepest ⌈ depth(e)
+            deepest + 1u64
+        [json.Member](members):
+            let deepest: mut u64 = 0u64
+            foreach &m: json.Member = members:
+                deepest ← deepest ⌈ depth(&m⌖.value)
+            deepest + 1u64
+        _:
+            0u64
+
+※ Whether `levels` of nesting are read with the limit `limit`, as deep as that,
+※ and written back as they were; or refused, where `refused` says they should
+※ be, as too deep at the bracket past the limit.
+fn holds(levels: u64, objects: bool, limit: u64, refused: bool) → bool:
+    let text: [u8] = nested(levels, objects)
+    let pool: mut arena = ⎕arena
+    match json.decode(text, &mut pool, .depth ← limit):
+        json.Value(v):
+            if refused or depth(&v) ≠ levels:
+                return false
+            let back: [u8] = json.encode(v, &mut pool) ?? []
+            (⎕text(back) ?? "") = (⎕text(text) ?? "x")
+        ⊥(e):
+            let width: u64 = if objects: 5u64 else: 1u64
+            refused and e.problem = json.Problem.too_deep and ⎕drop(e.at) = limit × width
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ the default limit, exactly and one past it
+    if ¬holds(1024u64, false, 1024u64, false) or ¬holds(1025u64, false, 1024u64, true):
+        return 1u6
+    if ¬holds(1024u64, true, 1024u64, false) or ¬holds(1025u64, true, 1024u64, true):
+        return 2u6
+    ※ a limit of its own
+    if ¬holds(3u64, false, 3u64, false) or ¬holds(4u64, false, 3u64, true) or ¬holds(1u64, true, 0u64, true):
+        return 3u6
+    ※ and a hostile one: a hundred thousand brackets, refused at the 1025th
+    let pool: mut arena = ⎕arena
+    let hostile: mut [u8] = []
+    let i: mut u64 = 0u64
+    while i < 100000u64:
+        hostile ⧺← ⟦91u8⟧
+        i ← i + 1u64
+    match json.decode(hostile, &mut pool):
+        json.Value(_):
+            return 4u6
+        ⊥(e):
+            if e.problem ≠ json.Problem.too_deep or e.at ≠ 1024:
+                return 5u6
+    0u6
