@@ -3707,11 +3707,11 @@ generated per shape and named for it, so a dump shows `__pl4g_table_slot.str` an
 there is no wondering which instantiation it belongs to.
 
 **A key is hashed by the runtime, with the table's seed.**  `pl4g_hash(bytes, count, seed)` is rapidhash in `runtime/io.c`, and
-`pl4g_hash_word(word, seed)` the same over a word's eight bytes; `_hash_of` calls one or the other, by `key_ir_type`, with what the
+`pl4g_hash_word(word, seed)` the same over a word's eight bytes; `_hashed` calls one or the other, by `key_ir_type`, with what the
 block's `SEED_FIELD` holds -- the seventh word, after `used`.  `pl4g_hash_seed()` hands out a seed no table has had: a count of those
 handed out mixed with a base `hash_start` works out from the stack `pl4g_args` is handed, the number `PL4G_HASH_SEED` says in the
-environment or the sixteen bytes the kernel points `AT_RANDOM` at in the auxiliary vector.  `__pl4g_table_new` writes one, `put`
-writes a fresh one before every rehash and one where the field says nought -- a table laid out in the image empty, which
+environment or the sixteen bytes the kernel points `AT_RANDOM` at in the auxiliary vector.  `__pl4g_table_new` writes one,
+`__pl4g_table_grow` a fresh one for every rebuild, `put` one where the field says nought -- a table laid out in the image empty, which
 `_empty_table_constant` writes so -- and the probe reads it.  A table laid out in the image with its keys has `tables.IMAGE_SEED`,
 and the checker places its entries with `sema/rapidhash.py`, which is the C over again; `tests/compiler/test_hash.py` compiles the
 hashing part of the C for the machine the suite runs on and holds the two to each other at every length the hash reads differently.
@@ -4010,31 +4010,42 @@ is the polarity `unless` wants, and `unless` is `ast.While` with `until` set: on
 flag, one negation where the condition is lowered, and every other thing a loop
 has -- labels, `break`, `continue`, an `else` arm -- unchanged.
 
-Three states, and what a table is rebuilt for
---------------------------------------------
+A dense array, an index, and what a table is rebuilt for
+--------------------------------------------------------
 
-An entry's first word says which of three it is: empty, holding a key, or given
-up.  The third is what taking a key out costs.  A probe walks a path until it
-reaches an empty entry, so emptying the entry a key left would end a probe that
-has to walk past it to reach what was put there after it; every key that
-collided with the one taken out would be lost.  So the entry is marked given up:
-`__pl4g_table_slot` walks past it, remembers the first one it walked past, and
-answers *that* entry when the probe reaches an empty one -- which is how an
-insertion takes back the room a removal left.
+A table keeps the order its keys were put in (spec.md, "A table is walked in the order its keys were first put in"), and is laid
+out as Python's dictionaries are since 3.6 for it.  The block is eight words: `arena`, `mask`, `count`, `stride`, `entries`,
+`used`, `seed`, `index`.  `index` and `entries` point into one run, the index first -- `mask + 1` words -- and the dense array of
+entries straight after it, with room for `room_for(mask + 1)` of them: three quarters of the index, which is as many as it may
+name, and one more.  An entry is what it was, the state word, the key, the value.
 
-The key of a given-up entry is still compared, which matters for one case: a key
-put back after being taken out is put back in the very entry it left, so a key
-is never in two places along one path.
+**A word of the index** is nought where nothing hashed there, and otherwise two things: in its low `OFFSET_BITS` (forty) bits how
+far past the start of the index its entry is -- never nought, the entries being after the index -- and above them the top
+twenty-four bits of the hash of that entry's key (`HASH_TOP`).  The probe, `_probe`, walks the index linearly from the hash masked:
+a word of nought ends it, the key being nowhere further; a word whose top bits are not the key's is walked past without reading
+its entry (`(word ^ hash) < 2^40` is one exclusive or and one comparison); only then is the entry read, walked past where it is
+given up, and its key compared.
 
-**The table carries two counts.**  `count` is how many keys it holds, which is
-what `#` answers; `used` is how many entries a probe may have to walk past,
-which is those and the ones given up.  The load is measured on `used`, since
-that is what lengthens a probe; how big the new array is, is decided by `count`,
-since that is what will be in it.  So a table crowded by entries given up is
-rebuilt at the size it has, and only a table crowded by keys is doubled -- which
-is what keeps a table that loses as many keys as it gains from doubling for
-ever.  Both counts are written afresh by the rehash, which is where the entries
-given up disappear.
+**The answer for a key that is not there is the entry after the last written**, `entries + used × stride`, which is where `put`
+would write it, and which is empty -- never written, so nought, the room the arena hands out having been nought.  So
+`__pl4g_table_slot` answers an entry either way, as it did, and a lookup reads the entry's first word for whether and the value
+unasked: nothing that calls it changed.  The extra entry is what makes that entry exist when the index is as full as it gets.
+
+**`put` writes a new key last**: the probe stops at a word of nought, which becomes the new entry's word, and the entry at `used`
+is written with the state and the key; `used` and `count` go up by one.  A key that is there is answered where it is, and its
+value replaced by the caller -- so it keeps its place.  Taking a key out (`__pl4g_table_give_up`) marks its entry given up and
+leaves the word of the index naming it, so a probe walking past it to what was put in after it still walks past; a key put back
+later is a new key and goes last, its old entry a hole.  `__pl4g_table_next` and `__pl4g_table_select` walk the dense array from
+nought to `used`, stepping past the holes, which is what makes a walk, and the set operators' answers, in order.
+
+**The table carries two counts.**  `count` is how many keys it holds, which is what `#` answers; `used` is how many entries are
+written, the keys and the holes, which is also how many words of the index are taken.  The load is measured on `used`: `put` calls
+`__pl4g_table_grow.<shape>` *before* its probe where one more would pass three quarters of the index.  That rebuilds the run --
+twice the index where `count + 1` is more than half of it, the same size otherwise, when the holes are at least a quarter -- moving
+the live entries in order to the front of the new dense array and putting each key's word in the first free word of its walk, with
+a fresh seed; no key is compared, every one moved being different.  So the holes disappear in a rebuild, a table crowded by holes is
+rebuilt at the size it has, and only a table crowded by keys doubles.  The rebuild is a function of its own so that `put`'s probe is
+not laid out around a loop that runs once in many insertions; the per-shape functions use `Shape.stride` as a constant.
 
 `__pl4g_table_give_up` is what marks one, and it is generated once for every
 table rather than once per shape: what it reads and writes is the entry's first
@@ -4772,10 +4783,14 @@ is the syntactic test 4638 asks.
 (`target/globals.py`), the way the frame table already relocated its rows; `PartsConst` lays parts out as a tuple of them would be.
 The compile-time interpreter places the target and writes its address.
 
-**A table is laid out by simulating `__pl4g_table_put`** in `_table_laid_out`: start at eight, grow before the probe when one more
-entry would pass three quarters, rebuild by walking the old entries in index order, probe linearly from the folded hash.  The
-entry is a record of the state word, the key as `key_ir_type` holds it, and the value -- checked against `Shape.stride` and
-`value_at`, since a layout that drifted would be a table nobody finds anything in.  The block's arena field is null, and
+**A table is laid out as `__pl4g_table_put` would have built it** in `_table_laid_out`: the keys in the order written, a key written
+twice keeping its first place and its last value; an index starting at eight words and doubling before a put that would pass three
+quarters of it -- nothing being taken out, every rebuild doubles -- and each key's word put in the first free word of its linear
+walk, in the order of the entries, with `tables.IMAGE_SEED`.  The run is one variable, a record of the index's words and the
+entries, with one empty entry after the last for a lookup of a key that is not there; the block's `index` points at it and
+`entries` past the index.  The entry is a record of the state word, the key as `key_ir_type` holds it, and the value -- checked
+against `Shape.stride` and `value_at`, since a layout that drifted would be a table nobody finds anything in.  A table laid out
+empty (`_empty_table_constant`) is a run of noughts as long as `__pl4g_table_new` would have taken.  The block's arena field is null, and
 `tables.arena_of` answers `⎕heap` for it through `__pl4g_table_arena`, so a table made out of one in the image has somewhere to
 come from.
 

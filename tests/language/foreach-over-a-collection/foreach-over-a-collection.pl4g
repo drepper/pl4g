@@ -5,10 +5,9 @@
 ※ names take that apart -- which is what several names next to each other
 ※ already do everywhere a tuple is bound.
 ※
-※ A table is not walked in the order its keys were put in it, and it has no such
-※ order: where a key lands is where its hash puts it, and growing the table moves
-※ everything.  So the answers here do not depend on the order: adding up what is
-※ there gives the same number whatever order the walk finds it in.
+※ A table is walked in the order its keys were first put in it, which
+※ `table-keeps-order` is about; the answers here are sums, which would be the
+※ same in any order.
 
 let std := ⎕import("std")
 

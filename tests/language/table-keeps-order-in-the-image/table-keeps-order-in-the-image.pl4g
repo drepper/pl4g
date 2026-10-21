@@ -1,0 +1,82 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A table the compiler lays out is in the order a program would have put its
+※ keys in, so it is walked in the order it was written: one written down `in
+※ ⎕static`, one a function worked out while compiling, and one written empty
+※ at the top level and filled while the program runs, which grows out of the
+※ entries the image gave it.  The order is the dense array's, and the compiler
+※ lays the dense array out in that order; the index beside it is laid out where
+※ the program's own insertions would have put each word, with the seed the image
+※ table carries, so a lookup finds every key.
+
+let std := ⎕import("std")
+
+let fixed: ⸨u64: str⸩ = ⸨30u64: "c", 10u64: "a", 20u64: "b"⸩ in ⎕static
+let odd: ⸨u8⸩ = ⸨5u8, 1u8, 3u8, 9u8⸩ in ⎕static
+
+fn made() → ⸨u64: u64⸩:
+    let d: mut ⸨u64: u64⸩ = ⸨⸩
+    foreach i := 0u64…40u64:
+        d⸨(40u64 - i) × 7919u64⸩ ← i
+    d⸨37u64 × 7919u64⸩ ← 99u64
+    d
+
+let built: ⸨u64: u64⸩ = made() in ⎕static
+※ a key written twice keeps the place it was first written in, and stands for
+※ what it was last given, as a key put in twice does
+let twice: ⸨u8: u8⸩ = ⸨1u8: 10u8, 2u8: 20u8, 1u8: 30u8⸩ in ⎕static
+let late: mut ⸨u64: u64⸩ = ⸨⸩
+let early: mut ⸨str: u8⸩ = ⸨"x": 1u8, "a": 2u8⸩
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let fine: mut bool = (fixed⸨10u64⸩ ?? "") = "a" ∧ ¬odd⸨2u8⸩
+    let keys: u64⟦3⟧ = ⟦30u64, 10u64, 20u64⟧ in ⎕static
+    let at: mut u64 ¤idx = 0
+    foreach k, _ := fixed:
+        fine ← fine ∧ k = keys⟦at⟧
+        at ← at + 1
+    if ¬fine ∨ at ≠ 3:
+        return 1u6
+
+    let wanted: u8⟦4⟧ = ⟦5u8, 1u8, 3u8, 9u8⟧ in ⎕static
+    at ← 0
+    foreach k := odd:
+        fine ← fine ∧ k = wanted⟦at⟧
+        at ← at + 1
+    if ¬fine ∨ at ≠ 4:
+        return 2u6
+
+    let turn: mut u64 = 0u64
+    foreach k, v := built:
+        fine ← fine ∧ k = (40u64 - turn) × 7919u64 ∧ v = (if turn = 3u64: 99u64 else: turn)
+        turn ← turn + 1u64
+    if ¬fine ∨ turn ≠ 40u64 ∨ (built⸨7919u64⸩ ?? 0u64) ≠ 39u64:
+        return 3u6
+
+    foreach i := 0u64…20u64:
+        late⸨(20u64 - i) × 31u64⸩ ← i
+    turn ← 0u64
+    foreach k, v := late:
+        fine ← fine ∧ k = (20u64 - turn) × 31u64 ∧ v = turn
+        turn ← turn + 1u64
+    if ¬fine ∨ turn ≠ 20u64:
+        return 4u6
+
+    early⸨"m"⸩ ← 3u8
+    early⸨"x"⸩ ← 4u8
+    let names: str⟦3⟧ = ⟦"x", "a", "m"⟧ in ⎕static
+    at ← 0
+    foreach k, _ := early:
+        fine ← fine ∧ k = names⟦at⟧
+        at ← at + 1
+    if ¬fine ∨ at ≠ 3 ∨ (early⸨"x"⸩ ?? 0u8) ≠ 4u8:
+        return 5u6
+
+    turn ← 0u64
+    foreach k, v := twice:
+        fine ← fine ∧ (if turn = 0u64: k = 1u8 ∧ v = 30u8 else: k = 2u8 ∧ v = 20u8)
+        turn ← turn + 1u64
+    if ¬fine ∨ turn ≠ 2u64:
+        return 6u6
+    0u6

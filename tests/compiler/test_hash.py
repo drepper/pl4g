@@ -124,22 +124,31 @@ def _walks(tmp_path: Path, seeds: list[str | None]) -> list[int]:
     return found
 
 
+def _in_order() -> int:
+    """What the program answers where the walk meets the keys in the order they
+    were put in: nought, and then one to thirty-nine."""
+    folded = 0
+    for key in range(40):
+        folded = (folded * 31 + key) & ((1 << 64) - 1)
+    return folded % 64
+
+
 def test_one_seed_walks_alike(tmp_path: Path) -> None:
     """`PL4G_HASH_SEED` is what makes a run one that can be had again."""
     walks = _walks(tmp_path, ["7", "7", "7"])
     assert len(set(walks)) == 1, walks
 
 
-def test_seeds_walk_differently(tmp_path: Path) -> None:
-    """Two seeds put the keys in two places, so a walk meets them in two
-    orders -- for some of six, which is all a hash can promise."""
+def test_seeds_walk_alike(tmp_path: Path) -> None:
+    """Two seeds put the keys in two places of the index, and a walk meets them
+    in one order all the same: the order they were put in, which is the order
+    of the dense array and nothing a seed decides."""
     walks = _walks(tmp_path, ["1", "2", "3", "4", "5", "6"])
-    assert len(set(walks)) > 1, walks
+    assert walks == [_in_order()] * 6, walks
 
 
-def test_a_run_seeds_its_tables_itself(tmp_path: Path) -> None:
-    """With nothing said, the kernel's random bytes are the base: six runs do
-    not all walk alike, which they would one time in some billions if they
-    did not draw a seed each."""
-    walks = _walks(tmp_path, [None] * 6)
-    assert len(set(walks)) > 1, walks
+def test_a_run_seeded_by_itself_walks_alike(tmp_path: Path) -> None:
+    """With nothing said, the kernel's random bytes are the base, and the walk
+    is in the order the keys were put in all the same."""
+    walks = _walks(tmp_path, [None] * 3)
+    assert walks == [_in_order()] * 3, walks

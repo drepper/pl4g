@@ -4360,8 +4360,8 @@ in the image as well.  At the top level and inside a body alike: inside one, the
 nothing is built when the line runs.  Anything worked out while the program runs is refused (4636), and so is a variable that may
 change (4637): nothing writes the image, so a `mut` name, a `mut` collection type, an element written and a `&mut` taken of one are
 all refused.  A table in the image is laid out entry by entry where the program's own insertions would have put it, with a seed of
-its own (below), so a lookup finds every key and a walk meets every key -- in its own order, which is not the order a table built
-while running would have.  A table made out of one -- a union, say -- comes out of `⎕heap`, there being no allocator to come out of
+its own (below), so a lookup finds every key and a walk meets every key in the order they were written, as it would in a table built
+while running.  A table made out of one -- a union, say -- comes out of `⎕heap`, there being no allocator to come out of
 the same one.
 
 **A call in the initializer is run while compiling.**  `let names: ⸨Colour: str⸩ = named() in ⎕static` calls a pure function of the
@@ -4563,16 +4563,17 @@ language whose dictionaries could not be keyed by it would have every one of tho
 rather than hidden: a key that is a word is hashed as its eight bytes and compared by one instruction, and a key that is text is
 hashed over its bytes and compared by a walk over them; an entry of such a table is wider by a word.
 
-**A program cannot choose keys that land together.**  A table's keys are hashed with rapidhash and a seed the table carries: one
-of its own, worked out from a base the process takes from the random bytes the kernel hands every process and a count of the tables
+**A program cannot choose keys that land together.**  A table's keys are hashed with rapidhash and a seed the table carries: one of
+its own, worked out from a base the process takes from the random bytes the kernel hands every process and a count of the tables
 made so far, so no two tables share one and knowing one says nothing of another.  A table takes a fresh seed whenever it grows; one
 laid out in the image with its keys has the seed it was laid out with, and nothing may be put in it; one laid out empty takes its
 first seed with its first key.  So keys read from outside cannot be chosen to fall into one place and turn every lookup into a walk
-of the whole table.  **A run can be repeated**: where the environment says `PL4G_HASH_SEED=n` when the program starts, the base is
-worked out from `n` instead, so the same program given the same input makes the same tables.  Compare **Python**, which seeds its
-hash per run and reads `PYTHONHASHSEED`; **Rust**, whose `HashMap` takes a seed of its own from a per-thread random base, as here;
-**Go**, which seeds each map, with an AES-based or a wyhash-style hash; and **C++** and **Java**, whose standard hashes are not
-seeded at all.
+of the whole table.  What the seed decides is where a key is looked for, and nothing a program can see: a table is walked in the
+order its keys were put in (below), whatever its seed.  **A run can be repeated**: where the environment says `PL4G_HASH_SEED=n`
+when the program starts, the base is worked out from `n` instead, so the same program given the same input makes the same tables.
+Compare **Python**, which seeds its hash per run and reads `PYTHONHASHSEED`; **Rust**, whose `HashMap` takes a seed of its own from
+a per-thread random base, as here; **Go**, which seeds each map, with an AES-based or a wyhash-style hash; and **C++** and **Java**,
+whose standard hashes are not seeded at all.
 
 Floating point is left out on purpose, and the reason is worth stating: a not-a-number is equal to nothing, including itself, so a
 key put in could never be found again; the two zeroes are equal and have different bits, so hashing them by their bits would put
@@ -4594,8 +4595,9 @@ is not.  So a key that is not there cannot be read past by accident, and `d⸨k�
 learn -- it is Python's `d.get(k, 0)` written with the operator the language already has, and `d⸨k⸩?` hands the miss back to the
 caller.  Python raises `KeyError`; this language has no exceptions and has a type that says the same thing in the signature.
 
-`d⸨k⸩ ← v` puts a value in a dictionary under a key.  A set has nothing to assign to (4434): a key goes into one by joining it
-with a set holding that key.
+`d⸨k⸩ ← v` puts a value in a dictionary under a key.  A key that is there already keeps its place among the others and stands for
+`v` from then on; a new one is the last of them.  A set has nothing to assign to (4434): a key goes into one by joining it with a
+set holding that key.
 
 **`†d⸨k⸩` takes a key out, and answers what was there.**  It undoes a lookup, so it is written before one (4700) and answers
 exactly what that lookup answers: the value where there was one, and whether there was one at all where the collection is a set.
@@ -4608,7 +4610,8 @@ if †s⸨k⸩:                          ※ a set says whether it held the key
 
 Nothing is reported for a value it leaves unread, which is what lets the one spelling be both the question and the line that only
 removes -- where Python needs `d.pop(k)` for the one and `del d[k]` for the other.  It is one walk: the entry is found once, read,
-and given up.  Taking out a key that is not there is nothing happening, and answers what a lookup of it would answer.
+and given up.  Taking out a key that is not there is nothing happening, and answers what a lookup of it would answer.  A key taken out
+and put in again is a new key, and is the last of them.
 
 **It is writing, so it needs `mut`** (4598), which reading does not: a name holding the read-only type cannot empty a table under
 everything else holding one.
@@ -4644,7 +4647,9 @@ collection is not a place to put a different collection either (4599): what stan
 | `a - b` | everything in `a` and not in `b` |
 
 What each answers is a set of its own, so it is of the writable type whatever its operands are, as a collection written down
-is: `let s: mut ⸨u8⸩ = a | b` may be written afterwards and changes neither `a` nor `b`.
+is: `let s: mut ⸨u8⸩ = a | b` may be written afterwards and changes neither `a` nor `b`.  Its keys are in Python's order: the ones
+of `a` it holds, in the order `a` has them, and then -- for `|` and `^` -- the ones of `b` it holds, in the order `b` has them.
+Comparing two tables with `=` asks what they hold and not in which order.
 
 `=` and `≠` compare two sets, or two dictionaries, for holding the same thing.  Ordering is not defined on them: Python reads `<=`
 as "is part of", and here ordering is about which of two comes first, which neither does.
@@ -5421,10 +5426,18 @@ function taking `yield`, which is the walk as a value and costs a call per turn 
 cheap: a row is a run of elements, so naming one is arithmetic on the place and no copy at all.  An array whose type does not say
 its shape is walked the same way, which is what lets a function take one of any length and still say what to do with each element.
 
-**A table is not walked in the order its keys were put in it**, and it has no such order: where a key lands is where its hash puts
-it, its hash depends on the table's seed, and growing the table moves everything -- so two runs walk one table in two orders, unless
-`PL4G_HASH_SEED` says otherwise.  Python promises the order keys were added in and pays for it with a second array; Go
-deliberately randomises its walk so that no program can come to depend on an order it never promised.  This promises nothing.
+**A table is walked in the order its keys were first put in it**, a set's and a dictionary's alike.  Putting in a key that is
+there already changes what it stands for and not where it is; taking one out takes it out of the order, and putting it back puts
+it last.  The order is the table's and not the run's: neither the seed nor growing the table changes it, so a table read in and
+written back -- a JSON object, a configuration -- comes out as it went in, and two runs walk one table alike.  A table laid out in
+the image is in the order it was written, a key written twice where it was first written.
+
+The cost is a second array, which is how it is kept (spec/details.md): the entries in the order they came, and an index of where
+each is, so a lookup reads a word of the index and then the entry.  Compare **Python**, whose dictionaries have kept this order
+since 3.6 and promised it since 3.7, with this layout; **Ruby**'s `Hash` and **JavaScript**'s `Map`, ordered by insertion too;
+**PHP**'s arrays, laid out the same way; **Java**'s `LinkedHashMap`, which threads a list through the entries for it; **Go**, which
+deliberately randomises its walk so that no program can come to depend on an order it never promised; and **C++**'s `unordered_map`
+and **Rust**'s `HashMap`, which promise no order at all.
 
 **Several names take each value apart**, the way several names take a tuple apart in a definition.  That is the whole of what
 `foreach k, v := d:` is -- a dictionary gives a key and a value together as a tuple, and two names take a tuple apart everywhere

@@ -3268,58 +3268,62 @@ def _known_while_compiling(expr: ast.Expr,
 
 
 def _table_laid_out(keys: Sequence[tuple[object, Const, Const | None]],
-                    hashed: Callable[[object, int], int]
-                    ) -> tuple[int, list[tuple[Const, Const | None] | None], int]:
+                    hashed: Callable[[object], int], stride: int
+                    ) -> tuple[int, list[int], list[tuple[Const, Const | None]]]:
     """Where each entry of a table goes, worked out the way the program would.
 
     The table a program builds from the same entries in the same order, grown at
-    the same points, with the seed *hashed* uses.  Answers the capacity, the
-    entries by index -- nothing for an empty one -- and how many keys there are.
+    the same points, with the seed *hashed* uses, of entries *stride* bytes long.
+    Answers the size of the index, its words -- each but nought saying, as
+    `tables` lays them out, how far past the start of the index its entry is and
+    the top bits of its key's hash --
+    and the entries in the order their keys were first put in, a key written
+    twice keeping its place and taking the later value.
     """
     capacity = tables.FIRST_CAPACITY
-    slots: list[tuple[object, Const, Const | None] | None] = [None] * capacity
-    count = used = 0
-
-    def slot_of(bits: object) -> int:
-        at = hashed(bits, capacity - 1)
-        while True:
-            held = slots[at]
-            if held is None or held[0] == bits:
-                return at
-            at = (at + 1) & (capacity - 1)
-
+    dense: dict[object, tuple[Const, Const | None]] = {}
     for bits, key, value in keys:
-        if (used + 1) * tables.LOAD_DENOMINATOR > capacity * tables.LOAD_NUMERATOR:
-            room = capacity * 2 if (count + 1) * tables.LOAD_DENOMINATOR \
-                > capacity * tables.LOAD_NUMERATOR else capacity
-            old, slots = slots, [None] * room
-            capacity, count, used = room, 0, 0
-            for one in old:
-                if one is not None:
-                    slots[slot_of(one[0])] = one
-                    count += 1
-                    used += 1
-        at = slot_of(bits)
-        if slots[at] is None:
-            count += 1
-            used += 1
-        slots[at] = (bits, key, value)
-    return capacity, [None if one is None else (one[1], one[2])
-                      for one in slots], count
+        # Nothing is taken out of a table written down, so every rebuild is one
+        # that doubles; a key written again asks for room as a new one does.
+        if (len(dense) + 1) * tables.LOAD_DENOMINATOR \
+                > capacity * tables.LOAD_NUMERATOR:
+            capacity *= 2
+        dense[bits] = (dense[bits][0] if bits in dense else key, value)
+    # The index, filled in the order the entries are in, which is the order
+    # the program's own insertions -- and every rebuild -- fill it in.
+    words = [0] * capacity
+    for at, bits in enumerate(dense):
+        full = hashed(bits)
+        where = full & (capacity - 1)
+        while words[where] != 0:
+            where = (where + 1) & (capacity - 1)
+        words[where] = (full & tables.HASH_TOP) \
+            | (capacity * tables.WORD + at * stride)
+    return capacity, words, list(dense.values())
 
 
-def _word_hash(bits: object, mask: int) -> int:
-    """Where a probe for a key of one word starts, in a table laid out in the
-    image: its hash with that table's seed, as the runtime works it out."""
+def _word_hash(bits: object) -> int:
+    """The hash of a key of one word, in a table laid out in the image: with
+    that table's seed, as the runtime works it out."""
     assert isinstance(bits, int)
-    return word_hash(bits, tables.IMAGE_SEED) & mask
+    return word_hash(bits, tables.IMAGE_SEED)
 
 
-def _text_hash(bits: object, mask: int) -> int:
-    """Where a probe for a key of text starts, in a table laid out in the image:
-    the hash of its bytes with that table's seed."""
+def _text_hash(bits: object) -> int:
+    """The hash of a key of text, in a table laid out in the image: of its
+    bytes, with that table's seed."""
     assert isinstance(bits, bytes)
-    return rapidhash(bits, tables.IMAGE_SEED) & mask
+    return rapidhash(bits, tables.IMAGE_SEED)
+
+
+def _table_block(module: Module) -> ProductType:
+    """The record of a table's block, as `__pl4g_table_new` writes one: the
+    fields at the offsets `tables` names them by."""
+    return ProductType((("arena", module.types.ptr_type(ARENA, True)),
+                        ("mask", U64), ("count", U64), ("stride", U64),
+                        ("entries", module.types.ptr_type(U8, True)),
+                        ("used", U64), ("seed", U64),
+                        ("index", module.types.ptr_type(U8, True))), name="table")
 
 
 def _counted(op: UnOp, value: int, ty: IntType) -> int:
@@ -5913,8 +5917,6 @@ class Checker:
             stored: Const = (self._module.int_const(U64, bits)
                              if held is U64 and isinstance(bits, int) else found)
             keys.append((bits, stored, given))
-        capacity, slots, count = _table_laid_out(
-            keys, _word_hash if held is U64 else _text_hash)
         entry = ProductType((("state", U64), ("key", held),
                              *((("value", shape.value),)
                                if shape.value is not None else ())),
@@ -5925,60 +5927,67 @@ class Checker:
             self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, node.value.span,
                              feature="a table of this shape in the image")
             return None
+        capacity, words, dense = _table_laid_out(
+            keys, _word_hash if held is U64 else _text_hash, shape.stride)
         live = self._module.int_const(U64, tables.LIVE)
-        run_ty = self._module.types.array_type(entry, (capacity,))
-        entries = self._image_variable(run_ty, self._module.array_const(
-            run_ty, [UndefConst(entry) if one is None
-                     else self._module.record_const(
-                         entry, (live, one[0], *((one[1],) if one[1] is not None
-                                                 else ())))
-                     for one in slots]))
-        block = ProductType((("arena", self._module.types.ptr_type(ARENA, True)),
-                             ("mask", U64), ("count", U64), ("stride", U64),
-                             ("entries", self._module.types.ptr_type(U8, True)),
-                             ("used", U64), ("seed", U64)), name="table")
+        # The index and the entries are one variable, the entries straight after
+        # the index, since that is how far a word of the index says they are.
+        # After the last entry one more, empty, which is what a lookup of a key
+        # that is not there reads; nothing may be put in the table, so there is
+        # no room for more.
+        index_ty = self._module.types.array_type(U64, (capacity,))
+        dense_ty = self._module.types.array_type(entry, (len(dense) + 1,))
+        run_ty = ProductType((("index", index_ty), ("entries", dense_ty)),
+                             name="run")
+        run = self._image_variable(run_ty, self._module.record_const(run_ty, (
+            self._module.array_const(
+                index_ty, [self._module.int_const(U64, word) for word in words]),
+            self._module.array_const(
+                dense_ty, [*(self._module.record_const(
+                    entry, (live, key, *((value,) if value is not None else ())))
+                    for key, value in dense), UndefConst(entry)]))))
+        block = _table_block(self._module)
         made = self._image_variable(block, self._module.record_const(block, (
             AddressConst(block.fields[0][1], None),
             self._module.int_const(U64, capacity - 1),
-            self._module.int_const(U64, count),
+            self._module.int_const(U64, len(dense)),
             self._module.int_const(U64, shape.stride),
-            AddressConst(block.fields[4][1], entries),
-            self._module.int_const(U64, count),
-            self._module.int_const(U64, tables.IMAGE_SEED))))
+            AddressConst(block.fields[4][1], run, capacity * tables.WORD),
+            self._module.int_const(U64, len(dense)),
+            self._module.int_const(U64, tables.IMAGE_SEED),
+            AddressConst(block.fields[7][1], run))))
         return AddressConst(ty, made)
 
     def _empty_table_constant(self, ty: Type) -> Const:
         """An empty set or dictionary of the heap, laid out in the image.
 
-        The block and a first run of entries, every one empty -- what
-        `__pl4g_table_new` would have made, with the heap as the allocator it grows
-        from.  Growing takes a new run from the heap and leaves this one where it
-        is, which nothing gives back: a table's runs are never handed back one at a
-        time.  So a program that never puts anything in it pays for none of it.
+        The block and a first run of an index and its entries, every word of it
+        nought -- what `__pl4g_table_new` would have made, with the heap as the
+        allocator it grows from.  Growing takes a new run from the heap and leaves
+        this one where it is, which nothing gives back: a table's runs are never
+        handed back one at a time.  So a program that never puts anything in it
+        pays for none of it.
         """
         assert isinstance(ty, (SetType, DictType))
         shape = tables.Shape(key=ty.element) if isinstance(ty, SetType) \
             else tables.Shape(key=ty.key, value=ty.value)
         capacity = tables.FIRST_CAPACITY
-        run_ty = self._module.types.array_type(U8, (capacity * shape.stride,))
-        entries = self._image_variable(run_ty, self._module.array_const(
-            run_ty, [self._module.int_const(U8, 0)] * (capacity * shape.stride)),
-            mutable=True)
-        arena = self._module.types.ptr_type(ARENA, True)
-        block = ProductType((("arena", arena), ("mask", U64), ("count", U64),
-                             ("stride", U64),
-                             ("entries", self._module.types.ptr_type(U8, True)),
-                             ("used", U64), ("seed", U64)), name="table")
+        size = capacity * tables.WORD + tables.room_for(capacity) * shape.stride
+        run_ty = self._module.types.array_type(U8, (size,))
+        run = self._image_variable(run_ty, self._module.array_const(
+            run_ty, [self._module.int_const(U8, 0)] * size), mutable=True)
+        block = _table_block(self._module)
         # No seed yet: the first key put in is what the table takes one for,
         # so that the one a program fills is seeded as one it made is.
         made = self._image_variable(block, self._module.record_const(block, (
-            AddressConst(arena, tables.heap_global(self._module)),
+            AddressConst(block.fields[0][1], tables.heap_global(self._module)),
             self._module.int_const(U64, capacity - 1),
             self._module.int_const(U64, 0),
             self._module.int_const(U64, shape.stride),
-            AddressConst(block.fields[4][1], entries),
+            AddressConst(block.fields[4][1], run, capacity * tables.WORD),
             self._module.int_const(U64, 0),
-            self._module.int_const(U64, 0))), mutable=True)
+            self._module.int_const(U64, 0),
+            AddressConst(block.fields[7][1], run))), mutable=True)
         return AddressConst(ty, made)
 
     def _key_bits(self, key: Const) -> object | None:
@@ -20669,10 +20678,12 @@ class Checker:
                       ty: SetType | DictType, span: Span) -> _Iteration:
         """Walk the keys a set holds, or the pairs a dictionary holds.
 
-        The places a table's entries are in are not all holding keys, so the
-        walk steps past the ones that are not; finding the next one is a
-        function of the runtime rather than a second loop written here, which
-        keeps the shape of this one the shape every other iterator has.
+        In the order the keys were first put in, which is the order of the
+        table's dense array of entries.  Not every entry of it holds a key --
+        taking one out leaves a hole -- so the walk steps past the ones that do
+        not; finding the next one is a function of the runtime rather than a
+        second loop written here, which keeps the shape of this one the shape
+        every other iterator has.
 
         A dictionary gives a key and what it stands for, together as a tuple.
         Two names take that apart, which is what several names next to each
@@ -20684,13 +20695,11 @@ class Checker:
         table = builder.cast(CastKind.BITCAST, value,
                              tables.table_type(self._module), span)
         finder = self._module.functions[tables.NEXT_SYMBOL]
-        pointer = tables.table_type(self._module)
-        capacity = builder.binary(
-            BinOp.WRAP_ADD,
-            builder.load(builder.binary(BinOp.ADD, table,
-                                        builder.int_const(U64, tables.MASK_FIELD),
-                                        span), span),
-            builder.int_const(U64, 1), span)
+        # How many entries are written, read once: the walk is of the dense
+        # array, in the order the keys were put in, and ends where it does.
+        written = builder.load(builder.binary(BinOp.ADD, table,
+                                              builder.int_const(U64, tables.USED_FIELD),
+                                              span), span)
         key_ty = ty.element if isinstance(ty, SetType) else ty.key
         element: Type = key_ty if isinstance(ty, SetType) else \
             self._module.types.tuple_type((ty.key, ty.value))
@@ -20716,7 +20725,7 @@ class Checker:
             element=element,
             start=(builder.call(finder, (table, builder.int_const(U64, 0)),
                                 U64, span),),
-            more=lambda b, s: b.compare(CmpPred.ULT, s[0], capacity, span),
+            more=lambda b, s: b.compare(CmpPred.ULT, s[0], written, span),
             take=take,
             step=lambda b, s: (b.call(
                 finder,

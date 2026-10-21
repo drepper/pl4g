@@ -5,12 +5,18 @@ much room it has and the entries themselves.  The value a program passes around
 is where that block is and nothing else, so two names for one collection see one
 answer.
 
-**The table is open-addressed with linear probing.**  Every entry is in the
-block rather than in a chain hanging off it, so a lookup touches one cache line
-where a chain would touch one per link, and a probe that runs on walks forward
-rather than following a pointer.  That is what the specification's O(1) means in
-practice, and it is what Python, Rust, Go, Swift and every recent implementation
-do; separate chaining is what the older ones did and what they moved away from.
+**The table is compact, and open-addressed with linear probing.**  Its entries
+are one dense array in the order their keys were first put in, and beside it an
+*index*: a power of two of words, each saying where in the dense array the entry
+whose key hashes there is, probed linearly.  The layout is Python's since 3.6
+(and its promise since 3.7): a walk is a walk of the dense array, which is the
+order the keys came in, and a lookup is a probe of the index -- a word a step,
+eight to a cache line -- and then the one entry it names.  The index word carries
+the top bits of the key's hash beside where the entry is, so a probe that meets
+another key's word rejects it without reading that entry at all.  Every entry is
+in the block rather than in a chain hanging off it, which is what Python, Rust,
+Go, Swift and every recent implementation do; separate chaining is what the
+older ones did and what they moved away from.
 
 **The three it needs are generated as functions of the representation** rather
 than written as assembly for each target.  Nothing in the compiler did that
@@ -45,7 +51,7 @@ from typing import Final
 from dataclasses import dataclass
 
 from ..ir.builder import IRBuilder
-from ..ir.function import SYSTEM_CCONV, FuncAttrs, Function, Linkage
+from ..ir.function import SYSTEM_CCONV, BasicBlock, FuncAttrs, Function, Linkage
 from ..ir.inst import AddressInst
 from ..ir.module import GlobalVar
 from ..target import statuses
@@ -83,20 +89,26 @@ HEAP_KEY: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}heap"
 #: one, which is what lets one table serve every instantiation.
 WORD: Final[int] = 8
 
-#: Where the fields of a table block are.  `mask` is the capacity less one, so
-#: that an index is a bitwise and.  The entries are a separate allocation rather
-#: than part of the block, so that the block never moves: what a program passes
-#: around is where the block is, and a table that grew under it would otherwise
-#: leave every name for it pointing at the old entries.
+#: Where the fields of a table block are.  `mask` is the size of the index less
+#: one, so that a place in it is a bitwise and.  The index and the entries are
+#: one allocation separate from the block, the index first and the entries
+#: straight after it, so that the block never moves: what a program passes around
+#: is where the block is, and a table that grew under it would otherwise leave
+#: every name for it pointing at the old entries.
 ARENA_FIELD: Final[int] = 0
 MASK_FIELD: Final[int] = WORD
 COUNT_FIELD: Final[int] = 2 * WORD
 STRIDE_FIELD: Final[int] = 3 * WORD
+#: Where the dense array of entries begins, which a walk reads; a probe reads
+#: `INDEX_FIELD` and nothing else, every word of the index saying how far from
+#: the index's own start the entry it names is.
 ENTRIES_FIELD: Final[int] = 4 * WORD
-#: How many entries are not free to probe past: the ones holding a key and the
-#: ones given up.  `count` says how many keys there are, which is what `#`
-#: answers; this says how long a probe can get, which is what decides when the
-#: table is rebuilt.  The two differ only where something has been taken out.
+#: How many entries of the dense array have been written: the ones holding a
+#: key and the holes taking one out left.  `count` says how many keys there
+#: are, which is what `#` answers; this is where the next key goes, how far a
+#: walk goes, and -- the index holding a word for every one of them -- how full
+#: the index is, which decides when the table is rebuilt.  The two differ only
+#: where something has been taken out.
 USED_FIELD: Final[int] = 5 * WORD
 
 #: What the table's keys are hashed with, its own and no other table's: worked
@@ -104,8 +116,24 @@ USED_FIELD: Final[int] = 5 * WORD
 #: out in the image empty, which says nought here -- when the first key goes in.
 SEED_FIELD: Final[int] = 6 * WORD
 
+#: Where the index is.
+INDEX_FIELD: Final[int] = 7 * WORD
+
 #: How much room a block takes, on the grain the allocator hands out.
-BLOCK_SIZE: Final[int] = 7 * WORD
+BLOCK_SIZE: Final[int] = 8 * WORD
+
+#: What a word of the index holds.  Nought is a place nothing hashed to.  Any
+#: other word is two things: in its low `OFFSET_BITS` bits, how many bytes after
+#: the start of the index the entry is -- never nought, the entries coming after
+#: the index -- and in the bits above, the top bits of the hash of that entry's
+#: key.  A probe compares those with the top bits of the hash it is looking for
+#: before it reads the entry: a word of another key is then turned away by one
+#: comparison, and the entry it names, which is in another cache line, is not
+#: read at all.  Forty bits of offset is a terabyte of entries; twenty-four bits
+#: of hash turn away all but one in sixteen million of the keys a probe meets.
+OFFSET_BITS: Final[int] = 40
+OFFSET_MASK: Final[int] = (1 << OFFSET_BITS) - 1
+HASH_TOP: Final[int] = ((1 << 64) - 1) ^ OFFSET_MASK
 
 #: The fields of one entry.  The state is always the first word; where the key
 #: is is always the second; where the *value* is depends on how wide the key is,
@@ -171,24 +199,36 @@ _LAYOUT: Final[DataLayout] = DataLayout(pointer_size=WORD)
 
 #: What the first word of an entry says about it.  Three states, because a key
 #: may be taken out: an entry that held one and does not any more is *given up*
-#: rather than emptied, since emptying it would end a probe that has to walk
-#: past it to find what was put there after it.  A probe therefore stops at an
-#: empty entry and walks past a given-up one, and an insertion reuses the first
-#: given-up entry it walked past.
+#: -- a hole in the dense array, which a walk steps past and which the word of
+#: the index naming it goes on naming, so that a probe walking past it to what
+#: was put in after it still walks past it.  An entry not yet written is empty,
+#: which is what the one a key would go in next is.
 EMPTY: Final[int] = 0
 LIVE: Final[int] = 1
 GONE: Final[int] = 2
 
-#: How many entries a table has to begin with.  A power of two, because the
-#: index is the hash masked; eight is enough that a collection written down with
-#: a handful of entries never grows while it is being built.
+#: How many words the index of a table has to begin with.  A power of two,
+#: because a place in it is the hash masked; eight is enough that a collection
+#: written down with a handful of entries never grows while it is being built.
 FIRST_CAPACITY: Final[int] = 8
 
-#: How full it gets before it grows, as a fraction: three of every four.  A
-#: linear probe lengthens sharply past that, and doubling before it does is what
-#: keeps the expected cost constant.
+#: How full the index gets before the table is rebuilt, as a fraction: three of
+#: every four.  A linear probe lengthens sharply past that, and doubling before
+#: it does is what keeps the expected cost constant.
 LOAD_NUMERATOR: Final[int] = 3
 LOAD_DENOMINATOR: Final[int] = 4
+
+
+def room_for(capacity: int) -> int:
+    """How many entries the dense array of an index of *capacity* words holds.
+
+    As many as the index may name before the table is rebuilt, and one more: the
+    one past the last written is where a key not in the table would go, and a
+    lookup of such a key reads that entry -- empty, every word of it nought --
+    rather than asking a second question of its answer.
+    """
+    return capacity * LOAD_NUMERATOR // LOAD_DENOMINATOR + 1
+
 
 #: The seed of a table the compiler lays out in the image with its keys in it.
 #: Such a table is never written, so nothing a program does can make use of
@@ -196,11 +236,12 @@ LOAD_DENOMINATOR: Final[int] = 4
 #: own with its first key.
 IMAGE_SEED: Final[int] = 0x6A09E667F3BCC908
 
-#: What the three are called.  They are the compiler's and a program cannot
+#: What the four are called.  They are the compiler's and a program cannot
 #: name them, so the names carry the prefix everything of the compiler's does.
 NEW_SYMBOL: Final[str] = "__pl4g_table_new"
 SLOT_SYMBOL: Final[str] = "__pl4g_table_slot"
 PUT_SYMBOL: Final[str] = "__pl4g_table_put"
+GROW_SYMBOL: Final[str] = "__pl4g_table_grow"
 
 
 def key_ir_type(shape: Shape) -> Type:
@@ -552,24 +593,21 @@ def _write(builder: IRBuilder, table: Value, offset: int, value: Value) -> None:
     builder.store(_field(builder, table, offset), value)
 
 
-def _hash_of(builder: IRBuilder, shape: Shape, key: Value, mask: Value,
-             seed: Value) -> Value:
-    """Where a probe for *key* starts, whatever kind of key it is: its hash with
-    the table's seed, masked.
+def _hashed(builder: IRBuilder, shape: Shape, key: Value, seed: Value) -> Value:
+    """The hash of *key* with the table's seed, whatever kind of key it is.
 
     A key that is a word is hashed as its eight bytes, and text over its bytes
     -- two strings that say the same thing are one key, and what they have in
     common is the bytes and not where they are.  Both with the seed, which is
     what keeps a program from choosing keys that land together: where a key goes
-    is nothing it can work out.
+    is nothing it can work out.  All sixty-four bits: the low ones say where a
+    probe starts and the top ones are what the index keeps beside the entry.
     """
     module = builder.module
     if key_ir_type(shape) is U64:
-        hashed = builder.call(hash_word_function(module), (key, seed), U64)
-    else:
-        hashed = builder.call(hash_function(module),
-                              (*_taken_apart(builder, key), seed), U64)
-    return builder.binary(BinOp.AND, hashed, mask)
+        return builder.call(hash_word_function(module), (key, seed), U64)
+    return builder.call(hash_function(module),
+                        (*_taken_apart(builder, key), seed), U64)
 
 
 def _same_key(builder: IRBuilder, shape: Shape, held: Value,
@@ -647,10 +685,11 @@ def _stepped(builder: IRBuilder, index: Value, mask: Value) -> Value:
 def _build_new(module: Module) -> Function:
     """``__pl4g_table_new(arena, stride)``: a table with room for a few entries.
 
-    Two allocations: the block, which never moves, and the entries, which are
-    replaced when the table grows.  Neither is zeroed here -- what the arena
-    hands out has never been handed out before, and what the system gave the
-    arena was zeroed when it gave it.
+    Two allocations: the block, which never moves, and the index with the dense
+    array of entries straight after it, which are replaced when the table is
+    rebuilt.  Neither is zeroed here -- what the arena hands out has never been
+    handed out before, and what the system gave the arena was zeroed when it
+    gave it.
     """
     table_ptr = table_type(module)
     arena_ptr = module.types.ptr_type(ARENA, mutable=True)
@@ -665,39 +704,116 @@ def _build_new(module: Module) -> Function:
     stride = entry.add_param(U64, "stride")
     block = _as(builder, builder.call(alloc, (arena, builder.int_const(U64, BLOCK_SIZE)),
                                       module.types.ptr_type(U8, mutable=True)), U64)
-    room = builder.binary(BinOp.WRAP_MUL, stride,
-                          builder.int_const(U64, FIRST_CAPACITY))
-    entries = builder.call(alloc, (arena, room),
-                           module.types.ptr_type(U8, mutable=True))
+    room = builder.binary(BinOp.WRAP_ADD,
+                          builder.binary(BinOp.WRAP_MUL, stride,
+                                         builder.int_const(U64, room_for(FIRST_CAPACITY))),
+                          builder.int_const(U64, FIRST_CAPACITY * WORD))
+    run = builder.call(alloc, (arena, room), module.types.ptr_type(U8, mutable=True))
     _write_address(builder, block, ARENA_FIELD, arena)
     _write(builder, block, MASK_FIELD, builder.int_const(U64, FIRST_CAPACITY - 1))
     _write(builder, block, COUNT_FIELD, builder.int_const(U64, 0))
     _write(builder, block, USED_FIELD, builder.int_const(U64, 0))
     _write(builder, block, STRIDE_FIELD, stride)
-    _write_address(builder, block, ENTRIES_FIELD, entries)
+    _write_address(builder, block, INDEX_FIELD, run)
+    _write_address(builder, block, ENTRIES_FIELD,
+                   builder.binary(BinOp.ADD, run,
+                                  builder.int_const(U64, FIRST_CAPACITY * WORD)))
     _write(builder, block, SEED_FIELD,
            builder.call(seed_function(module), (), U64))
     builder.ret(block)
     return func
 
 
-# -- finding where a key is, or where it would go --------------------------------
+# -- finding where a key is ------------------------------------------------------
+
+def _probe(func: Function, builder: IRBuilder, shape: Shape, key: Value,
+           hashed: Value, index: Value, mask: Value, threaded: bool
+           ) -> tuple[BasicBlock, Value, BasicBlock, Value]:
+    """Walk the index from where *hashed* puts *key*, to the entry holding it or
+    to the first word of the index nothing holds.
+
+    Answers the two blocks the walk ends in, each with what it ends with: the
+    entry, where the key was found, and the place in the index, where it was
+    not.  *threaded* is whether the memory token is carried along, which it is in
+    a function that writes: a probe only reads, but what it reads is what the
+    writes before it left.
+
+    **A word of the index is asked three things, the cheapest first.**  Nought
+    ends the walk, the key being nowhere further along it.  The top bits of the
+    hash it keeps are compared with the key's own next, which turns away all but
+    a few of the other keys a walk meets without reading the entry they name.
+    Only then is the entry read: whether it still holds a key -- one given up is
+    walked past, its word being what keeps the walk going past it -- and whether
+    that key is this one.
+    """
+    probe = func.add_block("probe")
+    tagged = func.add_block("tagged")
+    near = func.add_block("near")
+    live = func.add_block("live")
+    onward = func.add_block("onward")
+    found = func.add_block("found")
+    missing = func.add_block("missing")
+
+    def carried() -> tuple[Value, ...]:
+        return (builder.memory(),) if threaded else ()
+
+    def taken(block: BasicBlock) -> None:
+        if threaded:
+            builder.set_memory(block.add_param(MEM, "mem"))
+
+    builder.br(probe, (builder.binary(BinOp.AND, hashed, mask), *carried()))
+
+    builder.position_at(probe)
+    at = probe.add_param(U64, "at")
+    taken(probe)
+    word = builder.load(_entry(builder, index, at, builder.int_const(U64, WORD)))
+    builder.condbr(builder.compare(CmpPred.EQ, word, builder.int_const(U64, 0)),
+                   missing, tagged, true_args=(at, *carried()),
+                   false_args=carried())
+
+    builder.position_at(tagged)
+    taken(tagged)
+    builder.condbr(builder.compare(CmpPred.ULT,
+                                   builder.binary(BinOp.XOR, word, hashed),
+                                   builder.int_const(U64, 1 << OFFSET_BITS)),
+                   near, onward, true_args=carried(), false_args=carried())
+
+    builder.position_at(near)
+    taken(near)
+    place = builder.binary(BinOp.ADD, index,
+                           builder.binary(BinOp.AND, word,
+                                          builder.int_const(U64, OFFSET_MASK)))
+    builder.condbr(builder.compare(CmpPred.EQ, builder.load(place),
+                                   builder.int_const(U64, LIVE)),
+                   live, onward, true_args=carried(), false_args=carried())
+
+    builder.position_at(live)
+    taken(live)
+    builder.condbr(_same_key(builder, shape, _load_key(builder, shape, place), key),
+                   found, onward, true_args=(place, *carried()),
+                   false_args=carried())
+
+    builder.position_at(onward)
+    taken(onward)
+    builder.br(probe, (_stepped(builder, at, mask), *carried()))
+
+    holding = found.add_param(table_type(builder.module), "place")
+    taken(found)
+    nowhere = missing.add_param(U64, "at")
+    taken(missing)
+    return found, holding, missing, nowhere
+
 
 def _build_slot(module: Module, shape: Shape) -> Function:
     """``__pl4g_table_slot(table, key)``: the entry the key is in, or would go in.
 
-    One walk serves both questions, which is what makes a lookup and an
-    insertion the same cost: the probe stops at the key or at the first place
-    something may go, and which of the two it stopped at is what the caller
-    reads off the entry's own first word.
-
-    **An entry that was given up is walked past and remembered.**  Emptying an
-    entry when a key is taken out would end a probe that has to walk past it to
-    find what was put there after it; so it is marked given up, the probe goes
-    on, and the first such entry is where an insertion puts the key when the
-    probe reaches an empty one.  The key of a given-up entry is still compared:
-    a key put back where it was found is put back in the very entry it left,
-    which is what keeps one key in one place.
+    One answer serves both questions a program asks: whether the key is there
+    is what the entry's own first word says, and what it stands for is read from
+    the entry either way.  Where the key is not there, the entry answered is the
+    one after the last written -- where a key put in next would go, and empty:
+    its first word says nothing is there, and its value, which a lookup reads
+    unasked, is nought.  That entry is always there to be read, the dense array
+    having room for one more than the index may name (`room_for`).
     """
     table_ptr = table_type(module)
     held = key_ir_type(shape)
@@ -706,72 +822,194 @@ def _build_slot(module: Module, shape: Shape) -> Function:
     if not fresh:
         return func
     entry = func.add_block()
-    loop = func.add_block("probe")
-    free = func.add_block("free")
-    here = func.add_block("here")
-    reused = func.add_block("reused")
-    occupied = func.add_block("occupied")
-    same = func.add_block("same")
-    other = func.add_block("other")
-    given_up = func.add_block("given_up")
-    first = func.add_block("first")
-    onward = func.add_block("onward")
     builder = IRBuilder(module, func)
     builder.position_at(entry)
     table = entry.add_param(table_ptr, "table")
     key = entry.add_param(held, "key")
     mask = _read(builder, table, MASK_FIELD)
-    stride = _read(builder, table, STRIDE_FIELD)
-    entries = _read_address(builder, table, ENTRIES_FIELD, U64)
-    # One past the last index, which is what "nothing given up yet" is said
-    # with: an index no entry has, so no comparison against it can be wrong.
-    none = builder.binary(BinOp.WRAP_ADD, mask, builder.int_const(U64, 1))
-    builder.br(loop, (_hash_of(builder, shape, key, mask,
-                               _read(builder, table, SEED_FIELD)), none))
+    index = _read_address(builder, table, INDEX_FIELD, U64)
+    hashed = _hashed(builder, shape, key, _read(builder, table, SEED_FIELD))
+    found, place, missing, _ = _probe(func, builder, shape, key, hashed, index,
+                                      mask, threaded=False)
 
-    builder.position_at(loop)
-    index = loop.add_param(U64, "at")
-    kept = loop.add_param(U64, "kept")
-    place = _entry(builder, entries, index, stride)
-    state = builder.load(place)
-    builder.condbr(builder.compare(CmpPred.EQ, state,
-                                   builder.int_const(U64, EMPTY)),
-                   free, occupied)
-
-    # Nothing more along this path, so the key is not in the table: where it
-    # would go is the first entry given up, or this one where there was none.
-    builder.position_at(free)
-    builder.condbr(builder.compare(CmpPred.EQ, kept, none), here, reused)
-
-    builder.position_at(here)
+    builder.position_at(found)
     builder.ret(place)
 
-    builder.position_at(reused)
-    builder.ret(_entry(builder, entries, kept, stride))
-
-    builder.position_at(occupied)
-    builder.condbr(_same_key(builder, shape, _load_key(builder, shape, place),
-                             key), same, other)
-
-    builder.position_at(same)
-    builder.ret(place)
-
-    builder.position_at(other)
-    builder.condbr(builder.compare(CmpPred.EQ, state,
-                                   builder.int_const(U64, GONE)),
-                   given_up, onward)
-
-    builder.position_at(given_up)
-    builder.condbr(builder.compare(CmpPred.EQ, kept, none), first, onward)
-
-    # The two ways on: keeping what was already being kept, or keeping this
-    # entry because it is the first given-up one the probe has walked past.
-    builder.position_at(onward)
-    builder.br(loop, (_stepped(builder, index, mask), kept))
-
-    builder.position_at(first)
-    builder.br(loop, (_stepped(builder, index, mask), index))
+    builder.position_at(missing)
+    builder.ret(_entry(builder, _read_address(builder, table, ENTRIES_FIELD, U64),
+                       _read(builder, table, USED_FIELD),
+                       builder.int_const(U64, shape.stride)))
     return func
+
+
+# -- rebuilding one --------------------------------------------------------------
+
+def _build_grow(module: Module, shape: Shape) -> Function:
+    """``__pl4g_table_grow(table)``: the table rebuilt, with room for more.
+
+    **The keys are moved in the order they are in**, each to the next entry of
+    the new dense array, which is what keeps the order they were put in through
+    every rebuild; the entries given up are left behind, which is what clears
+    the holes taking keys out made.  The index is built afresh beside them: a
+    key is hashed with the table's new seed and put in the first word of its
+    walk nothing holds.  No key is compared with another -- every key moved is
+    different from every other -- so the walk asks one question of each word.
+
+    **Twice the room where the keys themselves are what filled it**, which is
+    where more than half of the index would hold them with one more, and the
+    same room otherwise: then what filled it was holes -- at least a quarter of
+    the index -- and rebuilding at the size it has is what clears them.  A
+    table that lost as many keys as it gained would otherwise double for ever,
+    and one rebuilt the moment it was full would be rebuilt again a key later.
+
+    Its own function rather than a part of `put`, because it is what `put`
+    almost never does: the loop that runs on every insertion is then not laid out
+    around the one that runs on one in many.
+    """
+    table_ptr = table_type(module)
+    func, fresh = generated(module, named(GROW_SYMBOL, shape), (table_ptr,), VOID)
+    if not fresh:
+        return func
+    alloc = allocator_function(module)
+    entry = func.add_block()
+    bigger = func.add_block("bigger")
+    afresh = func.add_block("afresh")
+    sized = func.add_block("sized")
+    walk = func.add_block("walk")
+    look = func.add_block("look")
+    move = func.add_block("move")
+    seek = func.add_block("seek")
+    skip = func.add_block("skip")
+    settle = func.add_block("settle")
+    onward = func.add_block("onward")
+    done = func.add_block("done")
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    table = entry.add_param(table_ptr, "table")
+    stride = builder.int_const(U64, shape.stride)
+    capacity = builder.binary(BinOp.WRAP_ADD, _read(builder, table, MASK_FIELD),
+                              builder.int_const(U64, 1))
+    old_used = _read(builder, table, USED_FIELD)
+    old_entries = _read_address(builder, table, ENTRIES_FIELD, U64)
+    keys = builder.binary(BinOp.WRAP_ADD, _read(builder, table, COUNT_FIELD),
+                          builder.int_const(U64, 1))
+    builder.condbr(builder.compare(CmpPred.UGT,
+                                   builder.binary(BinOp.WRAP_MUL, keys,
+                                                  builder.int_const(U64, 2)),
+                                   capacity),
+                   bigger, afresh)
+
+    builder.position_at(bigger)
+    builder.br(sized, (builder.binary(BinOp.WRAP_MUL, capacity,
+                                      builder.int_const(U64, 2)),))
+
+    builder.position_at(afresh)
+    builder.br(sized, (capacity,))
+
+    builder.position_at(sized)
+    words = sized.add_param(U64, "words")
+    # Three quarters of the index and one more, as `room_for` says.
+    room = builder.binary(BinOp.WRAP_ADD,
+                          builder.binary(BinOp.WRAP_SUB, words,
+                                         builder.binary(BinOp.LSHR, words,
+                                                        builder.int_const(U64, 2))),
+                          builder.int_const(U64, 1))
+    first = builder.binary(BinOp.WRAP_MUL, words, builder.int_const(U64, WORD))
+    run = builder.call(
+        alloc, (_read_address(builder, table, ARENA_FIELD, ARENA),
+                builder.binary(BinOp.WRAP_ADD, first,
+                               builder.binary(BinOp.WRAP_MUL, room, stride))),
+        module.types.ptr_type(U8, mutable=True))
+    index = _as(builder, run, U64)
+    entries = _as(builder, builder.binary(BinOp.ADD, run, first), U64)
+    mask = builder.binary(BinOp.WRAP_SUB, words, builder.int_const(U64, 1))
+    # A seed of its own again: the keys are all being put somewhere new anyway,
+    # and whatever could have been learned of where the old seed put them is
+    # learned of a seed the table no longer has.
+    seed = builder.call(seed_function(module), (), U64)
+    _write_address(builder, table, INDEX_FIELD, index)
+    _write_address(builder, table, ENTRIES_FIELD, entries)
+    _write(builder, table, MASK_FIELD, mask)
+    _write(builder, table, SEED_FIELD, seed)
+    builder.br(walk, (builder.int_const(U64, 0), builder.int_const(U64, 0),
+                      builder.memory()))
+
+    # Every entry of the old dense array, in order: `at` is where the walk is in
+    # it, and `moved` how many keys the new one holds so far.
+    builder.position_at(walk)
+    at = walk.add_param(U64, "at")
+    moved = walk.add_param(U64, "moved")
+    builder.set_memory(walk.add_param(MEM, "mem"))
+    builder.condbr(builder.compare(CmpPred.UGE, at, old_used), done, look,
+                   true_args=(moved, builder.memory()),
+                   false_args=(builder.memory(),))
+
+    builder.position_at(look)
+    builder.set_memory(look.add_param(MEM, "mem"))
+    old_place = _entry(builder, old_entries, at, stride)
+    builder.condbr(builder.compare(CmpPred.EQ, builder.load(old_place),
+                                   builder.int_const(U64, LIVE)),
+                   move, onward, true_args=(builder.memory(),),
+                   false_args=(moved, builder.memory()))
+
+    builder.position_at(move)
+    builder.set_memory(move.add_param(MEM, "mem"))
+    moved_key = _load_key(builder, shape, old_place)
+    into = _entry(builder, entries, moved, stride)
+    _write(builder, into, STATE_AT, builder.int_const(U64, LIVE))
+    _store_key(builder, shape, into, moved_key)
+    if shape.value is not None:
+        _store_value(builder, shape, into,
+                     _load_value(builder, shape, old_place))
+    hashed = _hashed(builder, shape, moved_key, seed)
+    builder.br(seek, (builder.binary(BinOp.AND, hashed, mask), builder.memory()))
+
+    builder.position_at(seek)
+    where = seek.add_param(U64, "where")
+    builder.set_memory(seek.add_param(MEM, "mem"))
+    word = _entry(builder, index, where, builder.int_const(U64, WORD))
+    builder.condbr(builder.compare(CmpPred.EQ, builder.load(word),
+                                   builder.int_const(U64, 0)),
+                   settle, skip, true_args=(builder.memory(),),
+                   false_args=(builder.memory(),))
+
+    builder.position_at(skip)
+    builder.set_memory(skip.add_param(MEM, "mem"))
+    builder.br(seek, (_stepped(builder, where, mask), builder.memory()))
+
+    builder.position_at(settle)
+    builder.set_memory(settle.add_param(MEM, "mem"))
+    builder.store(word, _index_word(builder, hashed,
+                                    builder.binary(BinOp.WRAP_ADD, first,
+                                                   builder.binary(BinOp.WRAP_MUL,
+                                                                  moved, stride))))
+    builder.br(onward, (builder.binary(BinOp.WRAP_ADD, moved,
+                                       builder.int_const(U64, 1)),
+                        builder.memory()))
+
+    builder.position_at(onward)
+    kept = onward.add_param(U64, "kept")
+    builder.set_memory(onward.add_param(MEM, "mem"))
+    builder.br(walk, (builder.binary(BinOp.WRAP_ADD, at, builder.int_const(U64, 1)),
+                      kept, builder.memory()))
+
+    # No holes in the new array: as many entries written as there are keys.
+    builder.position_at(done)
+    total = done.add_param(U64, "total")
+    builder.set_memory(done.add_param(MEM, "mem"))
+    _write(builder, table, COUNT_FIELD, total)
+    _write(builder, table, USED_FIELD, total)
+    builder.ret()
+    return func
+
+
+def _index_word(builder: IRBuilder, hashed: Value, offset: Value) -> Value:
+    """The word of the index naming the entry *offset* bytes past its start,
+    whose key hashed to *hashed*."""
+    return builder.binary(BinOp.OR,
+                          builder.binary(BinOp.AND, hashed,
+                                         builder.int_const(U64, HASH_TOP)),
+                          offset)
 
 
 # -- putting a key in ------------------------------------------------------------
@@ -779,17 +1017,22 @@ def _build_slot(module: Module, shape: Shape) -> Function:
 def _build_put(module: Module, shape: Shape) -> Function:
     """``__pl4g_table_put(table, key)``: the entry for the key, made if it is new.
 
-    The table is grown *before* the probe rather than after it, so that the
-    entry answered with is one of the new array's and not one of an array the
-    caller is about to be handed a pointer past.  Growing when the key turns out
-    to be there already merely grows a little early, which costs a doubling that
-    would have happened anyway.
+    **A new key goes last**: into the entry after the last written, with the
+    word of the index its probe stopped at naming it.  That is the whole of
+    keeping the order keys were put in -- a key already there keeps its entry and
+    has its value replaced where it is, and a key put back after it was taken
+    out is a new key, its old entry a hole the walk steps past.
 
-    **What crowds a table is what a probe must walk past**, which is the keys it
-    holds *and* the entries given up, so that is what the load is measured on.
-    Where the keys alone are not many, the table is rebuilt at the size it has
-    rather than doubled: what filled it was the entries given up, and rebuilding
-    is what clears them.
+    The table is rebuilt *before* the probe rather than after it, so that the
+    entry answered with is one of the new array's and not one of an array the
+    caller is about to be handed a pointer past.  Rebuilding when the key turns
+    out to be there already merely rebuilds a little early, which costs a
+    rebuilding that would have happened anyway.
+
+    **What crowds a table is what a probe must walk past**, which is a word of
+    the index for every entry written -- the keys it holds *and* the holes -- so
+    that is what the load is measured on, and what `__pl4g_table_grow` then
+    decides between doubling and clearing the holes by.
 
     Nothing but the memory token travels on a conditional branch here, and a
     memory token is nowhere: it says which path's ordering of the operations on
@@ -801,28 +1044,14 @@ def _build_put(module: Module, shape: Shape) -> Function:
                              (table_ptr, held), table_ptr)
     if not fresh:
         return func
-    slot_of = _build_slot(module, shape)
-    arena_ptr = module.types.ptr_type(ARENA, mutable=True)
-    alloc = allocator_function(module)
+    grow_it = _build_grow(module, shape)
     entry = func.add_block()
     # Before everything else, being what everything else reads: the blocks are
     # laid out in the order they are made.
     seeding = func.add_block("seeding")
     seeded = func.add_block("seeded")
     grow = func.add_block("grow")
-    bigger = func.add_block("bigger")
-    afresh = func.add_block("afresh")
-    sized = func.add_block("sized")
-    rehash = func.add_block("rehash")
-    one = func.add_block("one")
-    move = func.add_block("move")
-    stepped = func.add_block("stepped")
-    grown = func.add_block("grown")
     ready = func.add_block("ready")
-    there = func.add_block("there")
-    added = func.add_block("added")
-    fresh = func.add_block("fresh")
-    taken = func.add_block("taken")
     builder = IRBuilder(module, func)
     builder.position_at(entry)
     table = entry.add_param(table_ptr, "table")
@@ -840,8 +1069,8 @@ def _build_put(module: Module, shape: Shape) -> Function:
 
     builder.position_at(seeded)
     builder.set_memory(seeded.add_param(MEM, "mem"))
-    # One more entry than the probe has to walk past now, which is what it
-    # would have to walk past if this key is new.
+    # One more word of the index than is written now, which is what it would
+    # hold if this key is new.
     wanted = builder.binary(BinOp.WRAP_ADD, _read(builder, table, USED_FIELD),
                             builder.int_const(U64, 1))
     capacity = builder.binary(BinOp.WRAP_ADD, _read(builder, table, MASK_FIELD),
@@ -852,136 +1081,48 @@ def _build_put(module: Module, shape: Shape) -> Function:
                        builder.int_const(U64, LOAD_DENOMINATOR)),
         builder.binary(BinOp.WRAP_MUL, capacity,
                        builder.int_const(U64, LOAD_NUMERATOR)))
-    builder.condbr(crowded, grow, ready, false_args=(builder.memory(),))
+    builder.condbr(crowded, grow, ready, true_args=(builder.memory(),),
+                   false_args=(builder.memory(),))
 
-    # -- room for it, and everything moved into that -----------------------------
     builder.position_at(grow)
-    stride = _read(builder, table, STRIDE_FIELD)
-    old_mask = _read(builder, table, MASK_FIELD)
-    old_entries = _read_address(builder, table, ENTRIES_FIELD, U64)
-    # Twice the room where the keys themselves are what filled it, and the same
-    # room where what filled it was entries given up: rebuilding clears those,
-    # and a table that lost as many keys as it gained would otherwise double for
-    # ever.
-    keys = builder.binary(BinOp.WRAP_ADD, _read(builder, table, COUNT_FIELD),
-                          builder.int_const(U64, 1))
-    builder.condbr(
-        builder.compare(
-            CmpPred.UGT,
-            builder.binary(BinOp.WRAP_MUL, keys,
-                           builder.int_const(U64, LOAD_DENOMINATOR)),
-            builder.binary(BinOp.WRAP_MUL, capacity,
-                           builder.int_const(U64, LOAD_NUMERATOR))),
-        bigger, afresh)
-
-    builder.position_at(bigger)
-    builder.br(sized, (builder.binary(BinOp.WRAP_MUL, capacity,
-                                      builder.int_const(U64, 2)),))
-
-    builder.position_at(afresh)
-    builder.br(sized, (capacity,))
-
-    builder.position_at(sized)
-    room = sized.add_param(U64, "room")
-    roomier = builder.call(
-        alloc, (_read_address(builder, table, ARENA_FIELD, ARENA),
-                builder.binary(BinOp.WRAP_MUL, room, stride)),
-        module.types.ptr_type(U8, mutable=True))
-    _write_address(builder, table, ENTRIES_FIELD, roomier)
-    _write(builder, table, MASK_FIELD,
-           builder.binary(BinOp.WRAP_SUB, room, builder.int_const(U64, 1)))
-    _write(builder, table, COUNT_FIELD, builder.int_const(U64, 0))
-    _write(builder, table, USED_FIELD, builder.int_const(U64, 0))
-    # A seed of its own again: the keys are all being put somewhere new anyway,
-    # and whatever could have been learned of where the old seed put them is
-    # learned of a seed the table no longer has.
-    _write(builder, table, SEED_FIELD,
-           builder.call(seed_function(module), (), U64))
-    builder.br(rehash, (builder.int_const(U64, 0), builder.memory()))
-
-    # Every entry of the old array, put where the new array's own probe says.
-    builder.position_at(rehash)
-    at = rehash.add_param(U64, "at")
-    builder.set_memory(rehash.add_param(MEM, "mem"))
-    builder.condbr(builder.compare(CmpPred.UGT, at, old_mask), grown, one,
-                   true_args=(builder.memory(),),
-                   false_args=(builder.memory(),))
-
-    builder.position_at(one)
-    builder.set_memory(one.add_param(MEM, "mem"))
-    old_place = _entry(builder, old_entries, at, stride)
-    builder.condbr(builder.compare(CmpPred.EQ, builder.load(old_place),
-                                   builder.int_const(U64, LIVE)),
-                   move, stepped,
-                   true_args=(builder.memory(),),
-                   false_args=(builder.memory(),))
-
-    builder.position_at(move)
-    builder.set_memory(move.add_param(MEM, "mem"))
-    moved_key = _load_key(builder, shape, old_place)
-    into = builder.call(slot_of, (table, moved_key), table_ptr)
-    _write(builder, into, STATE_AT, builder.int_const(U64, LIVE))
-    _store_key(builder, shape, into, moved_key)
-    _write(builder, table, COUNT_FIELD,
-           builder.binary(BinOp.WRAP_ADD, _read(builder, table, COUNT_FIELD),
-                          builder.int_const(U64, 1)))
-    _write(builder, table, USED_FIELD,
-           builder.binary(BinOp.WRAP_ADD, _read(builder, table, USED_FIELD),
-                          builder.int_const(U64, 1)))
-    if shape.value is not None:
-        _store_value(builder, shape, into,
-                     _load_value(builder, shape, old_place))
-    builder.br(stepped, (builder.memory(),))
-
-    builder.position_at(stepped)
-    builder.set_memory(stepped.add_param(MEM, "mem"))
-    builder.br(rehash, (builder.binary(BinOp.WRAP_ADD, at,
-                                       builder.int_const(U64, 1)),
-                        builder.memory()))
-
-    builder.position_at(grown)
-    builder.set_memory(grown.add_param(MEM, "mem"))
+    builder.set_memory(grow.add_param(MEM, "mem"))
+    builder.call(grow_it, (table,), VOID)
     builder.br(ready, (builder.memory(),))
 
     # -- and now the entry itself ------------------------------------------------
     builder.position_at(ready)
     builder.set_memory(ready.add_param(MEM, "mem"))
-    place = builder.call(slot_of, (table, key), table_ptr)
-    builder.condbr(builder.compare(CmpPred.EQ, builder.load(place),
-                                   builder.int_const(U64, LIVE)),
-                   there, added,
-                   true_args=(builder.memory(),),
-                   false_args=(builder.memory(),))
+    mask = _read(builder, table, MASK_FIELD)
+    index = _read_address(builder, table, INDEX_FIELD, U64)
+    hashed = _hashed(builder, shape, key, _read(builder, table, SEED_FIELD))
+    found, place, missing, at = _probe(func, builder, shape, key, hashed, index,
+                                       mask, threaded=True)
 
-    builder.position_at(there)
-    there.add_param(MEM, "mem")
+    builder.position_at(found)
     builder.ret(place)
 
-    builder.position_at(added)
-    builder.set_memory(added.add_param(MEM, "mem"))
-    # An entry that was given up is one the probe already had to walk past, so
-    # taking it back is one more key and not one more of those.
-    was = builder.load(place)
-    _write(builder, place, STATE_AT, builder.int_const(U64, LIVE))
-    _store_key(builder, shape, place, key)
+    # Where the next entry is is how far past the index it is: the index's own
+    # words, and the entries written so far.
+    builder.position_at(missing)
+    used = _read(builder, table, USED_FIELD)
+    offset = builder.binary(
+        BinOp.WRAP_ADD,
+        builder.binary(BinOp.WRAP_MUL,
+                       builder.binary(BinOp.WRAP_ADD, mask,
+                                      builder.int_const(U64, 1)),
+                       builder.int_const(U64, WORD)),
+        builder.binary(BinOp.WRAP_MUL, used, builder.int_const(U64, shape.stride)))
+    made = builder.binary(BinOp.ADD, index, offset)
+    builder.store(_entry(builder, index, at, builder.int_const(U64, WORD)),
+                  _index_word(builder, hashed, offset))
+    _write(builder, made, STATE_AT, builder.int_const(U64, LIVE))
+    _store_key(builder, shape, made, key)
+    _write(builder, table, USED_FIELD,
+           builder.binary(BinOp.WRAP_ADD, used, builder.int_const(U64, 1)))
     _write(builder, table, COUNT_FIELD,
            builder.binary(BinOp.WRAP_ADD, _read(builder, table, COUNT_FIELD),
                           builder.int_const(U64, 1)))
-    builder.condbr(builder.compare(CmpPred.EQ, was,
-                                   builder.int_const(U64, GONE)),
-                   taken, fresh, true_args=(builder.memory(),),
-                   false_args=(builder.memory(),))
-
-    builder.position_at(fresh)
-    builder.set_memory(fresh.add_param(MEM, "mem"))
-    _write(builder, table, USED_FIELD,
-           builder.binary(BinOp.WRAP_ADD, _read(builder, table, USED_FIELD),
-                          builder.int_const(U64, 1)))
-    builder.br(taken, (builder.memory(),))
-
-    builder.position_at(taken)
-    builder.set_memory(taken.add_param(MEM, "mem"))
-    builder.ret(place)
+    builder.ret(made)
     return func
 
 
@@ -1034,15 +1175,18 @@ def _build_select(module: Module, shape: Shape) -> Function:
     walked = entry.add_param(table_ptr, "walked")
     other = entry.add_param(table_ptr, "other")
     want = entry.add_param(U64, "want")
-    mask = _read(builder, walked, MASK_FIELD)
-    stride = _read(builder, walked, STRIDE_FIELD)
+    # The walked table's entries in the order they were put in, which is the
+    # order the answer gets them in: what is in either is the left's keys and
+    # then the right's new ones, as Python's `a | b` has them.
+    used = _read(builder, walked, USED_FIELD)
+    stride = builder.int_const(U64, shape.stride)
     entries = _read_address(builder, walked, ENTRIES_FIELD, U64)
     builder.br(walk, (builder.int_const(U64, 0), builder.memory()))
 
     builder.position_at(walk)
     at = walk.add_param(U64, "at")
     builder.set_memory(walk.add_param(MEM, "mem"))
-    builder.condbr(builder.compare(CmpPred.UGT, at, mask), done, look,
+    builder.condbr(builder.compare(CmpPred.UGE, at, used), done, look,
                    true_args=(builder.memory(),),
                    false_args=(builder.memory(),))
 
@@ -1126,19 +1270,20 @@ def ensure_take(module: Module, shape: Shape) -> Function:
 def _build_give_up(module: Module) -> Function:
     """``__pl4g_table_give_up(table, place)``: the entry holds no key any more.
 
-    Given up rather than emptied, so that a probe walking past it to what was
-    put there after it still walks past it; `__pl4g_table_slot` is what reads
-    the difference, and what it remembers of it is where the next key put in
-    that path goes.
+    Given up rather than emptied: the word of the index naming it goes on
+    naming it, so that a probe walking past it to what was put in after it
+    still walks past it, and a walk of the dense array steps past the hole.
+    Nothing is put in that entry again -- a key put in next goes last, whatever
+    it is -- and the hole is left behind when the table is next rebuilt.
 
     **The entry is not cleared.**  Its key and its value are still there when
     this answers, which is what lets the one who took it out read what was
-    under it: nothing writes over either until something is put in that entry
-    again.
+    under it.
 
     **Nothing happens where the entry holds no key.**  Taking out a key that is
     not there is not an error and not a count going wrong: the probe answered
-    with the entry the key *would* be in, and that entry is left as it was.
+    with the entry the key *would* go in, which is empty, and it is left as it
+    was.
 
     One for every table rather than one per shape, since neither the key nor the
     value is touched: what it reads and writes is the entry's first word and the
@@ -1184,17 +1329,18 @@ NEXT_SYMBOL: Final[str] = "__pl4g_table_next"
 def _build_next(module: Module) -> Function:
     """``__pl4g_table_next(table, from)``: where the next entry holding a key is.
 
-    Answered as a place in the array of entries, at or after *from*, and as one
-    past the last place where there is none -- which is the same number a walk
-    compares against to know it is done, so a caller needs no second answer for
-    "there is no next one".
+    Answered as a place in the dense array of entries, at or after *from*, and as
+    the number of entries written where there is none -- which is the same
+    number a walk compares against to know it is done, so a caller needs no
+    second answer for "there is no next one".
 
-    A table is not walked in the order its keys were put in it.  It has no such
-    order: where a key lands is where its hash puts it, and growing the table
-    moves everything.  Python promises the order keys were added in and pays for
-    it with a second array; Go deliberately randomises its walk so that no
-    program can come to depend on an order it never promised.  This promises
-    nothing and pays nothing, and the specification says so.
+    **A table is walked in the order its keys were first put in it**, which is
+    the order of the dense array: a walk steps through it and past the holes
+    taking keys out left.  Python's dictionaries have walked so since 3.6 and
+    promised it since 3.7, for the same layout; Go deliberately randomises its
+    walk, and Rust's `HashMap` and C++'s `unordered_map` walk in whatever order
+    their buckets are in.  A table read and written back -- a JSON object, a
+    configuration -- then comes out as it went in.
     """
     table_ptr = table_type(module)
     func, fresh = generated(module, NEXT_SYMBOL, (table_ptr, U64), U64)
@@ -1209,15 +1355,14 @@ def _build_next(module: Module) -> Function:
     builder.position_at(entry)
     table = entry.add_param(table_ptr, "table")
     start = entry.add_param(U64, "from")
-    capacity = builder.binary(BinOp.WRAP_ADD, _read(builder, table, MASK_FIELD),
-                              builder.int_const(U64, 1))
+    used = _read(builder, table, USED_FIELD)
     stride = _read(builder, table, STRIDE_FIELD)
     entries = _read_address(builder, table, ENTRIES_FIELD, U64)
     builder.br(walk, (start,))
 
     builder.position_at(walk)
     at = walk.add_param(U64, "at")
-    builder.condbr(builder.compare(CmpPred.UGE, at, capacity), done, look)
+    builder.condbr(builder.compare(CmpPred.UGE, at, used), done, look)
 
     builder.position_at(look)
     builder.condbr(

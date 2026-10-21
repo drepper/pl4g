@@ -2657,6 +2657,7 @@ products and arrays together.
 everything.  Python promises insertion order and pays for it with a second array; Go randomises its walk so that no program can
 come to depend on an order it never promised.  This promises nothing and pays nothing, and the specification says so -- which is
 what lets the tests add up what a walk finds rather than check what it finds first.
+(Overturned on 2026-10-22: a table now keeps the order its keys were put in, below.)
 
 **Finding the next entry is a function of the runtime**, not a second loop written into the lowering.  A table's entries are not
 all holding keys, so a walk has to step past the ones that are not; doing that inside "is there another" would mean handing the
@@ -10742,6 +10743,66 @@ registers and operations, the checker's own trees -- stay shared: they are made 
 types are compared by address across everything that holds one.  Compare Lua's `lua_newstate`/`lua_close`, whose `lua_State`
 holds everything and of which a program may have many; Python's subinterpreters, which took years to separate the state that was
 global; Tcl's `Tcl_CreateInterp`; and V8's isolates, each a heap of its own.
+
+## 2026-10-22T10:00+02:00 — language and compiler
+
+### A table keeps the order its keys were put in
+
+**Tables and sets are walked in the order their keys were first put in**, which the user approved as one of the features the JSON
+module needs: an object read into a table and written back would otherwise come out reordered, and a configuration rewritten by a
+program would be shuffled on every run.  It overturns what was decided when tables were first walked (2026-09-15, "A table has no
+order and none is promised"): that decision saved a second array and cost every program that reads something and writes it back.
+
+**The layout is Python's compact one.**  The entries are a dense array in insertion order; beside it an index, a power of two of
+words probed linearly, each word naming one entry.  A walk is a walk of the dense array.  The rules, as the user approved them:
+
+- **Replacing a value keeps its place**; the entry is written where it is.
+- **Removing a key leaves a hole** the walk steps past.  The word of the index naming the entry stays, so that a probe walks past it
+  as it walked past a given-up entry before.
+- **Putting a key in again after removing it puts it last**: it is a new key, and its old entry stays a hole.  (Before, a key put
+  back went into the very entry it left.)
+- **Holes are cleared when the table is rebuilt**, which is when the index would be more than three quarters full counting the
+  holes: it doubles where the keys alone would fill more than half of it, and is rebuilt at the size it has otherwise -- then the
+  holes are at least a quarter of the index, which is the "share" the decision left open.  A table that loses as many keys as it
+  gains is then rebuilt once in a quarter of its size rather than doubling for ever, and one just rebuilt is not full again a key
+  later.
+- **The seed stays**, and a table still takes a fresh one whenever it is rebuilt; it decides where in the index a key's word is,
+  and no longer anything a program can see.  `PL4G_HASH_SEED` still makes a run one that can be had again, which now matters to
+  how long a probe is and not to what a program answers.
+
+Taken without asking, being implementation and recorded here:
+
+- **A word of the index is the entry's offset from the start of the index, in the low 40 bits, with the top 24 bits of the key's
+  hash above it.**  The index and the entries are one allocation, the entries straight after the index, so the offset is never
+  nought and nought can mean that nothing hashed there.  A probe compares the top bits before it reads the entry, so a word of
+  another key is turned away without touching the entry's cache line -- what SwissTable's control bytes do and CPython's indices do
+  not.  Forty bits is a terabyte of entries.
+- **The entry a missing key would go in is the one after the last written**, and the dense array has room for one more than the
+  index may name, so a lookup of a missing key still answers an entry -- empty, every word nought -- and reads the value unasked as
+  it did before.  The callers of `__pl4g_table_slot` did not change.
+- **Rebuilding is a function of its own**, `__pl4g_table_grow.<shape>`, called from `put`, which keeps `put`'s loop small.  The
+  functions generated per shape use the stride the shape says rather than reading it from the block.
+- **A table in the image is laid out the same way**: the index words worked out with the image's seed, the entries in the order
+  written, a key written twice keeping its first place and its last value -- as the evaluator's tables while compiling, which are
+  Python dictionaries, already had them -- and room for one entry after the last, since nothing may be put in it.
+- **Taking a key out while compiling is still not something the evaluator does** (`†` is refused there as before); everything else
+  it does to a table already kept this order.
+
+**Measured** on x86-64 through `bin/pl4g-run`, user time, the old and the new compiler's programs run interleaved three times each,
+before and after: 4 million `u64` keys put and then looked up 40 million times in the order they were put in, 2.5 and 2.25 s; 2
+million of them taken out and others put in, 0.77 and 0.65 s; 200 000 `str` keys put and looked up, 0.12 and 0.05 s -- a probe no
+longer compares text against every key its walk meets; 40 million lookups in a random order over 50 000 keys, 0.41 and 0.35 s, and
+over 400 000, 0.82 and 0.74 s.  **Random lookups in a table much larger than the cache are slower**: over 4 million keys, some 200
+MB, 1.5 and 1.8 s, since such a lookup misses on the index and then again on the entry, where the open-addressed array missed once.
+That is the price of the layout, which Python pays too, and the one case the hash bits in the index cannot help: the second miss
+is the hit's own.
+
+Compare **Python**, whose dictionaries have been laid out this way since 3.6 and promise the order since 3.7, and which puts a key
+put back last as well; **Ruby**, whose `Hash` has kept insertion order since 1.9; **JavaScript**'s `Map`, ordered by insertion by
+the standard; **PHP**'s arrays, the same layout since PHP 7; **Rust**'s `indexmap` crate, which is this as a library (and whose
+`swap_remove` is what this does not do: a removal here leaves the other keys where they are); **Java**'s `LinkedHashMap`, which
+keeps the order with a list threaded through the entries; **Go**, whose maps are walked in a deliberately random order; and **C++**'s
+`unordered_map` and **Rust**'s `HashMap`, which promise no order at all.
 
 Open questions
 --------------

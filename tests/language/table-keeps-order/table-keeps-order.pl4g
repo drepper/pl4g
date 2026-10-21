@@ -1,0 +1,101 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A table is walked in the order its keys were first put in it.
+※
+※ **Putting a key in that is there already keeps its place**: what it stands
+※ for is replaced where it is.  **Taking one out leaves a hole** the walk steps
+※ past, and **putting it in again puts it last**: it is a new key then, as it
+※ is in Python, whose dictionaries are laid out the way these are -- a dense
+※ array of the entries in the order they came, and an index of where each is.
+※ Growing the table moves the entries in their order and leaves the holes
+※ behind, so the order holds through every rebuild.
+※
+※ The keys here are numbers far apart, so that where they hash says nothing of
+※ the order they were put in, and there are enough of them that the table is
+※ rebuilt eight times on the way.  A set is the same table without values.  A
+※ table that loses a key for every one it gains is rebuilt at the size it has,
+※ which clears the holes rather than doubling for ever.
+
+let std := ⎕import("std")
+
+※ The i-th key put in.
+fn nth(i: u64) → u64:
+    ⎕wrap(i × 2654435761u64 + 977u64)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let d: mut ⸨u64: u64⸩ = ⸨⸩
+    foreach i := 0u64…1000u64:
+        d⸨nth(i)⸩ ← i
+    let at: mut u64 = 0u64
+    let fine: mut bool = #d = 1000
+    foreach k, v := d:
+        fine ← fine ∧ k = nth(at) ∧ v = at
+        at ← at + 1u64
+    if ¬fine ∨ at ≠ 1000u64:
+        return 1u6
+
+    ※ a value replaced stays where its key is
+    foreach i := 0u64…1000u64:
+        if (i % 3u64 ?? 1u64) = 0u64:
+            d⸨nth(i)⸩ ← i + 5000u64
+    at ← 0u64
+    foreach k, v := d:
+        let wanted: u64 = if (at % 3u64 ?? 1u64) = 0u64: at + 5000u64 else: at
+        fine ← fine ∧ k = nth(at) ∧ v = wanted
+        at ← at + 1u64
+    if ¬fine ∨ at ≠ 1000u64:
+        return 2u6
+
+    ※ the even ones taken out: the walk steps past their holes
+    foreach i := 0u64…500u64:
+        †d⸨nth(2u64 × i)⸩
+    at ← 1u64
+    foreach k, _ := d:
+        fine ← fine ∧ k = nth(at)
+        at ← at + 2u64
+    if ¬fine ∨ at ≠ 1001u64 ∨ #d ≠ 500:
+        return 3u6
+
+    ※ one put back goes last, and so does everything after it -- through the
+    ※ rebuilds those take, which leave the holes behind
+    d⸨nth(0u64)⸩ ← 7u64
+    foreach i := 1000u64…3000u64:
+        d⸨nth(i)⸩ ← i
+    let turn: mut u64 = 0u64
+    foreach k, v := d:
+        let wanted: u64 = if turn < 500u64: 2u64 × turn + 1u64 elif turn = 500u64: 0u64 else: turn + 499u64
+        fine ← fine ∧ k = nth(wanted) ∧ (turn ≠ 500u64 ∨ v = 7u64)
+        turn ← turn + 1u64
+    if ¬fine ∨ turn ≠ 2501u64 ∨ #d ≠ 2501:
+        return 4u6
+
+    ※ a set alike: joined one key at a time, one taken out and put back
+    let s: mut ⸨u64⸩ = ⸨⸩
+    foreach i := 0u64…100u64:
+        s ← s | ⸨nth(i)⸩
+    †s⸨nth(10u64)⸩
+    s ← s | ⸨nth(10u64)⸩
+    turn ← 0u64
+    foreach k := s:
+        let wanted: u64 = if turn < 10u64: turn elif turn = 99u64: 10u64 else: turn + 1u64
+        fine ← fine ∧ k = nth(wanted)
+        turn ← turn + 1u64
+    if ¬fine ∨ turn ≠ 100u64:
+        return 5u6
+
+    ※ a table that loses a key for every one it gains is rebuilt at the size it
+    ※ has, which is what clears its holes, and keeps the newest keys in order
+    let c: mut ⸨u64: u64⸩ = ⸨⸩
+    foreach i := 0u64…5u64:
+        c⸨nth(i)⸩ ← i
+    foreach i := 5u64…10000u64:
+        †c⸨nth(i - 5u64)⸩
+        c⸨nth(i)⸩ ← i
+    turn ← 9995u64
+    foreach k, v := c:
+        fine ← fine ∧ k = nth(turn) ∧ v = turn
+        turn ← turn + 1u64
+    if ¬fine ∨ turn ≠ 10000u64 ∨ #c ≠ 5:
+        return 6u6
+    0u6
