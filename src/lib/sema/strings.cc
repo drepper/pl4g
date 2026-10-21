@@ -321,6 +321,30 @@ namespace pl4g::sema::strings {
   }
 
 
+  ir::Function* c_string_function(ir::Module& module)
+  {
+    auto bytes = bytes_type(module);
+    auto [func, fresh] = generated(module, c_string_symbol, Types{ bytes, ir::u64() }, bytes, true);
+    if (! fresh)
+      return func;
+    // C means by text the address of bytes ending in a nul, which a `str` is
+    // not: it holds how many bytes it has beside them, and has no nul.  So the
+    // copy is one byte longer and the nul goes there.
+    auto entry = func->add_block();
+    ir::Builder builder(module, *func);
+    builder.position_at(entry);
+    auto text = entry->add_param(bytes, "text");
+    auto length = entry->add_param(ir::u64(), "text.length");
+    auto into = builder.call(tables::heap_new_function(module),
+                             Args{ builder.binary(BinOp::wrap_add, length, number(builder, 1)) }, bytes);
+    copy_bytes(builder, into, number(builder, 0), text, length);
+    auto end = builder.binary(BinOp::add, into, length);
+    builder.store(end, builder.int_const(ir::u8(), 0));
+    builder.ret(into);
+    return func;
+  }
+
+
   ir::Function* char_function(ir::Module& module)
   {
     auto [func, fresh] = generated(module, char_symbol, Types{ arena_pointer(), ir::char_type() }, bytes_type(module),

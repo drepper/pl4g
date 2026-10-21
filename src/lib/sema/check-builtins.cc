@@ -2009,9 +2009,10 @@ namespace pl4g::sema {
 
   void Checker::check_program()
   {
-    if (module.startup == nullptr && module.build == nullptr)
+    if (module.startup == nullptr && module.build == nullptr && module.output != ir::Output::shared)
       // A file with a build function in it describes a build rather than being
-      // a program, so nothing of it is ever started.
+      // a program, so nothing of it is ever started; a shared object is called
+      // by the program that loads it, and has no start of its own.
       diags.emit(D::LANG_FUNCDEF_SPECIAL_NO_STARTUP);
     report_unread_variables();
   }

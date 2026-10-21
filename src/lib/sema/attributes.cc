@@ -92,8 +92,11 @@ namespace pl4g::sema {
         .doc = "a value of this type stands for something that has to be given back, which the named function of the "
                "type does: it is moved and never copied, and every variable holding one closes it or moves it on "
                "before its scope ends" },
-      { .name = "external", .targets = T::function, .params = symbol,
+      { .name = "external", .targets = T::function, .params = symbol, .group = "elsewhere",
         .doc = "the function is defined somewhere else, under this symbol, and the compiler fills it in" },
+      { .name = "host", .targets = T::function, .params = symbol, .group = "elsewhere",
+        .doc = "the function is defined by the program this one is loaded into, under this symbol, and is looked up "
+               "when it is first called" },
       { .name = "system", .targets = T::file,
         .doc = "a system module: what it alone would be warned about or have logged is left unsaid, as a system "
                "header is in C" },
