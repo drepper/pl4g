@@ -1007,7 +1007,9 @@ namespace pl4g::sema {
       const ast::Expr* const* given = written.get(at);
       if (given != nullptr && lent_to_an_iterator(*given, (*given)->span))
         continue;
-      if (given != nullptr && ! may_write(*given))
+      if (auto list = given != nullptr ? list_views.get(id_of(*given)) : nullptr; list != nullptr) [[unlikely]]
+        diags.emit(D::LANG_LIST_VIEW_WRITTEN, (*given)->span, { { "found", (*list)->written() } });
+      else if (given != nullptr && ! may_write(*given))
         diags.emit(D::LANG_ARRAY_HANDED_NOT_WRITABLE, (*given)->span,
                    { { "param", func->param_names[std::size_t(at)] }, { "func", func->name } });
       else if (given != nullptr && changed_here) {

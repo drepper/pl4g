@@ -1033,6 +1033,10 @@ namespace pl4g::sema {
       return value;
     bool writable = may_write(node->value);
     if (! ty->fixed()) {
+      if (auto list = list_views.get(id_of(node->value)); node->mutable_ && list != nullptr) [[unlikely]] {
+        diags.emit(D::LANG_LIST_VIEW_WRITTEN, node->value->span, { { "found", (*list)->written() } });
+        return undef(module, ir::error_type());
+      }
       if (node->mutable_ && ! writable) [[unlikely]] {
         diags.emit(D::LANG_ARRAY_VIEW_NOT_WRITABLE, node->value->span, { { "name", node->name } });
         return undef(module, ir::error_type());

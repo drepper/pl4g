@@ -1482,11 +1482,8 @@ namespace pl4g::sema {
     auto found = value_type_of(value);
     if (found == expected || found == ir::error_type())
       return value;
-    if (auto array = ir::as<ir::ArrayType>(found); array != nullptr && lets_go_of(array, expected)) {
-      auto [start, lengths] = shape_of(builder, value, array, span);
-      auto strides = strides_of(builder, value, array, span);
-      return view(builder, start, lengths, strides, expected, span);
-    }
+    if (auto made = as_a_view(builder, expr, value, expected, span); made != nullptr)
+      return made;
     report_mismatch(span, found, expected);
     return failed_value(module);
   }

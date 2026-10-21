@@ -6,6 +6,8 @@
 #include "sema/strings.hh"
 
 #include <array>
+#include <format>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -426,6 +428,190 @@ namespace pl4g::sema::strings {
     builder.position_at(done);
     // What holds after the loop is what the loop carried.
     builder.set_memory(token);
+  }
+
+
+  namespace {
+
+    // The top bit of every byte of a word: a word none of whose bytes has it
+    // set is eight characters of ASCII.
+    constexpr std::uint64_t high_bits = 0x8080'8080'8080'8080;
+
+    // How many bytes a word holds, which is how far the fast paths go at a time.
+    constexpr unsigned word_size = 8;
+
+
+    /// Build the one that moves a run of bytes: a word at a time, read and
+    /// written where it is whatever its alignment, and the rest a byte at a time.
+    void build_move(ir::Module& module, ir::Function& func)
+    {
+      auto entry = func.add_block();
+      ir::Builder builder(module, func);
+      builder.position_at(entry);
+      auto into = entry->add_param(bytes_type(module), "into");
+      auto source = entry->add_param(bytes_type(module), "source");
+      auto count = entry->add_param(ir::u64(), "count");
+      auto word_ptr = ir::ptr_type(ir::u64(), true);
+      auto words = builder.new_block("words");
+      auto word = builder.new_block("word");
+      auto tail = builder.new_block("tail");
+      auto byte = builder.new_block("byte");
+      auto done = builder.new_block("moved");
+      auto zero = number(builder, 0);
+      builder.br(words, Args{ zero, builder.memory() });
+      builder.position_at(words);
+      auto at = words->add_param(ir::u64(), "at");
+      auto token = words->add_param(ir::mem_type(), "mem");
+      builder.set_memory(token);
+      auto ahead = builder.binary(BinOp::wrap_add, at, number(builder, word_size));
+      builder.condbr(builder.compare(CmpPred::ule, ahead, count), word, tail, {}, Args{ at, token });
+      builder.position_at(word);
+      auto to = builder.cast(CastKind::bitcast, builder.binary(BinOp::add, into, at), word_ptr);
+      auto from = builder.cast(CastKind::bitcast, builder.binary(BinOp::add, source, at), word_ptr);
+      builder.store(to, builder.load(from));
+      builder.br(words, Args{ ahead, builder.memory() });
+      builder.position_at(tail);
+      auto left = tail->add_param(ir::u64(), "at");
+      auto left_token = tail->add_param(ir::mem_type(), "mem");
+      builder.set_memory(left_token);
+      builder.condbr(builder.compare(CmpPred::ult, left, count), byte, done);
+      builder.position_at(byte);
+      auto place = builder.binary(BinOp::add, into, left);
+      builder.store(place, builder.load(builder.binary(BinOp::add, source, left)));
+      auto next = builder.binary(BinOp::wrap_add, left, number(builder, 1));
+      builder.br(tail, Args{ next, builder.memory() });
+      builder.position_at(done);
+      builder.set_memory(left_token);
+      builder.ret();
+    }
+
+
+    /// Where the range the byte after `first` has to be in begins, and how
+    /// wide it is, for a sequence of `count` bytes: any continuation byte after
+    /// a leading byte of two, and narrowed after `E0`, `ED`, `F0` and `F4`.
+    std::pair<ir::Value*, ir::Value*> first_following(ir::Builder& builder, ir::Value* first, unsigned count)
+    {
+      if (count == 2)
+        return { number(builder, 0x80), number(builder, 0x3F) };
+      auto [lowest, highest] = count == 3 ? std::pair{ 0xE0, 0xED } : std::pair{ 0xF0, 0xF4 };
+      auto is_lowest = builder.compare(CmpPred::eq, first, number(builder, lowest));
+      auto low = builder.select(is_lowest, number(builder, count == 3 ? 0xA0 : 0x90), number(builder, 0x80));
+      auto is_highest = builder.compare(CmpPred::eq, first, number(builder, highest));
+      auto high = builder.select(is_highest, number(builder, count == 3 ? 0x9F : 0x8F), number(builder, 0xBF));
+      return { low, builder.binary(BinOp::wrap_sub, high, low) };
+    }
+
+
+    /// Build the one that asks whether bytes are well-formed UTF-8: eight bytes
+    /// at a time while they are ASCII, and a sequence at a time, up to the end
+    /// of the word, from the first word that is not -- each sequence checked as
+    /// Unicode's table of well-formed byte sequences has it.
+    void build_valid(ir::Module& module, ir::Function& func)
+    {
+      auto entry = func.add_block();
+      ir::Builder builder(module, func);
+      builder.position_at(entry);
+      auto bytes = entry->add_param(bytes_type(module), "bytes");
+      auto length = entry->add_param(ir::u64(), "length");
+      auto word_ptr = ir::ptr_type(ir::u64(), true);
+      auto words = builder.new_block("words");
+      auto word = builder.new_block("word");
+      auto last = builder.new_block("last");
+      auto sequence = builder.new_block("sequence");
+      auto lead = builder.new_block("lead");
+      auto bad = builder.new_block("bad");
+      auto good = builder.new_block("good");
+      builder.br(words, Args{ number(builder, 0) });
+
+      // The words: eight bytes at a time while there are eight, and the
+      // sequences up to the end of a word that is not all ASCII.
+      builder.position_at(words);
+      auto at = words->add_param(ir::u64(), "at");
+      auto ahead = builder.binary(BinOp::wrap_add, at, number(builder, word_size));
+      builder.condbr(builder.compare(CmpPred::ule, ahead, length), word, last);
+      builder.position_at(word);
+      auto read = builder.load(builder.cast(CastKind::bitcast, builder.binary(BinOp::add, bytes, at), word_ptr));
+      auto high = builder.binary(BinOp::and_, read, number(builder, high_bits));
+      builder.condbr(builder.compare(CmpPred::eq, high, number(builder, 0)), words, sequence, Args{ ahead },
+                     Args{ at, ahead });
+      builder.position_at(last);
+      builder.condbr(builder.compare(CmpPred::ult, at, length), sequence, good, Args{ at, length });
+
+      // One sequence at a time, up to `until`: then the words again.
+      builder.position_at(sequence);
+      auto here = sequence->add_param(ir::u64(), "at");
+      auto until = sequence->add_param(ir::u64(), "until");
+      builder.condbr(builder.compare(CmpPred::ult, here, until), lead, words, {}, Args{ here });
+      builder.position_at(lead);
+      auto first = byte_at(builder, bytes, here);
+      auto ascii = builder.new_block("ascii");
+      auto above = builder.new_block("above");
+      auto starts = builder.new_block("starts");
+      auto over_two = builder.new_block("over.two");
+      auto over_three = builder.new_block("over.three");
+      std::array<std::pair<unsigned, ir::BasicBlock*>, 3> lengths{};
+      for (unsigned count = 2; count <= 4; ++count)
+        lengths[count - 2] = { count, builder.new_block("bytes." + std::to_string(count)) };
+      builder.condbr(builder.compare(CmpPred::ult, first, number(builder, 0x80)), ascii, above);
+      builder.position_at(ascii);
+      builder.br(sequence, Args{ builder.binary(BinOp::wrap_add, here, number(builder, 1)), until });
+      // Below `C2` is a continuation byte, or the start of an overlong form.
+      builder.position_at(above);
+      builder.condbr(builder.compare(CmpPred::ult, first, number(builder, 0xC2)), bad, starts);
+      builder.position_at(starts);
+      builder.condbr(builder.compare(CmpPred::ult, first, number(builder, 0xE0)), lengths[0].second, over_two);
+      builder.position_at(over_two);
+      builder.condbr(builder.compare(CmpPred::ult, first, number(builder, 0xF0)), lengths[1].second, over_three);
+      builder.position_at(over_three);
+      builder.condbr(builder.compare(CmpPred::ult, first, number(builder, 0xF5)), lengths[2].second, bad);
+      for (auto [count, block] : lengths) {
+        builder.position_at(block);
+        // The whole sequence has to be there before any of it is read.
+        auto whole = builder.new_block("whole." + std::to_string(count));
+        auto end = builder.binary(BinOp::wrap_add, here, number(builder, count - 1));
+        builder.condbr(builder.compare(CmpPred::ult, end, length), whole, bad);
+        builder.position_at(whole);
+        auto [low, width] = first_following(builder, first, count);
+        for (unsigned step = 1; step < count; ++step) {
+          auto following = byte_at(builder, bytes, builder.binary(BinOp::wrap_add, here, number(builder, step)));
+          auto then = builder.new_block(std::format("following.{}.{}", count, step));
+          auto off = builder.binary(BinOp::wrap_sub, following, step == 1 ? low : number(builder, 0x80));
+          builder.condbr(builder.compare(CmpPred::ule, off, step == 1 ? width : number(builder, 0x3F)), then, bad);
+          builder.position_at(then);
+        }
+        builder.br(sequence, Args{ builder.binary(BinOp::wrap_add, here, number(builder, count)), until });
+      }
+      builder.position_at(bad);
+      builder.ret(here);
+      builder.position_at(good);
+      builder.ret(length);
+    }
+
+  } // namespace
+
+
+  ir::Function* valid_function(ir::Module& module)
+  {
+    auto [func, fresh] = generated(module, valid_symbol, Types{ bytes_type(module), ir::u64() }, ir::u64(), false);
+    if (fresh)
+      build_valid(module, *func);
+    return func;
+  }
+
+
+  ir::Function* move_function(ir::Module& module)
+  {
+    auto bytes = bytes_type(module);
+    auto [func, fresh] = generated(module, move_symbol, Types{ bytes, bytes, ir::u64() }, ir::void_type(), true);
+    if (fresh)
+      build_move(module, *func);
+    return func;
+  }
+
+
+  void moved(ir::Builder& builder, ir::Value* into, ir::Value* source, ir::Value* count, Span span)
+  {
+    builder.call(move_function(builder.module()), Args{ into, source, count }, ir::void_type(), span);
   }
 
 } // namespace pl4g::sema::strings

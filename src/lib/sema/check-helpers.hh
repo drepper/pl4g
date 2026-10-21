@@ -293,6 +293,10 @@ namespace pl4g::sema {
   bool holds_a_short_reference(const ir::Type* ty, const KeySet& seen = {});  // check.py:2457
   // Whether a value of `ty` holds a reference anywhere inside it.
   bool holds_a_reference(const ir::Type* ty, const KeySet& seen = {});  // check.py:2488
+  /// Whether a value of `ty` is, or holds, a view: an array whose type does not say its shape, which
+  /// is where somebody else's elements are -- a list's among them, which is lent for as long as the
+  /// view is kept.
+  bool holds_a_view(const ir::Type* ty);  // check.py:2514
   // Whether an array of `found` stands where one of `wanted` is asked for.
   bool lets_go_of(const ir::ArrayType* found, const ir::ArrayType* wanted);  // check.py:2514
   // Which element of each dimension the `at`-th of the run is.

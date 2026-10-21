@@ -141,6 +141,17 @@
     ir::Value* lower_place_at(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:25779
     // Lower `⎕bytes(TEXT)`: what a string is made of.
     ir::Value* lower_bytes(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:25865
+    /// Lower `⎕text(BYTES)`: text from bytes, where they are UTF-8 -- a copy of them in the arena in
+    /// force, or where the first byte is that is not part of a well-formed sequence.
+    ir::Value* lower_text(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);
+    /// The view `view` of one dimension as one run: itself where its stride is one, and a copy
+    /// otherwise, in the arena in force.
+    ir::Value* as_one_run(ir::Builder& builder, ir::Value* view, const ir::ArrayType* ty, Span span);
+    /// `value` as the view `wanted`, where it is one or can be read as one, and nothing where it
+    /// cannot: an array letting its shape go, or a list of the same elements, which is lent for as
+    /// long as the view lives.  What `written` is says which list that is.
+    ir::Value* as_a_view(ir::Builder& builder, const ast::Expr* written, ir::Value* value, const ir::ArrayType* wanted,
+                         Span span);
     // Lower `⎕typename(⌜T⌝)`: the type written out, as text.
     ir::Value* lower_typename(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:25904
     // Lower `⎕fields(v)`: a record's fields as a tuple of name and value.

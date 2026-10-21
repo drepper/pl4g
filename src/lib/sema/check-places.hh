@@ -208,6 +208,18 @@
     // Lower `l ⧺← more`: `more` joined onto the end of the list in the place `l`, in the room it has to
     // spare and in new room twice as large where it has not enough.
     void lower_join_assign(ir::Builder& builder, const ast::JoinAssign* stmt);  // check.py:16673
+    /// Whether what is joined onto a list is, by the look of it, an array and not a list: a name or a
+    /// call that says so, a slice, the bytes of a string.  Anything else is lowered as the list it has
+    /// to be, which is what lets `[]` and the arms of an `if` take the list's type.
+    bool may_be_an_array(const ast::Expr* written);
+    /// Whether a view of `element` may be copied into a list, saying why not where it may not: as an
+    /// array is copied (4710), by its bytes.
+    bool view_copied(const ir::Type* element, const ast::Expr* written);
+    /// Copy the elements of `view`, a view of one dimension, into the room at `into`, `after`
+    /// elements along: one move of their bytes where they are one run, an element at a time where
+    /// they are a step apart.
+    void joined_on(ir::Builder& builder, ir::Value* into, ir::Value* after, ir::Value* view, const ir::Type* element,
+                   Span span);
     // `l⟦i⟧`: the element at `i`, which is checked against how many there are while running, a list's
     // length not being in its type.
     ir::Value* list_element(ir::Builder& builder, const ast::Element* expr, ir::Value* base, const ir::ListType* ty, const ir::Type* expected);  // check.py:16747

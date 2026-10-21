@@ -4198,9 +4198,9 @@ class Checker:
         self._made_alias: dict[int, tuple[ast.Expr, ast.Expr]] = {}
         #: The arenas `in` named around what is being lowered: `⎕heap` where none.
         self._out_of_arenas: frozenset[int] = frozenset({_HEAP})
-        # What was written as a list and read as a view of its elements, by the
-        # identity of what was written, and the list's type: such a view reads
-        # and never writes (4251).
+        #: What was written as a list and read as a view of its elements, by the
+        #: identity of what was written, and the list's type: such a view reads
+        #: and never writes (4251).
         self._list_views: dict[int, ListType] = {}
         #: What the body being checked said its answer was made in: the arena
         #: parameters' markers and how the signature named them.

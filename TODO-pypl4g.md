@@ -383,7 +383,10 @@ removed or decided otherwise, which its last paragraph says.
 [ ] copy a string's bytes a register at a time rather than one at a time.  Joining two arrays is one instruction per register's
     worth, because the lengths are written down and the run-at-a-time machinery can cut them up; a string's are not, so the join
     is a byte loop.  What it wants is a run whose length is a value rather than a number, which is the same thing a loop over a
-    dynamically sized array would want.
+    dynamically sized array would want.  `__pl4g_bytes_move`, which `⎕text` and joining an array onto a list use, is a word at
+    a time already; the joins of two strings and of two lists, and a list's growth, still call `copy_bytes`, and moving them
+    over changes the code of every program that joins anything, so it is a change of its own.  A vector at a time, and the same
+    for `__pl4g_str_valid`'s ASCII words (simdjson's way), is the step after.
 
 [ ] fill a shape from an array a run at a time where the counts are equal.  `⍴` with one value is a splat and one store,
     which the run machinery cuts up; with an array it is a store per element, each reading the source at a place known while

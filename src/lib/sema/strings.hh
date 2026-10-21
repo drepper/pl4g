@@ -53,4 +53,20 @@ namespace pl4g::sema::strings {
   // Copy `count` bytes, one at a time, into the place `offset` bytes along.
   void copy_bytes(ir::Builder& builder, ir::Value* into, ir::Value* offset, ir::Value* source, ir::Value* count);
 
+  // The two that let text in from bytes: one asking whether bytes are UTF-8,
+  // and one moving a run of bytes a word at a time.
+  inline constexpr std::string_view valid_symbol = "__pl4g_str_valid";
+  inline constexpr std::string_view move_symbol = "__pl4g_bytes_move";
+
+  /// ``__pl4g_str_valid(bytes, length)``: how far `bytes` are well-formed
+  /// UTF-8 -- `length` where all of them are, and otherwise where the first
+  /// sequence that is not begins.  Built on first ask.
+  ir::Function* valid_function(ir::Module& module);
+  /// ``__pl4g_bytes_move(into, source, count)``: `count` bytes copied, a word
+  /// at a time and the few left over one at a time.  Built on first ask.
+  ir::Function* move_function(ir::Module& module);
+  /// Call the move: `count` bytes from `source` to `into`, which do not
+  /// overlap.
+  void moved(ir::Builder& builder, ir::Value* into, ir::Value* source, ir::Value* count, Span span = invalid_span);
+
 } // namespace pl4g::sema::strings

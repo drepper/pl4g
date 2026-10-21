@@ -98,6 +98,7 @@ namespace pl4g::sema {
     constexpr std::string_view resume_name = "\N{APL FUNCTIONAL SYMBOL QUAD}resume";
     constexpr std::string_view bytes_name = "\N{APL FUNCTIONAL SYMBOL QUAD}bytes";
     constexpr std::string_view str_of_name = "\N{APL FUNCTIONAL SYMBOL QUAD}str";
+    constexpr std::string_view text_name = names::text_name;
     constexpr std::string_view one_run_name = "\N{APL FUNCTIONAL SYMBOL QUAD}one_run";
     constexpr std::string_view empty_name = "\N{APL FUNCTIONAL SYMBOL QUAD}empty";
     constexpr std::string_view fields_name = "\N{APL FUNCTIONAL SYMBOL QUAD}fields";
@@ -1300,6 +1301,8 @@ namespace pl4g::sema {
         return lower_bytes(builder, expr, expected);
       if (given == str_of_name)
         return lower_str_of(builder, expr, expected);
+      if (given == text_name)
+        return lower_text(builder, expr, expected);
       if (given == one_run_name)
         return lower_one_run(builder, expr, expected);
       if (given == empty_name)
@@ -2387,6 +2390,112 @@ namespace pl4g::sema {
       return error_value(module);
     }
     return made;
+  }
+
+
+  ir::Value* Checker::lower_text(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected)
+  {
+    if (expr->args.size() != 1) [[unlikely]] {
+      diags.emit(D::LANG_CALL_WRONG_ARGUMENT_COUNT, expr->span,
+                 { { "name", text_name }, { "expected", 1 }, { "found", expr->args.size() } });
+      return error_value(module);
+    }
+    const ast::Expr* written = expr->args[0];
+    auto wanted = ir::array_type(ir::u8(), { std::nullopt });
+    auto given =
+      lower_expr(builder, written, ast::is<ast::ArrayLit>(written) || in_the_image(written) ? wanted : nullptr);
+    auto found = value_type_of(given);
+    if (found == ir::error_type()) [[unlikely]]
+      return error_value(module);
+    auto view = as_a_view(builder, written, given, wanted, written->span);
+    if (view == nullptr) [[unlikely]] {
+      diags.emit(D::LANG_TEXT_NOT_BYTES, written->span, { { "found", found->written() } });
+      return error_value(module);
+    }
+    auto answer = ir::result_type(ir::str_type(), ir::u64());
+    if (! accepts(expected, answer)) [[unlikely]] {
+      report_mismatch(expr->span, answer, expected);
+      return error_value(module);
+    }
+    made_from[id_of(expr)] = { expr, out_of_arenas };
+    auto span = expr->span;
+    auto run = as_one_run(builder, view, wanted, span);
+    auto bytes = ir::ptr_type(ir::u8(), true);
+    auto start = builder.extract(run, 0, ir::parts_of(wanted)[0], span);
+    auto count = builder.extract(run, 1, ir::u64(), span);
+    auto upto = builder.call(strings::valid_function(module), std::vector<ir::Value*>{ start, count }, ir::u64(), span);
+    auto well_formed = builder.compare(ir::CmpPred::eq, upto, count, span);
+    // Asked before the branch: the answer carries it on both ways.
+    auto where = out_of(builder, span);
+    auto copying = builder.new_block("text.copy");
+    auto done = builder.new_block("text");
+    auto before = builder.memory();
+    auto nowhere = builder.cast(ir::CastKind::bitcast, builder.int_const(ir::u64(), 0), bytes, span);
+    builder.condbr(well_formed, copying, done, {}, std::vector<ir::Value*>{ nowhere, before }, span);
+    builder.position_at(copying);
+    builder.set_memory(before);
+    auto room = tables::allocate(builder, where, count);
+    strings::moved(builder, room, start, count, span);
+    builder.br(done, std::vector<ir::Value*>{ room, builder.memory() }, span);
+    builder.position_at(done);
+    ir::Value* made = done->add_param(bytes, "text");
+    builder.set_memory(done->add_param(ir::mem_type(), "mem"));
+    // On the way that failed the answer half is nowhere, which is what the
+    // truth value beside it says nothing may read.
+    auto text = builder.make_tuple(std::vector<ir::Value*>{ made, count, where }, ir::str_type(), span);
+    auto failed = builder.compare(ir::CmpPred::ne, upto, count, span);
+    return builder.wrap(text, failed, answer, span, upto);
+  }
+
+
+  ir::Value* Checker::as_one_run(ir::Builder& builder, ir::Value* view, const ir::ArrayType* ty, Span span)
+  {
+    auto stride = builder.extract(view, 2, ir::u64(), span);
+    auto kept = builder.new_block("one_run.already");
+    auto copying = builder.new_block("one_run.copy");
+    auto done = builder.new_block("one_run");
+    auto before = builder.memory();
+    builder.condbr(builder.compare(ir::CmpPred::eq, stride, builder.int_const(ir::u64(), 1), span), kept, copying, {},
+                   {}, span);
+    builder.position_at(kept);
+    builder.br(done, std::vector<ir::Value*>{ view, before }, span);
+    builder.position_at(copying);
+    builder.set_memory(before);
+    auto func = one_run_function(ty);
+    auto arena = out_of(builder, span);
+    auto copied = builder.call(func, std::vector<ir::Value*>{ arena, view }, ty, span);
+    builder.br(done, std::vector<ir::Value*>{ copied, builder.memory() }, span);
+    builder.position_at(done);
+    ir::Value* answer = done->add_param(ty, "run");
+    builder.set_memory(done->add_param(ir::mem_type(), "mem"));
+    return answer;
+  }
+
+
+  ir::Value* Checker::as_a_view(ir::Builder& builder, const ast::Expr* written, ir::Value* value,
+                                const ir::ArrayType* wanted, Span span)
+  {
+    auto found = value_type_of(value);
+    if (found == wanted)
+      return value;
+    if (auto array = ir::as<ir::ArrayType>(found); array != nullptr && lets_go_of(array, wanted)) {
+      auto [start, lengths] = shape_of(builder, value, array, span);
+      auto strides = strides_of(builder, value, array, span);
+      return view(builder, start, lengths, strides, wanted, span);
+    }
+    if (auto list = ir::as<ir::ListType>(found);
+        list != nullptr && wanted->rank() == 1 && list->element == wanted->element) {
+      if (auto borrowed = written != nullptr ? borrowed_name(written) : std::nullopt) {
+        const auto& [name, path] = *borrowed;
+        lend(name, false, written->span, path);
+      }
+      if (written != nullptr)
+        list_views[id_of(written)] = list;
+      auto start = builder.extract(value, 0, ir::parts_of(list)[0], span);
+      std::vector<ir::Value*> lengths{ builder.extract(value, 1, ir::u64(), span) };
+      return dense_view(builder, start, lengths, wanted, span);
+    }
+    return nullptr;
   }
 
 

@@ -503,6 +503,9 @@ namespace pl4g::sema {
     // a function saying `→ T in a` is made in what `a` was given.  The node is
     // kept beside what it says, so an id is never taken for another node's.
     Dict<std::int64_t, std::tuple<const ast::Expr*, KeySet>> made_from;  // check.py:4176
+    // What was written as a list and read as a view of its elements, by the identity of what was
+    // written, and the list's type: such a view reads and never writes (4251).
+    Dict<std::int64_t, const ir::ListType*> list_views;
     // What the call lowered last said of its answer, for the operator form of
     // `in`, whose call is one the checker wrote and no node holds.
     std::optional<KeySet> last_made_in;  // check.py:4179
