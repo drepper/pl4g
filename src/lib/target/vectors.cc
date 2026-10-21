@@ -108,11 +108,17 @@ namespace pl4g::target {
         return const_cast<ir::IntConst*>(module.constant<ir::IntConst>(ir::u64(), value));
       }
 
+      // And a branch at what what it hands the block it goes to became, which is
+      // read as much as an operand is.
       void settle_operands(Inst* inst)
       {
         for (auto& operand : inst->operands)
           if (auto found = became.find(operand); found != became.end())
             operand = found->second;
+        for (auto& edge : inst->targets)
+          for (auto& one : edge.args)
+            if (auto found = became.find(one); found != became.end())
+              one = found->second;
       }
 
       // Decide how every run in the function is cut up, before anything moves:
