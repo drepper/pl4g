@@ -94,6 +94,10 @@ namespace pl4g::target {
             made.binary[op] = every_width;
           made.binary[ir::BinOp::wrap_mul] = { 8, 16, 32 };
           made.unary[ir::UnOp::not_] = every_width;
+          // Comparing bytes, and gathering a register of truth values into the
+          // bits of an ordinary one.
+          made.compares = { 8 };
+          made.masks = true;
           return made;
         }
 

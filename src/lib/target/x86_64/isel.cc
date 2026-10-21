@@ -679,6 +679,67 @@ namespace pl4g::target::x86_64 {
   }
 
 
+  Insts X86Selector::select_run_compare(Condition cond, Reg dst, const MCOperand& left, const MCOperand& right,
+                                        int bits, Span span)
+  {
+    // Equality and the signed "greater" are the comparisons there are; the
+    // rest are those the other way round or turned round, and the unsigned
+    // orders are asked through the larger or the smaller of the two -- `a` is
+    // at least `b` exactly where the larger of them is `a`.
+    if (bits != 8) [[unlikely]]
+      throw UnsupportedOperation(std::format("comparing a run of {}-bit elements", bits), span);
+    Insts made;
+    bool turned = false;
+    if (cond == Condition::eq || cond == Condition::ne) {
+      extend(made, run_two_or_three("pcmpeqb", dst, left, right, span));
+      turned = cond == Condition::ne;
+    } else if (cond == Condition::sgt || cond == Condition::slt || cond == Condition::sle || cond == Condition::sge) {
+      bool exchanged = cond == Condition::slt || cond == Condition::sge;
+      turned = cond == Condition::sle || cond == Condition::sge;
+      extend(made, run_two_or_three("pcmpgtb", dst, exchanged ? right : left, exchanged ? left : right, span));
+    } else {
+      bool larger = cond == Condition::uge || cond == Condition::ult;
+      turned = cond == Condition::ult || cond == Condition::ugt;
+      auto either = registers().info.new_virtual(registers().vec, dst.bits());
+      extend(made, run_two_or_three(larger ? "pmaxub" : "pminub", either, left, right, span));
+      extend(made, run_two_or_three("pcmpeqb", dst, MCReg{ either }, left, span));
+    }
+    if (turned) {
+      auto ones = registers().info.new_virtual(registers().vec, dst.bits());
+      extend(made, select_run_ones(ones, span));
+      extend(made, run_two_or_three("pxor", dst, MCReg{ dst }, MCReg{ ones }, span));
+    }
+    return made;
+  }
+
+
+  Insts X86Selector::select_run_mask(Reg dst, const MCOperand& src, int lanes, Span span)
+  {
+    // The top bit of every byte is the whole of it: a truth value in a
+    // register is every bit of its lane set or clear.  The bits of bytes
+    // beyond a run shorter than the register are cleared.
+    auto reg = std::get_if<MCReg>(&src);
+    if (reg == nullptr) [[unlikely]]
+      throw UnsupportedOperation("gathering the lanes of something not in a register", span);
+    int wide = reg->width();
+    MCReg target{ dst, 32 };
+    Insts made{ inst("pmovmskb", { target, MCReg{ reg->reg, wide } }, span) };
+    if (lanes < wide / 8)
+      made.push_back(inst("and", { target, MCImm{ (__int128(1) << lanes) - 1, 32, false } }, span));
+    return made;
+  }
+
+
+  Insts X86Selector::select_run_truths(Reg dst, const MCOperand& src, Span span)
+  {
+    // Every byte taken from nought: one becomes every bit set and back.  The
+    // register is cleared first by an exclusive or with itself.
+    auto made = run_two_or_three("pxor", dst, MCReg{ dst }, MCReg{ dst }, span);
+    extend(made, run_two_or_three("psubb", dst, MCReg{ dst }, src, span));
+    return made;
+  }
+
+
   Insts X86Selector::select_set(Condition cond, Reg dst, const MCOperand& lhs, const MCOperand& rhs, Span span)
   {
     // Three instructions: the set writes a byte, which is widened after;

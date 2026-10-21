@@ -41,6 +41,10 @@ namespace pl4g::target::riscv64 {
         made.callee_saved.insert(regs.reg(name)->unit);
       for (auto name : caller_saved_names)
         made.caller_saved.insert(regs.reg(name)->unit);
+      // Every register of the vector extension: the convention keeps none of
+      // them across a call.
+      for (auto one : regs.vector_registers)
+        made.caller_saved.insert(one->unit);
       made.stack_align = 16;
       // `ra` holds the return address, which an unwinder follows; `sp` and `s0`,
       // the frame pointer, are left alone for the same reason, and `zero` can

@@ -438,7 +438,9 @@ namespace pl4g::sema {
     std::vector<ir::Value*> values;
     for (const auto& one : given)
       values.push_back(std::get<1>(one));
-    if (std::ranges::none_of(values, [](auto value) { return ir::is<ir::ArrayType>(value->ty); }))
+    if (std::ranges::none_of(values, [&](auto value) {
+          return ir::is<ir::ArrayType>(value->ty) || runs.contains(id_of(value));
+        }))
       return nullptr;
     std::vector<const ir::Type*> wanted;
     for (auto value : values)
@@ -452,7 +454,13 @@ namespace pl4g::sema {
     for (const auto& one : given)
       names.push_back(std::get<0>(one));
     if (all_at_once(expr, wanted, *shape))
-      return run_at_a_time(builder, expr, names, values, wanted, *shape, expected);
+      return run_at_a_time(builder, expr, names, values, wanted, *shape, expected,
+                           as_run.contains(id_of(expr)) && shape->size() == 1);
+    // An element at a time reads elements out of an array, so a run that came
+    // as one value is given the room it would have had.
+    for (auto& value : values)
+      if (runs.contains(id_of(value)))
+        value = as_array(builder, value, expr->span);
     std::int64_t total = 1;
     for (auto along : *shape)
       total *= along;
@@ -498,7 +506,7 @@ namespace pl4g::sema {
 
   ir::Value* Checker::run_at_a_time(ir::Builder& builder, const ast::Expr* expr, std::span<const std::string> names,
                                     std::span<ir::Value* const> values, std::span<const ir::Type* const> wanted,
-                                    std::span<const std::int64_t> shape, const ir::Type* expected)
+                                    std::span<const std::int64_t> shape, const ir::Type* expected, bool as_run)
   {
     auto lanes = shape.back();
     auto outer = shape.first(shape.size() - 1);
@@ -515,6 +523,16 @@ namespace pl4g::sema {
     }
     auto held = ir::as<ir::VecType>(value_type_of(made[0]));
     auto answer = ir::array_type(held->element, as_shape(shape));
+    if (as_run) {
+      // The answer wanted as the run itself: one value of as many lanes, and
+      // no room taken for it.
+      if (! accepts(expected, answer)) [[unlikely]] {
+        report_mismatch(expr->span, answer, expected);
+        return failed_value(module);
+      }
+      runs.insert(id_of(made[0]));
+      return made[0];
+    }
     auto place = builder.frame(answer, expr->span);
     for (std::size_t at = 0; at < made.size(); ++at)
       builder.store(run_place(builder, place, held, at * lanes, expr->span), made[at], expr->span);
@@ -530,6 +548,12 @@ namespace pl4g::sema {
   ir::Value* Checker::run_or_one(ir::Builder& builder, ir::Value* value, const ir::Type* want,
                                  std::span<const std::int64_t> index, std::int64_t lanes, Span span)
   {
+    // A run already held as a value is that run, taken by the operator it
+    // stands in.
+    if (runs.contains(id_of(value))) {
+      runs.erase(id_of(value));
+      return value;
+    }
     auto picked = value;
     for (auto along : index) {
       auto ty = value_type_of(picked);
@@ -544,6 +568,18 @@ namespace pl4g::sema {
       return builder.splat(picked, held, span);
     auto [start, lengths] = shape_of(builder, picked, array, span);
     return builder.load(builder.cast(ir::CastKind::bitcast, start, ir::ptr_type(held, true), span), span);
+  }
+
+
+  ir::Value* Checker::as_array(ir::Builder& builder, ir::Value* value, Span span)
+  {
+    runs.erase(id_of(value));
+    auto held = ir::as<ir::VecType>(value->ty);
+    contract_assert(held != nullptr);
+    auto answer = ir::array_type(held->element, as_shape(std::vector<std::int64_t>{ std::int64_t(held->lanes) }));
+    auto place = builder.frame(answer, span);
+    builder.store(run_place(builder, place, held, 0, span), value, span);
+    return builder.cast(ir::CastKind::bitcast, place, answer, span);
   }
 
 
@@ -572,6 +608,18 @@ namespace pl4g::sema {
         return found;
       std::optional<std::uint64_t> along;
       for (auto at : walked) {
+        if (auto vec = ir::as<ir::VecType>(seen[at])) {
+          // A run held as a value, which is one dimension of as many as it has
+          // lanes.
+          if (! along)
+            along = vec->lanes;
+          else if (*along != vec->lanes) [[unlikely]] {
+            diags.emit(D::LANG_LISTABLE_SHAPES_DIFFER, span, { { "found", vec->lanes }, { "wanted", *along } });
+            return std::nullopt;
+          }
+          seen[at] = vec->element;
+          continue;
+        }
         auto ty = ir::as<ir::ArrayType>(seen[at]);
         if (ty == nullptr || ! ty->fixed()) [[unlikely]] {
           diags.emit(D::LANG_LISTABLE_CANNOT_WALK, span,

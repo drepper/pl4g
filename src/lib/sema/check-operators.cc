@@ -79,6 +79,7 @@ namespace pl4g::sema {
     constexpr std::string_view wrap_name = "\N{APL FUNCTIONAL SYMBOL QUAD}wrap";
     constexpr std::string_view ones_name = "\N{APL FUNCTIONAL SYMBOL QUAD}ones";
     constexpr std::string_view lead_name = "\N{APL FUNCTIONAL SYMBOL QUAD}lead";
+    constexpr std::string_view mask_name = "\N{APL FUNCTIONAL SYMBOL QUAD}mask";
     constexpr std::string_view ord_name = "\N{APL FUNCTIONAL SYMBOL QUAD}ord";
     constexpr std::string_view chr_name = "\N{APL FUNCTIONAL SYMBOL QUAD}chr";
     constexpr std::string_view drop_name = "\N{APL FUNCTIONAL SYMBOL QUAD}drop";
@@ -1078,6 +1079,87 @@ namespace pl4g::sema {
   }
 
 
+  ir::Value* Checker::lower_mask(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected)
+  {
+    if (expr->args.size() != 1) [[unlikely]] {
+      diags.emit(D::LANG_CALL_WRONG_ARGUMENT_COUNT, expr->span,
+                 { { "name", std::string(mask_name) }, { "expected", 1 }, { "found", expr->args.size() } });
+      return error_value(module);
+    }
+    auto written = expr->args[0];
+    // What it is handed is lowered with its answer wanted as one run of lanes,
+    // and so is every walked operator inside it: no array is built for any of
+    // them.
+    auto outer = std::move(as_run);
+    as_run = KeySet{ id_of(written) };
+    ir::Value* given = nullptr;
+    try {
+      given = lower_expr(builder, written, nullptr);
+    } catch (...) {
+      as_run = std::move(outer);
+      throw;
+    }
+    as_run = std::move(outer);
+    auto found = value_type_of(given);
+    if (found == ir::error_type()) [[unlikely]]
+      return error_value(module);
+    bool held = runs.contains(id_of(given));
+    runs.erase(id_of(given));
+    std::uint64_t lanes = 0;
+    if (held) {
+      auto run = ir::as<ir::VecType>(found);
+      if (run->element != ir::bool_type()) [[unlikely]] {
+        // An operator walked at once that answers something other than truth
+        // values.
+        auto array = ir::array_type(run->element, std::vector<std::optional<std::uint64_t>>{ run->lanes });
+        diags.emit(D::LANG_MASK_NOT_TRUTH_VALUES, written->span,
+                   { { "name", std::string(mask_name) }, { "found", array->written() } });
+        return error_value(module);
+      }
+      lanes = run->lanes;
+    } else {
+      auto array = ir::as<ir::ArrayType>(found);
+      if (array == nullptr || array->element != ir::bool_type()) [[unlikely]] {
+        diags.emit(D::LANG_MASK_NOT_TRUTH_VALUES, written->span,
+                   { { "name", std::string(mask_name) }, { "found", found->written() } });
+        return error_value(module);
+      }
+      if (array->rank() != 1 || ! array->fixed()) [[unlikely]] {
+        diags.emit(D::LANG_MASK_SHAPE_NOT_ONE_RUN, written->span,
+                   { { "name", std::string(mask_name) }, { "found", found->written() } });
+        return error_value(module);
+      }
+      lanes = *array->shape[0];
+    }
+    if (lanes > 64) [[unlikely]] {
+      diags.emit(D::LANG_MASK_TOO_LONG, written->span, { { "name", std::string(mask_name) }, { "found", lanes } });
+      return error_value(module);
+    }
+    // The narrowest of the four machine widths with a bit for every one.
+    const ir::IntType* answer = lanes <= 8 ? ir::u8() : lanes <= 16 ? ir::as<ir::IntType>(ir::builtin_type("u16")) : lanes <= 32 ? ir::u32() : ir::u64();
+    if (! accepts(expected, answer)) [[unlikely]] {
+      report_mismatch(expr->span, answer, expected);
+      return error_value(module);
+    }
+    if (held)
+      return builder.unary(ir::UnOp::mask, given, answer, expr->span);
+    if (lanes == 0)
+      return builder.int_const(answer, 0);
+    auto [start, lengths] = shape_of(builder, given, ir::as<ir::ArrayType>(found), expr->span);
+    if (lanes == 1) {
+      // One truth value is one bit already, and a run of one is not a run.
+      auto one = builder.load(builder.cast(ir::CastKind::bitcast, start, ir::ptr_type(ir::bool_type(), true),
+                                           expr->span),
+                              expr->span);
+      return builder.cast(ir::CastKind::zext, one, answer, expr->span);
+    }
+    auto run = ir::vec_type(ir::bool_type(), unsigned(lanes));
+    auto read = builder.load(builder.cast(ir::CastKind::bitcast, start, ir::ptr_type(run, true), expr->span),
+                             expr->span);
+    return builder.unary(ir::UnOp::mask, read, answer, expr->span);
+  }
+
+
   ir::Value* Checker::lower_code_point(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected)
   {
     auto callee = ast::as<ast::NameRef>(expr->callee);
@@ -1272,6 +1354,8 @@ namespace pl4g::sema {
         return lower_code_point(builder, expr, expected);
       if (given == ones_name || given == lead_name)
         return lower_bit_count(builder, expr, expected);
+      if (given == mask_name)
+        return lower_mask(builder, expr, expected);
       if (given == drop_name || given == unit_name)
         return lower_unit_call(builder, expr, expected);
       if (given == entry_name)
@@ -2121,15 +2205,53 @@ namespace pl4g::sema {
     auto from = from_shape.first;
     if (known == 0)
       return;
-    if (known.has_value() && into_shape.one_run && from_shape.one_run
-        && (ir::is<ir::IntType>(element) || ir::is<ir::FloatType>(element) || ir::is<ir::BoolType>(element))) {
-      auto held = ir::vec_type(element, unsigned(*known));
-      auto pointer = ir::ptr_type(held, true);
-      auto to = builder.cast(ir::CastKind::bitcast, into, pointer, span);
-      auto value = builder.load(builder.cast(ir::CastKind::bitcast, from, pointer, span), span);
-      builder.store(to, value, span);
+    bool lanes = ir::is<ir::IntType>(element) || ir::is<ir::FloatType>(element) || ir::is<ir::BoolType>(element);
+    if (known.has_value() && into_shape.one_run && from_shape.one_run && lanes) {
+      move_as_one(builder, into, from, element, *known, span);
       return;
     }
+    if (known.has_value() && into_shape.one_run && from_shape.strides.size() == 1
+        && *known * std::int64_t(ir::stride_of(element, sema::layout())) <= as_one_at_most && lanes) {
+      // A view whose type cannot say its elements are one run nearly always
+      // is one, which is asked while the program runs.
+      auto one_run = builder.compare(ir::CmpPred::eq, from_shape.strides[0], builder.int_const(ir::u64(), 1), span);
+      auto whole = builder.new_block("copy.run");
+      auto apart = builder.new_block("copy.apart");
+      auto done = builder.new_block("copied.run");
+      auto before = builder.memory();
+      builder.condbr(one_run, whole, apart, {}, {}, span);
+      builder.position_at(whole);
+      builder.set_memory(before);
+      move_as_one(builder, into, from, element, *known, span);
+      builder.br(done, std::vector<ir::Value*>{ builder.memory() }, span);
+      builder.position_at(apart);
+      builder.set_memory(before);
+      move_apart(builder, into_shape, from_shape, element, count, span);
+      builder.br(done, std::vector<ir::Value*>{ builder.memory() }, span);
+      builder.position_at(done);
+      builder.set_memory(done->add_param(ir::mem_type(), "mem"));
+      return;
+    }
+    move_apart(builder, into_shape, from_shape, element, count, span);
+  }
+
+
+  void Checker::move_as_one(ir::Builder& builder, ir::Value* into, ir::Value* from, const ir::Type* element,
+                            std::int64_t known, Span span)
+  {
+    auto held = ir::vec_type(element, unsigned(known));
+    auto pointer = ir::ptr_type(held, true);
+    auto to = builder.cast(ir::CastKind::bitcast, into, pointer, span);
+    auto value = builder.load(builder.cast(ir::CastKind::bitcast, from, pointer, span), span);
+    builder.store(to, value, span);
+  }
+
+
+  void Checker::move_apart(ir::Builder& builder, const Laid& into_shape, const Laid& from_shape,
+                           const ir::Type* element, ir::Value* count, Span span)
+  {
+    auto into = into_shape.first;
+    auto from = from_shape.first;
     auto to_word = builder.cast(ir::CastKind::bitcast, into, ir::u64(), span);
     auto from_word = builder.cast(ir::CastKind::bitcast, from, ir::u64(), span);
     auto later = builder.compare(ir::CmpPred::ugt, to_word, from_word, span);

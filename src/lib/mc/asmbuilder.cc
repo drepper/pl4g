@@ -84,6 +84,12 @@ namespace pl4g::mc {
   }
   Insts InstructionSelector::select_run_splat(Reg, const MCOperand&, int, Span) { missing("select_run_splat"); }
   Insts InstructionSelector::select_run_ones(Reg, Span) { missing("select_run_ones"); }
+  Insts InstructionSelector::select_run_compare(Condition, Reg, const MCOperand&, const MCOperand&, int, Span)
+  {
+    missing("select_run_compare");
+  }
+  Insts InstructionSelector::select_run_mask(Reg, const MCOperand&, int, Span) { missing("select_run_mask"); }
+  Insts InstructionSelector::select_run_truths(Reg, const MCOperand&, Span) { missing("select_run_truths"); }
   Insts InstructionSelector::select_float_op(const Op*, Reg, const MCOperand&, const MCOperand&, int, Span)
   {
     missing("select_float_op");
@@ -589,6 +595,22 @@ namespace pl4g::mc {
   void Assembler::run_ones(Reg dst, Span span)
   {
     emit(selector_.select_run_ones(dst, span));
+  }
+
+  void Assembler::run_compare(Condition cond, Reg dst, const MCOperand& left, const MCOperand& right, int bits,
+                              Span span)
+  {
+    emit(selector_.select_run_compare(cond, dst, left, right, bits, span));
+  }
+
+  void Assembler::run_mask(Reg dst, const MCOperand& src, int lanes, Span span)
+  {
+    emit(selector_.select_run_mask(dst, src, lanes, span));
+  }
+
+  void Assembler::run_truths(Reg dst, const MCOperand& src, Span span)
+  {
+    emit(selector_.select_run_truths(dst, src, span));
   }
 
 

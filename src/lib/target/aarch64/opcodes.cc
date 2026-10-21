@@ -377,6 +377,31 @@ namespace pl4g::target::aarch64 {
           { reg_field(0, rd), reg_field(1, rn) });
       add("cmlt.2d", { v(128), v(128) }, 0x4EE0A800,
           { reg_field(0, rd), reg_field(1, rn) });
+      // The comparisons of a run of bytes, each lane every bit set where it holds
+      // and every bit clear where it does not.  Equality, and both orders both
+      // ways round of "greater" and "at least"; the "less" ones are these with
+      // the operands exchanged, and "not equal" is equality turned round.
+      add("cmeq.16b", { v(128), v(128), v(128) }, 0x6E208C00,
+          { reg_field(0, rd), reg_field(1, rn), reg_field(2, rm) });
+      add("cmgt.16b", { v(128), v(128), v(128) }, 0x4E203400,
+          { reg_field(0, rd), reg_field(1, rn), reg_field(2, rm) });
+      add("cmge.16b", { v(128), v(128), v(128) }, 0x4E203C00,
+          { reg_field(0, rd), reg_field(1, rn), reg_field(2, rm) });
+      add("cmhi.16b", { v(128), v(128), v(128) }, 0x6E203400,
+          { reg_field(0, rd), reg_field(1, rn), reg_field(2, rm) });
+      add("cmhs.16b", { v(128), v(128), v(128) }, 0x6E203C00,
+          { reg_field(0, rd), reg_field(1, rn), reg_field(2, rm) });
+      // neg Vd.16B, Vn.16B -- every byte taken from nought, which is how a truth
+      // value of one in memory becomes a lane of every bit set and back.
+      add("neg.16b", { v(128), v(128) }, 0x6E20B800,
+          { reg_field(0, rd), reg_field(1, rn) });
+      // addp Vd.16B, Vn.16B, Vm.16B -- each two neighbouring bytes added; three
+      // of them add each eight bytes of a register together.
+      add("addp.16b", { v(128), v(128), v(128) }, 0x4E20BC00,
+          { reg_field(0, rd), reg_field(1, rn), reg_field(2, rm) });
+      // umov Wd, Vn.H[0] -- the low sixteen bits into an ordinary register.
+      add("umov.h0", { r(32), v(128) }, 0x0E023C00,
+          { reg_field(0, rd), reg_field(1, rn) });
       // umaxv Bd, Vn.8B -- the same over the low eight bytes only.
       add("umaxv.8b", { v(128), v(128) }, 0x2E30A800,
           { reg_field(0, rd), reg_field(1, rn) });

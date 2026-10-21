@@ -696,6 +696,11 @@ namespace pl4g::sema {
       }
       return;
     }
+    if (auto array = ir::as<ir::ArrayType>(declared);
+        array != nullptr && array->fixed() && node->more.empty() && given_a_view(node->value)) {
+      lower_view_copied(builder, node, array);
+      return;
+    }
     initializing = std::string(node->name);
     ir::Value* value = nullptr;
     try {
@@ -713,6 +718,48 @@ namespace pl4g::sema {
     kept_by_a_name(declared, node->name_span);
     name_value(bound, node->name, node->name_span);
     bind_local(node->name, bound, node->name_span, node->mutable_, node->span, false, &builder);
+  }
+
+  bool Checker::given_a_view(const ast::Expr* expr)
+  {
+    if (auto element = ast::as<ast::Element>(expr))
+      return std::ranges::any_of(element->indices, [](const ast::Expr* one) { return ast::is<ast::Range>(one); });
+    if (auto name = ast::as<ast::NameRef>(expr)) {
+      auto local = find_local(name->name);
+      if (local == nullptr)
+        return false;
+      auto held = ir::as<ir::ArrayType>(held_by(local));
+      return held != nullptr && ! held->fixed();
+    }
+    return false;
+  }
+
+  void Checker::lower_view_copied(ir::Builder& builder, const ast::VarDef* node, const ir::ArrayType* declared)
+  {
+    // Giving an array to an array copies its elements, the two counts
+    // compared while running where either is unknown.  A name whose type
+    // states its shape owns elements that are one run, so this is a copy even
+    // where nothing may write either side.
+    initializing = std::string(node->name);
+    ir::Value* room = nullptr;
+    try {
+      auto value = lower_expr(builder, node->value, nullptr);
+      auto found = value_type_of(value);
+      if (found != ir::error_type()) {
+        auto made = builder.cast(ir::CastKind::bitcast, builder.frame(declared, node->span), declared, node->span);
+        if (copy_elements(builder, made, declared, value, found, node->value->span))
+          room = made;
+      }
+    } catch (...) {
+      initializing.reset();
+      throw;
+    }
+    initializing.reset();
+    if (room == nullptr)
+      room = fresh_undef(error_ty());
+    kept_by_a_name(declared, node->name_span);
+    name_value(room, node->name, node->name_span);
+    bind_local(node->name, room, node->name_span, node->mutable_, node->span, false, &builder);
   }
 
   void Checker::lower_derived(ir::Builder& builder, const ast::VarDef* node)
@@ -1104,6 +1151,16 @@ namespace pl4g::sema {
       copying.erase(id_of(expr));
       auto value = lower_expr(builder, expr, expected);
       return copy_of(builder, value, expr->span);
+    }
+    if (! as_run.empty() && as_run.contains(id_of(expr))) {
+      // An operator whose answer is wanted as a run asks the same of the
+      // operators it is made of.
+      if (auto binary = ast::as<ast::Binary>(expr); binary != nullptr && sema::all_at_once().contains(binary->op)) {
+        as_run.insert(id_of(binary->left));
+        as_run.insert(id_of(binary->right));
+      } else if (auto unary = ast::as<ast::Unary>(expr);
+                 unary != nullptr && all_at_once_unary().contains(unary->op))
+        as_run.insert(id_of(unary->operand));
     }
     if (abstract != nullptr && is_applying(expr)) {
       auto handled = abstractly(builder, expr);

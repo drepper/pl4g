@@ -75,6 +75,10 @@ namespace pl4g::target::aarch64 {
                                     bool is_signed, int bits, Span span) override;
     mc::Insts select_run_splat(mc::Reg dst, const mc::MCOperand& src, int bits, Span span) override;
     mc::Insts select_run_ones(mc::Reg dst, Span span) override;
+    mc::Insts select_run_compare(mc::Condition cond, mc::Reg dst, const mc::MCOperand& left,
+                                 const mc::MCOperand& right, int bits, Span span) override;
+    mc::Insts select_run_mask(mc::Reg dst, const mc::MCOperand& src, int lanes, Span span) override;
+    mc::Insts select_run_truths(mc::Reg dst, const mc::MCOperand& src, Span span) override;
     mc::Insts select_float_op(const mc::Op* op, mc::Reg dst, const mc::MCOperand& left, const mc::MCOperand& right,
                               int bits, Span span) override;
     mc::Insts select_float_compare(mc::Condition cond, mc::Reg dst, const mc::MCOperand& lhs,

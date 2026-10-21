@@ -158,7 +158,7 @@ namespace pl4g::ir {
 
   enum class UnOp : std::uint8_t {
     neg [[=Describe("neg")]], not_ [[=Describe("not")]], count_ones [[=Describe("ones")]],
-    count_leading [[=Describe("lead")]], fabs [[=Describe("fabs")]], floor [[=Describe("floor")]],
+    count_leading [[=Describe("lead")]], mask [[=Describe("mask")]], fabs [[=Describe("fabs")]], floor [[=Describe("floor")]],
     ceil [[=Describe("ceil")]], nearest [[=Describe("nearest")]], rounded [[=Describe("rounded")]],
   };
 

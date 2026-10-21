@@ -576,22 +576,59 @@ namespace pl4g::target::x86_64 {
         auto bits = int(run_covers(run, layout));
         auto destination = new_value(inst->ty, layout);
         held[inst] = destination;
-        asm_.run_move(Reg(destination), place_of(operand(1), span, { 0, bits }), bits, inst->span);
+        auto read = destination;
+        if (run->element == ir::bool_type())
+          // A truth value is a byte of one or nought in memory and a lane of
+          // every bit set or clear in a register.
+          read = new_value(inst->ty, layout);
+        asm_.run_move(Reg(read), place_of(operand(1), span, { 0, bits }), bits, inst->span);
+        if (read != destination)
+          asm_.run_truths(destination, MCReg{ read, run_bits(run, layout) }, inst->span);
         return;
       }
       if (inst->kind == InstKind::StoreInst && ir::is<ir::VecType>(operand(2)->ty)) {
         auto written = operand(2);
         auto run = ir::as<ir::VecType>(written->ty);
+        auto source = register_of(written, inst->span);
+        if (run->element == ir::bool_type()) {
+          // And back to a byte of one or nought.
+          auto bytes_of = new_value(written->ty, layout);
+          asm_.run_truths(bytes_of, MCReg{ source, run_bits(run, layout) }, inst->span);
+          source = bytes_of;
+        }
         asm_.run_store(place_of(operand(1), span, { 0, int(run_covers(run, layout)) }),
-                       MCReg{ register_of(written, inst->span), run_bits(run, layout) }, int(run_covers(run, layout)),
-                       inst->span);
+                       MCReg{ source, run_bits(run, layout) }, int(run_covers(run, layout)), inst->span);
         return;
       }
       if (inst->kind == InstKind::SplatInst) {
         auto run = ir::as<ir::VecType>(inst->ty);
         auto destination = new_value(inst->ty, layout);
         held[inst] = destination;
-        asm_.run_splat(destination, value(operand(0), inst->span), width_of(run->element), inst->span);
+        auto spread = destination;
+        if (run->element == ir::bool_type())
+          spread = new_value(inst->ty, layout);
+        asm_.run_splat(spread, value(operand(0), inst->span), width_of(run->element), inst->span);
+        if (spread != destination)
+          // A truth value spread over every lane is a run of them as memory
+          // holds one.
+          asm_.run_truths(destination, MCReg{ spread, run_bits(run, layout) }, inst->span);
+        return;
+      }
+      if (inst->kind == InstKind::CmpInst && ir::is<ir::VecType>(inst->ty)) {
+        auto compared = ir::as<ir::VecType>(operand(0)->ty);
+        auto destination = new_value(inst->ty, layout);
+        held[inst] = destination;
+        auto left = value(operand(0), inst->span);
+        auto right = value(operand(1), inst->span);
+        asm_.run_compare(condition_for(inst->pred), destination, left, right, width_of(compared->element),
+                         inst->span);
+        return;
+      }
+      if (inst->kind == InstKind::UnaryInst && inst->un == ir::UnOp::mask) {
+        auto gathered = ir::as<ir::VecType>(operand(0)->ty);
+        auto destination = computed(inst, inst->ty);
+        asm_.run_mask(destination, MCReg{ register_of(operand(0), inst->span), run_bits(gathered, layout) },
+                      int(gathered->lanes), inst->span);
         return;
       }
       if (inst->kind == InstKind::BinaryInst && ir::is<ir::VecType>(inst->ty)) {

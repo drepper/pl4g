@@ -125,6 +125,14 @@ namespace pl4g::target::riscv64 {
 
   Insts RVSelector::select_move(Reg dst, const MCOperand& src, Span span)
   {
+    if (dst.cls() == registers().vec) {
+      if (auto reg = std::get_if<MCReg>(&src); reg != nullptr && reg->reg.cls() == registers().vec) {
+        if (reg->reg == dst)
+          return {};
+        return { inst("vmv1r.v", { mcreg(dst), mcreg(reg->reg) }, span) };
+      }
+      throw UnsupportedOperation("putting that kind of operand in a run register", span);
+    }
     if (is_float(dst))
       return float_move(dst, src, span);
     if (auto reg = std::get_if<MCReg>(&src); reg != nullptr && is_float(reg->reg)) [[unlikely]]
@@ -724,40 +732,268 @@ namespace pl4g::target::riscv64 {
   }
 
 
+  std::tuple<Insts, MCReg, std::int64_t> RVSelector::in_frame(std::int64_t offset, Span span)
+  {
+    // The stack pointer and the offset itself wherever it fits twelve bits;
+    // past that, the place built in the register a function that works on runs
+    // keeps to itself.
+    if (imm12_min <= offset && offset <= imm12_max)
+      return { Insts{}, mcreg(registers().sp), offset };
+    if (spare == nullptr) [[unlikely]]
+      throw UnsupportedOperation(std::format("a place {} bytes into the frame", offset), span);
+    auto made = materialize(spare, offset, span);
+    made.push_back(inst("add", { mcreg(spare), mcreg(spare), mcreg(registers().sp) }, span));
+    return { std::move(made), mcreg(spare), 0 };
+  }
+
+
+  Insts RVSelector::frame_word(std::string_view mnemonic, Reg reg, std::int64_t offset, Span span)
+  {
+    if (reg.cls() == registers().vec) {
+      // A run register is set aside whole, by an instruction that takes its
+      // address in a register and no offset at all.
+      if (spare == nullptr) [[unlikely]]
+        throw UnsupportedOperation("setting a run register aside with nowhere to say where", span);
+      Insts before;
+      if (imm12_min <= offset && offset <= imm12_max)
+        before.push_back(inst("addi", { mcreg(spare), mcreg(registers().sp), imm(offset, 12) }, span));
+      else
+        before = std::get<0>(in_frame(offset, span));
+      bool writes = mnemonic == "sd" || mnemonic == "fsd";
+      before.push_back(inst(writes ? "vs1r.v" : "vl1re8.v", { mcreg(reg), mcreg(spare) }, span));
+      return before;
+    }
+    auto [before, base, at] = in_frame(offset, span);
+    before.push_back(inst(mnemonic, { mcreg(reg), base, imm(at, 12) }, span));
+    return before;
+  }
+
+
   Insts RVSelector::select_save_link(std::int64_t offset, Span span)
   {
-    return { inst("sd", { mcreg(registers().ra), mcreg(registers().sp), imm(offset, 12) }, span) };
+    return frame_word("sd", registers().ra, offset, span);
   }
 
 
   Insts RVSelector::select_restore_link(std::int64_t offset, Span span)
   {
-    return { inst("ld", { mcreg(registers().ra), mcreg(registers().sp), imm(offset, 12) }, span) };
+    return frame_word("ld", registers().ra, offset, span);
   }
 
 
   Insts RVSelector::select_spill(std::int64_t slot, Reg source, Span span)
   {
-    return { inst(is_float(source) ? "fsd" : "sd", { mcreg(source), mcreg(registers().sp), imm(slot, 12) }, span) };
+    return frame_word(is_float(source) ? "fsd" : "sd", source, slot, span);
   }
 
 
   Insts RVSelector::select_reload(Reg destination, std::int64_t slot, Span span)
   {
-    return { inst(is_float(destination) ? "fld" : "ld", { mcreg(destination), mcreg(registers().sp), imm(slot, 12) },
-                  span) };
+    return frame_word(is_float(destination) ? "fld" : "ld", destination, slot, span);
   }
 
 
   Insts RVSelector::select_frame(std::int64_t size, Span span)
   {
-    return { inst("addi", { mcreg(registers().sp), mcreg(registers().sp), imm(-size, 12) }, span) };
+    if (size <= imm12_max + 1 || spare == nullptr)
+      return { inst("addi", { mcreg(registers().sp), mcreg(registers().sp), imm(-size, 12) }, span) };
+    auto made = materialize(spare, size, span);
+    made.push_back(inst("sub", { mcreg(registers().sp), mcreg(registers().sp), mcreg(spare) }, span));
+    return made;
   }
 
 
   Insts RVSelector::select_unframe(std::int64_t size, Span span)
   {
-    return { inst("addi", { mcreg(registers().sp), mcreg(registers().sp), imm(size, 12) }, span) };
+    if (size <= imm12_max || spare == nullptr)
+      return { inst("addi", { mcreg(registers().sp), mcreg(registers().sp), imm(size, 12) }, span) };
+    auto made = materialize(spare, size, span);
+    made.push_back(inst("add", { mcreg(registers().sp), mcreg(registers().sp), mcreg(spare) }, span));
+    return made;
+  }
+
+
+  // -- runs, where the build has the vector extension ---------------------------
+  //
+  // Every group of vector instructions begins by saying what it works on, there
+  // being nothing in an instruction that says it; a run of truth values is a
+  // mask register, one bit per lane, and a byte of one or nought in memory.
+
+  mc::InstRef RVSelector::vset(int count, int bits, Span span)
+  {
+    // Tail and inactive elements agnostic, one register to a group.
+    int sew = bits == 8 ? 0 : bits == 16 ? 1 : bits == 32 ? 2 : 3;
+    return inst("vsetivli", { mcreg(registers().zero), imm(count, 5, false), imm(0xC0 | (sew << 3), 10, false) },
+                span);
+  }
+
+
+  std::pair<Insts, MCReg> RVSelector::address(const MCMem& place, Span span)
+  {
+    // A vector load or store takes its address in a register and no offset.
+    if (place.disp_sym != nullptr) {
+      MCSymRef symbol{ place.disp_sym };
+      MCReg held = mcreg(registers().info.new_virtual(registers().gpr, 64, nullptr, false));
+      Insts made{ inst("auipc.hi20", { held, symbol }, span), inst("addi.lo12", { held, held, symbol }, span) };
+      if (place.disp != 0) {
+        auto more = added(held, held, place.disp, span);
+        made.insert(made.end(), more.begin(), more.end());
+      }
+      return { std::move(made), held };
+    }
+    if (place.base.is_none()) [[unlikely]]
+      throw UnsupportedOperation("a run read from nowhere", span);
+    if (place.disp == 0)
+      return { Insts{}, mcreg(place.base) };
+    MCReg held = mcreg(registers().info.new_virtual(registers().gpr, 64));
+    return { added(held, mcreg(place.base), place.disp, span), held };
+  }
+
+
+  Insts RVSelector::added(const MCReg& dst, const MCReg& base, std::int64_t offset, Span span)
+  {
+    if (imm12_min <= offset && offset <= imm12_max)
+      return { inst("addi", { dst, base, imm(offset, 12) }, span) };
+    auto carried = registers().info.new_virtual(registers().gpr, 64);
+    auto made = materialize(carried, offset, span);
+    made.push_back(inst("add", { dst, base, mcreg(carried) }, span));
+    return made;
+  }
+
+
+  Insts RVSelector::select_vector_load(Reg dst, const MCMem& place, int size, Span span)
+  {
+    auto [made, at] = address(place, span);
+    made.push_back(vset(size, 8, span));
+    made.push_back(inst("vle8.v", { mcreg(dst), at }, span));
+    return made;
+  }
+
+
+  Insts RVSelector::select_vector_store(const MCMem& place, Reg src, int size, Span span)
+  {
+    auto [made, at] = address(place, span);
+    made.push_back(vset(size, 8, span));
+    made.push_back(inst("vse8.v", { mcreg(src), at }, span));
+    return made;
+  }
+
+
+  Insts RVSelector::select_truths_in(Reg dst, Reg src, int lanes, Span span)
+  {
+    // Which bytes are not nought.
+    return { vset(lanes, 8, span), inst("vmsne.vi", { mcreg(dst), mcreg(src), imm(0, 5) }, span) };
+  }
+
+
+  Insts RVSelector::select_truths_out(Reg dst, Reg src, int lanes, Span span)
+  {
+    // Nought everywhere, and one merged in where the mask -- read from v0 --
+    // is set.
+    return { vset(lanes, 8, span), inst("vmv1r.v", { mcreg(registers().v0), mcreg(src) }, span),
+             inst("vmv.v.i", { mcreg(dst), imm(0, 5) }, span),
+             inst("vmerge.vim", { mcreg(dst), mcreg(dst), imm(1, 5) }, span) };
+  }
+
+
+  Insts RVSelector::select_vector_splat(Reg dst, const MCOperand& src, int lanes, int bits, Span span)
+  {
+    if (auto value = std::get_if<MCImm>(&src); value != nullptr && -16 <= value->value && value->value <= 15)
+      return { vset(lanes, bits, span), inst("vmv.v.i", { mcreg(dst), imm(value->value, 5) }, span) };
+    auto [value, made] = as_register(src, span);
+    made.push_back(vset(lanes, bits, span));
+    made.push_back(inst("vmv.v.x", { mcreg(dst), value }, span));
+    return made;
+  }
+
+
+  Insts RVSelector::select_truth_splat(Reg dst, const MCOperand& src, int lanes, Span span)
+  {
+    // One the program wrote down is every bit set or every bit clear; one
+    // worked out is spread as a byte and asked which bytes are not nought.
+    MCReg target = mcreg(dst);
+    if (auto value = std::get_if<MCImm>(&src))
+      return { vset(lanes, 8, span), inst(value->value != 0 ? "vmxnor.mm" : "vmxor.mm", { target, target, target },
+                                          span) };
+    auto [value, made] = as_register(src, span);
+    MCReg spread = mcreg(registers().info.new_virtual(registers().vec, 128));
+    made.push_back(vset(lanes, 8, span));
+    made.push_back(inst("vmv.v.x", { spread, value }, span));
+    made.push_back(inst("vmsne.vi", { target, spread, imm(0, 5) }, span));
+    return made;
+  }
+
+
+  Insts RVSelector::select_vector_op(const mc::Op* op, Reg dst, Reg left, Reg right, int count, bool truths,
+                                     Span span)
+  {
+    std::string_view mnemonic;
+    if (op == mc::ops::and_)
+      mnemonic = truths ? "vmand.mm" : "vand.vv";
+    else if (op == mc::ops::or_)
+      mnemonic = truths ? "vmor.mm" : "vor.vv";
+    else if (op == mc::ops::xor_)
+      mnemonic = truths ? "vmxor.mm" : "vxor.vv";
+    else [[unlikely]]
+      throw UnsupportedOperation(std::format("'{}' over a whole run", op->name), span);
+    return { vset(count, 8, span), inst(mnemonic, { mcreg(dst), mcreg(left), mcreg(right) }, span) };
+  }
+
+
+  Insts RVSelector::select_vector_not(Reg dst, Reg src, int count, bool truths, Span span)
+  {
+    if (truths)
+      return { vset(count, 8, span), inst("vmnand.mm", { mcreg(dst), mcreg(src), mcreg(src) }, span) };
+    return { vset(count, 8, span), inst("vnot.v", { mcreg(dst), mcreg(src) }, span) };
+  }
+
+
+  Insts RVSelector::select_vector_compare(Condition cond, Reg dst, Reg left, Reg right, int lanes, bool truths,
+                                          Span span)
+  {
+    if (truths) {
+      // Two masks are equal where their exclusive or is clear.
+      if (cond != Condition::eq && cond != Condition::ne) [[unlikely]]
+        throw UnsupportedOperation("ordering two runs of truth values", span);
+      return { vset(lanes, 8, span), inst(cond == Condition::eq ? "vmxnor.mm" : "vmxor.mm",
+                                          { mcreg(dst), mcreg(left), mcreg(right) }, span) };
+    }
+    std::string_view mnemonic;
+    bool exchanged = false;
+    switch (cond) {
+    case Condition::eq: mnemonic = "vmseq.vv"; break;
+    case Condition::ne: mnemonic = "vmsne.vv"; break;
+    case Condition::slt: mnemonic = "vmslt.vv"; break;
+    case Condition::sgt: mnemonic = "vmslt.vv"; exchanged = true; break;
+    case Condition::sle: mnemonic = "vmsle.vv"; break;
+    case Condition::sge: mnemonic = "vmsle.vv"; exchanged = true; break;
+    case Condition::ult: mnemonic = "vmsltu.vv"; break;
+    case Condition::ugt: mnemonic = "vmsltu.vv"; exchanged = true; break;
+    case Condition::ule: mnemonic = "vmsleu.vv"; break;
+    case Condition::uge: mnemonic = "vmsleu.vv"; exchanged = true; break;
+    }
+    return { vset(lanes, 8, span),
+             inst(mnemonic, { mcreg(dst), mcreg(exchanged ? right : left), mcreg(exchanged ? left : right) }, span) };
+  }
+
+
+  Insts RVSelector::select_vector_mask(Reg dst, Reg src, int lanes, Span span)
+  {
+    // A mask is its own bits, so its first sixty-four are its first element
+    // at an element width of sixty-four; the bits beyond the run, which
+    // nothing promised, are cleared.
+    MCReg target = mcreg(dst);
+    Insts made{ vset(1, 64, span), inst("vmv.x.s", { target, mcreg(src) }, span) };
+    if (lanes < 64) {
+      if ((__int128(1) << lanes) - 1 <= imm12_max)
+        made.push_back(inst("andi", { target, target, imm((__int128(1) << lanes) - 1, 12) }, span));
+      else {
+        auto apart = imm(64 - lanes, 6, false);
+        made.push_back(inst("slli", { target, target, apart }, span));
+        made.push_back(inst("srli", { target, target, apart }, span));
+      }
+    }
+    return made;
   }
 
 
@@ -942,9 +1178,9 @@ namespace pl4g::target::riscv64 {
     public:
       Lowering(mc::Assembler& asm_, const ir::Function& func, const CallConvDesc& cconv, mc::RegisterInfo& info,
                Messages* messages, const SourceManager* sources, Constants* constants, const Destroyed* known,
-               const ir::DataLayout& layout)
+               const ir::DataLayout& layout, bool works_on_runs)
         : asm_(asm_), func(func), cconv(cconv), info(info), messages(messages), sources(sources),
-          constants(constants), known(known), layout(layout)
+          constants(constants), known(known), layout(layout), works_on_runs(works_on_runs)
       {
       }
 
@@ -1125,6 +1361,7 @@ namespace pl4g::target::riscv64 {
       void lower_return(const ir::Instruction* inst, std::optional<Span> span);
       void lower_call(const ir::Instruction* inst, std::optional<Span> span);
       void lower_wrap(const ir::Instruction* inst);
+      bool lower_run(const ir::Instruction* inst, std::optional<Span> span);
 
       mc::Assembler& asm_;
       const ir::Function& func;
@@ -1135,6 +1372,8 @@ namespace pl4g::target::riscv64 {
       Constants* constants;
       const Destroyed* known;
       const ir::DataLayout& layout;
+      bool works_on_runs = false;
+      RVSelector* selector = nullptr;
       bool rounds_in_one = false;
       // Where each value is held, and the registers after the first of a value
       // of several.
@@ -1147,11 +1386,22 @@ namespace pl4g::target::riscv64 {
 
     void Lowering::run()
     {
-      auto selector = dynamic_cast<RVSelector*>(&asm_.selector());
+      selector = dynamic_cast<RVSelector*>(&asm_.selector());
       rounds_in_one = selector != nullptr && selector->isa.has("zfa");
+      auto orders = cconv.orders(registers().gpr->name, registers().fpr->name);
+      if (selector != nullptr)
+        selector->spare = works_on_runs ? registers().spare : nullptr;
+      if (works_on_runs) {
+        // The spare kept back, and every vector register but the one masks are
+        // read from; none of them survives a call.
+        std::erase(orders[registers().gpr->name], registers().spare->unit);
+        std::vector<const mc::RegUnit*> vectors;
+        for (int at = 1; at < 32; ++at)
+          vectors.push_back(registers().vector_registers[std::size_t(at)]->unit);
+        orders[registers().vec->name] = std::move(vectors);
+      }
       asm_.begin_function(ir::symbol_name(func), func.linkage == ir::Linkage::visible, 0,
-                          mc::AllocationOrder::per_class(cconv.orders(registers().gpr->name, registers().fpr->name)),
-                          cconv.callee_saved);
+                          mc::AllocationOrder::per_class(std::move(orders)), cconv.callee_saved);
       returned = returned_value(func);
       labels = labels_of(ir::symbol_name(func), func);
       parameters();
@@ -1214,11 +1464,109 @@ namespace pl4g::target::riscv64 {
     }
 
 
+    bool Lowering::lower_run(const ir::Instruction* inst, std::optional<Span> span)
+    {
+      auto vec = ir::as<ir::VecType>(inst->ty);
+      auto new_run = [&] { return Reg(info.new_virtual(registers().vec, 128)); };
+      auto bytes_of = [&](const ir::VecType* ty) { return int(ty->lanes * ir::stride_of(ty->element, layout)); };
+      switch (inst->kind) {
+      case InstKind::LoadInst: {
+        if (vec == nullptr)
+          return false;
+        auto destination = new_run();
+        held[inst] = destination;
+        auto size = bytes_of(vec);
+        auto read = destination;
+        if (vec->element == ir::bool_type())
+          read = new_run();
+        asm_.emit(selector->select_vector_load(read, place_of(inst->operands[1], span), size, inst->span));
+        if (read != destination)
+          asm_.emit(selector->select_truths_in(destination, read, int(vec->lanes), inst->span));
+        return true;
+      }
+      case InstKind::StoreInst: {
+        auto written = ir::as<ir::VecType>(inst->operands[2]->ty);
+        if (written == nullptr)
+          return false;
+        auto source = register_of(inst->operands[2], inst->span);
+        if (written->element == ir::bool_type()) {
+          auto made = new_run();
+          asm_.emit(selector->select_truths_out(made, source, int(written->lanes), inst->span));
+          source = made;
+        }
+        asm_.emit(selector->select_vector_store(place_of(inst->operands[1], span), source, bytes_of(written),
+                                                    inst->span));
+        return true;
+      }
+      case InstKind::SplatInst: {
+        auto destination = new_run();
+        held[inst] = destination;
+        auto given = value(inst->operands[0], inst->span);
+        if (vec->element == ir::bool_type())
+          asm_.emit(selector->select_truth_splat(destination, given, int(vec->lanes), inst->span));
+        else
+          asm_.emit(selector->select_vector_splat(destination, given, int(vec->lanes), width_of(vec->element),
+                                                      inst->span));
+        return true;
+      }
+      case InstKind::BinaryInst: {
+        if (vec == nullptr)
+          return false;
+        auto destination = new_run();
+        held[inst] = destination;
+        auto operation = plain_operation(inst->bin);
+        if (operation == nullptr) [[unlikely]]
+          throw UnsupportedOperation(std::format("'{}' over a whole run", pl4g::describe(inst->bin)), span);
+        bool truths = vec->element == ir::bool_type();
+        asm_.emit(selector->select_vector_op(operation, destination, register_of(inst->operands[0], inst->span),
+                                                 register_of(inst->operands[1], inst->span),
+                                                 truths ? int(vec->lanes) : bytes_of(vec), truths, inst->span));
+        return true;
+      }
+      case InstKind::UnaryInst: {
+        if (vec == nullptr) {
+          if (inst->un != ir::UnOp::mask)
+            return false;
+          auto gathered = ir::as<ir::VecType>(inst->operands[0]->ty);
+          auto destination = destination_for(inst, inst->ty);
+          asm_.emit(selector->select_vector_mask(destination, register_of(inst->operands[0], inst->span),
+                                                     int(gathered->lanes), inst->span));
+          return true;
+        }
+        if (inst->un != ir::UnOp::not_) [[unlikely]]
+          throw UnsupportedOperation(std::format("'{}' over a whole run", pl4g::describe(inst->un)), span);
+        auto destination = new_run();
+        held[inst] = destination;
+        bool truths = vec->element == ir::bool_type();
+        asm_.emit(selector->select_vector_not(destination, register_of(inst->operands[0], inst->span),
+                                                  truths ? int(vec->lanes) : bytes_of(vec), truths, inst->span));
+        return true;
+      }
+      case InstKind::CmpInst: {
+        if (vec == nullptr)
+          return false;
+        auto compared = ir::as<ir::VecType>(inst->operands[0]->ty);
+        auto destination = new_run();
+        held[inst] = destination;
+        asm_.emit(selector->select_vector_compare(
+          condition_for(inst->pred), destination, register_of(inst->operands[0], inst->span),
+          register_of(inst->operands[1], inst->span), int(compared->lanes), compared->element == ir::bool_type(),
+          inst->span));
+        return true;
+      }
+      default:
+        return false;
+      }
+    }
+
+
     void Lowering::lower(const ir::Instruction* inst, std::size_t index)
     {
       auto span = valid(inst->span);
       if (auto refused = cannot_order(inst)) [[unlikely]]
         throw UnsupportedOperation(*refused, inst->span);
+      if (lower_run(inst, span))
+        return;
       switch (inst->kind) {
       case InstKind::FrameInst: {
         // Room of this function's own: the stack pointer and how far in.
@@ -1461,6 +1809,10 @@ namespace pl4g::target::riscv64 {
           asm_.loadreg(move.into, move.source, or_invalid(span));
         std::vector<Reg> clobbers{ calls.answer };
         clobbers.insert(clobbers.end(), calls.clobbers.begin(), calls.clobbers.end());
+        // The kernel keeps nothing of the vector extension across a system
+        // call.
+        for (auto one : registers().vector_registers)
+          clobbers.push_back(one);
         std::vector<Reg> reads;
         for (const auto& move : handed)
           reads.push_back(move.into);
@@ -1842,9 +2194,11 @@ namespace pl4g::target::riscv64 {
 
   void lower_function(mc::Assembler& asm_, const ir::Function& func, const CallConvDesc& cconv,
                       mc::RegisterInfo& registers, Messages* messages, const SourceManager* sources,
-                      Constants* constants, const Destroyed* known_clobbers, const ir::DataLayout& layout)
+                      Constants* constants, const Destroyed* known_clobbers, const ir::DataLayout& layout,
+                      bool works_on_runs)
   {
-    Lowering(asm_, func, cconv, registers, messages, sources, constants, known_clobbers, layout).run();
+    Lowering(asm_, func, cconv, registers, messages, sources, constants, known_clobbers, layout, works_on_runs)
+      .run();
   }
 
 } // namespace pl4g::target::riscv64

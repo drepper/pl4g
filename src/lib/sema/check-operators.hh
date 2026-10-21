@@ -61,6 +61,9 @@
     // Lower `⎕ones(N)` and `⎕lead(N)`: how many of a value's bits are set, and how many zeroes stand above
     // the highest one that is.
     ir::Value* lower_bit_count(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:24505
+    // Lower `⎕mask(B)`: a run of truth values as the bits of a whole number, the first of them the lowest
+    // bit, in the narrowest of the four machine widths that has a bit for every one.
+    ir::Value* lower_mask(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:24755
     // Lower `⎕ord(C)` and `⎕chr(N)`: the two conversions between a code point and the number Unicode gave
     // it.
     ir::Value* lower_code_point(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:24549
@@ -127,6 +130,11 @@
     // first is, how many along each dimension and how far apart, and whether that is one run -- which may
     // overlap, `v⟦0…3⟧ ← v⟦1…4⟧`, as `memmove`'s may.
     void move_elements(ir::Builder& builder, const Laid& into_shape, const Laid& from_shape, const ir::Type* element, ir::Value* count, std::optional<std::int64_t> known, Span span);  // check.py:25601
+    // Copy `known` elements that are one run on both sides, read as one value and then written.
+    void move_as_one(ir::Builder& builder, ir::Value* into, ir::Value* from_, const ir::Type* element, std::int64_t known, Span span);  // check.py:25932
+    // Copy `count` elements one at a time, from whichever end keeps two views that overlap from writing an
+    // element before it is read.
+    void move_apart(ir::Builder& builder, const Laid& into_shape, const Laid& from_shape, const ir::Type* element, ir::Value* count, Span span);  // check.py:25944
     // A loop copying `count` elements, from the last if `downward`.
     void element_by_element(ir::Builder& builder, const Laid& into_shape, const Laid& from_shape, const ir::Type* element, ir::Value* count, bool downward, Span span);  // check.py:25647
     // Copy `size` bytes, in the largest pieces that fit.

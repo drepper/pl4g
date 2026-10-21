@@ -38,6 +38,11 @@
     // Lower a variable defined inside a function body.
     void lower_local(ir::Builder& builder, const ast::VarDef* node);  // check.py:21319
     // Lower a variable whose type is whatever its value turns out to be.
+    // Whether `expr` is elements whose type does not state their shape: a run sliced out of an array, or a
+    // name bound to one.
+    bool given_a_view(const ast::Expr* expr);  // check.py:21555
+    // Lower `let a: T⟦N⟧ = v⟦i…j⟧`: the elements of a view, copied into room of the name's own.
+    void lower_view_copied(ir::Builder& builder, const ast::VarDef* node, const ir::ArrayType* declared);  // check.py:21570
     void lower_derived(ir::Builder& builder, const ast::VarDef* node);  // check.py:21407
     // Bind each name of a definition, or of a loop, that takes a tuple apart.
     void bind_apart(ir::Builder& builder, const ast::Node* node, ir::Value* value);  // check.py:21432

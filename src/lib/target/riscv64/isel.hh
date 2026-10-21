@@ -9,6 +9,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 
 #include "ir/ir.hh"
 #include "ir/layout.hh"
@@ -39,6 +40,9 @@ namespace pl4g::target::riscv64 {
     // What the program is built for; the extensions the code generator can
     // use are asked of it.
     isa::ISA isa;
+    // The register the function being lowered keeps to itself, where it works
+    // on runs; nothing in a function that does not.
+    const mc::PhysReg* spare = nullptr;
 
     mc::Insts select_move(mc::Reg dst, const mc::MCOperand& src, Span span) override;
     mc::Insts select_op(const mc::Op* op, mc::Reg dst, std::span<const mc::MCOperand> sources, Span span) override;
@@ -92,6 +96,28 @@ namespace pl4g::target::riscv64 {
     mc::Insts select_frame(std::int64_t size, Span span) override;
     mc::Insts select_unframe(std::int64_t size, Span span) override;
 
+    // -- runs, where the build has the vector extension ------------------------
+    // Read `size` bytes of a run into `dst`, and write them out of `src`.
+    mc::Insts select_vector_load(mc::Reg dst, const mc::MCMem& place, int size, Span span);
+    mc::Insts select_vector_store(const mc::MCMem& place, mc::Reg src, int size, Span span);
+    // A run of truth values held as bytes made a mask, and a mask made bytes.
+    mc::Insts select_truths_in(mc::Reg dst, mc::Reg src, int lanes, Span span);
+    mc::Insts select_truths_out(mc::Reg dst, mc::Reg src, int lanes, Span span);
+    // One value of `bits` in each of `lanes` elements, and one truth value in
+    // every lane of a mask.
+    mc::Insts select_vector_splat(mc::Reg dst, const mc::MCOperand& src, int lanes, int bits, Span span);
+    mc::Insts select_truth_splat(mc::Reg dst, const mc::MCOperand& src, int lanes, Span span);
+    // One of the bitwise three over `count` bytes, or over the lanes of two
+    // masks where `truths` says that is what they are; and the complement.
+    mc::Insts select_vector_op(const mc::Op* op, mc::Reg dst, mc::Reg left, mc::Reg right, int count, bool truths,
+                               Span span);
+    mc::Insts select_vector_not(mc::Reg dst, mc::Reg src, int count, bool truths, Span span);
+    // Compare `lanes` bytes of two runs into a mask, or two masks.
+    mc::Insts select_vector_compare(mc::Condition cond, mc::Reg dst, mc::Reg left, mc::Reg right, int lanes,
+                                    bool truths, Span span);
+    // The first `lanes` bits of a mask in an ordinary register.
+    mc::Insts select_vector_mask(mc::Reg dst, mc::Reg src, int lanes, Span span);
+
   private:
     mc::InstRef inst(std::string_view mnemonic, std::vector<mc::MCOperand> operands, Span span) const;
     mc::Insts float_move(mc::Reg dst, const mc::MCOperand& src, Span span);
@@ -101,12 +127,20 @@ namespace pl4g::target::riscv64 {
                                                                std::vector<mc::MCOperand> operands, Span span);
     mc::Insts float_store(const mc::MCMem& address, const mc::MCReg& value, int width, Span span);
     std::pair<mc::MCReg, mc::Insts> as_register(const mc::MCOperand& operand, Span span);
+    std::tuple<mc::Insts, mc::MCReg, std::int64_t> in_frame(std::int64_t offset, Span span);
+    mc::Insts frame_word(std::string_view mnemonic, mc::Reg reg, std::int64_t offset, Span span);
+    mc::InstRef vset(int count, int bits, Span span);
+    std::pair<mc::Insts, mc::MCReg> address(const mc::MCMem& place, Span span);
+    mc::Insts added(const mc::MCReg& dst, const mc::MCReg& base, std::int64_t offset, Span span);
   };
 
 
   // Build the machine form of one IR function.
+  // `works_on_runs` says the function did before the runs were brought down
+  // to what the machine has: it then keeps one register to itself.
   void lower_function(mc::Assembler& asm_, const ir::Function& func, const CallConvDesc& cconv,
                       mc::RegisterInfo& registers, Messages* messages, const SourceManager* sources,
-                      Constants* constants, const Destroyed* known_clobbers, const ir::DataLayout& layout);
+                      Constants* constants, const Destroyed* known_clobbers, const ir::DataLayout& layout,
+                      bool works_on_runs = false);
 
 } // namespace pl4g::target::riscv64

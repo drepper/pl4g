@@ -30,9 +30,11 @@
     // Whether the innermost run can be asked the operator all at once.
     bool all_at_once(const ast::Expr* expr, std::span<const ir::Type* const> wanted, std::span<const std::int64_t> shape);  // check.py:26940
     // Apply the operator to the innermost run of elements all at once.
-    ir::Value* run_at_a_time(ir::Builder& builder, const ast::Expr* expr, std::span<const std::string> names, std::span<ir::Value* const> values, std::span<const ir::Type* const> wanted, std::span<const std::int64_t> shape, const ir::Type* expected);  // check.py:26973
+    ir::Value* run_at_a_time(ir::Builder& builder, const ast::Expr* expr, std::span<const std::string> names, std::span<ir::Value* const> values, std::span<const ir::Type* const> wanted, std::span<const std::int64_t> shape, const ir::Type* expected, bool as_run = false);  // check.py:27323
     // One operand of a run-at-a-time operation, as a value of `lanes` lanes.
     ir::Value* run_or_one(ir::Builder& builder, ir::Value* value, const ir::Type* want, std::span<const std::int64_t> index, std::int64_t lanes, Span span);  // check.py:27020
+    // A run held as one value, put in room of its own as the array it is.
+    ir::Value* as_array(ir::Builder& builder, ir::Value* value, Span span);  // check.py:27389
     // Where the run that starts at the `at`-th element is, read as one value.
     ir::Value* run_place(ir::Builder& builder, ir::Value* base, const ir::VecType* held, std::int64_t at, Span span);  // check.py:27049
     // How many along each dimension the operands are walked.

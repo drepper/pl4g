@@ -210,6 +210,7 @@ set(PL4G_LIB_SOURCES
   src/lib/target/riscv64/isa.cc
   src/lib/target/riscv64/isel.cc
   src/lib/target/riscv64/opcodes.cc
+  src/lib/target/riscv64/peephole.cc
   src/lib/target/riscv64/regs.cc
   src/lib/target/riscv64/startup.cc
   src/lib/target/riscv64/target.cc
