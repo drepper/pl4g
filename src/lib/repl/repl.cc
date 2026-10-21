@@ -10,11 +10,18 @@ namespace pl4g::repl {
   Ended run_file(const Settings& settings)
   {
     SourceManager sources;
+    for (const auto& [path, text] : settings.held)
+      sources.hold(path, text);
     TextRenderer renderer(sources, settings.devices.error);
     DiagEngine diags([&](const Diagnostic& d) { renderer(d); }, settings.warnings);
     renderer.use(diags);
     renderer.recolour(settings.colour, settings.devices.output);
-    driver::Compilation compilation(settings.compile, diags, sources);
+    // The interpreter runs it, in a program that may define what a function
+    // the host defines names: so there is a host, as there is for a shared
+    // object, and the checker lets such a function be declared.
+    driver::Options compile = settings.compile;
+    compile.output_kind = ir::Output::interpreted;
+    driver::Compilation compilation(std::move(compile), diags, sources);
     auto module = compilation.front_end();
     if (module == nullptr || diags.failed()) [[unlikely]]
       return { 1, 0 };

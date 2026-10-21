@@ -6,6 +6,8 @@
 #   pl4g              the library, libpl4g.a
 #   pl4g-repl         the stand-alone REPL and interpreter
 #   pl4g-lsp          the stand-alone language server
+#   pl4g-embed-host   a program embedding the interpreter, whose functions
+#                     the programs it runs call (a test)
 #   pl4g-lexdump      the tokens of a file, for comparing with pypl4g
 #   *-asan            the same, built with the address and undefined-behaviour
 #                     sanitizers (PL4G_SANITIZERS=ON, the default)
@@ -37,6 +39,10 @@ find_library(UNISTRING_LIBRARY unistring REQUIRED)
 find_library(EDIT_LIBRARY edit REQUIRED)
 # The tree-sitter service: the grammar's parser is built in, the core is the system's.
 find_library(TREE_SITTER_LIBRARY tree-sitter REQUIRED)
+# What the interpreter calls a function the host defines through: the call
+# described from the function's signature and made as the system makes it.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(FFI REQUIRED IMPORTED_TARGET libffi)
 
 # The fuzzing entry points, each src/fuzz/NAME.cc with a corpus in src/fuzz/corpus/NAME.
 set(PL4G_FUZZ_TARGETS lexer parser check)
@@ -100,6 +106,7 @@ set(PL4G_LIB_SOURCES
   src/lib/rt/blob-riscv64.cc
   src/lib/rt/blob-x86_64.cc
   src/lib/interp/interp.cc
+  src/lib/embed/embed.cc
   src/lib/mc/asmbuilder.cc
   src/lib/mc/desc.cc
   src/lib/mc/dump.cc
@@ -234,7 +241,8 @@ function(pl4g_variant suffix)
     COMPILE_OPTIONS "--embed-dir=${CMAKE_SOURCE_DIR}/share")
   target_compile_options(pl4g${suffix} PUBLIC ${PL4G_COMMON_FLAGS} ${flags})
   target_link_options(pl4g${suffix} PUBLIC ${flags})
-  target_link_libraries(pl4g${suffix} PUBLIC simdjson::simdjson ${UNISTRING_LIBRARY} ${EDIT_LIBRARY} ${TREE_SITTER_LIBRARY})
+  target_link_libraries(pl4g${suffix} PUBLIC simdjson::simdjson ${UNISTRING_LIBRARY} ${EDIT_LIBRARY} ${TREE_SITTER_LIBRARY}
+    PkgConfig::FFI ${CMAKE_DL_LIBS})
 
   # The stand-alone interpreter: the library and a small driver.
   add_executable(pl4g-repl${suffix} src/repl/main.cc)
@@ -370,6 +378,14 @@ set_tests_properties(driver-agrees PROPERTIES TIMEOUT 1800)
 # The interactive session answers typed sessions as it should.
 add_test(NAME repl-sessions
   COMMAND python3 -I ${CMAKE_SOURCE_DIR}/src/test/repl_sessions.py $<TARGET_FILE:pl4g-repl> ${CMAKE_SOURCE_DIR})
+# A program embedding the interpreter runs programs that call the functions it
+# defines, every kind of value crossing both ways, and one that calls what it
+# does not define.  Its symbols are exported, as an embedding program's have
+# to be for dlsym to find them.
+add_executable(pl4g-embed-host src/test/embed_host.cc)
+target_link_libraries(pl4g-embed-host PRIVATE pl4g)
+set_target_properties(pl4g-embed-host PROPERTIES ENABLE_EXPORTS ON)
+add_test(NAME embed-host COMMAND prlimit --data=536870912 --cpu=120 -- $<TARGET_FILE:pl4g-embed-host>)
 # The AArch64 back end generates for every test program, at every level its
 # test asks for, what pypl4g's generates, and every row of its encoding table
 # encodes as pypl4g's does.

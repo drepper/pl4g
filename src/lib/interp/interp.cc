@@ -12,6 +12,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include <dlfcn.h>
+#include <ffi.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -19,6 +21,8 @@
 #include "ir/layout.hh"
 #include "diag/engine.hh"
 #include "rt/runtime.hh"
+#include "target/host.hh"
+#include "target/statuses.hh"
 #include "util/fdio.hh"
 
 
@@ -212,6 +216,70 @@ namespace pl4g::interp {
     };
 
 
+    // -- what the host defines ------------------------------------------------
+
+    // How one value crosses to the host and back: what libffi is told it is,
+    // how many bytes of its cell C reads, and how what comes back is made a
+    // cell again.
+    struct Crossing {
+      ::ffi_type* type = &::ffi_type_void;
+      Scalar scalar;
+      unsigned bytes = 0;
+    };
+
+    // What a value of `ty` is to C.  The checker lets only what C has cross,
+    // and a `str` has been made an address by then, so every one of these is
+    // a single cell, held as the x86-64 back end holds it in a register: an
+    // integer at its held width, a truth value as a byte, a character as its
+    // `u32`, a floating-point number as its bits, a reference as the address
+    // of the place it names.
+    Crossing crossing_of(const Type* ty)
+    {
+      if (is<VoidType>(ty))
+        return {};
+      if (auto c = as<CharType>(ty))
+        return crossing_of(c->holder());
+      if (auto i = as<IntType>(ty)) {
+        Scalar s{ Scalar::Kind::integer, i->bits, i->held(), i->is_signed };
+        switch (i->held()) {
+        case 8: return { i->is_signed ? &::ffi_type_sint8 : &::ffi_type_uint8, s, 1 };
+        case 16: return { i->is_signed ? &::ffi_type_sint16 : &::ffi_type_uint16, s, 2 };
+        case 32: return { i->is_signed ? &::ffi_type_sint32 : &::ffi_type_uint32, s, 4 };
+        default: return { i->is_signed ? &::ffi_type_sint64 : &::ffi_type_uint64, s, 8 };
+        }
+      }
+      if (is<BoolType>(ty))
+        return { &::ffi_type_uint8, { Scalar::Kind::boolean, 1, 8, false }, 1 };
+      if (auto f = as<FloatType>(ty)) {
+        if (f->bits == 32)
+          return { &::ffi_type_float, { Scalar::Kind::floating, 32, 32, true }, 4 };
+        if (f->bits == 64)
+          return { &::ffi_type_double, { Scalar::Kind::floating, 64, 64, true }, 8 };
+      }
+      if (is<PtrType>(ty))
+        return { &::ffi_type_pointer, {}, 8 };
+      throw InternalError(std::format("a value of type {} cannot cross to the host", ty->render()));
+    }
+
+    // A function the host defines, as it is called: the call's description,
+    // prepared once, and where the function is, once it was found.
+    struct HostCall {
+      ::ffi_cif cif{};
+      std::vector<::ffi_type*> types;
+      std::vector<Crossing> params;
+      Crossing answer;
+      void* address = nullptr;
+    };
+
+    // Where in a cell are the `bytes` bytes a C value of that many bytes
+    // takes: its low ones, wherever the machine keeps those.
+    std::byte* low_bytes(Cell& cell, unsigned bytes) noexcept
+    {
+      auto at = reinterpret_cast<std::byte*>(&cell);
+      return std::endian::native == std::endian::big ? at + (sizeof(Cell) - bytes) : at;
+    }
+
+
     // -- the machine ----------------------------------------------------------
 
     class Machine {
@@ -250,7 +318,11 @@ namespace pl4g::interp {
       In operand(Code& code, const Value* value, const std::unordered_map<const Value*, std::uint32_t>& cells);
       void expand(std::vector<Cell>& out, const Value* value);
       Cell address_of(const Value* value);
-      std::string describe(std::string_view what, const Function& func, Span span) const;
+      std::string describe(std::string_view what, const Function& func, Span span) const
+      {
+        return describe(what, func.name, span);
+      }
+      std::string describe(std::string_view what, std::string_view name, Span span) const;
       void place_globals();
       void encode(std::byte* at, const Value* init, const Type* ty, const DataLayout& layout);
 
@@ -260,6 +332,8 @@ namespace pl4g::interp {
       void binary(const Op& op, Cell* dst, const Cell* a, const Cell* b);
       Cell binary_int(const Op& op, const Scalar& s, Cell a, Cell b);
       Cell native_call(const Function* callee, const Cell* args);
+      Cell host_call(const Function* callee, const Cell* args);
+      HostCall& host_call_of(const Function* callee);
 
       const Cell* read(const Activation& a, In in) const
       {
@@ -294,6 +368,10 @@ namespace pl4g::interp {
       std::vector<std::string> strings;
       std::vector<Cell> initial_stack;
       std::array<unsigned char, 16> random{};
+      // What the host defines: each function's call, prepared the first time
+      // it is called, and where each symbol was found, asked once.
+      std::unordered_map<const Function*, std::unique_ptr<HostCall>> host_calls;
+      std::unordered_map<std::string, void*> host_symbols;
     };
 
 
@@ -561,13 +639,13 @@ namespace pl4g::interp {
     }
 
 
-    std::string Machine::describe(std::string_view what, const Function& func, Span span) const
+    std::string Machine::describe(std::string_view what, std::string_view name, Span span) const
     {
       std::string where;
       if (options.sources != nullptr && span.is_valid())
         if (auto position = options.sources->position(span.start))
           where = std::format("{}:{}:{}: ", position->path, position->line, position->column);
-      return std::format("{}pl4g: {} in '{}'\n", where, what, func.name);
+      return std::format("{}pl4g: {} in '{}'\n", where, what, name);
     }
 
 
@@ -1288,8 +1366,81 @@ namespace pl4g::interp {
     }
 
 
+    HostCall& Machine::host_call_of(const Function* callee)
+    {
+      auto& found = host_calls[callee];
+      if (found != nullptr)
+        return *found;
+      auto made = std::make_unique<HostCall>();
+      for (auto ty : callee->fty->params) {
+        made->params.push_back(crossing_of(ty));
+        made->types.push_back(made->params.back().type);
+      }
+      made->answer = crossing_of(callee->fty->ret);
+      if (::ffi_prep_cif(&made->cif, FFI_DEFAULT_ABI, unsigned(made->types.size()), made->answer.type,
+                         made->types.data())
+          != FFI_OK) [[unlikely]]
+        throw InternalError(std::format("libffi cannot describe a call of '{}'", callee->name));
+      found = std::move(made);
+      return *found;
+    }
+
+
+    Cell Machine::host_call(const Function* callee, const Cell* given)
+    {
+      HostCall& host = host_call_of(callee);
+      if (host.address == nullptr) {
+        // Asked of what the program loaded globally, as the compiled stub
+        // asks: once a symbol, however many declarations name it.
+        const std::string& symbol = *callee->attrs.host;
+        auto [at, fresh] = host_symbols.try_emplace(symbol, nullptr);
+        if (fresh)
+          at->second = ::dlsym(RTLD_DEFAULT, symbol.c_str());
+        if (at->second == nullptr) [[unlikely]] {
+          // The program stops, as a shared object's stub stops it, and the
+          // message is about the function the program wrote rather than the
+          // one the checker made of it to hand C its text.
+          std::string_view name = callee->name;
+          if (name.ends_with(target::host::crossing_suffix))
+            name.remove_suffix(target::host::crossing_suffix.size());
+          fault(describe(std::format("the host defines no '{}'", symbol), name, callee->span),
+                target::statuses::HOST_SYMBOL_MISSING);
+        }
+        host.address = at->second;
+      }
+      // Each argument is a cell of its own, of which C reads the low bytes
+      // its type has.  What comes back is at least a word: libffi widens a
+      // narrow integer to one, as its type says.
+      std::vector<Cell> words(given, given + host.params.size());
+      std::vector<void*> values;
+      values.reserve(words.size());
+      for (std::size_t i = 0; i < words.size(); ++i)
+        values.push_back(low_bytes(words[i], host.params[i].bytes));
+      union {
+        ::ffi_arg word;
+        float single;
+        double twice;
+      } answer{};
+      ::ffi_call(&host.cif, FFI_FN(host.address), &answer, values.data());
+      const Crossing& back = host.answer;
+      if (back.type == &::ffi_type_void)
+        return 0;
+      if (back.type == &::ffi_type_float)
+        return Cell(std::bit_cast<std::uint32_t>(answer.single));
+      if (back.type == &::ffi_type_double)
+        return std::bit_cast<Cell>(answer.twice);
+      if (back.type == &::ffi_type_pointer)
+        return Cell(answer.word);
+      // What the register holds at the width the type is held at, read as a
+      // load from memory reads it: whatever C left above that is not looked at.
+      return extend(Cell(answer.word), back.scalar.held, back.scalar.is_signed);
+    }
+
+
     Cell Machine::native_call(const Function* callee, const Cell* given)
     {
+      if (callee->attrs.host) [[unlikely]]
+        return host_call(callee, given);
       // A declaration may say less than the runtime takes -- a program may
       // declare `pl4g_io_submit` with five parameters -- and what it does not
       // hand over is nought here rather than whatever a register held.
