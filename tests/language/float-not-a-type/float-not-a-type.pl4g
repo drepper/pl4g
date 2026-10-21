@@ -1,0 +1,20 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4242 LANG_NUMBER_NOT_A_TYPE
+※ pl4g-test: expect-diag 4242 LANG_NUMBER_NOT_A_TYPE
+※ pl4g-test: expect-diag 4242 LANG_NUMBER_NOT_A_TYPE
+
+※ The type each crossing between whole and floating-point numbers makes is
+※ lifted, as it is for `⎕narrow` and `⎕widen`: a type is not a value, and
+※ without the marks its name would be read as a value's.
+
+let std := ⎕import("std")
+
+let n: u64 = 7u64
+let x: f64 = 2.5f64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let a: f64 = ⎕float(n, f64)
+    let b: i64 = ⎕trunc(x, i64) ?? 0i64
+    let c: f64 = ⎕from_bits(n, f64)
+    0u6

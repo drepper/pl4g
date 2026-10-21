@@ -1,7 +1,7 @@
 """Counting bits, and the microarchitecture level being a description.
 
-`\N{APL FUNCTIONAL SYMBOL QUAD}ones` and `\N{APL FUNCTIONAL SYMBOL QUAD}lead` are the first two questions the language asks that one of
-the three architectures answers with an instruction only at some levels.  So
+`\N{APL FUNCTIONAL SYMBOL QUAD}ones`, `\N{APL FUNCTIONAL SYMBOL QUAD}lead` and `\N{APL FUNCTIONAL SYMBOL QUAD}trail` are questions the language asks that two of
+the three architectures answer with an instruction only at some levels.  So
 these check two things at once: that the answers are right, and that they are
 the same answers however the machine arrived at them.
 """
@@ -38,6 +38,14 @@ CASES = [
     ("lead", "u32", "65536u32", 15),
     ("lead", "i8", "\N{SUPERSCRIPT MINUS}1i8", 0),
     ("lead", "i8", "1i8", 7),
+    ("trail", "u64", "0u64", 64), ("trail", "u64", "1u64", 0),
+    ("trail", "u64", "9223372036854775808u64", 63),
+    ("trail", "u64", "18446744073709551615u64", 0),
+    ("trail", "u8", "0u8", 8), ("trail", "u8", "128u8", 7),
+    ("trail", "u32", "65536u32", 16), ("trail", "u32", "0u32", 32),
+    ("trail", "i8", "\N{SUPERSCRIPT MINUS}128i8", 7),
+    ("trail", "i8", "\N{SUPERSCRIPT MINUS}1i8", 0),
+    ("trail", "i64", "\N{SUPERSCRIPT MINUS}9223372036854775808i64", 63),
 ]
 
 #: The program that asks one of them.  The value is read out of a variable, so
@@ -122,6 +130,52 @@ def test_the_instruction_is_used_where_the_level_has_it(tmp_path) -> None:  # no
     assert "popcnt" in dumped(ones, tmp_path, "--mclevel=v2")
     assert "lzcnt" not in dumped(lead, tmp_path, "--mclevel=v2")
     assert "lzcnt" in dumped(lead, tmp_path, "--mclevel=v3")
+
+
+def test_the_count_from_the_bottom_is_an_instruction_at_every_level(
+        tmp_path) -> None:  # noqa: ANN001
+    """`tzcnt` comes with the third level, and below it `bsf` finds the same bit
+    with the answer for nought left out -- which a conditional move puts back,
+    so there is no branch at any level."""
+    trail = source("trail", "u64", "8u64", 3)
+    assert "tzcnt" in dumped(trail, tmp_path, "--mclevel=v3")
+    older = dumped(trail, tmp_path, "--mclevel=v1")
+    assert "tzcnt" not in older and "bsf" in older and "cmove" in older
+
+
+def riscv_dumped(text: str, tmp_path, *extra: str) -> str:  # noqa: ANN001
+    """The assembler dump of *text*, compiled for RISC-V."""
+    path = tmp_path / "t.pl4g"
+    path.write_text(text, encoding="utf-8")
+    out = tmp_path / "t.asm"
+    proc = run_compiler(["-o", str(out), "--emit=asm", "-O1",
+                         "--target=riscv64-linux-none", *extra, str(path)])
+    assert proc.returncode == 0, describe(proc)
+    return out.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(("which", "mnemonic"), (("ones", "cpop"),
+                                                 ("lead", "clz"),
+                                                 ("trail", "ctz")))
+def test_riscv_counts_with_zbb_and_without_it(which: str, mnemonic: str,
+                                              tmp_path) -> None:  # noqa: ANN001
+    """The three counts are Zbb's on RISC-V, which the application profile the
+    compiler builds for has; a program built for the base without it counts
+    with the sequences, and answers the same."""
+    text = source(which, "u64", "8u64", {"ones": 1, "lead": 60, "trail": 3}[which])
+    assert "".join((" ", mnemonic, " ")) in riscv_dumped(text, tmp_path)
+    assert "".join((" ", mnemonic, " ")) not in riscv_dumped(
+        text, tmp_path, "--mclevel=rv64gc")
+
+
+@pytest.mark.parametrize(("which", "ty", "value", "expected"), CASES,
+                         ids=["".join((c[0], ".", c[1], ".", str(c[3])))
+                              for c in CASES])
+def test_and_the_same_without_zbb(which: str, ty: str, value: str,
+                                  expected: int, tmp_path) -> None:  # noqa: ANN001
+    """The sequences RISC-V counts with where it is built for the base."""
+    assert ran(source(which, ty, value, expected), "riscv64-linux-none",
+               tmp_path, "--mclevel=rv64gc") == 0
 
 
 def test_the_level_without_it_counts_the_bits_itself(tmp_path) -> None:  # noqa: ANN001

@@ -216,6 +216,18 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     RVInstDesc("mulh", (_r(), _r(), _r()), template=0x02001033,
                fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
                est_size=INSTRUCTION_SIZE),
+    # clz, ctz and cpop rd, rs1: the three counts of a doubleword's bits, which
+    # are Zbb's and not the base's -- the application profiles have it, and a
+    # program built for a base without it counts with the sequences instead.
+    RVInstDesc("clz", (_r(), _r()), template=0x60001013,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("ctz", (_r(), _r()), template=0x60101013,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("cpop", (_r(), _r()), template=0x60201013,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               est_size=INSTRUCTION_SIZE),
     # mulhu rd, rs1, rs2
     RVInstDesc("mulhu", (_r(), _r(), _r()), template=0x02003033,
                fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
@@ -303,6 +315,17 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     RVInstDesc("fcvt.w.s", (_r(), _f(), _rm()), template=0xC0000053,
                fields=(_reg(0, _RD), _reg(1, _RS1), _mode(2)),
                est_size=INSTRUCTION_SIZE),
+    # And the same into a whole doubleword from either format, signed and not,
+    # which is what a conversion toward zero asks for with `rtz`.
+    RVInstDesc("fcvt.l.s", (_r(), _f(), _rm()), template=0xC0200053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _mode(2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fcvt.lu.s", (_r(), _f(), _rm()), template=0xC0300053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _mode(2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fcvt.lu.d", (_r(), _f(), _rm()), template=0xC2300053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _mode(2)),
+               est_size=INSTRUCTION_SIZE),
     # Rounding a floating-point number where it stands, which is the Zfa
     # extension and not the base -- the application profiles have had it since
     # 2023, and what a program built for a base without it pays instead is the
@@ -320,6 +343,18 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
                fields=(_reg(0, _RD), _reg(1, _RS1)),
                est_size=INSTRUCTION_SIZE),
     RVInstDesc("fcvt.s.w", (_f(), _r()), template=0xD0007053,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               est_size=INSTRUCTION_SIZE),
+    # A whole doubleword, signed or not, as the floating-point number nearest
+    # it -- rounded as `frm` says, which is to nearest with a tie to even unless
+    # something changed it, and nothing in the language can.
+    RVInstDesc("fcvt.s.l", (_f(), _r()), template=0xD0207053,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fcvt.s.lu", (_f(), _r()), template=0xD0307053,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fcvt.d.lu", (_f(), _r()), template=0xD2307053,
                fields=(_reg(0, _RD), _reg(1, _RS1)),
                est_size=INSTRUCTION_SIZE),
     # The bits of a floating-point register in an ordinary one and back, with

@@ -857,7 +857,11 @@ class Lexer:
             while len(digits) < want and _is_hex_digit(self._peek()):
                 digits += self._peek()
                 self._pos += 1
-            if len(digits) == want and int(digits, 16) <= _MAX_CODE_POINT:
+            # A surrogate is a number and not a code point, so an escape naming
+            # one names nothing, as one beyond the last does: a string holding
+            # it would be no UTF-8 at all.
+            if len(digits) == want and int(digits, 16) <= _MAX_CODE_POINT \
+                    and not 0xD800 <= int(digits, 16) <= 0xDFFF:
                 return chr(int(digits, 16))
             self._diags.emit(D.LANG_SYNTAX_BAD_ESCAPE, self._span(start, self._pos), char=ch)
             return ""

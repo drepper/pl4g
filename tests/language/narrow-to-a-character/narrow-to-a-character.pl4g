@@ -1,0 +1,87 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕narrow(N, ⌜char⌝)` reads a number as the code point it is the number of,
+※ or says why it is none.  A code point is a narrower type than the number it is
+※ held as, with a top and a gap: nothing is above U+10FFFF, and the surrogates,
+※ D800 to DFFF, are numbers UTF-16 keeps for itself and no code point at all.
+※ So the error is `overflow` above the top, `sign` for a negative number, and
+※ `absent` for a surrogate -- the type having no value with that number, as an
+※ enumeration has none for a number that is not one of its values.
+※
+※ `⎕chr` asks the same question and stops the program where the answer is no.
+※ This is the form for a number that came from outside, where no is an answer
+※ to be ready for.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ the ends of the two runs of code points
+    if ⎕ord(⎕narrow(given(0x41u32), ⌜char⌝) ?? '?') ≠ 0x41u32:
+        1u6
+    elif ⎕ord(⎕narrow(given(0xD7FFu32), ⌜char⌝) ?? '?') ≠ 0xD7FFu32:
+        2u6
+    elif ⎕ord(⎕narrow(given(0xE000u32), ⌜char⌝) ?? '?') ≠ 0xE000u32:
+        3u6
+    elif ⎕ord(⎕narrow(given(0x10FFFFu32), ⌜char⌝) ?? '?') ≠ 0x10FFFFu32:
+        4u6
+    ※ and what lies between and beyond them
+    elif code(⎕narrow(given(0xD800u32), ⌜char⌝)) ≠ 3u8:
+        5u6
+    elif code(⎕narrow(given(0xDFFFu32), ⌜char⌝)) ≠ 3u8:
+        6u6
+    elif code(⎕narrow(given(0x110000u32), ⌜char⌝)) ≠ 0u8:
+        7u6
+    elif code(⎕narrow(given(0xFFFFFFFFu32), ⌜char⌝)) ≠ 0u8:
+        8u6
+    ※ a signed number, negative or not
+    elif code(⎕narrow(signed(⁻1i32), ⌜char⌝)) ≠ 2u8:
+        9u6
+    elif ⎕ord(⎕narrow(signed(0x10FFFFi32), ⌜char⌝) ?? '?') ≠ 0x10FFFFu32:
+        10u6
+    ※ a byte, which is always a code point, and a word, which often is not
+    elif ⎕ord(⎕narrow(byte(255u8), ⌜char⌝) ?? '?') ≠ 255u32:
+        11u6
+    elif code(⎕narrow(wide(0x10000000000u64), ⌜char⌝)) ≠ 0u8:
+        12u6
+    elif code(⎕narrow(wide(0xDABCu64), ⌜char⌝)) ≠ 3u8:
+        13u6
+    ※ numbers written down, which the compiler reads itself
+    elif code(⎕narrow(0xD800u32, ⌜char⌝)) ≠ 3u8 ∨ code(⎕narrow(⁻5i32, ⌜char⌝)) ≠ 2u8:
+        14u6
+    elif ⎕ord(⎕narrow(0x1F600u32, ⌜char⌝) ?? '?') ≠ 0x1F600u32:
+        15u6
+    else:
+        0u6
+
+※ Values the compiler cannot see, so that the checks are the program's.
+@[opaque]
+fn given(n: u32) → u32:
+    n
+
+@[opaque]
+fn signed(n: i32) → i32:
+    n
+
+@[opaque]
+fn byte(n: u8) → u8:
+    n
+
+@[opaque]
+fn wide(n: u64) → u64:
+    n
+
+※ Which condition it was, as a number.
+fn code(of: char?⎕narrowing) → u8:
+    match of:
+        char:
+            9u8
+        ⊥(why):
+            if why = ⎕narrowing.overflow:
+                0u8
+            elif why = ⎕narrowing.underflow:
+                1u8
+            elif why = ⎕narrowing.sign:
+                2u8
+            else:
+                3u8

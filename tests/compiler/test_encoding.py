@@ -302,6 +302,9 @@ SAMPLES = [
     # Counting bits, which the second and third levels add.
     ("popcnt rax,rbx", "popcnt", MCReg(reg("rax")), MCReg(reg("rbx"))),
     ("lzcnt rax,rbx", "lzcnt", MCReg(reg("rax")), MCReg(reg("rbx"))),
+    ("tzcnt rax,rbx", "tzcnt", MCReg(reg("rax")), MCReg(reg("rbx"))),
+    ("bsf rax,rbx", "bsf", MCReg(reg("rax")), MCReg(reg("rbx"))),
+    ("tzcnt r9,r10", "tzcnt", MCReg(reg("r9")), MCReg(reg("r10"))),
     # And the third level's shifts, which take their count in any register.
     ("shlx rax,rbx,rcx", "shlx", MCReg(reg("rax")), MCReg(reg("rbx")), MCReg(reg("rcx"))),
     ("shrx rax,rbx,rcx", "shrx", MCReg(reg("rax")), MCReg(reg("rbx")), MCReg(reg("rcx"))),
@@ -345,6 +348,10 @@ SAMPLES = [
     ("andpd xmm0,XMMWORD PTR [rbx]", "andpd", MCReg(reg("xmm0")),
      MCMem(base=reg("rbx"), size_bits=128)),
     ("cvtss2sd xmm0,xmm1", "cvtss2sd", MCReg(reg("xmm0")), MCReg(reg("xmm1"))),
+    ("cvtsi2sd xmm0,rax", "cvtsi2sd", MCReg(reg("xmm0")), MCReg(reg("rax"))),
+    ("cvtsi2ss xmm9,r10", "cvtsi2ss", MCReg(reg("xmm9")), MCReg(reg("r10"))),
+    ("cvttsd2si rax,xmm1", "cvttsd2si", MCReg(reg("rax")), MCReg(reg("xmm1"))),
+    ("cvttss2si r11,xmm12", "cvttss2si", MCReg(reg("r11")), MCReg(reg("xmm12"))),
     ("ucomiss xmm0,xmm1", "ucomiss", MCReg(reg("xmm0")), MCReg(reg("xmm1"))),
     ("ucomisd xmm0,xmm1", "ucomisd", MCReg(reg("xmm0")), MCReg(reg("xmm1"))),
     ("movss DWORD PTR [rbx],xmm0", "movss", MCMem(base=reg("rbx")),

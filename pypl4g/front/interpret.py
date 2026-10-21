@@ -322,6 +322,16 @@ class Machine:
         left = self._number(inst.operands[0], values)
         right = self._number(inst.operands[1], values)
         ty = inst.ty
+        if inst.op is BinOp.WIDE_MUL:
+            # The whole product, which a number here has room for, cut into
+            # the two halves the tuple holds: the upper read as the operands'
+            # type reads it and the lower as the unsigned bits it is.
+            assert isinstance(ty, TupleType)
+            whole = left * right
+            upper = ty.members[0]
+            assert isinstance(upper, IntType)
+            return (_in_range((whole >> 64) & ((1 << 64) - 1), upper),
+                    whole & ((1 << 64) - 1))
         if ty is BOOL:
             found = _ARITHMETIC.get(inst.op)
             if found is None:
@@ -376,6 +386,11 @@ class Machine:
             return bin(raw).count("1")
         if inst.op is UnOp.COUNT_LEADING:
             return ty.held - raw.bit_length()
+        if inst.op is UnOp.COUNT_TRAILING:
+            # The lowest set bit is the only one of a value's that its negation
+            # shares with it, which is what finds it without a loop; nought
+            # has none, and its count is the width.
+            return (raw & -raw).bit_length() - 1 if raw else ty.held
         raise Refused("".join(("the operation ", inst.op.value)), inst)
 
     def _cast(self, inst: CastInst, values: dict[int, object]) -> object:

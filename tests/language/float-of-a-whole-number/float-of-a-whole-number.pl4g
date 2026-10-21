@@ -1,0 +1,99 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕float(N, ⌜F⌝)` is the floating-point number nearest the whole number N.
+※ It cannot fail -- every whole number lies between two numbers of either
+※ format, the largest `u64` far below where `f32` runs out -- so it answers the
+※ number and not a result.  Where there is no number of the format equal to it,
+※ the nearer of the two either side is the answer, and a tie goes to the one
+※ whose last bit is nought.
+※
+※ What is compared here is the bits of each answer, `⎕bits`: two numbers that
+※ are meant to be the same number are the same bits, and comparing them that
+※ way says so exactly rather than within a tolerance.
+※
+※ Each number comes out of a function the compiler does not look through, so
+※ the conversion is the machine's; the last few are written down, and are the
+※ compiler's -- and the two have to agree.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ small numbers are exact, negative ones too
+    if ⎕bits(⎕float(given(3u64), ⌜f64⌝)) ≠ 0x4008000000000000u64:
+        1u6
+    elif ⎕bits(⎕float(signed(⁻2i64), ⌜f64⌝)) ≠ 0xC000000000000000u64:
+        2u6
+    ※ 2⁵³ + 1 is the first whole number f64 has no room for, and it is a tie
+    ※ between 2⁵³ and 2⁵³ + 2: the even one is 2⁵³
+    elif ⎕bits(⎕float(given(9007199254740993u64), ⌜f64⌝)) ≠ 0x4340000000000000u64:
+        3u6
+    ※ and 2⁵³ + 3 is a tie the other way, to 2⁵³ + 4
+    elif ⎕bits(⎕float(given(9007199254740995u64), ⌜f64⌝)) ≠ 0x4340000000000002u64:
+        4u6
+    ※ the largest u64 is nearest 2⁶⁴
+    elif ⎕bits(⎕float(given(18446744073709551615u64), ⌜f64⌝)) ≠ 0x43F0000000000000u64:
+        5u6
+    ※ a u64 above 2⁶³ whose last bits decide the rounding: 2⁶³ + 1025 is past
+    ※ the half-way point to the next number, which is 2⁶³ + 2048
+    elif ⎕bits(⎕float(given(9223372036854776833u64), ⌜f64⌝)) ≠ 0x43E0000000000001u64:
+        6u6
+    ※ and 2⁶³ + 1024 is the half-way point itself, which goes to the even 2⁶³
+    elif ⎕bits(⎕float(given(9223372036854776832u64), ⌜f64⌝)) ≠ 0x43E0000000000000u64:
+        7u6
+    ※ the smallest i64, which is a power of two and exact
+    elif ⎕bits(⎕float(signed(⁻9223372036854775808i64), ⌜f64⌝)) ≠ 0xC3E0000000000000u64:
+        8u6
+    ※ f32 has twenty-four bits: 2²⁴ + 1 is a tie that goes to 2²⁴, rounded once
+    ※ and not by way of f64
+    elif ⎕bits(⎕float(given(16777217u64), ⌜f32⌝)) ≠ 0x4B800000u32:
+        9u6
+    ※ 2⁶³ + 2³⁹ + 1 rounded once to f32 is up; by way of f64 it would be the
+    ※ half-way point and go down to 2⁶³
+    elif ⎕bits(⎕float(given(9223372586610589697u64), ⌜f32⌝)) ≠ 0x5F000001u32:
+        10u6
+    ※ the narrower types, each widened by its own sign first
+    elif ⎕bits(⎕float(byte(255u8), ⌜f64⌝)) ≠ 0x406FE00000000000u64:
+        11u6
+    elif ⎕bits(⎕float(small(⁻1i8), ⌜f32⌝)) ≠ 0xBF800000u32:
+        12u6
+    elif ⎕bits(⎕float(word(4294967295u32), ⌜f64⌝)) ≠ 0x41EFFFFFFFE00000u64:
+        13u6
+    ※ the same numbers written down, which the compiler converts itself
+    elif ⎕bits(⎕float(9007199254740993u64, ⌜f64⌝)) ≠ 0x4340000000000000u64:
+        14u6
+    elif ⎕bits(⎕float(9223372586610589697u64, ⌜f32⌝)) ≠ 0x5F000001u32:
+        15u6
+    elif ⎕bits(⎕float(⁻9223372036854775808i64, ⌜f64⌝)) ≠ 0xC3E0000000000000u64:
+        16u6
+    ※ what the number counts travels with it
+    elif ⎕bits(⎕drop(far())) ≠ 0x4022000000000000u64:
+        17u6
+    else:
+        0u6
+
+※ Values the compiler cannot see, so that the conversions are made while the
+※ program runs and not before it.
+@[opaque]
+fn given(n: u64) → u64:
+    n
+
+@[opaque]
+fn signed(n: i64) → i64:
+    n
+
+@[opaque]
+fn byte(n: u8) → u8:
+    n
+
+@[opaque]
+fn small(n: i8) → i8:
+    n
+
+@[opaque]
+fn word(n: u32) → u32:
+    n
+
+fn far() → f64 ¤meter:
+    let steps: u32 ¤meter = 9
+    ⎕float(steps, ⌜f64⌝)

@@ -1,0 +1,169 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕trunc(F, ⌜T⌝)` is the whole number of T a floating-point number is toward
+※ zero: what is after the point goes.  Most floating-point numbers are no value
+※ of any whole-number type, so it answers a result the way `⎕narrow` does, and
+※ the error says which way it did not fit -- `overflow` above the top,
+※ `underflow` below the bottom, `sign` for a number negative by at least one
+※ where the type has no negative numbers, and `absent` for a not-a-number,
+※ which is no number of any type.  An infinity is beyond one end or the other.
+※ Arithmetic answers neither -- an operation that would stops the program --
+※ so the ones here are made out of their bits, which is the one way a program
+※ comes to hold one.
+※
+※ Whether it fits is decided by the number after the truncation, so ⁻0.5 is
+※ nought in an unsigned type and 255.9 is 255 in a `u8`.  The other roundings
+※ are the operators on the floating-point number that come first.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ what is after the point goes, on either side of nought
+    if (⎕trunc(given(2.75f64), ⌜i64⌝) ?? 0i64) ≠ 2i64:
+        1u6
+    elif (⎕trunc(given(⁻2.75f64), ⌜i64⌝) ?? 0i64) ≠ ⁻2i64:
+        2u6
+    ※ and the rounding operators come before it
+    elif (⎕trunc(↓given(⁻2.25f64), ⌜i64⌝) ?? 0i64) ≠ ⁻3i64:
+        3u6
+    ※ the ends of i64: its bottom is a power of two and fits, its top plus one
+    ※ is the first power of two that does not
+    elif (⎕trunc(given(⁻9223372036854775808.0f64), ⌜i64⌝) ?? 0i64) ≠ ⁻9223372036854775808i64:
+        4u6
+    elif wide(⎕trunc(given(9223372036854775808.0f64), ⌜i64⌝)) ≠ 0u8:
+        5u6
+    ※ the next number below the bottom of i64 is far below it, and underflows
+    elif wide(⎕trunc(given(⁻9223372036854777856.0f64), ⌜i64⌝)) ≠ 1u8:
+        6u6
+    ※ a not-a-number is absent from every type, and an infinity overflows or
+    ※ underflows
+    elif wide(⎕trunc(nan(), ⌜i64⌝)) ≠ 3u8:
+        7u6
+    elif wide(⎕trunc(⎕from_bits(given_bits(0xFFF8000000000001u64), ⌜f64⌝), ⌜i64⌝)) ≠ 3u8:
+        8u6
+    elif wide(⎕trunc(infinity(), ⌜i64⌝)) ≠ 0u8:
+        9u6
+    elif wide(⎕trunc(negative_infinity(), ⌜i64⌝)) ≠ 1u8:
+        10u6
+    ※ an unsigned type: nought is reached from below by anything above minus
+    ※ one, and minus one itself is the wrong sign
+    elif (⎕trunc(given(⁻0.5f64), ⌜u8⌝) ?? 9u8) ≠ 0u8:
+        11u6
+    elif byte(⎕trunc(given(⁻1.0f64), ⌜u8⌝)) ≠ 2u8:
+        12u6
+    elif byte(⎕trunc(negative_infinity(), ⌜u8⌝)) ≠ 2u8:
+        13u6
+    elif (⎕trunc(given(255.9f64), ⌜u8⌝) ?? 0u8) ≠ 255u8:
+        14u6
+    elif byte(⎕trunc(given(256.0f64), ⌜u8⌝)) ≠ 0u8:
+        15u6
+    elif byte(⎕trunc(nan(), ⌜u8⌝)) ≠ 3u8:
+        16u6
+    ※ a u64 from 2⁶³ up, which no signed conversion reaches
+    elif (⎕trunc(given(9223372036854777856.0f64), ⌜u64⌝) ?? 0u64) ≠ 9223372036854777856u64:
+        17u6
+    elif (⎕trunc(given(18446744073709549568.0f64), ⌜u64⌝) ?? 0u64) ≠ 18446744073709549568u64:
+        18u6
+    elif (⎕trunc(given(3.5f64), ⌜u64⌝) ?? 0u64) ≠ 3u64:
+        19u6
+    elif unsigned(⎕trunc(given(18446744073709551616.0f64), ⌜u64⌝)) ≠ 0u8:
+        20u6
+    ※ a signed type narrower than a word, at both ends
+    elif (⎕trunc(given(⁻128.9f64), ⌜i8⌝) ?? 0i8) ≠ ⁻128i8:
+        21u6
+    elif small(⎕trunc(given(⁻129.0f64), ⌜i8⌝)) ≠ 1u8:
+        22u6
+    elif small(⎕trunc(given(128.0f64), ⌜i8⌝)) ≠ 0u8:
+        23u6
+    ※ and from the narrower format: the top of i32 plus one is 2³¹, which f32
+    ※ has, and the number below that it has is 2³¹ - 128
+    elif (⎕trunc(single(2147483520.0f32), ⌜i32⌝) ?? 0i32) ≠ 2147483520i32:
+        24u6
+    elif word(⎕trunc(single(2147483648.0f32), ⌜i32⌝)) ≠ 0u8:
+        25u6
+    elif (⎕trunc(single(⁻2147483648.0f32), ⌜i32⌝) ?? 0i32) ≠ ⁻2147483648i32:
+        26u6
+    elif (⎕trunc(single(4294967040.0f32), ⌜u64⌝) ?? 0u64) ≠ 4294967040u64:
+        27u6
+    ※ numbers written down, which the compiler converts itself
+    elif (⎕trunc(⁻2.75f64, ⌜i64⌝) ?? 0i64) ≠ ⁻2i64:
+        28u6
+    elif byte(⎕trunc(⁻1.0f64, ⌜u8⌝)) ≠ 2u8:
+        29u6
+    elif wide(⎕trunc(9223372036854775808.0f64, ⌜i64⌝)) ≠ 0u8:
+        30u6
+    else:
+        0u6
+
+※ Values the compiler cannot see, so that the conversions are made while the
+※ program runs and not before it.
+@[opaque]
+fn given(x: f64) → f64:
+    x
+
+@[opaque]
+fn single(x: f32) → f32:
+    x
+
+@[opaque]
+fn nan() → f64:
+    ⎕from_bits(0x7FF8000000000000u64, ⌜f64⌝)
+
+@[opaque]
+fn infinity() → f64:
+    ⎕from_bits(0x7FF0000000000000u64, ⌜f64⌝)
+
+@[opaque]
+fn negative_infinity() → f64:
+    ⎕from_bits(0xFFF0000000000000u64, ⌜f64⌝)
+
+@[opaque]
+fn given_bits(n: u64) → u64:
+    n
+
+※ Which condition it was, as a number.
+fn which(why: ⎕narrowing) → u8:
+    if why = ⎕narrowing.overflow:
+        0u8
+    elif why = ⎕narrowing.underflow:
+        1u8
+    elif why = ⎕narrowing.sign:
+        2u8
+    else:
+        3u8
+
+fn wide(of: i64?⎕narrowing) → u8:
+    match of:
+        i64:
+            9u8
+        ⊥(why):
+            which(why)
+
+fn unsigned(of: u64?⎕narrowing) → u8:
+    match of:
+        u64:
+            9u8
+        ⊥(why):
+            which(why)
+
+fn word(of: i32?⎕narrowing) → u8:
+    match of:
+        i32:
+            9u8
+        ⊥(why):
+            which(why)
+
+fn byte(of: u8?⎕narrowing) → u8:
+    match of:
+        u8:
+            9u8
+        ⊥(why):
+            which(why)
+
+fn small(of: i8?⎕narrowing) → u8:
+    match of:
+        i8:
+            9u8
+        ⊥(why):
+            which(why)

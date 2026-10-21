@@ -1,0 +1,59 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕wide_mul(A, B)` is the whole product of two 64-bit numbers, which takes 128
+※ bits and so is answered as two: the upper half and the lower half, in that
+※ order, as a tuple.  It is never a fault -- the product always has the room it
+※ needs -- and it is one instruction where the machine has one, which all three
+※ do.
+※
+※ Signed or unsigned, as the operands are.  The upper half of a signed product
+※ is signed, and the lower half is the bits below it, which have no sign of
+※ their own: it is a `u64` either way.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ the largest product there is: (2⁶⁴ - 1)² is 2¹²⁸ - 2⁶⁵ + 1
+    let high, low := ⎕wide_mul(given(18446744073709551615u64),
+                              given(18446744073709551615u64))
+    ※ one that fits, whose upper half is nought
+    let none, small := ⎕wide_mul(given(4294967296u64), given(3u64))
+    ※ a power of ten times a mantissa, which is the multiplication a parser of
+    ※ decimal numbers makes
+    let ten, rest := ⎕wide_mul(given(10000000000000000000u64),
+                              given(12345678901234567890u64))
+    ※ signed: minus one times one is all ones in both halves
+    let minus, bits := ⎕wide_mul(signed(⁻1i64), signed(1i64))
+    ※ and the smallest i64 squared is 2¹²⁶, the one product of two i64 whose
+    ※ upper half has its top bit clear without being small
+    let square, zero := ⎕wide_mul(signed(⁻9223372036854775808i64),
+                                 signed(⁻9223372036854775808i64))
+    ※ numbers written down, which the compiler multiplies itself
+    let folded := ⎕wide_mul(18446744073709551615u64, 18446744073709551615u64)
+    let negative := ⎕wide_mul(⁻3i64, 5i64)
+    if high ≠ 18446744073709551614u64 ∨ low ≠ 1u64:
+        1u6
+    elif none ≠ 0u64 ∨ small ≠ 12884901888u64:
+        2u6
+    elif ten ≠ 6692605942763486917u64 ∨ rest ≠ 11078171411247792128u64:
+        3u6
+    elif minus ≠ ⁻1i64 ∨ bits ≠ 18446744073709551615u64:
+        4u6
+    elif square ≠ 4611686018427387904i64 ∨ zero ≠ 0u64:
+        5u6
+    elif folded⟦0⟧ ≠ 18446744073709551614u64 ∨ folded⟦1⟧ ≠ 1u64:
+        6u6
+    elif negative⟦0⟧ ≠ ⁻1i64 ∨ negative⟦1⟧ ≠ 18446744073709551601u64:
+        7u6
+    else:
+        0u6
+
+※ Values the compiler cannot see, so that the products are the machine's.
+@[opaque]
+fn given(n: u64) → u64:
+    n
+
+@[opaque]
+fn signed(n: i64) → i64:
+    n

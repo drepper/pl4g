@@ -2788,6 +2788,64 @@ now carries the unit and the parser reads it between the name and the mark, whic
 a result whose answer is a length, and there is nothing about a result for a unit to say.
 
 
+Whole numbers and floating-point numbers
+----------------------------------------
+
+Three cast kinds carry the four names: `itof` a whole number into the floating-point number nearest it, `ftoi` a floating-point
+number toward zero, and `fbits` the bits of one read as the other, in whichever direction its two types say.  None of them is a
+`bitcast`.  That one means "the same bits in the same register, read as something else" and emits nothing; these three move a
+value between the two kinds of register, and the verifier says so of each -- an integer of any width and a float of either for
+the first two, an integer and a float of one width for the third.  Whether `itof` reads its operand as signed is the operand's
+type's business, as it is for every other instruction, so there are not two of each.
+
+**`ftoi` answers nothing in particular for a number its type has no room for.**  The three architectures answer such a number
+three ways -- x86-64 the smallest signed number, AArch64 and RISC-V the end it is beyond, and not-a-number nought on one and the
+top on another -- and the checker asks the question before anything reads the answer, so there is nothing to agree on.  The
+interpreter of the C++ implementation answers nought there, a C++ conversion of such a number being undefined; the constant
+folders do not fold one at all.
+
+`⎕trunc` lowers to three comparisons and the conversion: at or above the top of the type plus one, at or below the bottom less
+one (or below the bottom, where the format has no number for the bottom less one), and unequal to itself, which only a
+not-a-number is.  Each bound is a power of two or one less than one that the format holds, so it is a constant in the image.
+For an unsigned type the second comparison is with minus one, and it is `sign` rather than `underflow` -- exclusive with the
+other two as the narrowing's are, so `_reason` adds them up the same way, with `absent` as a third term weighted three.
+
+**Every whole number is widened to a word by its own sign before it is converted**, so each back end has one conversion per
+format and signedness, from a word.  An unsigned number narrower than a word is a signed word that is not negative, so only a
+`u64` needs the unsigned conversion -- which AArch64 (`ucvtf`, `fcvtzu`) and RISC-V (`fcvt.d.lu`, `fcvt.lu.d`) have and x86-64 has
+only in AVX-512, which no level here assumes.  There:
+
+- **into a float**, the signed conversion answers every `u64` below 2⁶³, and a branch skips what follows for those.  One with the
+  top bit set is halved, the bit shifted out or-ed back into the lowest place so that the halved number still rounds the way the
+  whole one would -- it has more bits than either format keeps, so that one bit is enough -- and its conversion is doubled, which
+  is exact.  It is the sequence GCC emits.
+- **out of a float**, the signed conversion answers every number below 2⁶³ and the smallest signed number for one from 2⁶³ up,
+  which has only the top bit set; so the number less 2⁶³ is converted as well, and kept where the first answer was negative by a
+  mask made of that answer's sign shifted across the word.  Or-ing the two puts the top bit back.  No branch; it is Clang's.
+
+RISC-V's narrower bit move, `fmv.x.w`, fills the doubleword with copies of the top bit, and a `u32` is held there with zeroes,
+so the move is followed by the `and` every narrow unsigned value is normalized with.  The conversions on RISC-V name `rtz`
+toward zero and the dynamic field for nearest, which is what `frm` holds at startup and what nothing in the language changes;
+`select_int_to_float` now takes a doubleword for both formats (`fcvt.s.l` rather than `fcvt.s.w`), the word the rounding
+sequence hands it being in a doubleword already, extended by its sign.
+
+**A constant is converted by the checker**, and the narrower format by hand: Python's `float(int)` rounds to nearest even for
+`f64`, but `f32` of an `int` by way of `f64` would round twice, so `_nearest_float` keeps the top twenty-four bits and rounds the
+rest itself.  The C++ checker converts with the host's own conversion, which is single-rounding in both formats.  `⎕from_bits` of
+a constant is folded unless it is a not-a-number, whose fraction a `FloatConst` -- a number, not bits -- does not promise to keep.
+
+`⎕narrow(n, ⌜char⌝)` is `_narrowed_to_char`: above the top where the number's type reaches past it, negative where it is signed,
+and a surrogate where it reaches the first of them -- `(n - 0xD800) <u 0x800`, one subtraction that wraps and one comparison, a
+number below the run coming out of the subtraction very large.  `⎕chr`'s check is the same question with the answer turned round
+and the top asked as well, and stops with 83.  Both have their constant forms in the checker, as does a literal number where a
+`char` is wanted, and the lexer refuses an escape naming a surrogate as it refuses one beyond the last code point.
+
+`⎕wide_mul` is `wide.mul`, a binary instruction whose answer is the tuple of its two halves and so the one whose type is not its
+operands': the verifier asks for two 64-bit operands of one type and an answer of the upper half's type and `u64`.  Each back end
+lowers it to `Assembler.wide_product`, which saturating and trapping multiplication already used, into two registers that are the
+tuple's two members as any value of several parts is held -- the upper one first.
+
+
 A function written where a value is wanted
 ------------------------------------------
 
@@ -4658,8 +4716,27 @@ language does not.
 **AArch64 has `clz` at every level**, counting leading zeroes not being a feature
 there but the instruction set; it counts bits set as well, in the vector unit,
 which is four instructions and a trip through a register of the other kind and
-is a to-do line rather than a guess.  RISC-V has neither outside an extension
-this compiler does not require, so it counts both itself.
+is a to-do line rather than a guess.  RISC-V has all three counts in Zbb --
+`cpop`, `clz` and `ctz` -- which the application profile the compiler builds for
+by default has; where the program is built for a base without it, it counts
+itself.  The RISC-V selector answers `counts_ones`, `counts_leading` and
+`counts_trailing` by asking the ISA string, as it does for Zfa's rounding.
+
+**`⎕trail` is the third count**, and the one where the zero case costs nothing to
+get right.  A value narrower than the register has the bit just above its own
+set first: a value with a set bit of its own counts what it did, and nought
+counts up to that bit and stops, which is the width of the type.  Whatever stood
+above the value in the register -- a sign, or anything at all on x86-64, where a
+narrow value says nothing about the rest of its register -- is above the bit
+that stops the count, so a signed value is not masked as the other two counts
+mask it.  x86-64 has `tzcnt` from the third level (BMI1 comes with the same level
+as `lzcnt`); below it the selector emits `bsf`, which finds the same bit and
+leaves its destination undefined for nought, and a `cmove` from a register
+holding sixty-four after it -- the zero flag `bsf` sets for nought being exactly
+the condition.  AArch64 has no count from the bottom and reverses the bits with
+`rbit` before its `clz`.  Without any instruction the zeroes below the lowest set
+bit are made ones by `~x & (x - 1)` and counted with the sequence `⎕ones` uses:
+for nought that is every bit, which is the width again.
 
 **And the third level's shifts take their count in any register.**  A shift by a
 value the program computed is three instructions at the older levels -- the count

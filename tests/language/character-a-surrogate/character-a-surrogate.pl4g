@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok run=native,qemu exit=83 diag=none
+
+※ A surrogate is a number and no code point: D800 to DFFF are what UTF-16
+※ spends on saying that a code point takes two of its units.  A string holding
+※ one would be a string no UTF-8 encoder can write, and every `str` is
+※ well-formed UTF-8 -- so `⎕chr` stops the program for one exactly as it does
+※ for a number above the last code point, with the same status.
+
+let surrogate: u32 = 0xDC00u32
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let c: char = ⎕chr(surrogate)
+    if ⎕ord(c) ≠ 0u32:
+        1u6
+    else:
+        2u6

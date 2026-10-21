@@ -1,0 +1,24 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4243 LANG_WIDE_MUL_NOT_A_WORD
+※ pl4g-test: expect-diag 4243 LANG_WIDE_MUL_NOT_A_WORD
+※ pl4g-test: expect-diag 4206 LANG_TYPE_OPERAND_MISMATCH
+
+※ `⎕wide_mul` answers the product nothing else has room for, which is the one
+※ of two 64-bit numbers.  Two narrower numbers have a product a wider type
+※ holds, so they are widened and multiplied the ordinary way; a floating-point
+※ number has no halves to answer; and the two are of one type, as the
+※ operands of every arithmetic operator are.
+
+let std := ⎕import("std")
+
+let a: u32 = 7u32
+let x: f64 = 2.5f64
+let w: u64 = 3u64
+let s: i64 = 3i64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let h, l := ⎕wide_mul(a, a)
+    let p, q := ⎕wide_mul(x, x)
+    let m, n := ⎕wide_mul(w, s)
+    0u6

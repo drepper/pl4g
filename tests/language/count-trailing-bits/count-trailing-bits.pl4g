@@ -1,0 +1,58 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=0
+※ pl4g-test: diag=none
+
+※ `⎕trail` says how many zeroes stand below the lowest set bit, which is
+※ `⎕lead` asked from the other end.  It counts over the value's own type, and of
+※ nought it answers the width of the type, as `⎕lead` does: a count of zeroes
+※ below a set bit that is not there is every bit the type has.
+※
+※ A signed number is counted as the bits two's complement gives it, so
+※ `⎕trail(⁻128i8)` is seven -- and what stands above a narrow value in its
+※ register is never reached, the count stopping at the type's own width.
+※
+※ x86-64 has an instruction for it from the third level and an older one with
+※ the zero case left out below that; AArch64 turns the bits round and counts
+※ from the top; RISC-V has one in Zbb.  Where none of them is used, the zeroes
+※ are made ones and counted the way `⎕ones` counts.  Every way answers the same.
+
+let all: u64 = 18446744073709551615u64
+let none: u64 = 0u64
+let top: u64 = 9223372036854775808u64
+let one: u64 = 1u64
+let byte: u8 = 0u8
+let low: u8 = 128u8
+let small: i8 = ⁻128i8
+let minus: i64 = ⁻1i64
+let word: u32 = 65536u32
+let half: u16 = 0u16
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let wrong: mut u6 = 0u6
+    if ⎕trail(all) ≠ 0u8:
+        wrong ← 1u6
+    if ⎕trail(none) ≠ 64u8:
+        wrong ← 2u6
+    if ⎕trail(top) ≠ 63u8:
+        wrong ← 3u6
+    if ⎕trail(one) ≠ 0u8:
+        wrong ← 4u6
+    if ⎕trail(byte) ≠ 8u8:
+        wrong ← 5u6
+    if ⎕trail(low) ≠ 7u8:
+        wrong ← 6u6
+    if ⎕trail(small) ≠ 7u8:
+        wrong ← 7u6
+    if ⎕trail(minus) ≠ 0u8:
+        wrong ← 8u6
+    if ⎕trail(word) ≠ 16u8:
+        wrong ← 9u6
+    if ⎕trail(half) ≠ 16u8:
+        wrong ← 10u6
+    ※ numbers written down, which the compiler counts itself
+    if ⎕trail(0u32) ≠ 32u8 ∨ ⎕trail(⁻128i8) ≠ 7u8 ∨ ⎕trail(40u64) ≠ 3u8:
+        wrong ← 11u6
+    wrong

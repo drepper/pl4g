@@ -451,6 +451,20 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 mandatory_prefix=0xF3, opsize=OpSize.REXW,
                 modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
                 implicit_defs=(EFLAGS,), est_size=5),
+    # tzcnt r64, r/m64                   F3 REX.W 0F BC /r
+    # The zeroes below the lowest set bit, the width for nought.  BMI1, which
+    # the third level promises beside the count from the top.
+    X86InstDesc("tzcnt", (_r(64), _rm(64)), opcode=0xBC, map=OpMap.M0F,
+                mandatory_prefix=0xF3, opsize=OpSize.REXW,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_defs=(EFLAGS,), est_size=5),
+    # bsf r64, r/m64                     REX.W 0F BC /r
+    # The same count at every level, except that nought leaves the destination
+    # undefined and says so in the zero flag -- which is what the conditional
+    # move after it reads.
+    X86InstDesc("bsf", (_r(64), _rm(64)), opcode=0xBC, map=OpMap.M0F,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_defs=(EFLAGS,), est_size=4),
     # The one-operand multiplies are the only way to see the upper half of a
     # product on this architecture.  They read one factor in a fixed register
     # and write both halves of the answer to a fixed pair, which is said here
@@ -992,6 +1006,32 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("cvtss2sd", (_x(), _xm(32)), opcode=0x5A, map=OpMap.M0F,
                 mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    # cvtsi2sd xmm, r/m64                F2 REX.W 0F 2A /r
+    # cvtsi2ss xmm, r/m64                F3 REX.W 0F 2A /r
+    # A signed 64-bit number as the floating-point number nearest it, rounded
+    # the way MXCSR says -- which is to nearest, a tie to even, unless a program
+    # changed it, and nothing in this language can.
+    X86InstDesc("cvtsi2sd", (_x(), _rm(64)), opcode=0x2A, map=OpMap.M0F,
+                mandatory_prefix=0xF2, opsize=OpSize.REXW,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, est_size=5,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    X86InstDesc("cvtsi2ss", (_x(), _rm(64)), opcode=0x2A, map=OpMap.M0F,
+                mandatory_prefix=0xF3, opsize=OpSize.REXW,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, est_size=5,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    # cvttsd2si r64, xmm/m64             F2 REX.W 0F 2C /r
+    # cvttss2si r64, xmm/m32             F3 REX.W 0F 2C /r
+    # And back, toward zero whatever MXCSR says.  A number with no 64-bit
+    # signed value answers the smallest one, which the sequence for an
+    # unsigned conversion reads.
+    X86InstDesc("cvttsd2si", (_r(64), _xm(64)), opcode=0x2C, map=OpMap.M0F,
+                mandatory_prefix=0xF2, opsize=OpSize.REXW,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, est_size=5,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    X86InstDesc("cvttss2si", (_r(64), _xm(32)), opcode=0x2C, map=OpMap.M0F,
+                mandatory_prefix=0xF3, opsize=OpSize.REXW,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, est_size=5,
                 roles=(OperandRole.DEF, OperandRole.USE)),
     X86InstDesc("ucomiss", (_x(), _xm(32)), opcode=0x2E, map=OpMap.M0F,
                 modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,

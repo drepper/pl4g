@@ -1187,8 +1187,25 @@ asked about one; without the marks a type's name and a value's name are both ide
 the name turned out to be.
 
 **Both types are whole numbers** (4548).  Whether a value fits is a question about the ends of a type, and those are the types
-with ends a value can fall outside.  A floating-point number narrowed to a whole one asks what is to be done with what is after
-the point, which is a different question and not one the language answers yet.
+with ends a value can fall outside.  A floating-point number made a whole one asks what is to be done with what is after the
+point, which is a different question, and `⎕trunc` (below) is what answers it.
+
+**`⎕narrow` reads a number as a code point too**, `⌜char⌝` being a narrower type than the number it is held as, with a top and a
+gap: nothing is above U+10FFFF, and the surrogates in the middle are no code points at all (Characters, below).
+
+```
+let c: char = ⎕narrow(n, ⌜char⌝) ?? '\uFFFD'
+```
+
+It is the question an enumeration's narrowing asks -- does this number fit a type whose values have gaps -- and the answer is the
+same shape: `overflow` above U+10FFFF, `sign` for a negative number, `absent` for a surrogate.  `⎕chr` asks the same and stops the
+program where the answer is no; this is the form for a number that came from outside, a decoder handed bytes that claim a
+surrogate is a character, where no is an answer the program has to be ready for.  Each condition is asked only where the number's
+own type can reach it, so a `u8` is checked for nothing.
+
+Compare: **Rust**'s `char::from_u32`, which is this answering an `Option` and so with the reason thrown away; **Swift**'s
+`Unicode.Scalar(_:)`, an optional likewise; **Go**'s `rune`, which is any `int32` and has no question to ask until `utf8.ValidRune`
+is called; **Python**'s `chr`, which raises above the top and lets a surrogate through -- the mistake `⎕chr` used to make too.
 
 **Each condition is asked only where it can hold.**  A type whose every value the other one has cannot be overflowed into, and a
 source with no negative values cannot be negative -- so those comparisons are settled by the two types while compiling and none
@@ -1209,6 +1226,81 @@ Compare: **C**'s implicit conversions, which narrow silently and are the source 
 the error saying *which* way it did not fit rather than only that it did not.  **Go** truncates silently.  **Ada** raises
 `Constraint_Error`, which says which subtype was violated at the cost of an exception mechanism this language does not have.
 **Swift**'s `init?(exactly:)` answers an optional, which is Rust's answer with the reason thrown away.
+
+#### Whole numbers and floating-point numbers
+
+Four names the compiler provides cross between the two kinds of number.  Two convert the number and two move its bits.
+
+| Written | Takes | Gives | Can it fail |
+|---|---|---|---|
+| `⎕float(n, ⌜F⌝)` | any whole number | `F`, which is `f32` or `f64` | no |
+| `⎕trunc(x, ⌜T⌝)` | `f32` or `f64` | `T ? ⎕narrowing`, `T` any whole-number type | yes |
+| `⎕bits(x)` | `f64`, `f32` | `u64`, `u32` -- the same bits | no |
+| `⎕from_bits(u, ⌜F⌝)` | `u64` for `f64`, `u32` for `f32` | `F` -- the same bits | no |
+
+```
+let mean: f64 = sum ÷ ⎕float(count, ⌜f64⌝) ?? 0.0f64
+let whole: i64 = ⎕trunc(↓mean, ⌜i64⌝) ?? 0i64
+let top: u64 = ⎕bits(mean) » 52u64
+let one: f64 = ⎕from_bits(0x3FF0000000000000, ⌜f64⌝)
+```
+
+The arguments are in the order `⎕widen` and `⎕narrow` have them -- the value, then the type made of it -- and the type is lifted
+(4242) for the reason it is there.  It is written where there is a choice to make, which is every case but `⎕bits`: what a
+number's bits are is settled by its width, and there is nothing to ask.
+
+**`⎕float` is the floating-point number nearest the whole one**, a tie going to the one whose last bit is nought.  It cannot fail:
+every whole number lies between two numbers of either format, the largest `u64` being far below where `f32` runs out, so it answers
+the number and not a result.  Every whole number below 2⁵³ is exact in an `f64`, and below 2²⁴ in an `f32`; above that the answer
+is rounded, once -- an `f32` made of an `i64` is not an `f64` made of it and then narrowed, which would round twice and is wrong
+for a number the first rounding lands half-way between two of the second's.  The tie to the even one is what IEEE 754 calls round
+to nearest, what every one of the three machines does unless told otherwise, and the rounding with no bias (Rounding, below).
+What the number counts travels with it, as it does through a widening.  It takes a whole number (4240) and makes a floating-point
+one (4241): a floating-point number becomes the other format by widening, which needs no name.
+
+**`⎕trunc` is the whole number a floating-point one is toward zero**: what is after the point goes, which is what the name says and
+what every machine's conversion does.  Most floating-point numbers are no value of any whole-number type, so **it answers a result
+the way a narrowing does**, with the reason in a `⎕narrowing`:
+
+| value | when |
+| --- | --- |
+| `overflow` | the number, toward zero, is above the top of the type -- `+∞` among them |
+| `underflow` | it is below the bottom of a type with negative numbers -- `-∞` among them |
+| `sign` | it is negative by at least one and the type has no negative numbers |
+| `absent` | it is a not-a-number, which is no number of any type |
+
+What fits is decided by the number after the truncation: ⁻0.5 is nought in an unsigned type and not a mistake, and 255.9 is 255 in
+a `u8`.  **There is no `⎕round`**, because the other three roundings are the operators on the floating-point number that come
+first: `⎕trunc(↓x, ⌜i64⌝)` is the floor, `↑` the ceiling and `↕` the nearest, each a whole number already when it is converted.  A
+fourth name for each would be the same two steps under a name that hides one of them.  What the number counts travels with it,
+as through `⎕narrow`.
+
+Each bound is a power of two, which every floating-point format holds exactly, so each condition is one comparison with a number
+in the image: the top of a type plus one, and the bottom less one where the format has that number -- where it does not, which
+happens for the widest types, the next number up is the bottom itself and the comparison is with that.  A not-a-number is the one
+value unequal to itself.  Where the number is written down, the compiler converts it and the result is a constant.
+
+**`⎕bits` and `⎕from_bits` convert nothing.**  The bits are the ones the number is kept in -- sign, exponent and fraction -- read as
+the unsigned whole number of the format's width, and back.  `⎕bits(1.0f64)` is `0x3FF0000000000000`, and `⎕bits(⁻0.0f64)` has only
+its top bit set, which is how a program tells apart the two zeroes every comparison calls equal.  Each is one instruction, moving
+the bits from one kind of register to the other.  What a unit said of the number it does not say of the bits, which are no
+quantity, so `⎕bits` answers a plain `u64` or `u32`; `⎕from_bits` takes exactly that type, so a number written without a suffix
+takes its width from the format asked for.
+
+**`⎕from_bits` is the one way a program comes to hold an infinity or a not-a-number.**  Every pattern of bits is some value of the
+format, and a program that takes a number apart and puts it back together -- a parser, a serializer, a value boxed in the
+fraction of a not-a-number -- has to be able to put back what it took apart, so it does not check.  What a program then does with
+such a value is what it does with any: arithmetic answering one stops the program (Floating point, below), a comparison answers
+what IEEE 754 says, and `⎕trunc` answers `absent` or the end it is beyond.  A not-a-number's fraction is kept, there and back.
+
+Compare: **C**, whose casts convert both ways silently, a floating-point number too large for the integer being undefined
+behaviour, and whose bits are `memcpy` or a union; **C++20**'s `std::bit_cast`, which is `⎕bits` for every type; **Rust**'s `as`,
+which saturates and maps a not-a-number to nought, beside `f64::to_bits` and `from_bits`, which these are named after; **Go**'s
+conversions, whose out-of-range answer is "implementation-dependent", and `math.Float64bits`; **Zig**'s `@floatFromInt` and
+`@intFromFloat`, the second of which is illegal behaviour out of range, and `@bitCast`; **Java**'s casts, which saturate, and
+`Double.doubleToRawLongBits`; **Python**'s `int()`, which raises for an infinity and a not-a-number and is otherwise exact, its
+integers having no ends; **Haskell**'s `truncate`, whose answer out of range is unspecified.  Nobody else answers which way it did
+not fit; the closest are the ones that raise.
 
 #### Arithmetic
 
@@ -1432,11 +1524,12 @@ the bits are what is wanted, an unsigned type is what says so.  Rust rotates sig
 
 #### Counting bits
 
-Two names the compiler provides ask about the bits of a number rather than about the number.
+Three names the compiler provides ask about the bits of a number rather than about the number.
 
 ```
 ⎕ones(200u8)      ※ 3 -- how many of its bits are set
 ⎕lead(1u8)        ※ 7 -- how many zeroes stand above the highest one that is
+⎕trail(40u8)      ※ 3 -- and how many below the lowest
 ```
 
 **Both count over the type's own width.**  `⎕ones(255u8)` is eight and `⎕ones(255u64)` is eight as well, and
@@ -1444,18 +1537,53 @@ Two names the compiler provides ask about the bits of a number rather than about
 highest set bit are the ones its type has room for.  A signed number is counted as the bits two's complement gives it, so
 `⎕ones(⁻1i8)` is eight.
 
-**`⎕lead` of nought is the width of the type.**  That is the only answer that makes a count of leading zeroes a count of
-leading zeroes, and it is said here because two of the three architectures have an instruction that leaves it undefined -- a
-program would otherwise mean one thing on one machine and another elsewhere.
+**`⎕lead` and `⎕trail` of nought are the width of the type.**  That is the only answer that makes a count of zeroes a count of
+zeroes, and it is said here because the architectures have instructions that leave it undefined -- x86-64's `bsr` and `bsf`, the
+only ones below its third level -- so a program would otherwise mean one thing on one machine and another elsewhere.  `⎕trail` of
+a value is the place of its lowest set bit, which is what a walk over the set bits of a mask asks at every step.
+
+Which instruction answers is the machine's and the level's: x86-64 counts the bits set from its second level and the zeroes at
+either end from its third, with `bsf` and a conditional move below that for the count from the bottom; AArch64 counts the leading
+zeroes at every level and the trailing ones as the leading ones of the bits reversed; RISC-V has all three in Zbb, which the
+application profiles have.  Where none is there, the counting is a sequence without a branch, and the answers are the same.
 
 **Both answer with a `u8`** whatever they were given, the widest count there is being sixty-four.  A count is not of the same kind
 as the thing counted: adding it back to the number it came from would be adding a length to a number, and the type saying so is
 what makes that a thing a reader sees.
 
-Compare: **C**, where these are `popcount` and `clz` built in to two compilers and undefined for zero in both; **Rust**, whose
-`count_ones` and `leading_zeros` are methods of every integer type and define zero the way this does; **Go**, whose `math/bits`
-says the same; **Zig**, whose `@popCount` and `@clz` likewise.  The disagreement in the field is only about zero, and the answer
-every language that chose one picked is the width.
+Compare: **C**, where these are `popcount`, `clz` and `ctz` built in to two compilers and the last two undefined for zero in
+both, and C23's `stdc_trailing_zeros`, which defines it; **Rust**, whose `count_ones`, `leading_zeros` and `trailing_zeros` are
+methods of every integer type and define zero the way this does; **Go**, whose `math/bits` says the same; **Zig**, whose
+`@popCount`, `@clz` and `@ctz` likewise.  The disagreement in the field is only about zero, and the answer every language that
+chose one picked is the width.
+
+#### The whole of a product
+
+**`⎕wide_mul(a, b)` is the whole product of two 64-bit numbers**, which takes 128 bits and so is answered as two: the upper half
+and the lower half, in that order, as a tuple.
+
+```
+let high, low := ⎕wide_mul(mantissa, power)
+```
+
+No type of the language is wide enough to hold it, and that is the whole reason it is asked: a parser of decimal numbers multiplies
+a mantissa by a power of ten and needs the upper half, a hash mixes the two halves, and a division by a constant is a
+multiplication whose upper half is the quotient.  The upper half comes first because that is the order a number is written in,
+and it is the half that says whether the product would have fitted -- nought for an unsigned one.
+
+**Both operands are 64-bit and of one type** (4243, and 4206 where they differ).  The product of two narrower numbers fits in a
+wider type, so it is a widening and one ordinary multiplication, and that is what a program writes for it.  Signed or unsigned, as
+the operands are: the upper half of a signed product is an `i64`, and the lower half is the bits below it, which have no sign of
+their own and are a `u64` either way.  It is never a fault -- the product always has the room it needs -- and what it answers
+counts nothing, half of a unit being no unit.
+
+**It is one instruction where the machine has one, and all three do.**  x86-64's one-operand `mul` answers both halves at once;
+AArch64 and RISC-V have the upper half as an instruction of its own beside the ordinary multiplication, `umulh` and `mulhu`.
+
+Compare: **C** and **C++** have no such operation, and GCC's and Clang's `unsigned __int128` is how it is written there -- a type
+of its own that this language does not have; **Rust**'s `u64::widening_mul` and `carrying_mul`, which answer the pair the other
+way round, low half first; **Go**'s `bits.Mul64`, which answers `(hi, lo)` as this does; **Zig**'s `std.math.mulWide`, which
+answers a `u128`; **Java**'s `Math.multiplyHigh`, the upper half alone.
 
 #### Saturating arithmetic
 
@@ -1799,7 +1927,7 @@ processor.
 **The answer is of the type it was given.**  A rounded `f64` is an `f64`, not an integer.  That is what every machine's
 instruction does and it is the honest answer: which integer type the value would fit in is a question about the value and not
 about its type, and an answer that turned out not to fit would have to stop the program.  A program that wants an integer says so,
-and the conversion is written where it happens.
+and the conversion is written where it happens: `⎕trunc(↓x, ⌜i64⌝)`, which answers a result where the whole number does not fit.
 
 **A tie goes to the even number**, which is what IEEE 754 calls round-to-nearest and what all three of these machines do.  So
 `↕2.5` is 2 and `↕3.5` is 4.  The other rule -- a tie going away from zero, which is C's `round` and what most people are taught
@@ -2287,8 +2415,11 @@ let last: char = 0x10ffff        ※ a number written where a code point is want
 
 **A value of one is held in thirty-two bits**, which is where every code point fits with room to spare.  That says how much room
 one takes and not which numbers are values of it: **the last code point is U+10FFFF** (4493), which is as far as UTF-16's
-surrogate pairs reach and which every encoding has had to agree with since.  A number above it, or below zero, is not a code
-point; one written down is reported, and one worked out while the program runs stops the program.
+surrogate pairs reach and which every encoding has had to agree with since.  **And the surrogates are none** (4244): D800 to DFFF
+are what UTF-16 spends on saying that a code point takes two of its units, and Unicode gives none of them to a character.  A
+string holding one would be a string no UTF-8 encoder can write, and every `str` is well-formed UTF-8 (Strings, below), so no
+`char` is one either.  A number above the last, below zero or among the surrogates is not a code point; one written down is
+reported -- as a number, or as an escape (2004) -- and one worked out while the program runs stops the program.
 
 **It is not an integer type.**  Adding two of them is not a character and neither is a third of one, so the arithmetic is not
 defined on them.  All six comparisons are: what the ordering means is the order Unicode numbered them in, which is a real order and
@@ -2300,12 +2431,13 @@ order is the order somebody happened to write the values in and which therefore 
 | Written | Takes | Gives | Can it fail |
 |---|---|---|---|
 | `⎕ord(c)` | `char` | `u32` | no -- every code point is a number |
-| `⎕chr(n)` | `u32` | `char` | yes -- not every number is a code point |
+| `⎕chr(n)` | `u32` | `char` | yes -- not every number is a code point, and it stops the program (83) |
 
 Which of the two can fail is why neither is written as an assignment and why nothing converts on its own.  A conversion that may
 stop the program is a thing a reader should be able to see, and one that cannot is still a thing a reader should be told is
 happening.  The two carry the quad for the reason every compiler-provided name does: so that no program has to give up the names
-`ord` and `chr`.
+`ord` and `chr`.  Where a number that is not a code point is an answer the program has to be ready for rather than a mistake,
+`⎕narrow(n, ⌜char⌝)` asks the same question and answers a result (Narrowing, above).
 
 Compare: **C**, whose `char` is an integer type of the width of a byte, which is neither a character nor one code point;
 **C++20**'s `char32_t`, which is this and is still an integer type, so `c + 1` compiles; **Rust**'s `char`, which is exactly
@@ -7873,7 +8005,7 @@ allocation that could not be met are three different things.
 | 80 | an answer that will not fit its type: a sum, a difference, a product, a shift, a rotation |
 | 81 | an operation whose answer is not a number, which is a floating-point one that came to an infinity or to not-a-number |
 | 82 | an index or a slice outside what it names, and the largest or smallest of nothing |
-| 83 | a number turned into a code point that is not one |
+| 83 | a number turned into a code point that is not one: one above U+10FFFF, or a surrogate |
 | 84 | a walk over a list used after it ended, or moved off either end |
 | 85 | the system would give no more memory |
 | 86 | the program ran off the bottom of its stack |

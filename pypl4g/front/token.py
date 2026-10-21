@@ -351,6 +351,24 @@ CHR_NAME: Final[str] = "".join((BUILTIN_GLYPH, "chr"))
 #: three architectures leave it as, and is why the language says it.
 ONES_NAME: Final[str] = "".join((BUILTIN_GLYPH, "ones"))
 LEAD_NAME: Final[str] = "".join((BUILTIN_GLYPH, "lead"))
+#: And how many zeroes stand below the lowest one that is set, which is the
+#: same question asked from the other end and answered the same way for nought.
+TRAIL_NAME: Final[str] = "".join((BUILTIN_GLYPH, "trail"))
+
+#: The whole of a product of two 64-bit numbers, as its upper and its lower
+#: half.  What every machine has an instruction for and no type of the language
+#: is wide enough to hold, which is why it answers two of them.
+WIDE_MUL_NAME: Final[str] = "".join((BUILTIN_GLYPH, "wide_mul"))
+
+#: The crossings between whole numbers and floating-point ones.  A whole number
+#: becomes the floating-point number nearest it, which cannot fail; a
+#: floating-point number becomes a whole one toward zero, which can, and answers
+#: a result the way a narrowing does.  The bits of one are the other two names:
+#: nothing converted, only moved between the two kinds of register.
+FLOAT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "float"))
+TRUNC_NAME: Final[str] = "".join((BUILTIN_GLYPH, "trunc"))
+BITS_NAME: Final[str] = "".join((BUILTIN_GLYPH, "bits"))
+FROM_BITS_NAME: Final[str] = "".join((BUILTIN_GLYPH, "from_bits"))
 
 #: The tolerance the approximate comparisons read, and what it holds until a
 #: program sets it.  APL's own tolerance defaults to the same number.
