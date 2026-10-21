@@ -2847,6 +2847,50 @@
       "option": "always-fails"
     },
     {
+      "number": 4250,
+      "name": "LANG_TEXT_NOT_BYTES",
+      "severity": "error",
+      "message": "'⎕text' makes text of bytes -- a 'u8⟦⟧', an array of them or a list of them -- and this is '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type that was written"
+        }
+      ],
+      "cause": "Text is made of bytes, and what it is encoded as is UTF-8, so the bytes are what is checked and what is copied.  Nothing else is the bytes of anything: a number is a number whatever width it is held in, and a string is text already.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Strings",
+        "requirement": "Text is made from bytes only by '⎕text', which checks that they are well-formed UTF-8."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4251,
+      "name": "LANG_LIST_VIEW_WRITTEN",
+      "severity": "error",
+      "message": "this is '{found}', a list, whose elements are read through a view and never written through one",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the list handed where a view that writes is wanted"
+        }
+      ],
+      "cause": "A list is a value: another name may share the room its elements are in, as long as neither changes them, and a list in the image is in room nothing may write.  Writing an element through the list itself copies it out first where it has to; a view that writes is handed where the elements are and nothing more, so there is nothing to copy them out before the write.  A view of a list is therefore one that reads, and an element is written through the list, 'l⟦i⟧ ← v'.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Lists",
+        "requirement": "A list is read as a view of its elements, never written through one."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4401,
       "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
       "severity": "error",

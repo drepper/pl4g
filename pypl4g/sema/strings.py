@@ -2,12 +2,13 @@
 
 A `str` is where its bytes are and how many there are, and the bytes are always
 well-formed UTF-8.  That last is an invariant rather than a hope, and it is what
-makes everything here short: there are two ways to make a string and neither can
-produce anything else.  A literal's bytes are what the source held, encoded by
-the compiler.  A join puts well-formed bytes after well-formed bytes.  So a walk
-over the characters is a decoder and not a validator -- which is where nearly
-all of the cost of walking text usually goes -- and nothing that reads a string
-has to ask whether it is one.
+makes everything here short: every way to make a string makes only that.  A
+literal's bytes are what the source held, encoded by the compiler.  A join puts
+well-formed bytes after well-formed bytes, and `⎕str` encodes one code point.
+`⎕text` takes bytes from anywhere, and is the one place that asks: the check
+below.  So a walk over the characters is a decoder and not a validator -- which
+is where nearly all of the cost of walking text usually goes -- and nothing that
+reads a string has to ask whether it is one.
 
 Two functions are generated for it, in the representation and not as assembly
 per target, for the reason the table runtime gives: both have loops, several
@@ -35,8 +36,9 @@ from ..ir.builder import IRBuilder
 from ..ir.function import FuncAttrs, Function, Linkage
 from ..ir.inst import BinOp, CastKind, CmpPred
 from ..ir.module import Module
-from ..ir.types import ARENA, CHAR, I64, MEM, PtrType, Type, U8, U32, U64
+from ..ir.types import ARENA, CHAR, I64, MEM, VOID, PtrType, Type, U8, U32, U64
 from ..ir.value import Value
+from ..source.location import INVALID_SPAN, Span
 
 #: What each of the two is called.  The names carry the compiler's own prefix
 #: for the same reason every generated symbol does: nothing a program can write
@@ -526,3 +528,256 @@ def copy_bytes(builder: IRBuilder, into: Value, offset: Value, source: Value,
     # own parameter -- the token the body left behind is the body's, and the
     # body is not on every way here.
     builder.set_memory(token)
+
+
+#: The two that let text in from bytes: one asking whether bytes are UTF-8, and
+#: one moving a run of bytes a word at a time.
+VALID_SYMBOL: Final[str] = "__pl4g_str_valid"
+MOVE_SYMBOL: Final[str] = "__pl4g_bytes_move"
+
+#: The top bit of every byte of a word.  A word of bytes none of which has it set
+#: is eight characters of ASCII, which is what makes the common case one load, one
+#: `and` and one branch per eight bytes.
+_HIGH_BITS: Final[int] = 0x8080_8080_8080_8080
+
+#: How many bytes a word holds, which is how far the fast paths go at a time.
+_WORD: Final[int] = 8
+
+
+def valid_function(module: Module) -> Function:
+    """``__pl4g_str_valid(bytes, length)``: how far *bytes* are well-formed
+    UTF-8 -- *length* where all of them are, and otherwise where the first
+    sequence that is not begins.  Built on first ask."""
+    func, fresh = _generated(module, VALID_SYMBOL, (bytes_type(module), U64),
+                             U64, impure=False)
+    if fresh:
+        _build_valid(module, func)
+    return func
+
+
+def move_function(module: Module) -> Function:
+    """``__pl4g_bytes_move(into, source, count)``: *count* bytes copied, a
+    word at a time and the few left over one at a time.  Built on first ask."""
+    func, fresh = _generated(
+        module, MOVE_SYMBOL, (bytes_type(module), bytes_type(module), U64), VOID,
+        impure=True)
+    if fresh:
+        _build_move(module, func)
+    return func
+
+
+def moved(builder: IRBuilder, into: Value, source: Value, count: Value,
+          span: Span = INVALID_SPAN) -> None:
+    """Call the move: *count* bytes from *source* to *into*, which do not
+    overlap."""
+    builder.call(move_function(builder.module), (into, source, count), VOID,
+                 span)
+
+
+def _build_move(module: Module, func: Function) -> None:
+    """Build the one that moves a run of bytes.
+
+    **A word at a time**, which is what C's `memcpy` does for a length nobody
+    knew while compiling, and the rest one byte at a time.  The words are read
+    and written where they are, whatever their alignment: every one of the three
+    machines reads a word that straddles two as one instruction -- RISC-V's
+    kernel finishing it where the hardware does not -- and lining the two up
+    first would cost a loop of its own whenever source and destination are not
+    aligned alike, which for bytes going into fresh room is nearly always.
+
+    The two runs do not overlap.  Every caller copies into room it has just made,
+    or into the spare room after a list's elements, which nothing reads from.
+    """
+    entry = func.add_block()
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    into = entry.add_param(bytes_type(module), "into")
+    source = entry.add_param(bytes_type(module), "source")
+    count = entry.add_param(U64, "count")
+    word_ptr = module.types.ptr_type(U64, mutable=True)
+    words = builder.new_block("words")
+    word = builder.new_block("word")
+    tail = builder.new_block("tail")
+    byte = builder.new_block("byte")
+    done = builder.new_block("moved")
+    builder.br(words, (builder.int_const(U64, 0), builder.memory()))
+    builder.position_at(words)
+    at = words.add_param(U64, "at")
+    token = words.add_param(MEM, "mem")
+    builder.set_memory(token)
+    ahead = builder.binary(BinOp.WRAP_ADD, at, builder.int_const(U64, _WORD))
+    builder.condbr(builder.compare(CmpPred.ULE, ahead, count), word, tail,
+                   false_args=(at, token))
+    builder.position_at(word)
+    builder.store(
+        builder.cast(CastKind.BITCAST, builder.binary(BinOp.ADD, into, at),
+                     word_ptr),
+        builder.load(builder.cast(CastKind.BITCAST,
+                                  builder.binary(BinOp.ADD, source, at),
+                                  word_ptr)))
+    builder.br(words, (ahead, builder.memory()))
+    builder.position_at(tail)
+    left = tail.add_param(U64, "at")
+    left_token = tail.add_param(MEM, "mem")
+    builder.set_memory(left_token)
+    builder.condbr(builder.compare(CmpPred.ULT, left, count), byte, done)
+    builder.position_at(byte)
+    builder.store(builder.binary(BinOp.ADD, into, left),
+                  builder.load(builder.binary(BinOp.ADD, source, left)))
+    builder.br(tail, (builder.binary(BinOp.WRAP_ADD, left,
+                                     builder.int_const(U64, 1)),
+                      builder.memory()))
+    builder.position_at(done)
+    builder.set_memory(left_token)
+    builder.ret()
+
+
+def _build_valid(module: Module, func: Function) -> None:
+    """Build the one that asks whether bytes are well-formed UTF-8.
+
+    **Eight bytes at a time while they are ASCII**, which is what most text is
+    most of the way through: a word is read, and where none of its bytes has its
+    top bit set all eight are characters and the next word is read.  A word
+    that has one is gone through a sequence at a time up to its end, and then the
+    words begin again from wherever the last sequence ended -- so a word is never
+    read twice for the sake of one byte in it, and a sequence that straddles the
+    end of a word is checked whole.  Fewer than eight left at the end are gone
+    through a sequence at a time.
+
+    **A sequence is checked as Unicode's table of well-formed byte sequences
+    has it** (Table 3-7), which is the whole of what makes UTF-8 well formed:
+    a leading byte from `C2` to `F4` -- `80` to `BF` are continuation bytes, `C0`
+    and `C1` could only begin an overlong two-byte form, and above `F4` only
+    numbers above `10FFFF` -- followed by as many continuation bytes as it says,
+    the first of which is narrowed for four leading bytes: after `E0` it is from
+    `A0` (anything less is an overlong three-byte form), after `ED` up to `9F`
+    (anything more is a surrogate), after `F0` from `90` (an overlong four-byte
+    form), after `F4` up to `8F` (above `10FFFF`).  One comparison of the
+    difference against the width of the range asks both ends at once.
+
+    What it answers is where the first sequence that is not well formed begins,
+    which is the first byte that is not part of one, or *length* where every
+    byte is: a sequence cut short by the end of the bytes is as ill formed as one
+    cut short by anything else.
+    """
+    entry = func.add_block()
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    bytes_ = entry.add_param(bytes_type(module), "bytes")
+    length = entry.add_param(U64, "length")
+    word_ptr = module.types.ptr_type(U64, mutable=True)
+
+    def const(value: int) -> Value:
+        return builder.int_const(U64, value)
+
+    words = builder.new_block("words")
+    word = builder.new_block("word")
+    last = builder.new_block("last")
+    sequence = builder.new_block("sequence")
+    lead = builder.new_block("lead")
+    bad = builder.new_block("bad")
+    good = builder.new_block("good")
+    builder.br(words, (const(0),))
+
+    # The words: eight bytes at a time while there are eight, and the sequences
+    # up to the end of a word that is not all ASCII.
+    builder.position_at(words)
+    at = words.add_param(U64, "at")
+    ahead = builder.binary(BinOp.WRAP_ADD, at, const(_WORD))
+    builder.condbr(builder.compare(CmpPred.ULE, ahead, length), word, last)
+    builder.position_at(word)
+    read = builder.load(builder.cast(CastKind.BITCAST,
+                                     builder.binary(BinOp.ADD, bytes_, at),
+                                     word_ptr))
+    builder.condbr(
+        builder.compare(CmpPred.EQ,
+                        builder.binary(BinOp.AND, read, const(_HIGH_BITS)),
+                        const(0)),
+        words, sequence, true_args=(ahead,), false_args=(at, ahead))
+    builder.position_at(last)
+    builder.condbr(builder.compare(CmpPred.ULT, at, length), sequence, good,
+                   true_args=(at, length))
+
+    # One sequence at a time, up to *until*: then the words again.
+    builder.position_at(sequence)
+    here = sequence.add_param(U64, "at")
+    until = sequence.add_param(U64, "until")
+    builder.condbr(builder.compare(CmpPred.ULT, here, until), lead, words,
+                   false_args=(here,))
+    builder.position_at(lead)
+    first = _byte_at(builder, bytes_, here)
+    ascii = builder.new_block("ascii")
+    above = builder.new_block("above")
+    starts = builder.new_block("starts")
+    over_two = builder.new_block("over.two")
+    over_three = builder.new_block("over.three")
+    lengths = {count: builder.new_block("".join(("bytes.", str(count))))
+               for count in (2, 3, 4)}
+    builder.condbr(builder.compare(CmpPred.ULT, first, const(0x80)), ascii, above)
+    builder.position_at(ascii)
+    builder.br(sequence, (builder.binary(BinOp.WRAP_ADD, here, const(1)), until))
+    # Below `C2` is a continuation byte, or the start of an overlong form.
+    builder.position_at(above)
+    builder.condbr(builder.compare(CmpPred.ULT, first, const(0xC2)), bad, starts)
+    builder.position_at(starts)
+    builder.condbr(builder.compare(CmpPred.ULT, first, const(0xE0)), lengths[2],
+                   over_two)
+    builder.position_at(over_two)
+    builder.condbr(builder.compare(CmpPred.ULT, first, const(0xF0)), lengths[3],
+                   over_three)
+    builder.position_at(over_three)
+    builder.condbr(builder.compare(CmpPred.ULT, first, const(0xF5)), lengths[4],
+                   bad)
+    for count, block in lengths.items():
+        builder.position_at(block)
+        # The whole sequence has to be there before any of it is read.
+        whole = builder.new_block("".join(("whole.", str(count))))
+        builder.condbr(
+            builder.compare(CmpPred.ULT,
+                            builder.binary(BinOp.WRAP_ADD, here, const(count - 1)),
+                            length),
+            whole, bad)
+        builder.position_at(whole)
+        low, width = _first_following(builder, first, count)
+        for step in range(1, count):
+            following = _byte_at(builder, bytes_,
+                                 builder.binary(BinOp.WRAP_ADD, here, const(step)))
+            then = builder.new_block("".join(("following.", str(count), ".",
+                                              str(step))))
+            builder.condbr(
+                builder.compare(
+                    CmpPred.ULE,
+                    builder.binary(BinOp.WRAP_SUB, following,
+                                   low if step == 1 else const(0x80)),
+                    width if step == 1 else const(0x3F)),
+                then, bad)
+            builder.position_at(then)
+        builder.br(sequence, (builder.binary(BinOp.WRAP_ADD, here, const(count)),
+                              until))
+    builder.position_at(bad)
+    builder.ret(here)
+    builder.position_at(good)
+    builder.ret(length)
+
+
+def _first_following(builder: IRBuilder, first: Value,
+                     count: int) -> tuple[Value, Value]:
+    """Where the range the byte after *first* has to be in begins, and how wide
+    it is, for a sequence of *count* bytes.
+
+    Any continuation byte after a leading byte of two; after one of three, from
+    `A0` after `E0` and up to `9F` after `ED`; after one of four, from `90`
+    after `F0` and up to `8F` after `F4`.  Chosen without a branch, the two
+    leading bytes that narrow it being compared and the answer selected.
+    """
+    def const(value: int) -> Value:
+        return builder.int_const(U64, value)
+
+    if count == 2:
+        return const(0x80), const(0x3F)
+    lowest, highest = (0xE0, 0xED) if count == 3 else (0xF0, 0xF4)
+    low = builder.select(builder.compare(CmpPred.EQ, first, const(lowest)),
+                         const(0xA0 if count == 3 else 0x90), const(0x80))
+    high = builder.select(builder.compare(CmpPred.EQ, first, const(highest)),
+                          const(0x9F if count == 3 else 0x8F), const(0xBF))
+    return low, builder.binary(BinOp.WRAP_SUB, high, low)

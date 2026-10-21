@@ -2329,10 +2329,11 @@ let wide: str = "a\tb\u00a3ω"
 **A value of one is where the bytes are and how many there are** -- two words, the shape an array whose type does not say its
 length has.  It owns nothing: the bytes are a literal's, in the image, or an arena's, put there by a join.
 
-**That the bytes are well-formed is an invariant and not a hope.**  There are two ways to make a string: a literal, whose bytes
-the compiler encoded itself from what the source held, and a join of two, which puts well-formed bytes after well-formed bytes.
-Nothing else makes one, so nothing that reads one has to check it -- which is where nearly all of the cost of walking text
-usually goes.
+**That the bytes are well-formed is an invariant and not a hope.**  There are four ways to make a string: a literal, whose bytes
+the compiler encoded itself from what the source held, a join of two, which puts well-formed bytes after well-formed bytes,
+`⎕str`, which encodes one code point, and `⎕text`, which takes bytes and checks them (below).  Nothing else makes one, so nothing
+that reads one has to check it -- which is where nearly all of the cost of walking text usually goes: it is paid once, where text
+comes in from bytes, and not wherever it is read.
 
 **`foreach` over a string gives its characters, as `char` values, in order.**
 
@@ -2372,12 +2373,53 @@ where a string *is* its bytes and the question cannot be asked.
 
 A literal, a join of two, and this.  It is the compiler's name for the reason the other two are not a program's to write either:
 that a string's bytes are well-formed UTF-8 is an invariant, and encoding one code point is what keeps it one **by construction and
-not by inspection**.  There is deliberately no way in from bytes, which would have to be checked rather than constructed, so
-`⎕bytes` is a one-way door.  It takes a character (4610) and not a number: not every number is a code point, and `⎕chr` is what
-says so.
+not by inspection**.  The way in from bytes is the fourth, below, and the one that has to inspect.  It takes a character (4610)
+and not a number: not every number is a code point, and `⎕chr` is what says so.
 
 It allocates, how many bytes a code point takes not being known until it is looked at -- which, like every allocation, is no
 effect: what it makes is new, and a pure function may do it.
+
+**`⎕text(BYTES)` is text from bytes, where they are UTF-8**, and it answers a result, `str ? u64`: the text, or where the bytes
+stop being it.
+
+```
+⎕text(⎕bytes("a£€")) ?? ""        ※ "a£€"
+⎕text(buffer⟦0…n⟧) in scratch     ※ the text made in scratch, or the offset
+match ⎕text(raw):
+    str(t):  …                    ※ well-formed: t is a copy of the bytes
+    ⊥(at):   …                    ※ not: at is where the first bad sequence begins
+```
+
+So `⎕bytes` is no longer a one-way door, and the invariant that every `str` is well-formed UTF-8 still holds: a literal, a join
+and `⎕str` keep it by construction, and this, the fourth way a string is made and the only one from bytes, **keeps it by
+inspection** -- which is why it is the compiler's name and why it answers a result rather than a string.  The bytes are anything
+that is read as a `u8⟦⟧` -- a view, an array whose type says its shape, a list (4250 for anything else).
+
+**Well-formed is Unicode's table of well-formed byte sequences and nothing looser** (Table 3-7 of the standard): a leading byte
+from `C2` to `F4` followed by as many continuation bytes as it says, the first of them narrowed after four leading bytes.  So
+there is no overlong form of any length -- `C0` and `C1` lead nothing, and `E0` and `F0` are followed by at least `A0` and `90`
+-- no surrogate, `ED` being followed by at most `9F`, nothing above `10FFFF`, `F4` being followed by at most `8F` and nothing from
+`F5` leading anything, no continuation byte with no leading one, and no leading byte without all of its continuation bytes, the
+end of the bytes cutting one short as much as any other byte does.  **The error is the offset of the first byte that is not part
+of a well-formed sequence**, which is where the sequence it would have begun starts: `⎕text` of `61 62 E2 82 41` answers 2.
+
+**It copies**, into the arena `in` names or into `⎕heap`, as a join does: the bytes are somebody's -- a buffer read into, a
+list still to be joined onto -- and a string is nobody's to change.  Nothing is copied, and no room taken, where the check fails;
+and like every allocation it is no effect.  Elements that are not one run, a view of every other byte, are made one first as
+`⎕one_run` makes them.
+
+**It reads eight bytes at a time while they are ASCII**, which is what most text is most of the way through -- a word whose bytes
+none has its top bit set is eight characters -- and a sequence at a time from the first word that is not, up to that word's end;
+then words again.  The copy is one move of the bytes, a word at a time.  Both are functions the compiler writes in its own
+representation, so every target and the interpreter run the same check.
+
+Compare: **Rust**'s `str::from_utf8`, which this is -- the same table, an error whose `valid_up_to` is this offset, and an ASCII
+shortcut a word at a time -- with the difference that `from_utf8` borrows the bytes, Rust being able to say that nobody changes
+them while the `&str` lives, and `String::from_utf8` takes a `Vec` over without copying; **Go**'s `string(b)`, which copies and
+checks nothing, so a Go string may hold anything and `range` over one decodes with a replacement character; **Python**'s
+`bytes.decode("utf-8")`, which raises with the same offset in `UnicodeDecodeError.start`; **Java**'s `new String(bytes, UTF_8)`,
+which replaces rather than refuses; **Swift**'s `String(validating:as:)`, which answers `nil` and no offset; **C**, where there is
+nothing to convert and nothing to check.
 
 **All six comparisons are defined on strings**, and the order is the order the code points are in -- the first character that
 differs deciding, and a string that is a prefix of another coming first.
@@ -3632,7 +3674,8 @@ same; Go's and Rust's slices carry no stride and are always runs.
 which is a second kind of array for a case nothing has asked for.
 
 **A `T⟦N⟧` stands where a `T⟦⟧` is wanted**, which is how an array is passed to something that takes any length.  That goes one
-way only: a `T⟦4⟧` promises four, and nothing that has lost its count can promise that.
+way only: a `T⟦4⟧` promises four, and nothing that has lost its count can promise that.  A list `[T]` stands there too, as a
+view it lends itself to ([Lists](#lists)).
 
 ```
 fn total(xs: u8⟦⟧, n: u8) → u8: …
@@ -4076,6 +4119,48 @@ where it stands copies it out, into the arena in force; what is in the image is 
 Compare: **Python**'s `l += [x]`, `l[i]` and `l[i] = v`; **Rust**'s `Vec`, whose `extend`, indexing and `reserve` these are and
 which doubles the same way; **Go**'s `l = append(l, x)`, the same thing with the list written twice and a slice whose room may or
 may not be shared with another; **C++**'s `std::vector`, `insert` at the end and `reserve`.
+
+**A list stands where a view of its elements is wanted**, as an array whose type says its shape does: a `[T]` is handed to a
+`T⟦⟧` parameter, bound to a `T⟦⟧` name, given to `⎕text`, and **sliced**, `l⟦i…j⟧` and `l⟦i…j…k⟧` being views of some of its
+elements with the ends checked against how many there are.  The view is where the elements are and how many, one apart, so making
+one copies nothing.
+
+```
+let buffer: mut [u8] = []
+buffer ⧺← ⎕bytes("[1, 2]")
+parse(buffer)                         ※ handed as a u8⟦⟧
+let head: u8⟦⟧ = buffer⟦0…1⟧           ※ a view of the first byte
+```
+
+**A view of a list borrows the list**, as `&` borrows a place, and the borrow is the one references have -- out until the last use
+of the name keeping the view, and for the statement where nothing keeps it.  While it is out the list is read and not changed in
+place (4566): joining onto it may move its elements into new room and give the old room back, and an element written or the whole
+list given a new value is the change a reader of the view was promised would not happen.  **And a view of a list reads and never
+writes** (4251): a list is a value whose room another name may share, or one in the image nothing may write, and a write through
+the list itself copies it out first where it has to -- a view is handed where the elements are and no more, so there is nothing to
+copy out before a write through it.  An element is written through the list, `l⟦i⟧ ← v`.
+
+**What is joined onto a list may be an array of its elements**, of one dimension -- a view, a slice, an array whose type says its
+shape -- and so may either side of a `⧺` whose other side is a list, which makes a new list of the two in the arena in force.
+
+```
+l ⧺← row                              ※ row: u16⟦⟧, its elements copied in
+l ⧺← l⟦0…3⟧                           ※ a slice of the list itself
+let both: [u16] = l ⧺ fixed            ※ fixed: u16⟦5⟧
+```
+
+**The list grows once, to fit, and the elements go in as one move of their bytes**, a word at a time, where they are one run --
+which a list's own elements and an array whose type says its shape always are, and a view nearly always is; a view whose elements
+are a step apart is copied an element at a time.  A slice of the list itself may be joined on: the room it grows into is new, and
+the room it grew out of is given back after the copy.  The elements are copied as an array is copied, by their bytes, so only an
+array of elements that are all of their value is joined on this way (4710); a list of strings is joined onto with a list.
+
+Compare: **Rust**, whose `Vec<T>` is read as `&[T]` and sliced `&v[i..j]`, the borrow checker refusing a `push` while the slice
+lives, and whose `extend_from_slice` is `⧺←` of a view; **Go**, whose slice is both the list and its view, `append(l, a...)` the
+join, and whose `append` past the room leaves an older slice quietly looking at the old array; **C++**'s `std::span` of a
+`std::vector`, which a `push_back` that reallocates leaves dangling with nothing said; **Python**'s `l += a` and `memoryview`,
+which refuses to let a `bytearray` be resized while a view of it is held -- the rule this is, checked while running there and
+while compiling here.
 
 **`†l⟦i⟧` takes one element out**, and answers what it was:
 

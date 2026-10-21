@@ -302,9 +302,15 @@ TYPENAME_NAME: Final[str] = "".join((BUILTIN_GLYPH, "typename"))
 #: `str` is made -- a literal, a join, and this -- and because a string's bytes
 #: being well-formed UTF-8 is an invariant, which encoding one code point here
 #: keeps true by construction.  `⎕bytes` is the way out of a string and this is
-#: one of the ways in; there is deliberately no way in from bytes, which would
-#: have to be checked.
+#: one of the ways in; the way in from bytes is `⎕text`, which checks.
 STR_OF_NAME: Final[str] = "".join((BUILTIN_GLYPH, "str"))
+
+#: Text from bytes: the bytes copied into a string where they are well-formed
+#: UTF-8, and where they are not, the offset of the first byte that is not part
+#: of a well-formed sequence.  The compiler's name because it is the way in that
+#: `⎕bytes` is the way out of, and what keeps every `str` well formed is that it
+#: checks -- which is a property of the type, and so the compiler's to keep.
+TEXT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "text"))
 
 #: The elements of an array as one run: the array itself where they already are,
 #: and a copy of them otherwise.  The compiler's name because a view's strides

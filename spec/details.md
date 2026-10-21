@@ -3976,6 +3976,56 @@ from a name, a field, an element or through a reference, where either side may c
 `_changed_in_place` finds the body changing it so, read off what is written.  Whether a change is an effect is `_made_here` of the
 list's place, the question an array's element write already asked.
 
+**A list read as a view is `_as_a_view`**, which every place a view is wanted asks: `_spread` (what `_lower_into` does for a `T⟦⟧`),
+`_as_wanted` (a generic call's arguments), `⎕text`, and the two joins below.  An array whose type says its shape lets its shape go
+there, as before; a list of the element wanted is the view `(elements, count, 1)` of one dimension, and `_borrowed_name` of what was
+written is `_lend`-ed as a `&` -- for the statement, and past it where `_kept_by_a_name` keeps it, which now asks `_holds_a_view`
+beside `_holds_a_reference`, so the liveness that ends a reference's borrow ends a view's.  `_list_place`, which `⧺←`, `l⟦i⟧ ←`, `†`,
+`⎕reserve` and the rest ask, asks `_lent_out` with `writing` before anything changes the list (4566); an assignment of the whole
+list already did.  What was written is noted in `_list_views` by identity, and the two places that hand a `mut` view -- a call's
+`writes_arrays` and `_owned_array` for a `let mut` -- refuse one found there (4251).  `l⟦i…j⟧` is `_list_element` making that view
+and handing it to `_lower_slice`, so the ends, the step and the checks are an array's.  A generic call's argument is converted after
+it was lowered, with no tree to lend from, so it lends nothing: during the call nobody else can reach a local list.
+
+**`l ⧺← v` of an array is a branch of `_lower_join_assign`** taken where `_may_be_an_array` says the right side looks like one -- a
+name or a call `_said_to_be` an array, a slice, `⎕bytes`, `⎕span`, `⎕one_run` -- so that `[]` and an `if`'s arms are still lowered
+into the list's type; anything else that turns out to be an array there is a mismatch, as before.  It lowers the side with nothing
+wanted, makes it a view, refuses elements `_not_copied_because` names (4710, `_view_copied`), takes room for the view's count with
+`_room_made`, copies with `_joined_on` and writes the list back with `_room_kept` -- so a slice of the list itself is read from the
+old room before it is given back.  `_joined_on` compares the view's stride with one while running: one run is a call of
+`__pl4g_bytes_move` for count times stride bytes, otherwise `_element_by_element` copies forward.  `l ⧺ v` and `v ⧺ l` are
+`_joined_with_a_view`, reached from `_joined_list` where either side is an array (`_lower_concat` wants nothing of a right side
+`_may_be_an_array` says is one): room for both counts from `__pl4g_list_room` in the arena in force, each side through `_joined_on`.
+
+**`__pl4g_bytes_move(into, source, count)`** (`strings.move_function`) copies eight bytes at a time with a `u64` load and store at
+each offset and the rest a byte at a time; its loops carry the memory token as `copy_bytes`'s does.  The words are wherever the
+offsets put them: x86-64 and AArch64 read a misaligned word as one instruction and RISC-V's kernel finishes one where the hardware
+does not, so lining them up first is a cost for the uncommon machine.  It is impure, a call that writes memory being one nothing may
+remove.  The older byte loops (`copy_bytes`, in a string's join and a list's) are left as they were, since changing them changes
+the code of every program that joins anything.
+
+Text from bytes
+---------------
+
+**`⎕text(BYTES)` is `_lower_text`.**  The argument is lowered with nothing wanted (a `u8⟦⟧` for an array written down, as
+`_spread` does), `_as_a_view` makes it a `u8⟦⟧` or 4250 is said, and the answer is `str ? u64`.  `_made_from` says it was made in
+`_out_of_arenas`, and `_takes_room` admits `in` around it.  `_as_one_run` keeps a view whose stride is one and otherwise calls
+`__pl4g_one_run.u8⟦⟧`, `⎕one_run`'s function, in the arena in force.  Then `__pl4g_str_valid(bytes, length)` answers how far the
+bytes are well formed; equal to the length, the room is `tables.allocate`d from the arena and the bytes moved in by
+`__pl4g_bytes_move`; otherwise nothing is allocated and the join block gets a null pointer.  The answer is one `wrap` of the
+string made of that pointer, the length and the allocator, failed where the two differ, carrying the offset -- the answer half
+read by nothing on the way it failed.
+
+**`__pl4g_str_valid`** (`strings.valid_function`) is generated once per module, pure.  Its `words` block reads the `u64` at the
+offset while eight bytes are left and goes round again where `word & 0x8080808080808080` is nought; a word that is not is handed
+to the `sequence` block with its end as the bound, and the last few bytes with the length as the bound.  `sequence` decodes one
+sequence per turn while the offset is below the bound, then goes back to `words` from wherever it got to: a leading byte below
+`80` is one byte; below `C2` is refused; below `E0`, `F0` and `F5` is two, three and four, each first asking that the whole
+sequence is before the end, then that each following byte is in its range, as one unsigned comparison of the byte less the low end
+against the width.  The first following byte's range is chosen with two `select`s on the leading byte (`_first_following`): from
+`A0` after `E0`, to `9F` after `ED`, from `90` after `F0`, to `8F` after `F4`; the rest are `80` to `BF`.  Every refusal returns
+the offset the sequence began at, and the end the length.
+
 A cursor is where the list is, and how far along
 -----------------------------------------------
 

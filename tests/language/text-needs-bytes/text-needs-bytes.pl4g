@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4250
+※ pl4g-test: expect-diag 4250 LANG_TEXT_NOT_BYTES
+
+※ Text is made of bytes, so bytes are what `⎕text` checks and copies: a `u8⟦⟧`, an array
+※ of `u8` whose type says its shape, or a list of them.  An array of wider numbers is not
+※ the bytes of anything -- which of its bytes come first is the machine's business -- and
+※ nothing else is either.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let wide: u16⟦2⟧ = ⟦0x6869u16, 0x2121u16⟧ in ⎕static
+    let t: str = ⎕text(wide) ?? ""
+    if t = "hi!!": 0u6 else: 1u6

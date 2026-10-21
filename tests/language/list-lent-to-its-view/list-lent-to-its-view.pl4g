@@ -1,0 +1,24 @@
+※ pl4g-test: compile=error diag=4566
+※ pl4g-test: expect-diag 4566 LANG_BORROW_NAME_WRITTEN
+
+※ **A view of a list's elements borrows the list**, as a `&` does a place: the elements are
+※ in room that joining onto the list may move and give back, so while the view can still be
+※ read the list is not changed in place -- not joined onto, not written by element, not
+※ given a new value.  Reading it beside the view is no change and is allowed.  The borrow
+※ ends at the view's last use, so the join is allowed after it.
+※
+※ Compare: **Rust**, where `&v[..]` borrows the `Vec` and `v.push(x)` while the slice lives is
+※ refused; **C++**, where a `std::span` of a `std::vector` is left dangling by a `push_back`
+※ that reallocates, and nothing says so; **Go**, whose slice keeps the old array alive and
+※ quietly stops seeing what is appended.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: mut [u8] = [1u8, 2u8, 3u8]
+    l ⧺← [4u8]
+    let first: u8⟦⟧ = l⟦0…2⟧
+    let n: u64 = #l
+    l ⧺← [5u8]
+    if first⟦1⟧ = 2u8 ∧ n = 4: 0u6 else: 1u6

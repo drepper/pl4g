@@ -10743,6 +10743,44 @@ types are compared by address across everything that holds one.  Compare Lua's `
 holds everything and of which a program may have many; Python's subinterpreters, which took years to separate the state that was
 global; Tcl's `Tcl_CreateInterp`; and V8's isolates, each a heap of its own.
 
+## 2026-10-22T10:00+02:00 — language
+
+### Text from bytes, `⎕text`; a list read as a view, sliced, and joined onto with an array
+
+The user asked for a JSON module -- a `u8` buffer decoded into a recursive type, encoded back, UTF-8 throughout, at simdjson's
+speed -- and approved the list of language features it wants.  Two of them are here.
+
+**`⎕text(BYTES)` answers `str ? u64`**: the bytes copied into the arena `in` names, or `⎕heap`, where they are well-formed UTF-8,
+and the offset of the first byte not part of a well-formed sequence where they are not.  `⎕bytes` stops being a one-way door,
+and every `str` is still well formed -- kept by inspection here and by construction everywhere else.  Well formed is Unicode's
+Table 3-7: no overlong form, no surrogate, nothing above `10FFFF`, nothing cut short.  The bytes are anything read as a `u8⟦⟧`,
+a list and an array whose type says its shape included.  Compare Rust's `str::from_utf8` and its `valid_up_to`, which this is
+but for borrowing rather than copying; Go's `string(b)`, which checks nothing; Python's `bytes.decode`, raising with the same
+offset; Java's `String(bytes, UTF_8)`, which replaces; Swift's `String(validating:)`, which answers no offset.
+
+**A list stands where a view of its elements is wanted, and `l⟦i…j⟧` slices one**; **`l ⧺← v` and `l ⧺ v` take an array of the
+list's elements**, of one dimension -- the list grown once, the elements one move of bytes where they are one run.  Compare
+Rust's `&v[..]` and `extend_from_slice`, Go's `append(l, a...)`, C++'s `insert(end(), …)`.
+
+Taken without asking, each the choice most like the rest of the language:
+
+- **A view of a list borrows the list as a `&` does**, with the borrow rules references already have (4566): out until the last
+  use of the name keeping it.  Joining onto a list may move its elements and give the old room back, so a view that outlived
+  the move would read room nobody holds.  Rust refuses the same; C++'s `span` of a `vector` dangles; Python's `memoryview` of a
+  `bytearray` refuses a resize while running.
+- **A view of a list reads and never writes** (4251): a list is a value whose room may be shared or in the image, and a write
+  through the list copies it out first where it must, which a view cannot.  Writing a list's elements in place through a `mut`
+  view would want that copy made when the view is, a question for when something asks.
+- **The text is a copy**, in the arena `in` names, as a join's is (`⎕str` takes its arena as an argument, an older form):
+  Rust's `from_utf8` can borrow because it can say nobody changes the bytes while the `&str` lives, which nothing here says of a
+  `u8⟦⟧`.  Bytes that are not one run are made one first, `⎕one_run`'s way, and checked there.
+- **An array joined onto a list is copied as an array is**, by its bytes, so only one whose elements are all of their value
+  (4710); a list of strings is joined onto with a list, which copies each one deep.
+- **The check is eight bytes at a time while they are ASCII**, and a sequence at a time, up to the end of the word, from the
+  first word that is not; **the copy a word at a time**.  Both read words where they are, whatever their alignment, as C's
+  `memcpy` does on all three machines (RISC-V's kernel finishing a misaligned access where the hardware does not); a vector at a
+  time, simdjson's way, is the next step and wants a load whose length is a value.
+
 Open questions
 --------------
 
