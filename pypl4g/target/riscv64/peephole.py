@@ -24,7 +24,7 @@ class SaidOnce:
     aside in the frame and fetching it back is done whole, whatever was said.
     """
 
-    name = "said-once"
+    name = "riscv.said-once"
 
     def run(self, function: MachineFunction) -> bool:
         """Drop what is said twice; report whether anything went."""

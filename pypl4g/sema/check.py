@@ -24788,6 +24788,14 @@ class Checker:
         self._runs.discard(id(given))
         if held:
             assert isinstance(found, VecType)
+            if found.element is not BOOL:
+                # An operator walked at once that answers something other than
+                # truth values -- a sum of two runs of bytes.
+                self._diags.emit(D.LANG_MASK_NOT_TRUTH_VALUES, written.span,
+                                 name=MASK_NAME,
+                                 found=self._module.types.array_type(
+                                     found.element, (found.lanes,)).written())
+                return UndefConst(ERROR)
             lanes = found.lanes
         else:
             if not isinstance(found, ArrayType) or found.element is not BOOL:

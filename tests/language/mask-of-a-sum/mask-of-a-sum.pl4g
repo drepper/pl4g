@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4260
+※ pl4g-test: expect-diag 4260 LANG_MASK_NOT_TRUTH_VALUES
+
+※ An operator walked over a run of bytes answers a run of bytes, which has no one
+※ bit per element to give however it was made: a sum is not a question, and a
+※ mask is made of what a comparison answers.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let c: u8⟦8⟧ = ⟦1u8, 0u8, 2u8, 0u8, 3u8, 0u8, 4u8, 0u8⟧ in ⎕static
+    if ⎕mask(c + 1u8) = 255u8: 0u6 else: 1u6
