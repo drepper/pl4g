@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok run=native,qemu exit=82 diag=none
+
+※ A field written of an element past the end of a list stops the program, as the
+※ element written whole does: how many there are is asked while running.
+
+let std := ⎕import("std")
+
+type Point = x : u32 ; y : u32
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: mut [Point] = []
+    l ⧺← [Point(.x ← 1u32, .y ← 2u32)]
+    let at: u64 ¤idx = ⎕unit(⎕drop(#init.args), ⌜idx⌝)
+    l⟦at⟧.y ← 3u32
+    if l⟦0⟧.y = 3u32: 0u6 else: 1u6

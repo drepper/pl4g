@@ -4084,6 +4084,28 @@ is the polarity `unless` wants, and `unless` is `ast.While` with `until` set: on
 flag, one negation where the condition is lowered, and every other thing a loop
 has -- labels, `break`, `continue`, an `else` arm -- unchanged.
 
+A field of an element of a list, written
+----------------------------------------
+
+`l⟦i⟧.name ← v` is `_list_field_assign`, which `_lower_member_assign` sends a statement to where `_through_a_list` finds an element
+of a list on the path -- an `ast.Element` whose base `_said_to_be` a `ListType`, which it now answers for a list's element as it
+does for an array's.  The place is `_record_at(…, writing=True)`, whose element case for a list is `_list_element_written`: the
+list's place (`_list_place`, which asks `mut` and that no view of the list is out), the index (`_index_into`), `_made_writable`, the
+bounds `check` and `_element_place` -- what `_lower_list_element_assign` does before it writes, in the same order -- and the list's
+allocator left in `_written_allocator`.  The field is then `_field_place` from there, and what is written goes as an element does:
+where the field's type points somewhere and `owned.can_own` it, the old value is loaded, the new one copied with
+`owned.own_function` into that allocator, stored, and the old given back; a record without anything to own is `_record_into`;
+anything else is a store.  A path through records is `_record_at`'s member case unchanged, and a path through a list held in a
+field of an element (`l⟦i⟧.sub⟦j⟧.x`) is the same walk again, `_list_place` asking `_place_written(…, writing=True)`, whose
+`_place_of_a_field` asks `_record_at` for writing -- so the outer list is made writable before the inner one's place is read.
+
+Three things changed under it.  `_made_here` steps through an `extract` of the elements of a `load` of a list to the place the list
+was loaded from, a list's elements being its own, so writing an element's field of a local list is no effect, as writing the
+element is not.  `_addressed_in` gives a place to the name at the root of a path through an element that a statement changes in
+place (`_named_through_an_element`), since writing it may copy the list out of the image.  And `_array_in_a_field` answers nothing
+straight away for a path through a list whose field is not an array whose type says its shape, so that the element is made ready
+once and not twice.
+
 A dense array, an index, and what a table is rebuilt for
 --------------------------------------------------------
 

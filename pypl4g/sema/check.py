@@ -413,6 +413,16 @@ def _collect_assigned(block: ast.Block, into: list[str]) -> None:
                 pass
 
 
+def _named_through_an_element(expr: object) -> str | None:
+    """The name a path through an element starts from -- `l` of `l⟦i⟧.name` and
+    of `l⟦i⟧.items` -- and nothing for any other path."""
+    through = False
+    while isinstance(expr, (ast.Member, ast.Element)):
+        through = through or isinstance(expr, ast.Element)
+        expr = expr.base
+    return expr.name if through and isinstance(expr, ast.NameRef) else None
+
+
 def _addressed_in(node: object, into: set[str]) -> None:
     """Add to *into* every name `&` is written in front of, anywhere below *node*.
 
@@ -448,6 +458,21 @@ def _addressed_in(node: object, into: set[str]) -> None:
             and isinstance(node.args[0], ast.NameRef):
         # As does making room in one.
         into.add(node.args[0].name)
+    # And changing a part of an element of one in place -- a field written, a
+    # list in a field joined onto -- which makes the list ready first as
+    # writing the element whole does.
+    changed: object = None
+    match node:
+        case ast.MemberAssign() | ast.ElementAssign() | ast.TakeAt():
+            changed = node.base
+        case ast.JoinAssign():
+            changed = node.target
+        case ast.Call() if isinstance(node.callee, ast.NameRef) \
+                and node.callee.name in (RESERVE_NAME, ITER_NAME) and node.args:
+            changed = node.args[0]
+    through = _named_through_an_element(changed)
+    if through is not None:
+        into.add(through)
     if isinstance(node, ast.Call) and isinstance(node.callee, ast.NameRef) \
             and node.callee.name == ITER_NAME and len(node.args) == 1 \
             and isinstance(node.args[0], ast.NameRef):
@@ -4224,6 +4249,9 @@ class Checker:
         #: The name a reference is being taken of, while one is: working the
         #: place out reads the name, and that read is the reference itself.
         self._taking_a_reference: str | None = None
+        # The allocator of the list whose element `_list_element_written` last
+        # made ready, which what is written into a part of it is kept in.
+        self._written_allocator: Value | None = None
         #: The parameters each call handed the arena it stands in, having named
         #: none for them, by the call's identity.
         self._arena_in_force: dict[int, set[int]] = {}
@@ -5186,6 +5214,12 @@ class Checker:
         """
         if not isinstance(expr, ast.Member):
             return None
+        if self._through_a_list(expr):
+            # Asked before anything is lowered: the element on the way is made
+            # writable where it is reached, which is once.
+            said = self._said_to_be(expr)
+            if not isinstance(said, ArrayType) or not said.fixed:
+                return None
         somewhere = self._record_at(builder, expr.base, writing=writing,
                                     below=(expr.name,))
         if somewhere is None:
@@ -5271,6 +5305,13 @@ class Checker:
                     return (value, ty.pointee)
                 return None
             case ast.Element():
+                if writing and isinstance(self._said_to_be(expr.base), ListType):
+                    # A list's element written in part: in the list's own room,
+                    # made so first, as `l⟦i⟧ ← v` makes it.
+                    written = self._list_element_written(builder, expr)
+                    if written is None or not isinstance(written[1], ProductType):
+                        return None
+                    return (written[0], written[1])
                 # An array's elements are where the array is, so one of them is
                 # a place whatever it holds.  The index is checked here as it is
                 # anywhere else: what this answers is one element and not a run.
@@ -12910,6 +12951,9 @@ class Checker:
             self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, stmt.span,
                              name=_path_text(whole))
             return
+        if self._through_a_list(stmt.base):
+            self._list_field_assign(builder, stmt)
+            return
         found = self._record_at(builder, stmt.base, writing=True)
         if found is None:
             self._diags.emit(D.LANG_ASSIGN_NOT_A_RECORD, stmt.base.span)
@@ -12962,6 +13006,81 @@ class Checker:
             self._record_into(builder, place, value, held, stmt.span)
             return
         builder.store(place, value, stmt.span)
+
+    def _list_field_assign(self, builder: IRBuilder, stmt: ast.MemberAssign) -> None:
+        """`l⟦i⟧.name ← v`: one field of an element of a list written, where the
+        element is.
+
+        Held to what writing the element whole is held to (`_lower_list_element_assign`):
+        the list in the place `l` made its own room first -- copied out of the
+        image, which is read-only -- the index checked against how many there
+        are, and what points somewhere copied into the list's allocator, the
+        value it replaces given back.  The rest of the element is not read and
+        not written.  A path of fields, `l⟦i⟧.a.b ← v`, is one offset further in
+        for each.
+        """
+        self._written_allocator = None
+        found = self._record_at(builder, stmt.base, writing=True)
+        if found is None:
+            self._diags.emit(D.LANG_ASSIGN_NOT_A_RECORD, stmt.base.span)
+            return
+        where, ty = found
+        at = _field_index(ty, stmt.name)
+        if at is None:
+            self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, stmt.name_span,
+                             type=ty.written(), name=stmt.name)
+            return
+        held = ty.fields[at][1]
+        if _read_only_table(held):
+            self._diags.emit(D.LANG_PLACE_NOT_WRITABLE, stmt.name_span,
+                             name=stmt.name, found=held.written())
+            return
+        if not self._made_here(where):
+            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
+        allocator = self._written_allocator
+        place = self._field_place(builder, where, ty, at, stmt.span)
+        value = self._lower_into(builder, stmt.value, held, stmt.span)
+        if self._value_type_of(value) is ERROR:
+            return
+        if owned.points(held) and owned.can_own(held) and allocator is not None:
+            replaced = builder.load(place, stmt.span)
+            value = builder.call(owned.own_function(self._module, held),
+                                 (allocator, value), held, stmt.span)
+            builder.store(place, value, stmt.span)
+            owned.give_back(builder, replaced, held, None)
+            return
+        if isinstance(held, ProductType):
+            self._record_into(builder, place, value, held, stmt.span)
+            return
+        builder.store(place, value, stmt.span)
+
+    def _list_element_written(self, builder: IRBuilder, expr: ast.Element
+                              ) -> tuple[Value, Type] | None:
+        """Where one element of a list is, for part of it to be written there:
+        the list in its place given room of its own first, as `l⟦i⟧ ← v` gives
+        it, and the index checked against how many there are.  The list's
+        allocator, which what goes in is kept in, is left in
+        `_written_allocator`."""
+        if len(expr.indices) != 1 or isinstance(expr.indices[0], ast.Range):
+            self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, expr.base.span,
+                             found="a list")
+            return None
+        found = self._list_place(builder, expr.base, expr.base.span,
+                                 "a field written")
+        if found is None:
+            return None
+        place, ty = found
+        at = self._index_into(builder, expr.indices[0], expr.span)
+        if at is None:
+            return None
+        self._made_writable(builder, place, ty, expr.span, expr.base)
+        elements, count, held = self._list_at(builder, place, ty, expr.span)
+        builder.check(builder.compare(CmpPred.ULT, at, count, expr.span),
+                      "an index outside its list", statuses.OUT_OF_RANGE, expr.span)
+        self._written_allocator = builder.extract(held, 2, parts_of(ty)[2],
+                                                  expr.span)
+        return (self._element_place(builder, elements, ty.element, at, expr.span),
+                ty.element)
 
     def _kept_by_the_place(self, where: Value, base: ast.Expr, ty: Type) -> bool:
         """Whether what goes into a place is asked how long it lasts
@@ -15291,7 +15410,8 @@ class Checker:
             self._report_mismatch(expr.span, answer.ty, expected)
         return answer
 
-    def _place_written(self, builder: IRBuilder, expr: ast.Expr
+    def _place_written(self, builder: IRBuilder, expr: ast.Expr,
+                       writing: bool = False
                        ) -> tuple[Value, Type, bool, str, bool] | None:
         """Where what *expr* names is, what it holds, whether it may be written,
         and what to call it in a message.
@@ -15308,7 +15428,7 @@ class Checker:
             case ast.Element():
                 return self._place_of_an_element(builder, expr)
             case ast.Member():
-                return self._place_of_a_field(builder, expr)
+                return self._place_of_a_field(builder, expr, writing)
             case ast.Deref():
                 # `&r\N{POSITION INDICATOR}` is the place `r` already names, so it is `r` -- with
                 # whatever this asks for about writing, which the reference in
@@ -15938,9 +16058,12 @@ class Checker:
         found = held.exports.get(expr.name)
         return found if isinstance(found, GlobalVar) else None
 
-    def _place_of_a_field(self, builder: IRBuilder, expr: ast.Member
+    def _place_of_a_field(self, builder: IRBuilder, expr: ast.Member,
+                          writing: bool = False
                           ) -> tuple[Value, Type, bool, str, bool] | None:
-        """Where one field of a record is, for a reference being taken of it."""
+        """Where one field of a record is, for a reference being taken of it --
+        or, where *writing* says so, for the field to be changed in place, which
+        an element of a list on the way is made ready for."""
         shared = self._exported_variable(expr)
         if shared is not None:
             # The variable itself and not a field of one: a path whose first part is
@@ -15948,7 +16071,7 @@ class Checker:
             # that place.  It lasts as long as the program does.
             return (builder.address(shared, expr.span), shared.value_type,
                     shared.mutable, expr.name, True)
-        found = self._record_at(builder, expr.base)
+        found = self._record_at(builder, expr.base, writing=writing)
         if found is None:
             self._diags.emit(D.LANG_REF_NOT_A_PLACE, expr.span)
             return None
@@ -16603,7 +16726,7 @@ class Checker:
                 self._diags.emit(D.LANG_LIST_CHANGED_NOT_A_LIST, span,
                                  what=changing, found=said.written())
             return None
-        found = self._place_written(builder, expr)
+        found = self._place_written(builder, expr, self._through_a_list(expr))
         if found is None:
             return None
         address, held, may_change, what, _ = found
@@ -17219,7 +17342,8 @@ class Checker:
         if not _names_a_place(expr.args[0]):
             self._diags.emit(D.LANG_TAKE_NOT_A_PLACE, expr.args[0].span)
             return UndefConst(ERROR)
-        found = self._place_written(builder, expr.args[0])
+        found = self._place_written(builder, expr.args[0],
+                                    self._through_a_list(expr.args[0]))
         if found is None:
             return UndefConst(ERROR)
         address, held, may_change, what, _ = found
@@ -19088,7 +19212,19 @@ class Checker:
                 held = self._said_to_be(expr.base)
                 if isinstance(held, ArrayType) and len(expr.indices) == held.rank:
                     return held.element
+                if isinstance(held, ListType) and len(expr.indices) == 1:
+                    return held.element
         return None
+
+    def _through_a_list(self, expr: ast.Expr) -> bool:
+        """Whether the path *expr* goes through an element of a list: a field
+        of `l⟦i⟧`, or of a field of it, however deep."""
+        while isinstance(expr, (ast.Member, ast.Element)):
+            if isinstance(expr, ast.Element) \
+                    and isinstance(self._said_to_be(expr.base), ListType):
+                return True
+            expr = expr.base
+        return False
 
     def _each_call(self, builder: IRBuilder, base: ast.Expr, ty: Type | None,
                    span: Span) -> "ast.Call | object | None":
@@ -29033,6 +29169,13 @@ class Checker:
                 continue
             if isinstance(seen, ExtractInst):
                 made = seen.operands[0]
+                if seen.index == 0 and isinstance(made, LoadInst) \
+                        and isinstance(made.ty, ListType):
+                    # The elements of a list are that list's alone -- a list is
+                    # a value, and one shared is copied before it is written --
+                    # so those of a list in a place this call made are too.
+                    seen = made.operands[1]
+                    continue
                 # A part of a view made here is what was put in it.
                 seen = made.operands[seen.index] \
                     if isinstance(made, TupleInst) and seen.index < len(made.operands) \

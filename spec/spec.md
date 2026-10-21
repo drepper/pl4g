@@ -4138,6 +4138,14 @@ left is a place (3027), a list's (4929) -- an array's length is in its type, and
 length is not in its type -- and written as an array's are.  A list in the image is read-only, so the first change made to one
 where it stands copies it out, into the arena in force; what is in the image is as it was.
 
+**A part of an element is written where the element is**: `l⟦i⟧.name ← v` writes one field of a list of records, and the rest
+of the element is not read or written.  It is held to what writing the element whole is held to -- the list in a place that may be
+changed, the index checked, a list in the image copied out first -- and what points somewhere, text or a list, is copied into the
+list's allocator as an element is, the value it replaces given back.  A path goes one field further in for each, `l⟦i⟧.at.x ← v`,
+and a list held in a field of an element is a place like any other, so `l⟦i⟧.items⟦j⟧ ← v`, `l⟦i⟧.items ⧺← more` and
+`†l⟦i⟧.items⟦j⟧` change it there.  Compare **Rust**'s `v[i].name = x` and **Go**'s `s[i].name = x` on a slice of structs, which write
+the same place; **Python**'s `l[i].name = x` writes the object the list refers to.
+
 Compare: **Python**'s `l += [x]`, `l[i]` and `l[i] = v`; **Rust**'s `Vec`, whose `extend`, indexing and `reserve` these are and
 which doubles the same way; **Go**'s `l = append(l, x)`, the same thing with the list written twice and a slice whose room may or
 may not be shared with another; **C++**'s `std::vector`, `insert` at the end and `reserve`.
