@@ -67,8 +67,11 @@ add_custom_command(
   DEPENDS pl4g-gen-diag ${CMAKE_SOURCE_DIR}/share/diagnostics.json
   COMMENT "Generating the diagnostic catalog")
 
-# The runtime a compiled program carries, compiled into the library as it is.
-set_source_files_properties(runtime/io.c PROPERTIES COMPILE_OPTIONS "-fno-builtin;-fno-strict-aliasing")
+# The runtime a compiled program carries, compiled into the library as it is
+# but for where it keeps what it remembers: in the state the interpreter
+# selects (runtime/state.h) rather than in variables of its own.
+set_source_files_properties(runtime/io.c PROPERTIES COMPILE_OPTIONS "-fno-builtin;-fno-strict-aliasing"
+  COMPILE_DEFINITIONS PL4G_RUNTIME_STATE)
 
 set(PL4G_LIB_SOURCES
   src/lib/util/unicode.cc
@@ -234,7 +237,7 @@ set(PL4G_LIB_SOURCES
 function(pl4g_library_settings target)
   set(flags ${ARGN})
   target_include_directories(${target} PUBLIC ${CMAKE_SOURCE_DIR}/src/lib ${PL4G_GENERATED})
-  target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/tree-sitter-pl4g/src)
+  target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/tree-sitter-pl4g/src ${CMAKE_SOURCE_DIR}/runtime)
   # Where #embed finds the grammar's queries.
   set_source_files_properties(src/lib/ts/highlight.cc PROPERTIES
     COMPILE_OPTIONS "--embed-dir=${CMAKE_SOURCE_DIR}/tree-sitter-pl4g/queries")

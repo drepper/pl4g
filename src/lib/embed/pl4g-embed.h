@@ -1,10 +1,18 @@
 /* PL4G's interpreter, for a program that loads it as a shared object.
 
-   libpl4g-embed.so offers this one function with C's linkage, so that a
-   program -- in C or in anything that calls C -- can find it with dlsym after
-   dlopen and needs none of the compiler's headers.  Everything else in the
-   object is hidden.  A program wanting more than this links with the library
-   and uses pl4g::embed::Interpreter (embed/embed.hh), which this wraps.
+   libpl4g-embed.so offers these three functions with C's linkage, so that a
+   program -- in C or in anything that calls C -- can find them with dlsym
+   after dlopen and needs none of the compiler's headers.  Everything else in
+   the object is hidden.  A program wanting more than this links with the
+   library and uses pl4g::embed::Interpreter (embed/embed.hh), which this wraps.
+
+   Everything a run changes that outlives it is in a state: the heap the
+   program takes from, the seed its tables are worked out from, and what the
+   runtime took from the system.  A state is made by pl4g_embed_state_new and
+   given back, with all of that, by pl4g_embed_state_free; what is in one is
+   nobody's business but the library's.  Several may exist at once, each run
+   in one of them seeing none of the others; one state is run in by one thread
+   at a time.
 
    What the PL4G program calls with @[host("SYMBOL")] is looked up with
    dlsym(RTLD_DEFAULT, SYMBOL): the program loading this object defines it,
@@ -18,17 +26,32 @@
 extern "C" {
 #endif
 
-/** The type of pl4g_embed_run_source, for the pointer dlsym answers.  */
-typedef int (*pl4g_embed_run_source_t)(const char *text, size_t length, const char *name);
+/** A state of the interpreter, whose insides are the library's.  */
+typedef struct pl4g_embed_state pl4g_embed_state;
 
-/** Compile the PL4G program in the LENGTH bytes at TEXT and run it.
+/** The types of the three functions, for the pointers dlsym answers.  */
+typedef pl4g_embed_state *(*pl4g_embed_state_new_t)(void);
+typedef void (*pl4g_embed_state_free_t)(pl4g_embed_state *state);
+typedef int (*pl4g_embed_run_source_t)(pl4g_embed_state *state, const char *text, size_t length,
+                                       const char *name);
+
+/** A new state, as fresh as the first: nothing allocated, nothing seeded.
+    Answers NULL where there is no memory for one.  */
+pl4g_embed_state *pl4g_embed_state_new(void);
+
+/** Give back STATE and everything its runs took and did not give back.
+    STATE may be NULL, which does nothing.  */
+void pl4g_embed_state_free(pl4g_embed_state *state);
+
+/** Compile the PL4G program in the LENGTH bytes at TEXT and run it in STATE.
 
     NAME is what its diagnostics and the messages of its faults call the
     file.  The program uses descriptors 0, 1 and 2 as its devices.  Answers
     the status it exited with; 1 where it did not compile, the diagnostics
     having gone to standard error; 128 plus the number of a signal it would
-    have died of; and -1 where the interpreter itself failed.  */
-int pl4g_embed_run_source(const char *text, size_t length, const char *name);
+    have died of; and -1 where STATE is NULL or the interpreter itself
+    failed.  */
+int pl4g_embed_run_source(pl4g_embed_state *state, const char *text, size_t length, const char *name);
 
 #ifdef __cplusplus
 }

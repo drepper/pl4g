@@ -9,13 +9,41 @@
 #include <utility>
 
 #include "repl/repl.hh"
+#include "state.h"
 
 
 namespace pl4g::embed {
 
   struct Interpreter::State {
     repl::Settings settings;
+    // What the runtime remembers between calls -- the heap, the seed of
+    // every table -- for the runs of this interpreter and no other's, and
+    // what it took from the system, which is given back with it.
+    ::pl4g_runtime_state runtime{};
+
+    ~State() { ::pl4g_runtime_release(&runtime); }
   };
+
+
+  namespace {
+
+    // The runtime working in `state` for as long as this lives, on this
+    // thread, and in whatever it worked in before afterwards.
+    class Selected {
+    public:
+      explicit Selected(::pl4g_runtime_state& state) : before(::pl4g_runtime_current)
+      {
+        ::pl4g_runtime_current = &state;
+      }
+      Selected(const Selected&) = delete;
+      Selected& operator=(const Selected&) = delete;
+      ~Selected() { ::pl4g_runtime_current = before; }
+
+    private:
+      ::pl4g_runtime_state* before = nullptr;
+    };
+
+  } // anonymous namespace
 
 
   Interpreter::Interpreter() : state(std::make_unique<State>()) {}
@@ -83,6 +111,7 @@ namespace pl4g::embed {
     // A copy, so that what one run names is not left for the next.
     repl::Settings settings = state->settings;
     settings.compile.inputs = { path };
+    Selected selected(state->runtime);
     auto ended = repl::run_file(settings);
     return { ended.status, ended.signal };
   }
@@ -93,6 +122,7 @@ namespace pl4g::embed {
     repl::Settings settings = state->settings;
     settings.compile.inputs = { name };
     settings.held.emplace_back(std::move(name), std::string(text));
+    Selected selected(state->runtime);
     auto ended = repl::run_file(settings);
     return { ended.status, ended.signal };
   }

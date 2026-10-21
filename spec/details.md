@@ -1205,15 +1205,30 @@ of one taking a `str`.  The embedding program is not ended with it: the stop unw
 and `run_source` or `run_file` answers 92.
 
 **The interpreter is also a shared object**, `libpl4g-embed.so`, for a program that loads it with `dlopen` rather than linking
-with the library.  It offers one function with C's linkage, `pl4g_embed_run_source(text, length, name)` (`src/lib/embed/pl4g-embed.h`),
-which runs a program held in memory with descriptors 0, 1 and 2 and answers its status -- 128 plus a signal's number where it
-would have died of one, and -1 where the interpreter itself failed, nothing being allowed to leave it as an exception.  Everything
-else in the object is hidden, by the visibility it is compiled with and by a version script, which also hides what is visible by
-its own say-so: the grammar's entry point, and the instantiations of the standard library's templates.  The functions the program
-calls with `@[host]` are still found with `dlsym(RTLD_DEFAULT, ...)`, so the loading program is linked with `-rdynamic`.
-`src/examples/embed/host.c` is such a program, in C, and ctest's `embed-example` runs it: it hands the interpreter a program that
-reads its input through two functions of the host, works out a sum, the extremes and a sum of squares, and delivers them through a
-third that only stores them, which the host then checks against what it works out itself.
+with the library.  It offers three functions with C's linkage (`src/lib/embed/pl4g-embed.h`): `pl4g_embed_state_new`, which makes a
+state of the interpreter, `pl4g_embed_state_free`, which gives one back, and `pl4g_embed_run_source(state, text, length, name)`,
+which runs a program held in memory in a state, with descriptors 0, 1 and 2, and answers its status -- 128 plus a signal's number
+where it would have died of one, and -1 where there is no state or the interpreter itself failed, nothing being allowed to leave it
+as an exception.  A state is opaque: the C side names a type it never sees inside, which is a struct around a
+`pl4g::embed::Interpreter`.  Everything else in the object is hidden, by the visibility it is compiled with and by a version
+script, which also hides what is visible by its own say-so: the grammar's entry point, and the instantiations of the standard
+library's templates.  The functions the program calls with `@[host]` are still found with `dlsym(RTLD_DEFAULT, ...)`, so the
+loading program is linked with `-rdynamic`.  `src/examples/embed/host.c` is such a program, in C, and ctest's `embed-example` runs
+it: in each of two states made at once, it hands the interpreter a program that reads its input through two functions of the host,
+works out a sum, the extremes and a sum of squares, and delivers them through a third that only stores them, which the host then
+checks against what it works out itself.
+
+**What a run leaves behind is its state's.**  The interpreter had no state of its own between runs, but the runtime it calls did,
+in variables of the C file: the heap's lists and the slab it cuts from, and the base every table's seed is worked out from.  Built
+into the library (`PL4G_RUNTIME_STATE`), the runtime keeps them in a `struct pl4g_runtime_state` (`runtime/state.h`) instead -- the
+one the thread has selected in `pl4g_runtime_current`, which `embed::Interpreter` selects for the length of a run and which is
+otherwise one of the process's own -- and keeps account of what it takes from the system: each slab and each object too large for
+a class carries a link in front of it, and the ring with its mappings and the runs of arguments and of the environment, which
+nothing gives back while a program runs, are noted in a ledger.  Releasing a state unmaps and closes all of it.  The packaged
+runtime is built without the definition and is what it was, byte for byte, which `bin/pl4g-runtime --check` holds it to.  What the
+compiler keeps for the life of the process -- the types, made once and shared because they are compared by address, the registers
+and operations of the targets, and the trees the checker makes of its own -- is not a run's and not a state's: it never changes
+what a program does, and it is shared by every state as it is by every thread of the language server.
 
 Diagnostics
 -----------

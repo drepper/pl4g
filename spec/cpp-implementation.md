@@ -104,8 +104,9 @@ through the same ring; the arena allocator the back ends emit as machine code is
 startup function is handed carries the descriptors the embedder chose (`interp::Devices`).  A function the host defines is found
 with `dlsym` at its first call and called through libffi, each value crossing as the x86-64 back end holds it in a register
 (details.md, "The Embedded Interpreter, and Its Calls into the Host"); `src/test/embed_host.cc`, ctest's `embed-host`, embeds it.
-`libpl4g-embed.so` is the interpreter as a shared object offering one C function, `pl4g_embed_run_source`; ctest's
-`embed-example` runs `src/examples/embed/host.c`, which loads it with `dlopen`.
+`libpl4g-embed.so` is the interpreter as a shared object offering three C functions -- a state made, given back, and run in;
+ctest's `embed-example` runs `src/examples/embed/host.c`, which loads it with `dlopen`.  What a run leaves behind is in its state,
+the runtime's heap and seed among it (details.md).
 
 The checker
 -----------

@@ -49,6 +49,13 @@ namespace pl4g::embed {
   // process would start it; nothing of one is left for the next but what the
   // host functions it called kept.  The settings stay for every run after
   // they were made.
+  //
+  // Everything a run changes that outlives an instruction is the
+  // interpreter's own: the heap the program takes from, the seed its tables
+  // are worked out from, and what the runtime took from the system, which is
+  // given back when the interpreter is destroyed.  So several may exist at
+  // once, and run one after the other or on threads of their own, none seeing
+  // another's.
   class Interpreter {
   public:
     // An interpreter whose programs are started with nothing but their own

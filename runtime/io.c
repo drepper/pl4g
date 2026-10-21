@@ -17,6 +17,8 @@ typedef long i64;
 typedef unsigned int u32;
 typedef int i32;
 
+#include "state.h"
+
 /* -- the system calls ------------------------------------------------------ */
 
 #if defined(__x86_64__)
@@ -263,6 +265,61 @@ static inline u32 load_plain(const u64 at)
   return *(const u32 *) at;
 }
 
+#ifdef PL4G_RUNTIME_STATE
+/* The process's own state, which a thread works in until something selects
+ * another, and the one that is selected. */
+static struct pl4g_runtime_state process_state;
+__thread struct pl4g_runtime_state *pl4g_runtime_current = &process_state;
+
+/* Note in the running state what nothing else gives back: a mapping, or a
+ * descriptor where `fd` is not negative.  Where there is no room for the note
+ * and none to be had, it goes unnoted, and is given back by nothing, as it is
+ * in a compiled program. */
+static void keep(u64 at, u64 len, i64 fd)
+{
+  struct pl4g_runtime_state *state = pl4g_runtime_current;
+  struct pl4g_ledger *ledger = state->ledger;
+  if (ledger == 0 || ledger->used == PL4G_LEDGER_ENTRIES) {
+    i64 room = sys(NR_MMAP, 0, sizeof (struct pl4g_ledger), PROT_READ_WRITE,
+                   MAP_PRIVATE_ANONYMOUS, -1, 0);
+    if (room < 0)
+      return;
+    struct pl4g_ledger *more = (struct pl4g_ledger *) room;
+    more->next = ledger;
+    more->used = 0;
+    state->ledger = ledger = more;
+  }
+  struct pl4g_ledger_entry *entry = &ledger->entries[ledger->used++];
+  entry->at = at;
+  entry->len = len;
+  entry->fd = fd;
+}
+
+void pl4g_runtime_release(struct pl4g_runtime_state *state)
+{
+  while (state->mapped != 0) {
+    struct pl4g_mapped *one = state->mapped;
+    state->mapped = one->next;
+    sys(NR_MUNMAP, (i64) one, (i64) one->size, 0, 0, 0, 0);
+  }
+  while (state->ledger != 0) {
+    struct pl4g_ledger *ledger = state->ledger;
+    state->ledger = ledger->next;
+    for (u64 at = ledger->used; at-- > 0;) {
+      const struct pl4g_ledger_entry *entry = &ledger->entries[at];
+      if (entry->fd >= 0)
+        sys(NR_CLOSE, entry->fd, 0, 0, 0, 0, 0);
+      else
+        sys(NR_MUNMAP, (i64) entry->at, (i64) entry->len, 0, 0, 0, 0);
+    }
+    sys(NR_MUNMAP, (i64) ledger, sizeof (struct pl4g_ledger), 0, 0, 0, 0);
+  }
+  char *bytes = (char *) state;
+  for (u64 at = 0; at < sizeof *state; ++at)
+    bytes[at] = 0;
+}
+#endif
+
 /* Make the ring, once.  A system that has no io_uring will not grow one, so a
  * failure is remembered and the calls below go straight to the kernel after
  * it -- which is what lets a program run where there is no ring at all. */
@@ -286,6 +343,15 @@ static int started(struct pl4g_ring *r)
                fd, OFF_CQ_RING);
   i64 sqes = sys(NR_MMAP, 0, sqe_len, PROT_READ_WRITE, MAP_SHARED_POPULATE,
                  fd, OFF_SQES);
+#ifdef PL4G_RUNTIME_STATE
+  keep(0, 0, fd);
+  if (sq >= 0)
+    keep((u64) sq, sq_len, -1);
+  if (cq >= 0)
+    keep((u64) cq, cq_len, -1);
+  if (sqes >= 0)
+    keep((u64) sqes, sqe_len, -1);
+#endif
   if (sq < 0 || cq < 0 || sqes < 0)
     return 0;
   r->fd = (u64) fd;
@@ -467,6 +533,9 @@ void pl4g_args(const u64 *stack, struct view *out)
      top -- so the refusals are the range and not merely the sign. */
   if (room < 0)
     return;
+#ifdef PL4G_RUNTIME_STATE
+  keep((u64) room, count * sizeof (struct counted), -1);
+#endif
   struct counted *made = (struct counted *) room;
   for (u64 at = 0; at < count; ++at) {
     made[at].at = argv[at];
@@ -583,9 +652,14 @@ u64 pl4g_hash_word(u64 word, u64 seed)
 }
 
 /* What every table's seed is worked out from, once per process, and how many
- * have been handed out. */
+ * have been handed out.  In the interpreter, the running state's (state.h). */
+#ifdef PL4G_RUNTIME_STATE
+# define hash_base (pl4g_runtime_current->hash_base)
+# define hash_count (pl4g_runtime_current->hash_count)
+#else
 static u64 hash_base;
 static u64 hash_count;
+#endif
 
 /* What the auxiliary vector calls the 16 random bytes the kernel leaves on the
  * stack for the process. */
@@ -684,6 +758,9 @@ struct run pl4g_env(const u64 *stack)
   /* As above: a refusal is a small negative number and an address is not. */
   if (room < 0)
     return out;
+#ifdef PL4G_RUNTIME_STATE
+  keep((u64) room, 2 * count * sizeof (struct counted), -1);
+#endif
   struct counted *made = (struct counted *) room;
   for (u64 at = 0; at < count; ++at) {
     const unsigned char *one = envp[at];
@@ -962,16 +1039,17 @@ void pl4g_io_drain(struct pl4g_ring *r)
 #define HEAP_LARGEST 65536UL
 #define HEAP_SLAB (1UL << 20)
 #define HEAP_PAGE 4096UL
-/* sixteen classes sixteen apart, and eight powers of two from 512 to 64 KiB */
-#define HEAP_CLASSES 24
-
-struct heap_free {
-  struct heap_free *next;
-};
-
+/* HEAP_CLASSES and struct heap_free are in state.h, which the interpreter's
+ * state holds the lists in. */
+#ifdef PL4G_RUNTIME_STATE
+# define heap_lists (pl4g_runtime_current->heap_lists)
+# define heap_bump (pl4g_runtime_current->heap_bump)
+# define heap_end (pl4g_runtime_current->heap_end)
+#else
 static struct heap_free *heap_lists[HEAP_CLASSES];
 static unsigned char *heap_bump;
 static unsigned char *heap_end;
+#endif
 
 /* Which class a size falls in, and how big the objects of that class are. */
 static u64 heap_class(u64 size, u64 *rounded)
@@ -996,13 +1074,52 @@ static u64 heap_pages(u64 size)
   return (size + HEAP_PAGE - 1) & ~(HEAP_PAGE - 1);
 }
 
+#ifdef PL4G_RUNTIME_STATE
+/* Where the interpreter is the one running: a mapping of at least `size`
+ * bytes, with what keeps account of it in front, linked into the running
+ * state's list so that the state can give it back; and the giving back of one
+ * before that. */
+static void *kept_map(u64 size)
+{
+  u64 whole = heap_pages(size + sizeof (struct pl4g_mapped));
+  i64 room = sys(NR_MMAP, 0, whole, PROT_READ_WRITE, MAP_PRIVATE_ANONYMOUS, -1, 0);
+  if (room < 0)
+    return 0;
+  struct pl4g_runtime_state *state = pl4g_runtime_current;
+  struct pl4g_mapped *one = (struct pl4g_mapped *) room;
+  one->size = whole;
+  one->prev = 0;
+  one->next = state->mapped;
+  if (one->next != 0)
+    one->next->prev = one;
+  state->mapped = one;
+  return one + 1;
+}
+
+static void kept_unmap(void *at)
+{
+  struct pl4g_mapped *one = (struct pl4g_mapped *) at - 1;
+  if (one->prev != 0)
+    one->prev->next = one->next;
+  else
+    pl4g_runtime_current->mapped = one->next;
+  if (one->next != 0)
+    one->next->prev = one->prev;
+  sys(NR_MUNMAP, (i64) one, (i64) one->size, 0, 0, 0, 0);
+}
+#endif
+
 /* Room for `size` bytes, aligned to sixteen; nothing where the system has none. */
 void *pl4g_heap_alloc(u64 size)
 {
   if (size > HEAP_LARGEST) {
+#ifdef PL4G_RUNTIME_STATE
+    return kept_map(size);
+#else
     i64 room = sys(NR_MMAP, 0, heap_pages(size), PROT_READ_WRITE,
                    MAP_PRIVATE_ANONYMOUS, -1, 0);
     return room < 0 ? 0 : (void *) room;
+#endif
   }
   u64 rounded;
   u64 c = heap_class(size, &rounded);
@@ -1015,12 +1132,20 @@ void *pl4g_heap_alloc(u64 size)
     /* What is left of the old slab is not worth a list of its own: it is less
        than one object of this class, and the classes below will not ask for it
        often enough to matter. */
+#ifdef PL4G_RUNTIME_STATE
+    unsigned char *room = kept_map(HEAP_SLAB - sizeof (struct pl4g_mapped));
+    if (room == 0)
+      return 0;
+    heap_bump = room;
+    heap_end = room + HEAP_SLAB - sizeof (struct pl4g_mapped);
+#else
     i64 room = sys(NR_MMAP, 0, HEAP_SLAB, PROT_READ_WRITE,
                    MAP_PRIVATE_ANONYMOUS, -1, 0);
     if (room < 0)
       return 0;
     heap_bump = (unsigned char *) room;
     heap_end = heap_bump + HEAP_SLAB;
+#endif
   }
   void *made = heap_bump;
   heap_bump += rounded;
@@ -1033,7 +1158,11 @@ void pl4g_heap_free(void *at, u64 size)
   if (at == 0)
     return;
   if (size > HEAP_LARGEST) {
+#ifdef PL4G_RUNTIME_STATE
+    kept_unmap(at);
+#else
     sys(NR_MUNMAP, (i64) at, heap_pages(size), 0, 0, 0, 0);
+#endif
     return;
   }
   u64 rounded;

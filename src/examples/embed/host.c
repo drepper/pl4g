@@ -1,12 +1,17 @@
 /* An example of a program embedding PL4G's interpreter.
 
-   It loads the interpreter as a shared object with dlopen, finds the one
-   function the object offers with dlsym, and hands it a PL4G program held in
-   a string.  That program asks this one for its input through two functions
-   defined here, works out a few things about it, and hands the answers back
-   through a third, which only stores them.  Once the program has run, main
-   checks what was stored against what it works out itself, and exits with 0
-   where everything agrees and with a number saying what did not.
+   It loads the interpreter as a shared object with dlopen, finds the three
+   functions the object offers with dlsym, makes a state of the interpreter
+   and hands it a PL4G program held in a string.  That program asks this one
+   for its input through two functions defined here, works out a few things
+   about it, and hands the answers back through a third, which only stores
+   them.  Once the program has run, main checks what was stored against what
+   it works out itself, and exits with 0 where everything agrees and with a
+   number saying what did not.
+
+   It does so in two states made at the same time, to show that they can be:
+   each holds what its runs leave behind -- the heap, the seed of every table --
+   and neither sees the other's.
 
    The three functions are found by the interpreter with
    dlsym(RTLD_DEFAULT, ...), so this program is linked with -rdynamic: what it
@@ -97,6 +102,8 @@ static const char program[] =
   "    deliver(n, sum, smallest, largest, squares)\n"
   "    0u6\n";
 
+static int check(void);
+
 int main(int argc, char *argv[])
 {
   const char *library = argc > 1 ? argv[1] : DEFAULT_LIBRARY;
@@ -106,20 +113,43 @@ int main(int argc, char *argv[])
       fprintf(stderr, "cannot load %s: %s\n", library, dlerror());
       return 2;
     }
+  pl4g_embed_state_new_t state_new = (pl4g_embed_state_new_t) dlsym(handle, "pl4g_embed_state_new");
+  pl4g_embed_state_free_t state_free = (pl4g_embed_state_free_t) dlsym(handle, "pl4g_embed_state_free");
   pl4g_embed_run_source_t run = (pl4g_embed_run_source_t) dlsym(handle, "pl4g_embed_run_source");
-  if (run == NULL)
+  if (state_new == NULL || state_free == NULL || run == NULL)
     {
-      fprintf(stderr, "%s offers no pl4g_embed_run_source: %s\n", library, dlerror());
+      fprintf(stderr, "%s does not offer what it should: %s\n", library, dlerror());
       return 3;
     }
 
-  int status = run(program, strlen(program), "example.pl4g");
-  if (status != 0)
+  pl4g_embed_state *states[2] = { state_new(), state_new() };
+  if (states[0] == NULL || states[1] == NULL)
     {
-      fprintf(stderr, "the program ended with status %d\n", status);
-      return 4;
+      fputs("no state could be made\n", stderr);
+      return 7;
     }
+  int checked = 0;
+  for (int which = 0; which < 2 && checked == 0; ++which)
+    {
+      result.delivered = false;
+      int status = run(states[which], program, strlen(program), "example.pl4g");
+      if (status != 0)
+        {
+          fprintf(stderr, "the program ended with status %d\n", status);
+          checked = 4;
+        }
+      else
+        checked = check();
+    }
+  state_free(states[0]);
+  state_free(states[1]);
+  dlclose(handle);
+  return checked;
+}
 
+/* What was delivered, held to what is due: 0 where it agrees.  */
+static int check(void)
+{
   /* What the answers have to be, worked out here.  */
   int64_t sum = 0, squares = 0, smallest = readings[0], largest = readings[0];
   for (int64_t at = 0; at < COUNT; ++at)
@@ -148,6 +178,5 @@ int main(int argc, char *argv[])
   printf("delivered: %lld readings, sum %lld, smallest %lld, largest %lld, sum of squares %lld\n",
          (long long) result.count, (long long) result.sum, (long long) result.smallest,
          (long long) result.largest, (long long) result.squares);
-  dlclose(handle);
   return 0;
 }

@@ -10724,6 +10724,25 @@ C++ API, which needs no `dlopen` at all, and looking the C++ functions up by the
 embedding APIs, both C and both what a program written in anything links with; Guile's and Tcl's likewise; and V8's, which is C++
 only and is linked, never looked up.
 
+## 2026-10-21T20:30+02:00 — implementation
+
+### The interpreter's state in one object, made and freed by the embedding program
+
+The user asked for **everything a run of the interpreter keeps to be in one object**, several of which may exist at once, made
+by one new function of `libpl4g-embed.so` and given back by another, opaque to the caller and handed to the run function.  So
+`pl4g_embed_state_new` and `pl4g_embed_state_free` are added and `pl4g_embed_run_source` takes the state first.
+
+What there was to move was the runtime's: the heap's free lists and slab and the hash seed lived in variables of `runtime/io.c`,
+one set per process, which every interpreter in a process shared.  They are now a struct, selected per thread for the length of a
+run, in the build of the runtime that goes into the library only, so that the runtime compiled programs carry is unchanged.  And
+freeing a state gives back what its runs took -- the heap's mappings, which the runtime now keeps account of there, and the ring
+and its mappings and descriptor and the runs of arguments, which a compiled program leaves for its exit to give back and which an
+embedded one would otherwise leak a set of per run.  The compiler's process-wide caches -- the interned types, the targets'
+registers and operations, the checker's own trees -- stay shared: they are made once, never change what a program does, and the
+types are compared by address across everything that holds one.  Compare Lua's `lua_newstate`/`lua_close`, whose `lua_State`
+holds everything and of which a program may have many; Python's subinterpreters, which took years to separate the state that was
+global; Tcl's `Tcl_CreateInterp`; and V8's isolates, each a heap of its own.
+
 Open questions
 --------------
 
