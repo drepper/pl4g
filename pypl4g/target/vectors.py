@@ -40,7 +40,7 @@ from dataclasses import dataclass, field
 from ..ir.function import BasicBlock, Function
 from ..ir.inst import (AnyLaneInst, BinaryInst, BinOp, CastInst, CastKind,
                        CmpInst, CmpPred, Instruction, LoadInst, SplatInst,
-                       StoreInst, UnaryInst, UnOp)
+                       StoreInst, Terminator, UnaryInst, UnOp)
 from ..ir.layout import DataLayout, stride_of
 from ..ir.module import Module
 from ..ir.types import IntType, BOOL, Type, TypeContext, U64, VecType
@@ -209,11 +209,16 @@ class _Settler:
         return inst
 
     def _settle_operands(self, inst: Instruction) -> None:
-        """Point an instruction that is staying at what its operands became."""
+        """Point an instruction that is staying at what its operands became --
+        and a branch at what what it hands the block it goes to became, which is
+        read as much as an operand is."""
         for at, operand in enumerate(inst.operands):
             found = self._became.get(id(operand))
             if found is not None:
                 inst.operands[at] = found
+        if isinstance(inst, Terminator):
+            for edge in inst.successors():
+                edge.args = [self._became.get(id(one), one) for one in edge.args]
 
     def _plan(self, func: Function) -> None:
         """Decide how every run in this function is cut up, before anything moves.
