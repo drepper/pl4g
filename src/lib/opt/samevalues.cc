@@ -50,7 +50,9 @@ namespace pl4g::opt {
       InstKind kind{};
       std::string opcode;
       const Type* ty = nullptr;
-      std::vector<const Value*> operands;
+      // Which value each operand is -- and for an undefined one, which type,
+      // every undefined value of one type being the same nothing.
+      std::vector<const void*> operands;
       // What the shape carries beside: an operation, a position, a kind of cast.
       int what = 0;
       std::int64_t index = 0;
@@ -90,8 +92,11 @@ namespace pl4g::opt {
         return value;
       };
       Key key{ inst->kind, inst->opcode(), inst->ty, {} };
-      for (auto one : inst->operands)
-        key.operands.push_back(standing(one));
+      for (auto one : inst->operands) {
+        auto found = standing(one);
+        key.operands.push_back(found->vkind == ValueKind::undef ? static_cast<const void*>(found->ty)
+                                                                : static_cast<const void*>(found));
+      }
       // The slots pypl4g's class of each shape has beside the common ones.
       switch (inst->kind) {
       case InstKind::BinaryInst: key.what = int(inst->bin); break;

@@ -103,6 +103,7 @@ set(PL4G_LIB_SOURCES
   src/lib/opt/conditions.cc
   src/lib/opt/constfold.cc
   src/lib/opt/dce.cc
+  src/lib/opt/divisions.cc
   src/lib/opt/facts.cc
   src/lib/opt/inline.cc
   src/lib/opt/knownargs.cc
