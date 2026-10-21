@@ -217,21 +217,22 @@ class A64Selector(InstructionSelector):
         may be the stack pointer itself; that is the one case that needs the
         register set aside, any other building the number in *dst*."""
         stack = MCReg(SP)
+        target = MCReg(dst, bits=64)
         if offset <= 0xFFF:
-            return [self._inst("add", (MCReg(dst), stack,
+            return [self._inst("add", (target, stack,
                                        MCImm(offset, 12, signed=False)), span)]
         if offset <= 0xFFFFFF:
-            made = [self._inst("add.lsl12", (MCReg(dst), stack,
+            made = [self._inst("add.lsl12", (target, stack,
                                              MCImm(offset >> 12, 12, signed=False)),
                                span)]
             if offset & 0xFFF:
-                made.append(self._inst("add", (MCReg(dst), MCReg(dst),
+                made.append(self._inst("add", (target, target,
                                                MCImm(offset & 0xFFF, 12,
                                                      signed=False)), span))
             return made
         holder = self._spare_for(offset, span) if dst is SP else dst
         return [*self._materialize(holder, offset, span),
-                self._inst("add.uxtx", (MCReg(dst), stack, MCReg(holder, bits=64)),
+                self._inst("add.uxtx", (target, stack, MCReg(holder, bits=64)),
                            span)]
 
     def _frame_place(self, offset: int, bytes_: int, span: Span,
