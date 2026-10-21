@@ -1405,7 +1405,7 @@ namespace pl4g::opt {
 
     constexpr std::string_view optimizing[] = {
       "dropignored", "dropunreached", "tailcalls", "largeanswers", "coroutines", "inline", "leanvalues",
-      "constfold", "samevalues", "purecalls", "simplifycfg", "constfold", "facts", "settle", "dce",
+      "constfold", "samevalues", "purecalls", "simplifycfg", "constfold", "conditions", "facts", "settle", "dce",
       "dropunreached", "splitedges",
     };
 
@@ -1424,6 +1424,7 @@ namespace pl4g::opt {
       if (name == "purecalls") return pure_calls(module);
       if (name == "simplifycfg") return simplify_cfg(module);
       if (name == "facts") return facts(module);
+      if (name == "conditions") return branch_conditions(module);
       if (name == "settle") return settle(module);
       if (name == "dce") return dead_code(module);
       throw InternalError("no pass is called " + std::string(name));
