@@ -1770,15 +1770,23 @@ namespace pl4g::sema {
     // one.
     auto kept_top = top;
     auto kept_bundles = bundles;
+    auto kept_stands = stands;
+    auto kept_unit_scopes = unit_scopes;
     if (written->scope != nullptr && written->siblings != nullptr) {
       top = written->scope;
       bundles = written->siblings;
+    }
+    if (written->stands) {
+      stands = *written->stands;
+      unit_scopes = { written->units };
     }
     ir::Function* func;
     {
       Finally put_back([&] {
         top = kept_top;
         bundles = kept_bundles;
+        stands = std::move(kept_stands);
+        unit_scopes = std::move(kept_unit_scopes);
       });
       bool met_all;
       {

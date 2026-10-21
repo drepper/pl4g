@@ -1,0 +1,24 @@
+※ pl4g-test: module
+※※ Two tables in the image, each the answer of a call: one a program names, and
+※※ one it does not -- which could not be worked out if anything asked.
+
+※※ The square of a number below eight, read out of the table.
+@[export]
+fn squared(n: u64) → u64:
+    SQUARES⟦⎕unit(n, ⌜idx⌝)⟧
+
+let SQUARES: u64⟦8⟧ = squares() in ⎕static
+
+fn squares() → u64⟦8⟧:
+    ⟦0, 1, 4, 9, 16, 25, 36, 49⟧
+
+※※ Whether three is in the table nothing can work out.
+@[export]
+fn never() → bool:
+    NEVER⸨3u8⸩
+
+let NEVER: ⸨u8⸩ = refused() in ⎕static
+
+fn refused() → ⸨u8⸩:
+    let twice: fn(u8) → u8 = λ x: u8 → u8 { x + x }
+    ⸨twice(3u8)⸩

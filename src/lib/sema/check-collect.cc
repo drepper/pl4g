@@ -1254,6 +1254,8 @@ namespace pl4g::sema {
     made->exported = is_export(attrs);
     made->scope = top;
     made->siblings = bundles;
+    made->stands = stands;
+    made->units = unit_scopes.front();
     made->written_params = handed;
     if (! node->held)
       (*top)[std::string(node->name)] = Held(made);
@@ -2404,6 +2406,9 @@ namespace pl4g::sema {
     other->result = false;
     other->error.reset();
     other->unit = nullptr;
+    // The answer's type arguments are the answer's: `Parsed(f64) ? Fault`
+    // carries a `Fault`, which takes none.
+    other->args = {};
     if (ir::builtin_type(*ref->error) != nullptr)
       other->module.reset();
     const ir::Type* carried_ = resolve_type(other);

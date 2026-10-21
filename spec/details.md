@@ -5477,3 +5477,102 @@ list grows and the element perhaps shared until written.
 
 **Giving back a list of records holding text failed an assertion**, `__pl4g_disown` having been written for text and lists only;
 that and the merge above are in their own sections.
+
+
+A list handed on, units where they stand, and the image worked out when named
+-----------------------------------------------------------------------------
+
+**A parameter threaded through a call is taken as the body's own.**  `_takes_owned` asks `_threaded(name, body)` beside
+`_changed_in_place`: an assignment `name ← CALL(…)` with `name` bare among the call's arguments (or a `Named` one's value), a
+`return CALL(…)` likewise, or such a call as the body's last statement.  Read off what is written, as `_changed_in_place` is.
+`_movable(written, current)` then lets a parameter be handed on where `_owned_parameter(written, current)` says the function being
+lowered takes it as its own -- which asks `_Local.named_parameter`, set where the name is bound as a parameter and, unlike
+`is_parameter`, not cleared when the body gives it a value -- and a name in `_addressed` is refused only where `_referenced(body,
+name)` finds `&` in front of it, a capture by reference, a `[&]` lambda naming it or `⎕iter` of it in the function's body
+(`_node_of_func`; a function with no node there, a lambda's, is refused as before).  A join, an element written or one taken out
+gives a name storage of its own for the write and makes no second way to it.  `_answered` keeps answering such a parameter through
+`_heaps_or_copied`, the room being the heap's from the call that answered it.  The C++ is `threaded`, `referenced`,
+`Local::named_parameter` and `movable(written, current)`.
+
+**A unit that may stand is a cast.**  `_shorter_life`, which every non-result `_lower_into` goes through, casts a number whose type
+differs from the one wanted only in a unit `_stands_for` lets stand -- `bitcast`, which no back end emits anything for.  `_accepts`
+already let it through; `_as_declared` then found the value's type not the name's and bound `UndefConst`.  `_Generic` keeps the
+defining file's `_stands` and its top-level unit scope, and the call that makes an instance (`_lower_generic_call`) swaps them in
+beside `_top` and `_bundles`, as `written.scope` already was; the C++ `Generic` copies the two when it is collected, the units of a
+file being settled before any function is.
+
+**A result's error is resolved with no type arguments** (`replace(ref, …, args=())`, `other->args = {}`).  **`_report_unused` skips
+`_`.**
+
+**The nought of an error's answer reaches a floating-point register.**  `_select_float_move` on each machine took a register or
+memory; an `MCImm` -- what `undefined()` answers for an `UndefConst` -- now goes into a fresh ordinary register by `select_move` and
+across by `select_move_bits`: `mov`/`movq` on x86-64, `movz`/`fmov` on AArch64, `li`/`fmv.d.x` on RISC-V.
+
+**A variable in the image whose value is a call waits to be named.**  `_collect_global` leaves `initializer` nothing and puts the
+variable in `_waiting_images`, by name, where it is `in ⎕static`, its value an `Allocated` call, nothing `@[expect]`s of it, and the
+checker is not `_images_now` -- which `run` sets for a whole program, `whole_modules`, the macros' checker and the language server's,
+everything lowered there being lowered at once.  `want(names)` works out every waiting variable among `names` (`_image_now`, which
+is `_constant_value` with `_for_the_image` set) before it lowers anything, so a body reading the variable is lowered after it is
+known; and `_constant` of a waiting name works it out on the spot, for a number read where it may fold.  A variable nothing names
+keeps no initializer and `dropunreached` drops it, being named by nothing -- the one reader of an initializer before that is
+`dropunreached` itself, of what is named.  The C++ keeps `waiting_images` as a vector in the order written, so the two compilers
+work them out, and lay out what they hold, in the same order.  **An array may be what such a call answers**: `_constant_value`'s
+`Call` arm takes an `ArrayType` of one dimension whose type says its length, and `_as_literal` makes an `ArrayLit` of a list where
+one is wanted and a `FloatLit` of a float.
+
+
+What `std.string` is built from
+------------------------------
+
+**`modules/string.pl4g` is PL4G and nothing else**: `std` imports it with `@[export]`, and it imports nothing, its tables being its
+own.  It says `unit ¤size → ¤idx` once, so that a count of bytes is a place among them -- and since a generic function made for
+another file reads its own file's units, `parse_int` and `format_int` mean the same in a program that says nothing of the kind.
+
+**Reading a decimal number** (`parse_f64`) is three loops and three ways to the answer.  The whole part and the fraction each go
+through their bytes with one subtraction, one comparison and a multiplication by ten per digit, every digit into one `u64` that is
+not asked whether it fits (`⎕wrap`): where at most nineteen digits count, it is right, and where more do, `leading` reads the first
+nineteen again, the noughts in front counted, and the exponent takes the rest.  A `_` is looked at only where a byte is not a digit,
+and only where `Allow.underscores` says so (`separator`).  Then: nought, which has its sign; **Clinger's**, `⎕float` of the
+significand times or divided by `EXACT_TENS⟦k⟧`, where it is below 2⁵³ and the power is 10²² at most, both exact and one rounding;
+and **`eisel_lemire(q, w)`**, fast_float's `compute_float` -- the significand shifted to its top bit, one `⎕wide_mul` by the power's
+upper word and a second by its lower one where the 55 bits that matter might take a carry, the power of two worked out as
+`(217706 × q) » 16`, subnormals by shifting away what does not fit, and the exact-tie test for the powers of five that are exact.  It
+answers an infinity's bits where the number is too large, which `parse_f64` refuses.  **Where digits were left out**, `w` and
+`w + 1` are both tried and, where they round apart, `closest` walks from the first up or down: `against_half(text, bits)` compares
+the number with the point half way between `bits` and the next `f64`, `(2m + 1) × 2^(e - 1)`, as two big integers -- the digits
+(800 at most, and whether any after them was not nought) times `5^power` on one side or the other and `2^…` on the other, every
+multiplication the one loop over `big⟦row, i⟧`, `u64⟦2, 48⟧` in the frame.  The steps are the digits nineteen at a time
+(`TENS⟦19⟧` and what is gathered), then `FIVES⟦27⟧` at a time; the shift is in place from the top word down.  2731 bits is the most
+any case reaches (a number of 800 nines at every exponent there is), so 48 words is room to spare.  **Hexadecimal** (`hex_float`)
+keeps the first sixteen digits that count and `binary(m, e, more)` rounds on bits: the fraction and the exponent side by side are one
+number, and rounding up is adding one, a carry out of the fraction going into the exponent and, past the largest, into an infinity.
+
+**Reading a whole number** (`parse_int`) is one loop whatever the type: `digit_value` of each byte compared with the base, one
+`⎕wide_mul` by the base asking whether the magnitude still fits, and `narrowed` at the end, which is `comptime if` the type is
+`u64` and a narrowing of the signed number otherwise -- `-(m - 1) - 1`, so that the smallest `i64`'s magnitude never has to be an
+`i64`.  `comptime if` is also what lets the narrowing to `T'` be checked where the call says what `T'` is.
+
+**Writing an `f64`** (`format_f64`) is `shortest(bits)`, Schubfach as Giulietti's paper and Bolz's C++ have it: the significand `c`
+and the binary exponent `q`; `k = ⌊q × log10(2)⌋` as `(q × 1262611) » 22` -- of three quarters of 2^q, `524031` less before the
+shift, where the neighbour below is nearer; `h = q + ⌊-k × log2(10)⌋ + 1` as `(-k × 1741647) » 19`; the three products `to_odd(g, cb « h)` of the
+number and its neighbours' half way points, each the upper 64 bits of 64 × 128 with the last bit set where anything below was
+not nought; then one digit fewer tried first, and the nearer of two otherwise.  The trailing noughts come off by `tenth`, ÷ 10 as a
+multiplication by ⌈2^67 ÷ 10⌉ and a shift; `decimal_count` is `⌊bits × 1233 ÷ 4096⌋` and one comparison with `TENS`; the digits
+are written two at a time from `PAIRS` into a `u8⟦32⟧` of the frame, ÷ 100 being the multiplication by ⌈2^68 ÷ 25⌉ of the
+quarter, at the place JavaScript's form puts them -- one to the right where the point comes in among them or after the first, the
+digits before it moved back after -- with the noughts the buffer was made of, and joined onto the list in one move.  **Writing a
+whole number** (`format_int`) is the same pairs into a `u8⟦24⟧` in base ten and a division a digit in any other.  The digits are
+written in each writer and not by a function: one writing a buffer it is handed is impure, and one answering a record of digits
+was a third of the time, its copies into the caller and back costing more than the digits.
+
+**The tables are functions' answers** -- `exact_tens`, `tens`, `fives`, `pairs`, `powers_of_five`, `powers_of_ten` -- each a literal in
+a body, worked out and laid out in the image the first time a function that reads it is lowered.
+`tests/compiler/test_std_string_tables.py` makes every one of them again from its definition and compares: fast_float's script for
+the powers of five, ⌊10^k × 2^-r⌋ + 1 for Schubfach's.
+
+**What was checked.**  Beyond the language tests, a Python model of every function, word for word in 64-bit arithmetic, was compared
+with Python's `float` and `repr` over some two million numbers, and the compiled module with the model over 1.9 million cases on
+x86-64 at `-O1` and some 190 000 each on AArch64 and RISC-V under QEMU and at `-O0`: every bit pattern's text and back, the half way
+point between random neighbours written out exactly and a digit past it, random long digit strings, every power of ten and of two,
+hexadecimal numbers of up to 120 bits, the flags.  What `format_f64` writes was compared with `node`'s `String(x)` for 200 000
+numbers.  None differed.

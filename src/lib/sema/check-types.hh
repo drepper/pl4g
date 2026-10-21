@@ -152,6 +152,10 @@ namespace pl4g::sema {
     Span value_span;
     // A parameter arrives with a value the caller chose.
     bool is_parameter = false;
+    // Whether the name is a parameter's, whatever it has been given since:
+    // `is_parameter` is about the value, and this about the name, which a list
+    // taken as the body's own keeps.
+    bool named_parameter = false;
     // What the definition said it raises, in force while the variable exists.
     Expectation* expectation = nullptr;
     std::vector<Expected> expected_pairs;
@@ -295,6 +299,10 @@ namespace pl4g::sema {
     bool exported = false;
     Dict<std::string, Held>* scope = nullptr;
     Dict<std::string, Bundle*>* siblings = nullptr;
+    // And the units it could name and the ones it said may stand for others,
+    // which are the file's too -- settled before any function is collected.
+    std::optional<std::vector<std::tuple<const ir::Unit*, const ir::Unit*>>> stands;
+    Dict<std::string, const ir::Unit*> units;
     OrderedMap<Types, ir::Function*> made;
     OrderedSet<Types> making;
     bool refused = false;

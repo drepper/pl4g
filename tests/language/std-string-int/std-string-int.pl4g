@@ -1,0 +1,134 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `std.string.parse_int(bytes, ⌜T⌝)` reads a whole number of any whole-number
+※ type: a `-` in front, the digits of the base, and what the flags allow -- a
+※ `+`, `0x` in front, `_` between digits, noughts in front.  One body reads them
+※ all: the digits are gathered in a `u64`, each step asking the whole product
+※ whether it still fits, and the type is asked once at the end by narrowing.
+※ What does not fit is `out_of_range` -- a minus in front of an unsigned type
+※ among it, unless what follows is nought -- and how many bytes were read is
+※ what the caller goes on from.
+※
+※ `std.string.format_int(n, into)` is the way back: a `-` and the digits,
+※ written onto a list and the list handed back, in any base, with as many
+※ noughts in front as `digits` asks for -- four hexadecimal digits for a `\u`
+※ escape.  Base ten goes two digits at a time.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+
+※ Whether `parse_int` reads `text` as the i64 `value`, taking `end` bytes.
+fn reads(text: str, allow: std.string.Allow, value: i64, end: u64) → bool:
+    match std.string.parse_int(⎕bytes(text), ⌜i64⌝, .allow ← allow):
+        std.string.Parsed(i64)(p):
+            p.value = value ∧ ⎕drop(p.end) = end
+        ⊥:
+            false
+
+※ What `parse_int` refuses `text` with as an i64, one for each kind, and nought
+※ where it reads it.
+fn why(text: str, allow: std.string.Allow) → u8:
+    match std.string.parse_int(⎕bytes(text), ⌜i64⌝, .allow ← allow):
+        std.string.Parsed(i64)(_):
+            0u8
+        ⊥(said):
+            if said = std.string.ParseError.absent:
+                1u8
+            elif said = std.string.ParseError.malformed:
+                2u8
+            else:
+                3u8
+
+※ What `format_int` writes, as text.
+fn written(n: T', base: u8, digits: u8, upper: bool) → str:
+    ⎕text(std.string.format_int(n, [], .base ← base, .digits ← digits, .upper ← upper)) ?? "?"
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let json: std.string.Allow = std.string.Allow.json
+    let plus: std.string.Allow = std.string.Allow.plus
+    let all: std.string.Allow = (std.string.Allow.plus | std.string.Allow.hex
+                                 | std.string.Allow.underscores)
+    ※ the ends of an i64, and past them
+    if (¬reads("9223372036854775807", json, 9223372036854775807i64, 19u64)
+            ∨ ¬reads("-9223372036854775808,", json, ⁻9223372036854775808i64, 20u64)
+            ∨ why("9223372036854775808", json) ≠ 3u8
+            ∨ why("-9223372036854775809", json) ≠ 3u8
+            ∨ why("99999999999999999999999999", json) ≠ 3u8):
+        return 1u6
+    ※ what is refused, and why; and where reading stops
+    if (why("", json) ≠ 1u8 ∨ why("x", json) ≠ 1u8 ∨ why("+1", json) ≠ 1u8
+            ∨ why("-", json) ≠ 2u8 ∨ why("01", json) ≠ 2u8
+            ∨ ¬reads("0", json, 0i64, 1u64) ∨ ¬reads("-0", json, 0i64, 2u64)
+            ∨ ¬reads("12.5", json, 12i64, 2u64) ∨ ¬reads("7e3", json, 7i64, 1u64)):
+        return 2u6
+    ※ the flags
+    if (¬reads("+42", plus, 42i64, 3u64) ∨ ¬reads("-0x7f", all, ⁻127i64, 5u64)
+            ∨ ¬reads("1_000_000", all, 1000000i64, 9u64) ∨ ¬reads("1__0", all, 1i64, 1u64)
+            ∨ ¬reads("0xg", all, 0i64, 1u64) ∨ ¬reads("+0x_1", all, 0i64, 2u64)
+            ∨ ¬reads("007", std.string.Allow.loose, 7i64, 3u64)):
+        return 3u6
+    ※ every width: what fits is read, what does not is out of range
+    let byte: std.string.Parsed(u8) ? ParseError = std.string.parse_int(⎕bytes("255"), ⌜u8⌝)
+    let over: std.string.Parsed(u8) ? ParseError = std.string.parse_int(⎕bytes("256"), ⌜u8⌝)
+    let minus: std.string.Parsed(u16) ? ParseError = std.string.parse_int(⎕bytes("-1"), ⌜u16⌝)
+    let nought: std.string.Parsed(u32) ? ParseError = std.string.parse_int(⎕bytes("-0"), ⌜u32⌝)
+    let small: std.string.Parsed(i8) ? ParseError = std.string.parse_int(⎕bytes("-128"), ⌜i8⌝)
+    let three: std.string.Parsed(u3) ? ParseError = std.string.parse_int(⎕bytes("8"), ⌜u3⌝)
+    let top: std.string.Parsed(u64) ? ParseError = std.string.parse_int(⎕bytes("18446744073709551615"), ⌜u64⌝)
+    let past: std.string.Parsed(u64) ? ParseError = std.string.parse_int(⎕bytes("18446744073709551616"), ⌜u64⌝)
+    if ((byte ?? std.string.Parsed(.value ← 0u8, .end ← 0)).value ≠ 255u8
+            ∨ (over ?? std.string.Parsed(.value ← 7u8, .end ← 0)).value ≠ 7u8
+            ∨ (minus ?? std.string.Parsed(.value ← 7u16, .end ← 0)).value ≠ 7u16
+            ∨ (nought ?? std.string.Parsed(.value ← 7u32, .end ← 0)).value ≠ 0u32
+            ∨ (small ?? std.string.Parsed(.value ← 0i8, .end ← 0)).value ≠ ⁻128i8
+            ∨ (three ?? std.string.Parsed(.value ← 1u3, .end ← 0)).value ≠ 1u3
+            ∨ (top ?? std.string.Parsed(.value ← 0u64, .end ← 0)).value ≠ 18446744073709551615u64
+            ∨ (past ?? std.string.Parsed(.value ← 1u64, .end ← 0)).value ≠ 1u64):
+        return 4u6
+    ※ other bases, the letters in either case
+    let hexadecimal: std.string.Parsed(u16) ? ParseError = std.string.parse_int(⎕bytes("00e9\""), ⌜u16⌝, .base ← 16u8)
+    let thirty_six: std.string.Parsed(u64) ? ParseError = std.string.parse_int(⎕bytes("Zz"), ⌜u64⌝, .base ← 36u8)
+    let binary: std.string.Parsed(u8) ? ParseError = std.string.parse_int(⎕bytes("1012"), ⌜u8⌝, .base ← 2u8)
+    let hex_value: std.string.Parsed(u16) = hexadecimal ?? std.string.Parsed(.value ← 0u16, .end ← 0)
+    let two_value: std.string.Parsed(u8) = binary ?? std.string.Parsed(.value ← 0u8, .end ← 0)
+    if (hex_value.value ≠ 0xE9u16 ∨ hex_value.end ≠ 4
+            ∨ (thirty_six ?? std.string.Parsed(.value ← 0u64, .end ← 0)).value ≠ 1295u64
+            ∨ two_value.value ≠ 5u8 ∨ two_value.end ≠ 3):
+        return 5u6
+    ※ written: every width, the smallest of them, other bases, at least so many digits
+    if (written(0u8, 10u8, 1u8, false) ≠ "0" ∨ written(⁻128i8, 10u8, 1u8, false) ≠ "-128"
+            ∨ written(18446744073709551615u64, 10u8, 1u8, false) ≠ "18446744073709551615"
+            ∨ written(⁻9223372036854775808i64, 10u8, 1u8, false) ≠ "-9223372036854775808"
+            ∨ written(1234567u32, 10u8, 1u8, false) ≠ "1234567"
+            ∨ written(255u8, 16u8, 1u8, false) ≠ "ff" ∨ written(255u8, 16u8, 4u8, true) ≠ "00FF"
+            ∨ written(⁻5i16, 2u8, 8u8, false) ≠ "-00000101" ∨ written(1295u64, 36u8, 1u8, true) ≠ "ZZ"
+            ∨ written(42u64, 10u8, 6u8, false) ≠ "000042" ∨ written(7u3, 10u8, 1u8, false) ≠ "7"):
+        return 6u6
+    ※ and back: every u64 a xorshift gives, and its negation as an i64 where it has one
+    let state: mut u64 = 88172645463325252u64
+    let n: mut u64 = 0u64
+    while n < 5000u64:
+        state ← state ^ (state » 12u64)
+        state ← state ^ (state « 25u64)
+        state ← state ^ (state » 27u64)
+        let r: u64 = ⎕wrap(state × 2685821657736338717u64) » (n % 64u64 ?? 0u64)
+        let text: [u8] = std.string.format_int(r, [])
+        let count: u64 ¤idx = #text
+        match std.string.parse_int(text, ⌜u64⌝):
+            std.string.Parsed(u64)(back):
+                if back.value ≠ r ∨ back.end ≠ count:
+                    return 7u6
+            ⊥:
+                return 8u6
+        let negative: i64 = 0i64 - (⎕narrow(r » 1u64, ⌜i64⌝) ?? 0i64)
+        let minus_text: [u8] = std.string.format_int(negative, [], .base ← 16u8)
+        match std.string.parse_int(minus_text, ⌜i64⌝, .base ← 16u8):
+            std.string.Parsed(i64)(back):
+                if back.value ≠ negative:
+                    return 9u6
+            ⊥:
+                return 10u6
+        n ← n + 1u64
+    0u6

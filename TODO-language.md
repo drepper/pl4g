@@ -1349,3 +1349,22 @@ Runtime
 
 [ ] whether text inside a container is quoted by `⍕`.  It is not, as a string field of a record is not (2026-10-22); Python's
     `str` of a list and Rust's `Debug` quote it, and a JSON module's tests may want `⍕` to read back as a program.
+
+[?] name an error type through a module in a result.  `u64 ? std.string.ParseError` does not parse: what follows the mark is one
+    name, looked up through the answer's module, so a result whose answer is the language's own type cannot carry another
+    module's error.  Question: a path after the mark, as a type is written anywhere else; or leave it, a module's error being
+    carried by a type of that module -- which is what `std.string.Parsed(f64) ? ParseError` does.
+
+[?] compare a count with an index.  `unit ¤size → ¤idx` lets a count stand where an index is wanted, and an operator wants one type
+    on both sides, so `p.end ≠ #text` is refused and `let n: u64 ¤idx = #text` is the way to write it.  Question: whether a
+    comparison or a sum takes the unit one side may stand for -- the way `+` of a literal takes the other side's type -- or stays as
+    it is, the crossing being written where it happens.
+
+[ ] the text of a floating-point number in `std.text` and `⍕`.  `std.string.format_f64` writes the shortest digits as bytes in
+    JSON's form; what `⍕` of an `f64` should write -- this language's literal, `1.5f64` or `1.5`, with the raised minus -- is the
+    same digits in another layout, waiting on a decision about the suffix.
+
+[ ] a one-line `if` continued by an `elif` on the next line.  `if a: x` followed by `elif b: y` is accepted by the grammar and
+    refused by the compiler ("expected an expression, found 'elif'"), which `tests/compiler/test_grammar.py` says of any program
+    that has it.  One of the two is wrong.
+

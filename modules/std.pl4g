@@ -22,6 +22,11 @@ let fs := ⎕import("fs")
 @[export]
 let io := ⎕import("io")
 
+※※ Numbers read out of bytes and written onto them, and characters as UTF-8:
+※※ `std.string`.
+@[export]
+let string := ⎕import("string")
+
 
 ※※ The devices a program starts with open.
 ※※

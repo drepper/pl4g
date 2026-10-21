@@ -1,0 +1,15 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 7000 LANG_COMPTIME_CANNOT
+
+※ The same module as image-worked-out-when-named, and this program names
+※ `never`, which reads the table that cannot be worked out.  Named, it is worked
+※ out -- and what the compiler cannot do there it says, as it would have said it
+※ of the table in the program's own file: what moved is when it is asked, and
+※ nothing about what it answers.
+
+let std := ⎕import("std")
+let tables := ⎕import("tables")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if tables.never(): 0u6 else: 1u6

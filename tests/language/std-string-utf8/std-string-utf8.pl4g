@@ -1,0 +1,85 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A character a time, as a decoder of JSON's strings and an encoder of them want
+※ it: `std.string.format_char(c, into)` writes one as UTF-8 onto a list, one byte
+※ to four, and `std.string.decode_char(bytes)` reads the one sequence the bytes
+※ begin with, answering the character and how many bytes it took.  What is well
+※ formed is Unicode's Table 3-7, as `⎕text` reads it: no overlong form -- `C0 80`
+※ is not nought -- no surrogate, nothing above U+10FFFF, no continuation byte
+※ standing alone and no leading byte without all of its own.  `digit_value` is a
+※ digit of any base up to thirty-six, the four of a `\u` escape among them.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+
+※ Whether the bytes decode to `c`, taking `end` of them.
+fn decodes(bytes: u8⟦⟧, c: char, end: u64 ¤idx) → bool:
+    match std.string.decode_char(bytes):
+        std.string.Parsed(char)(p):
+            p.value = c ∧ p.end = end
+        ⊥:
+            false
+
+※ Whether the bytes are refused, as malformed.
+fn refused(bytes: u8⟦⟧) → bool:
+    match std.string.decode_char(bytes):
+        std.string.Parsed(char)(_):
+            false
+        ⊥(why):
+            why = std.string.ParseError.malformed
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ one character of each length, written and read back
+    let out: mut [u8] = []
+    out ← std.string.format_char('A', out)
+    out ← std.string.format_char('£', out)
+    out ← std.string.format_char('€', out)
+    out ← std.string.format_char('\U0001F600', out)
+    out ← std.string.format_char('\U0010FFFF', out)
+    if (⎕text(out) ?? "") ≠ "A£€\U0001F600\U0010FFFF" ∨ #out ≠ 14:
+        return 1u6
+    if (¬decodes(out, 'A', 1) ∨ ¬decodes(out⟦1…14⟧, '£', 2) ∨ ¬decodes(out⟦3…14⟧, '€', 3)
+            ∨ ¬decodes(out⟦6…14⟧, '\U0001F600', 4) ∨ ¬decodes(out⟦10…14⟧, '\U0010FFFF', 4)):
+        return 2u6
+    ※ the edges of each length
+    if (¬decodes(⟦0x7Fu8⟧, '\u007F', 1) ∨ ¬decodes(⟦0xC2u8, 0x80u8⟧, '\u0080', 2)
+            ∨ ¬decodes(⟦0xDFu8, 0xBFu8⟧, '\u07FF', 2) ∨ ¬decodes(⟦0xE0u8, 0xA0u8, 0x80u8⟧, '\u0800', 3)
+            ∨ ¬decodes(⟦0xEDu8, 0x9Fu8, 0xBFu8⟧, '\uD7FF', 3) ∨ ¬decodes(⟦0xEEu8, 0x80u8, 0x80u8⟧, '\uE000', 3)
+            ∨ ¬decodes(⟦0xF0u8, 0x90u8, 0x80u8, 0x80u8⟧, '\U00010000', 4)
+            ∨ ¬decodes(⟦0xF4u8, 0x8Fu8, 0xBFu8, 0xBFu8⟧, '\U0010FFFF', 4)):
+        return 3u6
+    ※ what Table 3-7 does not have
+    if (¬refused(⟦0x80u8⟧) ∨ ¬refused(⟦0xC0u8, 0x80u8⟧) ∨ ¬refused(⟦0xC1u8, 0xBFu8⟧)
+            ∨ ¬refused(⟦0xE0u8, 0x9Fu8, 0xBFu8⟧) ∨ ¬refused(⟦0xEDu8, 0xA0u8, 0x80u8⟧)
+            ∨ ¬refused(⟦0xF0u8, 0x8Fu8, 0xBFu8, 0xBFu8⟧) ∨ ¬refused(⟦0xF4u8, 0x90u8, 0x80u8, 0x80u8⟧)
+            ∨ ¬refused(⟦0xF5u8, 0x80u8, 0x80u8, 0x80u8⟧) ∨ ¬refused(⟦0xFFu8⟧)
+            ∨ ¬refused(⟦0xE2u8, 0x82u8⟧) ∨ ¬refused(⟦0xE2u8, 0x82u8, 0x41u8⟧) ∨ ¬refused(⟦0xC3u8, 0xC3u8⟧)):
+        return 4u6
+    match std.string.decode_char(⎕bytes("")):
+        std.string.Parsed(char)(_):
+            return 5u6
+        ⊥(why):
+            if why ≠ std.string.ParseError.absent:
+                return 6u6
+    ※ every code point there is, written and read back -- the surrogates being
+    ※ none, and stepped over
+    let n: mut u32 = 0u32
+    while n ≤ 0x10FFFFu32:
+        if n = 0xD800u32:
+            n ← 0xE000u32
+        let c: char = ⎕chr(n)
+        let one: [u8] = std.string.format_char(c, [])
+        let count: u64 ¤idx = #one
+        if ¬decodes(one, c, count):
+            return 7u6
+        n ← n + (if n < 0x10000u32: 1u32 else: 37u32)
+    ※ digits
+    if ((std.string.digit_value(48u8) ?? 99u8) ≠ 0u8 ∨ (std.string.digit_value(57u8) ?? 99u8) ≠ 9u8
+            ∨ (std.string.digit_value(97u8) ?? 99u8) ≠ 10u8 ∨ (std.string.digit_value(70u8) ?? 99u8) ≠ 15u8
+            ∨ (std.string.digit_value(122u8) ?? 99u8) ≠ 35u8 ∨ (std.string.digit_value(90u8) ?? 99u8) ≠ 35u8
+            ∨ (std.string.digit_value(47u8) ?? 99u8) ≠ 99u8 ∨ (std.string.digit_value(58u8) ?? 99u8) ≠ 99u8
+            ∨ (std.string.digit_value(64u8) ?? 99u8) ≠ 99u8 ∨ (std.string.digit_value(123u8) ?? 99u8) ≠ 99u8):
+        return 8u6
+    0u6

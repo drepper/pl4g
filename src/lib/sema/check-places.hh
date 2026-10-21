@@ -190,7 +190,7 @@
     std::vector<ir::Value*> owned_arguments(ir::Builder& builder, const ast::Call* expr, ir::Function* func, std::span<ir::Value* const> args);  // check.py:16556
     // Whether `written`, handed to a parameter that is taken as the callee's own, may be handed over as it
     // is rather than copied: `std::move`.
-    bool movable(const ast::Expr* written);  // check.py:16578
+    bool movable(const ast::Expr* written, ir::Function* current);  // check.py:16578
     // Whether `written` is a parameter `func` takes as its own.
     bool owned_parameter(const ast::Expr* written, ir::Function* func);  // check.py:16600
     // `value` as it is where its allocator is `⎕heap`, and a copy in the heap where it is anything else --

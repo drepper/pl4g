@@ -254,8 +254,9 @@ which a test checks, so the log has nothing to leave out of them but what cannot
 #### The `std` module
 
 One module the installation provides, holding what a program is started with and the devices it is started with open, and
-handing on two more: `std.io`, which holds the devices themselves and the ring every request to them goes through, and `std.fs`,
-which holds files, directories and the `State` a program does its I/O with.  `fs` imports `io`, since what it opens are devices:
+handing on three more: `std.io`, which holds the devices themselves and the ring every request to them goes through, `std.fs`,
+which holds files, directories and the `State` a program does its I/O with, and `std.string`, which reads numbers out of bytes and
+writes them onto lists of bytes (below).  `fs` imports `io`, since what it opens are devices:
 
 ```
 let std := ⎕import("std")
@@ -296,6 +297,19 @@ fn run(s: &mut fs.State) → u64
 fn as_error(n: i32) → Error
 fn error_name(code: i32) → str       ※ "not_found" for 2; "other" for one Error does not name
 fn error_name_of(e: Error) → str
+
+※ std.string: numbers out of bytes and onto lists of them, characters as UTF-8
+type Parsed(T')  = value : T' ; end : u64 ¤idx           ※ what was read, and where what follows begins
+enum ParseError  ※ absent, malformed, out_of_range
+enum Allow       ※ flags: json (none), plus, special, hex, underscores, loose
+
+fn parse_f64(bytes: u8⟦⟧, allow: Allow ← Allow.json) → Parsed(f64) ? ParseError
+fn parse_int(bytes: u8⟦⟧, kind: ⌜T'⌝, base: u8 ← 10u8, allow: Allow ← Allow.json) → Parsed(T') ? ParseError
+fn format_f64(x: f64, into: mut [u8]) → [u8]
+fn format_int(n: T', into: mut [u8], base: u8 ← 10u8, digits: u8 ← 1u8, upper: bool ← false) → [u8]
+fn format_char(c: char, into: mut [u8]) → [u8]
+fn decode_char(bytes: u8⟦⟧) → Parsed(char) ? ParseError
+fn digit_value(c: u8) → u8?
 ```
 
 **Every device carries where the ring is.**  The ring is a field of `init.fs`, which is in the image, so where it is does not
@@ -503,8 +517,9 @@ nil "~8,'0D" x)` and `~16R` are directives with parameters.  **APL**'s dyadic `�
 left.  Here it is a call with named arguments, which a reader who knows calls already reads, and which a generator emits without a
 second grammar to emit it in.
 
-What is not there yet: a floating-point number, whose shortest text that reads back as the same number is an algorithm of its own
--- and with it a precision, which means nothing for a whole number; and an enumeration, whose names do not reach run time.
+What is not there yet: a floating-point number -- whose shortest text that reads back as the same number is what
+`std.string.format_f64` writes, as bytes and in JSON's form rather than in this language's -- and with it a precision, which means
+nothing for a whole number; and an enumeration, whose names do not reach run time.
 
 **`format`, `print` and `println` take a template**, and they are macros:
 
@@ -612,6 +627,81 @@ types and two calls; `Ring` is its own and is not exported.
 Compare **Rust**, whose `std::io::stdout` is taken by a call and guarded by a lock, a run-time check where a static one is
 available; **Go**, whose `os.Stdout` is a package variable anything may write to; **Zig**, which passes a writer explicitly as this
 does; **C**, where the three are integers anyone may write to at any time, which is the thing being designed away.
+
+#### `std.string`
+
+**Numbers are read out of bytes and written onto lists of bytes**, in the language and not in the runtime: what a parser is handed
+is what came off a device, bytes until something has checked them, and what a writer makes goes to one.  A `str` is read by
+`⎕bytes` of it, and what is written becomes one by `⎕text`.
+
+```
+let p: std.string.Parsed(f64) ? ParseError = std.string.parse_f64(input⟦at…n⟧)
+at ← at + (p?).end                                      ※ read in place: how many bytes the number took
+let k: std.string.Parsed(u16) ? ParseError = std.string.parse_int(hex, ⌜u16⌝, .base ← 16u8)
+out ← std.string.format_f64(x, out)                    ※ the list goes in and comes back out, grown
+out ← std.string.format_int(c, out, .base ← 16u8, .digits ← 4u8)
+```
+
+**What is read answers where the bytes after it begin.**  `Parsed(T')` holds the value and `end`, the place of the first byte not
+part of the number, which is how many bytes it took: a decoder reading a run of things in place goes on from there without having
+had to find where the number stops, and what stopped it is the caller's to look at -- `1.5]` is one and a half and three bytes.
+`end` is an index, `¤idx`, being what a caller adds to the place it read from.  **Why nothing was read is a `ParseError`**:
+`absent`, nothing a number begins with is there; `malformed`, one was begun and broken off -- a sign alone, a point or an `e` with
+no digits after it, a nought in front of another digit; `out_of_range`, it is well written and the type has no value for it.
+
+**The grammar is JSON's, RFC 8259's, and nothing looser** unless `Allow` says so: flags combined with `|`, `json` being none of
+them -- `plus`, a `+` where a `-` may stand; `special`, `inf`, `infinity` and `nan` in either case; `hex`, `0x` and hexadecimal
+digits, and for `parse_f64` C's whole hexadecimal form with a point and a `p` exponent; `underscores`, a `_` between two digits;
+`loose`, noughts in front, a point with digits on one side only, and an `e` with nothing after it left unread rather than refused.
+`0x` with no digit after it is a nought and something else, as C reads it.
+
+**`parse_f64` answers the `f64` nearest the decimal number, a tie to the even one, whatever the number.**  Every digit counts,
+however many: a number written as the exact half way point between two `f64` -- 767 digits at the most -- and one a digit past it
+round apart, as they must.  Too small for any but nought is nought, with its sign; too large for any is `out_of_range`, an
+infinity being no number this language computes with, and `special` the one way to read one.  The algorithms are the ones the
+fastest C and C++ libraries use: Clinger's for a significand below 2⁵³ and a power of ten up to 10²², Eisel and Lemire's for every
+other with nineteen digits or fewer, and for more, where the nineteen and one more round apart, an exact comparison of the number
+with the half way point as two big integers.
+
+**`parse_int(bytes, ⌜T⌝)` reads a whole number of any whole-number type**, the type handed as `Dir.open` hands it, in any base
+from two to thirty-six (a condition of the signature): what does not fit the type is `out_of_range`, a minus in front of an
+unsigned type among it unless what follows is nought.  In base ten, JSON's rule about a nought in front holds unless `loose` lifts
+it.  One body reads every type, gathering the magnitude in a `u64` and narrowing once.
+
+**`format_f64(x, into)` writes the shortest text that reads back as the same `f64`**, and of several as short the nearest, in the
+form JavaScript's `Number.prototype.toString` writes, which is what `JSON.stringify` writes.  With the digits d₁…dₖ and the number
+d₁.d₂…dₖ × 10ⁿ⁻¹: `k ≤ n ≤ 21`, the digits and `n - k` noughts; `0 < n ≤ 21`, a point after the first `n`; `-6 < n ≤ 0`, `0.`,
+`-n` noughts and the digits; and otherwise one digit, a point and the rest where there are more, `e`, a sign and `n - 1` --
+`100`, `1.5`, `0.000001`, `1e+21`, `1.5e-7`.  A negative number has `-` in front, the hyphen-minus every data format writes and not
+the raised minus of this language's literals.  **Nought with its sign is `-0`**, where JavaScript writes `0`: what is written here
+reads back as the number it came from.  A number that is not finite, which JSON cannot write, is `Infinity`, `-Infinity` or `NaN`,
+which `special` reads back.  The digits are Giulietti's Schubfach.
+
+**`format_int(n, into)` writes a whole number of any type**, in any base, the digits past nine small letters or with `upper`
+capitals, at least `digits` of them with noughts in front: four hexadecimal digits of a `\u` escape are `.base ← 16u8, .digits ←
+4u8`.  **`format_char` writes a character as UTF-8 and `decode_char` reads one** -- the sequence the bytes begin with, well formed
+as `⎕text` asks (Table 3-7), and how many bytes it took.  **`digit_value`** is a digit's value in any base up to thirty-six, or
+nothing.
+
+**A list written onto is handed in and handed back**: `out ← format_f64(x, out)` moves the room into the call and out again,
+copying nothing, as `v ← pushed(v, x)` does (Lists, above) -- through any number of calls between, each handing it on.  A
+`&mut [u8]` would say the same and make every writer impure, the list being somebody else's; a value handed in and back is the
+writer's own while it writes, and the writer stays pure.
+
+**The tables are data in the image**: 651 powers of five as 128 bits each for Eisel and Lemire, 617 powers of ten for Schubfach,
+and a few small ones -- each the answer of a function of the module, laid out by the compiler the first time something names it
+(What is in the image, below), so a program that reads and writes no number has the compiler read none of it.
+
+Compare: **C**'s `strtod`, correctly rounded in glibc, reading the locale's point, and `printf("%.17g")`, which is not the
+shortest; **C++17**'s `std::from_chars` and `std::to_chars`, the pair this module is, answering where reading stopped and writing
+the shortest; **Rust**'s `str::parse::<f64>`, Eisel and Lemire's since 1.55, and its `Display`, the shortest by Grisu with a
+fallback; **Go**'s `strconv.ParseFloat`, Eisel and Lemire's too, and `FormatFloat(x, 'g', -1, 64)`, Ryu's; **Zig**'s
+`std.fmt.parseFloat` and its Ryu formatting; **Java**'s `Double.toString`, Schubfach since JDK 19, written by Giulietti for it;
+**Python**'s `float` and `repr`, David Gay's correctly rounded algorithms; **JavaScript**, whose `Number.prototype.toString` is the
+form written here; **D**'s `std.conv.to` and **Odin**'s `strconv`; **Haskell**'s `read` and `show`, which round-trip by Steele and
+White's method; **APL**'s `⍎` and `⍕`, **BQN**'s `•ParseFloat` and `•Repr`, **Uiua**'s `parse`, and **Wolfram**'s `ToExpression`
+and `ToString`, which read and write their own notations rather than JSON's.  What is unusual here is only that the whole of it is
+in the language itself, its tables included.
 
 ### Expressions
 
@@ -2788,7 +2878,9 @@ whatever file names it.
 
 **In a pattern, one name in parentheses after a type is the name the value is bound to**, as it always was: `u8(v)`.  A type with
 type parameters is written with its own before that -- `Maybe(u8)(inner)` -- and one with neither binding nor anything after it
-would read its single type as a binding, so it takes `(_)`.
+would read its single type as a binding, so it takes `(_)` -- which binds nothing, and nothing is said of it not being read.
+**A result of one is written with its types before the mark**, `Read(f64) ? Why`, and they are the answer's: the error is a
+name of its own, a type of the answer's module or one the language has, which takes none.
 
 Compare Haskell's `data Pair a = Pair a a`, Rust's `struct Pair<T>` with `where` bounds, C++ class templates with `requires`
 clauses, Go's `type Pair[T any] struct`, and Zig, where a function returning a type is how a type takes parameters.  The
@@ -2840,6 +2932,11 @@ let at: u64 ¤idx = 2
 v⟦at⟧                                ※ which one
 v⟦#v - 1⟧                             ※ a count, where `unit ¤size → ¤idx` says it may stand
 ```
+
+**A name defined with one unit and given a number of another that may stand there is of the type it was written with**:
+`let n: u64 ¤idx = #v` is an index, and a comparison of it with another index compares two of one type.  The bits are the same
+bits, so the crossing is a cast of nothing.  **What may stand where is the file's**: a generic function made for another file reads
+its own file's `unit … → …`, as it reads its own file's names (Generic Functions).
 
 **Any other unit is introduced before it is used** (4539), which is what keeps a unit mistyped in one place from quietly becoming
 a unit of its own -- the one mistake a language with no such rule cannot tell from a new kind of quantity.  Three forms:
@@ -4427,6 +4524,13 @@ nothing of the callee, the value's code copies.  Compare **C++**, where `v = f(s
 still be read; **Rust**, where `v = f(v)` moves and reading the old `v` is refused; **Swift**, whose copy-on-write would copy here
 if a second reference were alive, and does not when none is.
 
+**A body handing such a parameter on is its owner as much as one changing it in place.**  `into ← f(x, into)`, or answering
+`f(x, into)` outright, takes the room the call answers back -- so the body takes the parameter as its own, its caller hands the room
+over to it as above, and it hands the room on, the parameter not being read again.  A list is then built through any number of
+calls between the one that made it and the one that grows it, `std.string`'s writers among them, and nothing on the way copies
+it.  A parameter joined onto in place is a place of the body's own and is handed on all the same; one a reference is taken of, a
+lambda brings in by reference or a cursor walks is reached a second way, and is copied.
+
 ```
 let l: mut [u8] = [1u8, 2u8, 3u8]
 let m: [u8] = l                       ※ l is used below: m gets a copy
@@ -4683,8 +4787,9 @@ while running.  A table made out of one -- a union, say -- comes out of `⎕heap
 the same one.
 
 **A call in the initializer is run while compiling.**  `let names: ⸨Colour: str⸩ = named() in ⎕static` calls a pure function of the
-program before the program runs, and what it answers is laid out as the literal it comes to would be -- a set, a dictionary, a list
-or text, of numbers, truth values, characters, text and values of enumerations.  The function may build what it answers the way any
+program before the program runs, and what it answers is laid out as the literal it comes to would be -- a set, a dictionary, a list,
+an array of one dimension whose type says its length, or text, of numbers, truth values, characters, text and values of
+enumerations.  The function may build what it answers the way any
 does: from a table written empty, entries put in one at a time, `comptime foreach` over `⎕fields(⌜E⌝)`, loops, set operators.  So a
 table of an enumeration's names is read off the enumeration rather than written out beside it.  The function is not in the
 program for that: nothing of it runs while the program does.  A function marked `@[impure]` or `@[io]` is refused (4665), as is a
@@ -4699,6 +4804,13 @@ fn named() → ⸨Colour: str⸩:
 
 let names: ⸨Colour: str⸩ = named() in ⎕static
 ```
+
+**In a module a program imports, the call is run when something names the variable**, as a function there is lowered when
+something names it.  What it comes to is the same whenever it is worked out -- a pure call of constants -- and what moves is when the
+compiler spends the time, and whether: a library holding a table of thousands of numbers in a function's body costs a program that
+never reads it nothing, the body being set aside unread and the call never made.  `std.string`'s tables are held so, and every
+program reaches `std.string` through `std`.  What cannot be worked out is said where something names it, then (7000); a program's
+own file is worked out whole, as its functions are lowered whole.
 
 Compare **Zig**, whose `std.StaticStringMap.initComptime` builds a lookup table from a list worked out by comptime code; **D**, whose
 compile-time function evaluation builds the value of a `static immutable` associative array; **C++**'s `constexpr` functions, which
@@ -8490,7 +8602,8 @@ t.text(1234u64)
 ```
 
 **An instance made for an importing file is checked where the function was written**, not where it was called: its body names
-what its own file can see, and a name the calling file happens to have of the same spelling does not change what the body means.
+what its own file can see -- the units and what may stand for what among them -- and a name the calling file happens to have of
+the same spelling does not change what the body means.
 That is the rule a bundle's lines already follow and it is the same reason -- substituting *into* a definition is not
 substituting the definition into the place that used it.  The arguments are the calling file's expressions and are lowered
 there, which is the line between the two.

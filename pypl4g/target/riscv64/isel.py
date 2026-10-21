@@ -271,6 +271,14 @@ class RVSelector(InstructionSelector):
             if src.reg is dst:
                 return ()
             return (self._inst("fsgnj.d", (MCReg(dst), src, src), span),)
+        if isinstance(src, MCImm):
+            # A number written out, which is the nought standing for the answer
+            # of an error that nothing reads.  Nothing puts one straight into a
+            # floating-point register, so it goes into an ordinary one and its
+            # bits are moved across.
+            carried = INFO.new_virtual(GPR, 64)
+            return (*self.select_move(carried, MCImm(src.value, 64, signed=False), span),
+                    *self.select_move_bits(dst, MCReg(carried, bits=64), 64, span))
         raise UnsupportedOperation(
             "putting that kind of operand in a floating-point register", span)
 

@@ -169,6 +169,10 @@ class _Local:
     #: A parameter arrives with a value the caller chose, so not reading it says
     #: nothing about this function.
     is_parameter: bool = False
+    #: Whether the name is a parameter's, whatever it has been given since:
+    #: `is_parameter` is about the value and goes when the body gives it another,
+    #: and this is about the name, which a list taken as the body's own keeps.
+    named_parameter: bool = False
     #: What the definition said it raises, kept in force for as long as the
     #: variable exists, since not every such diagnostic is raised while the
     #: definition itself is being read.
@@ -507,6 +511,38 @@ def _addressed_in(node: object, into: set[str]) -> None:
     elif isinstance(node, (list, tuple)):
         for one in node:
             _addressed_in(one, into)
+
+
+def _referenced(node: object, name: str) -> bool:
+    """Whether anything below *node* may reach the variable *name* other than by
+    its name: `&` in front of it, a lambda bringing it in by reference, a walk
+    over it with a cursor.
+
+    The places `_addressed_in` gives storage to for a join, an element written
+    or one taken out are the variable's own and reach nothing; these are what
+    make a second way to it, so a list named by one of them may not be handed
+    over to a call as though nothing else could see it."""
+    if isinstance(node, ast.AddressOf) and isinstance(node.operand, ast.NameRef) \
+            and node.operand.name == name:
+        return True
+    if isinstance(node, ast.Call) and isinstance(node.callee, ast.NameRef) \
+            and node.callee.name == ITER_NAME and len(node.args) == 1 \
+            and isinstance(node.args[0], ast.NameRef) and node.args[0].name == name:
+        return True
+    if isinstance(node, ast.Capture) and node.by_reference and node.name == name:
+        return True
+    if isinstance(node, ast.Lambda) \
+            and node.brings_in is ast.CaptureAll.BY_REFERENCE:
+        written: list[str] = []
+        _named_in(node.body, written)
+        if name in written:
+            return True
+    if isinstance(node, ast.Node):
+        return any(_referenced(getattr(node, one.name), name)
+                   for one in fields_of(node))
+    if isinstance(node, (list, tuple)):
+        return any(_referenced(one, name) for one in node)
+    return False
 
 
 def _read_through(node: object, into: set[int]) -> None:
@@ -848,6 +884,10 @@ class _Generic:
     #: tables still being filled when the definition is collected.
     scope: dict[str, object] | None = None
     siblings: dict[str, "_Bundle"] | None = None
+    #: And the units it could name and the ones it said may stand for others --
+    #: `unit ¤size → ¤idx` -- which are the file's too.
+    stands: list[tuple[Unit, Unit]] | None = None
+    units: dict[str, Unit] | None = None
     #: What has been made of it so far, by what the types turned out to be.
     made: dict[tuple[Type, ...], Function] = field(default_factory=dict)
     #: Whether it is being made just now, so that a function that calls itself
@@ -3210,12 +3250,52 @@ def _shape_written(expr: ast.ArrayLit) -> tuple[int, ...] | None:
 
 def _takes_owned(node: ast.FuncDef, params: Sequence[Type]) -> tuple[int, ...]:
     """Which parameters of a definition its body takes as its own: `mut` ones
-    holding a list that the body changes in place."""
+    holding a list that the body changes in place, or hands on to a call whose
+    answer it takes back."""
     if node.body is None:
         return ()
     return tuple(at for at, (param, ty) in enumerate(zip(node.params, params))
                  if param.mutable and _holds_a_list(ty) and owned.can_own(ty)
-                 and _changed_in_place(param.name, node.body))
+                 and (_changed_in_place(param.name, node.body)
+                      or _threaded(param.name, node.body)))
+
+
+def _threaded(name: str, body: ast.Block) -> bool:
+    """Whether *body* hands the list *name* holds to a call and takes back what
+    the call answers -- `l ← f(x, l)` -- or answers with what it answers.
+
+    That is how a list is built through calls, each taking the room in and
+    handing it out again: a body that does it is the room's owner as much as one
+    joining onto it itself, so that its caller may hand the room over to it and
+    it may hand the room on, rather than every call on the way copying it."""
+    def through(expr: object) -> bool:
+        return isinstance(expr, ast.Call) and any(
+            isinstance(one.value if isinstance(one, ast.Named) else one, ast.NameRef)
+            and (one.value if isinstance(one, ast.Named) else one).name == name
+            for one in expr.args)
+
+    found = False
+
+    def visit(one: object) -> None:
+        nonlocal found
+        if found:
+            return
+        match one:
+            case ast.AssignStmt() if one.name == name and not one.more \
+                    and through(one.value):
+                found = True
+            case ast.ReturnStmt() if through(one.value):
+                found = True
+        if isinstance(one, ast.Node):
+            for field_ in fields_of(one):
+                visit(getattr(one, field_.name))
+        elif isinstance(one, (tuple, list)):
+            for item in one:
+                visit(item)
+
+    visit(body)
+    return found or bool(body.stmts) and isinstance(body.stmts[-1], ast.ExprStmt) \
+        and through(body.stmts[-1].value)
 
 
 def _mentions(node: object, name: str) -> int:
@@ -3975,6 +4055,14 @@ class Checker:
         #: they are written.
         self._waiting: list[_Collected] = []
         self._waiting_generics: list[_Generic] = []
+        #: And the variables in the image whose value is a call nothing has named
+        #: yet, by name: what each is and what it is defined as, worked out where
+        #: a name for it is asked for, as a body is lowered.
+        self._waiting_images: dict[str, tuple[GlobalVar, ast.VarDef, Type]] = {}
+        #: Whether the variables are worked out where they are defined, which is
+        #: where everything here is lowered: a program's own file, every file of
+        #: the test that checks `std` whole, what the macros and an editor read.
+        self._images_now = True
         #: What a condition written in a signature does in this build, which is
         #: the command line's to say and nothing the program can change.
         self._conditions = conditions
@@ -4488,6 +4576,8 @@ class Checker:
                 one for one in unit.items if not only_for_macros(one)))
                 for unit in units]
         self._units = units
+        self._images_now = whole_program or self._whole_modules or self._for_macros \
+            or self._notes is not None
         for unit in units:
             self._mark_system(unit)
         self._definitions = {item.name: item for unit in units
@@ -4632,6 +4722,8 @@ class Checker:
                     grew = True
             if not grew:
                 break
+        for name in [one for one in self._waiting_images if one in names]:
+            self._image_now(name)
         if not chosen and not generics:
             for name in self._exported_imports:
                 held = self._top.get(name)
@@ -4643,6 +4735,16 @@ class Checker:
             self._lower_function(entry)
         for one in generics:
             self._check_generic(one)
+
+    def _image_now(self, name: str) -> None:
+        """Work out the variable *name* in the image whose value is a call, where
+        it was left until something named it."""
+        var, node, ty = self._waiting_images.pop(name)
+        outer, self._for_the_image = self._for_the_image, True
+        try:
+            var.initializer = self._constant_value(node, ty)
+        finally:
+            self._for_the_image = outer
 
     def _module_at(self, expr: ast.Expr) -> LoadedModule | None:
         """The module a path names, or nothing: `m`, or `m.inner` where `m`
@@ -4866,10 +4968,17 @@ class Checker:
             # grow from, and no constructor runs for it.
             unbuilt = ty is not None and _is_a_table(ty) and not static \
                 and _empty_in_the_heap(node.value)
+            # A call laid out in the image, in a module lowered as far as it is
+            # named, is worked out where something names it: a table a library
+            # holds is not made for a program that never reads it.
+            later = static and not self._images_now and not pairs \
+                and ty is not None and ty is not ERROR \
+                and isinstance(node.value, ast.Allocated) \
+                and isinstance(node.value.value, ast.Call)
             outer, self._for_the_image = self._for_the_image, static
             try:
                 initializer = (self._empty_table_constant(ty) if unbuilt
-                               else None if ty is None
+                               else None if ty is None or later
                                or (_is_a_table(ty) and not static)
                                else self._constant_value(node, ty))
             finally:
@@ -4915,6 +5024,8 @@ class Checker:
                                        expected_pairs=list(pairs)))
         if _is_a_table(ty) and not static and initializer is None:
             self._built_globals.append((var, node))
+        if later and ty is not ERROR:
+            self._waiting_images[node.name] = (var, node, ty)
 
     def _mark_system(self, unit: ast.SourceUnit) -> None:
         """Bind what was said of the file itself, and note a system file.
@@ -5747,7 +5858,8 @@ class Checker:
                 self._diags.emit(D.LANG_SPREAD_NOT_HERE, node.value.span)
                 return None
             case ast.Call() if self._for_the_image \
-                    and isinstance(ty, (SetType, DictType, ListType, StrType)) \
+                    and (isinstance(ty, (SetType, DictType, ListType, StrType))
+                         or isinstance(ty, ArrayType) and ty.fixed and len(ty.shape) == 1) \
                     and isinstance(node.value.callee, ast.NameRef) \
                     and self._find_local(node.value.callee.name) is None:
                 literal = self._worked_out_for_the_image(node.value, ty)
@@ -5855,8 +5967,9 @@ class Checker:
         image, and answer that as the literal it would have been written as.
 
         The function is the program's own and pure, its arguments known while
-        compiling; what it answers is a set, a dictionary, a list or text made of
-        numbers, truth values, characters, text and values of enumerations.  What
+        compiling; what it answers is a set, a dictionary, a list, an array of one
+        dimension whose type says its length, or text, made of numbers, truth
+        values, characters, text and values of enumerations.  What
         cannot be worked out is said (4635, 4636), as for any constant.
         """
         assert isinstance(call.callee, ast.NameRef)
@@ -5901,6 +6014,8 @@ class Checker:
                 return ast.BoolLit(span=span, value=value)
             case int():
                 return ast.IntLit(span=span, value=value)
+            case float():
+                return ast.FloatLit(span=span, value=value)
             case str():
                 return ast.StringLit(span=span, value=value)
             case EnumConst():
@@ -5924,6 +6039,10 @@ class Checker:
                 elements = [self._as_literal(one, span) for one in value]
                 if any(one is None for one in elements):
                     return None
+                if isinstance(ty, ArrayType):
+                    # An array the call made, laid out as one written down.
+                    return ast.ArrayLit(span=span, elements=tuple(
+                        one for one in elements if one is not None))
                 return ast.ListLit(span=span, elements=tuple(
                     one for one in elements if one is not None))
         return None
@@ -6489,7 +6608,11 @@ class Checker:
         an expectation written where a reader would write it -- on the
         definition -- covers a diagnostic only discovered later.
         """
-        if local.read or local.is_parameter or local.value.ty is ERROR:
+        if local.read or local.is_parameter or local.value.ty is ERROR \
+                or local.name == WILDCARD_NAME:
+            # `_` is what an arm writes where it binds nothing -- `Pair(u8)(_)`,
+            # whose parentheses would otherwise be read as the binding -- and
+            # nothing is there to read.
             return
         if local.placed and local.written:
             # What such a name stands for is a place, and the value bound to it
@@ -6566,7 +6689,7 @@ class Checker:
             scope[name] = _Local(name=name, value=value, span=span,
                                  mutable=mutable, placed=True, held=placed_as,
                                  value_span=value_span if value_span.is_valid
-                                 else span, is_parameter=is_parameter,
+                                 else span, is_parameter=is_parameter, named_parameter=is_parameter,
                                  depth=len(self._scopes))
             self._places[id(value)] = scope[name]
             self._lifetime_begins(scope[name], placed_as)
@@ -6615,7 +6738,7 @@ class Checker:
             value = place
         scope[name] = _Local(name=name, value=value, span=span, mutable=mutable,
                              value_span=value_span if value_span.is_valid else span,
-                             is_parameter=is_parameter, depth=len(self._scopes),
+                             is_parameter=is_parameter, named_parameter=is_parameter, depth=len(self._scopes),
                              placed=placed, held=held if placed else None)
         if placed:
             # Where the place is, so that a reference worked out from it can be
@@ -7904,6 +8027,7 @@ class Checker:
         made = _Generic(node=node, path=path, attrs=attrs, parameters=written,
                         exported=self._is_export(attrs),
                         scope=self._top, siblings=self._bundles,
+                        stands=self._stands, units=self._unit_scopes[0],
                         written_params=handed)
         if node.held is None:
             self._top[node.name] = made
@@ -9033,8 +9157,11 @@ class Checker:
         # answer is: the same lookup, and the same report where the name is not
         # one.  Through the answer's module, except a type the language has,
         # which no module defines: `std.fs.Pending ? i32` carries an `i32`.
+        # The answer's type arguments are the answer's: `Parsed(f64) ? Fault`
+        # carries a `Fault`, which takes none.
         carried = self._resolve_type(
             replace(ref, name=ref.error, result=False, error=None, unit=None,
+                    args=(),
                     module=None if ref.error in BUILTIN_TYPES else ref.module))
         if carried is ERROR:
             return ERROR
@@ -12562,6 +12689,9 @@ class Checker:
                     return None
                 found = self._top.get(expr.name)
                 if isinstance(found, GlobalVar):
+                    if expr.name in self._waiting_images:
+                        # A number read where it may be one the compiler knows.
+                        self._image_now(expr.name)
                     if found.mutable or not isinstance(found.initializer,
                                                        IntConst):
                         return None
@@ -14054,8 +14184,11 @@ class Checker:
         # expressions and were lowered with this file's names, which is the
         # division a bundle already makes.
         kept = (self._top, self._bundles)
+        kept_units = (self._stands, self._unit_scopes)
         if written.scope is not None and written.siblings is not None:
             self._top, self._bundles = written.scope, written.siblings
+        if written.stands is not None and written.units is not None:
+            self._stands, self._unit_scopes = written.stands, [written.units]
         try:
             try:
                 met = self._check_clauses(written.node.clauses, bound,
@@ -14085,6 +14218,7 @@ class Checker:
             func = self._instance_of(written, bound, expr.span)
         finally:
             self._top, self._bundles = kept
+            self._stands, self._unit_scopes = kept_units
         if func is None:
             return UndefConst(ERROR)
         return self._made_call(builder, expr, func, args, expected)
@@ -17096,7 +17230,7 @@ class Checker:
             if at >= len(given):
                 continue
             one = written.get(at)
-            if one is not None and self._movable(one):
+            if one is not None and self._movable(one, builder.function):
                 self._module.reports.record(
                     ReportKind.COPY_INTO_ALLOCATOR, func.name,
                     "".join(("'", _written_as(one), "' is handed to '", func.name,
@@ -17106,23 +17240,30 @@ class Checker:
             given[at] = self._copy_into_heap(builder, given[at], expr.span)
         return given
 
-    def _movable(self, written: ast.Expr) -> bool:
+    def _movable(self, written: ast.Expr, current: Function) -> bool:
         """Whether *written*, handed to a parameter that is taken as the callee's
         own, may be handed over as it is rather than copied: `std::move`.
 
         It may where it is a variable of this function that owns its room -- a
-        `mut` one, not a parameter, its address never taken -- named nowhere
-        else in the statement, and not read again: not used after it, or given
-        something new by it, as `v ← f(v, x)` gives `v` what the call answers.
+        `mut` one, not a parameter unless *current*, the function being lowered,
+        takes it as its own, its address never taken -- named nowhere else in
+        the statement, and not read again: not used after it, or given something
+        new by it, as `v ← f(v, x)` gives `v` what the call answers.
         """
         if not isinstance(written, ast.NameRef):
             return False
         local = self._find_local(written.name)
         stmt = self._current_stmt
-        if local is None or local.is_parameter or not local.mutable \
-                or written.name in self._addressed or stmt is None \
-                or _mentions(stmt, written.name) != 1:
+        if local is None or not local.mutable \
+                or local.named_parameter and not self._owned_parameter(written, current) \
+                or stmt is None or _mentions(stmt, written.name) != 1:
             return False
+        if written.name in self._addressed:
+            # A place: of its own, for joining onto it in place, or one a second
+            # way reaches, which nothing handed over can be.
+            node = self._node_of_func.get(id(current))
+            if node is None or node.body is None or _referenced(node.body, written.name):
+                return False
         if isinstance(stmt, ast.AssignStmt) and stmt.name == written.name \
                 and not stmt.more:
             return True
@@ -17133,7 +17274,7 @@ class Checker:
         if not isinstance(written, ast.NameRef):
             return False
         local = self._find_local(written.name)
-        return local is not None and local.is_parameter \
+        return local is not None and local.named_parameter \
             and written.name in func.param_names \
             and func.param_names.index(written.name) in func.takes_owned
 
@@ -29701,6 +29842,15 @@ class Checker:
         stands there has that type, the same bits read as the smaller promise.
         """
         found = self._value_type_of(value)
+        if isinstance(expected, (IntType, FloatType)) \
+                and isinstance(found, (IntType, FloatType)) \
+                and found is not expected and found.bare is expected.bare \
+                and self._stands_for(found.unit, expected.unit):
+            # A number in a unit the program said may stand here, which is the
+            # same bits under the type wanted: `let n: u64 ¤idx = #v` names a
+            # value of the type it was declared with, and what reads it -- a
+            # comparison with another index -- reads one.
+            return builder.cast(CastKind.BITCAST, value, expected, span)
         if not _promises_as_much(expected, found, self._calling_key):
             return value
         if isinstance(expected, (FuncType, RunningType)):

@@ -1571,6 +1571,11 @@ namespace pl4g::sema {
   ir::Value* Checker::shorter_life(ir::Builder& builder, ir::Value* value, const ir::Type* expected, Span span)
   {
     auto found = value_type_of(value);
+    if (is_number(expected) && is_number(found) && found != expected && bare_of(found) == bare_of(expected)
+        && stands_for(unit_on(found), unit_on(expected)))
+      // A number in a unit the program said may stand here: the same bits
+      // under the type wanted, so that what reads the name reads that type.
+      return builder.cast(ir::CastKind::bitcast, value, expected, span);
     if (! promises_as_much(expected, found, calling_key))
       return value;
     if (ir::is<ir::FuncType>(expected) || ir::is<ir::RunningType>(expected)) {

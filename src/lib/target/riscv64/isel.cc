@@ -178,6 +178,17 @@ namespace pl4g::target::riscv64 {
         return {};
       return { inst("fsgnj.d", { mcreg(dst), *reg, *reg }, span) };
     }
+    if (auto imm = std::get_if<MCImm>(&src)) {
+      // A number written out, which is the nought standing for the answer of
+      // an error that nothing reads.  Nothing puts one straight into a
+      // floating-point register, so it goes into an ordinary one and its bits
+      // are moved across.
+      auto carried = registers().info.new_virtual(registers().gpr, 64);
+      Insts made = select_move(carried, MCImm{ imm->value, 64, false }, span);
+      auto bits = select_move_bits(dst, mcreg(carried), 64, span);
+      made.insert(made.end(), bits.begin(), bits.end());
+      return made;
+    }
     throw UnsupportedOperation("putting that kind of operand in a floating-point register", span);
   }
 
