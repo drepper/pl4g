@@ -346,11 +346,11 @@ def disown_function(module: Module, ty: Type) -> Function:
     builder = IRBuilder(module, func)
     builder.position_at(entry)
     value = entry.add_param(ty, "v")
-    if not isinstance(ty, (StrType, ListType)):
+    if isinstance(ty, (ProductType, TupleType, SumType)):
         # A record, a tuple or a sum: what it owns is what its parts own, and
         # it has no storage of its own to give back -- it is in whatever holds
         # it, a list's run or a frame.
-        if held_in_memory(ty) and isinstance(ty, (ProductType, TupleType, SumType)):
+        if held_in_memory(ty):
             _disown_in_memory(builder, func, builder.cast(
                 CastKind.BITCAST, value, module.types.ptr_type(ty, mutable=True)),
                 ty)
@@ -484,7 +484,8 @@ def give_back(builder: IRBuilder, value: Value, ty: Type,
                      (builder.cast(CastKind.BITCAST, start, _bytes(module)),
                       _size(builder, ty, count)), VOID)
         return
-    if known == "heap" and isinstance(ty, ListType) and not points(ty.element):
+    if known == "heap" and isinstance(ty, (ListType, ArrayType)) \
+            and not points(ty.element):
         start, count = _parts(builder, value, ty)
         _dispose(builder, builder.extract(value, 2, parts_of(ty)[2]), start, count,
                  ty)
