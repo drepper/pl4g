@@ -5155,6 +5155,18 @@ not, and an element written is checked with its path in the same way.
 `_field_types`, by the local's identity.  `_type_stood_for` answers `f⟦1⟧` from there, which is what `⎕typename` and `comptime if`
 ask; `_lower_expr` refuses it as a value (4691).  Anywhere else `⎕fields(⌜T⌝)` of a record type is 4692.
 
+**`⎕kindof` and `⎕alternatives`.**  `_settled` asks `_settled_kind` of an `=` or `≠` before it compares two types: one side a
+call of `⎕kindof` with one argument, the other a string literal, the literal held to `_KINDS` (4282) and the type `_type_stood_for`
+answers named by `_kind_of` -- a `match` over the IR's type classes.  A `⎕kindof` lowered as a value is 4281, as `⎕isrecord` is
+4605.  `_lower_alternatives` reads the tag once (`_tag_place`) and builds, for each variant in order, the pair of the name's text
+and a one-dimensional view: the start the sum's own place bitcast to the part's pointer -- or, for a `void` part, a `frame` of a
+`bool` holding `true`, made once per call -- the count the tag compared with the variant's index and zero-extended, the stride one;
+the pairs and the whole go through `_made_tuple`.  `std.text` uses them for the four new arms; `list_text`, `set_text` and
+`dictionary_text` are generic over `[E']`, `⸨K'⸩` and `⸨K': V'⸩`, which `_collection_type` now accepts with an `OpaqueType` as the
+key, and a call reading the types out of a writable table hands it on bitcast to the read-only parameter type it settled
+(`_lower_generic_call`, after `_reading`).  `tests/compiler/test_std_whole.py` lets a `comptime foreach` over `⎕alternatives` go
+untyped, as one over `⎕fields` does.
+
 **An empty table at the top level** (`_empty_in_the_heap`, `_empty_table_constant`): the block and a run of `FIRST_CAPACITY` empty
 entries are image variables made writable (`_image_variable(…, mutable=True)`), the block's arena word the address of
 `__pl4g_heap`; the variable's initializer is the block's address, and it is not given to `_build_the_tables`.  Growing allocates a
