@@ -10672,6 +10672,29 @@ chose:
   gets.  It says nothing but "add the load address to these eight bytes", so a position-independent image holds no four-byte
   absolute address: whatever stores one in the fixed-address image stores eight bytes, or a displacement, in this one.
 
+## 2026-10-21T13:32+02:00 — language and compiler
+
+**Functions the host defines: `@[host]`, found with `dlsym` at the first call, in the interpreter and in a shared object**
+
+The user asked for an embeddable C++ interpreter that finds, with `dlsym`, symbols the program it is loaded into defines, and for a
+syntax to declare -- not define -- functions that follow the system's ABI under the name they are known by, each looked up the
+first time it is called and called with its parameters and answer converted.  Asked, the user chose:
+
+- **`@[host("SYMBOL")]`** on a function with no body, over widening `@[external]` and over a declaration form of its own (`extern
+  fn … = "SYMBOL"`).  `@[external]` stays the packaged runtime's, so each attribute says where the code comes from.  Compare C's
+  `extern` and Zig's `extern fn`, resolved by a linker; Rust's `extern "C"` with `#[link_name]`, the same; LuaJIT's `ffi.cdef`,
+  Python's ctypes and Julia's `@ccall`, which declare a function and find it at run time with `dlsym` -- what this is.
+- **A string is handed over as a C string**: a `str` argument is passed as a copy ending in a nul, made for the call and given
+  back after it, as ctypes' `c_char_p` and LuaJIT do; beside it the integers, the floating-point numbers, truth values, characters
+  and references (as pointers), records marked `@[abi]` by reference only (the rule 4596 already says), and as an answer nothing or
+  a number.
+- **A C++ interface for embedding** (`pl4g::embed::Interpreter`), over a C one in a shared library.
+- **For the compiler, a shared object**: an executable has nobody to ask, so `@[host]` in one is an error; a new kind of image, a
+  shared object, depends on the C library for `dlsym` and performs the lookup itself.  It offers its `@[visible]` functions as
+  dynamic symbols with the system's convention, as a C library does, needs no startup function, and runs its constructors when it
+  is loaded.  **pypl4g and the C++ compiler both write it**, held to each other byte for byte as the executables are, **for all
+  three architectures**.
+
 Open questions
 --------------
 

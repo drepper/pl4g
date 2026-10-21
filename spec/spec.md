@@ -5978,6 +5978,43 @@ Compare: **C**, whose `extern` declaration this is, with a linker behind it rath
 **Rust**, whose `extern "C"` and `#[repr(C)]` are this pair almost exactly; **Zig**, whose `extern fn` and `extern struct`
 likewise; **Go**, whose cgo compiles the C as part of the build, which is the answer not taken here.
 
+##### Functions the host defines
+
+**A program run inside another program may call what that program defines.**  `@[host("SYMBOL")]` on a function with no body
+declares one of them, under the name it is known by:
+
+```
+@[host("puts")]
+fn puts(text: str) → i32
+```
+
+**Where it is found is the host's business, and when is the first call.**  The interpreter embedded in a program, and a shared
+object the compiler made and a program loaded, each ask `dlsym` for the symbol the first time the function is called, keep what
+it answered, and call it from then on with the system's convention.  A symbol `dlsym` does not find stops the program, with a
+status of its own (`host-symbol-missing`), at that first call: what is in the host is known only once there is a host.  **An
+executable has none**, so a host function in one is refused (5300): the image a kernel starts has nobody to ask.
+
+**What crosses is what C has.**  A parameter is an integer, a floating-point number, a truth value, a character, a reference --
+handed over as the address of the place it names -- or a `str`; a record marked `@[abi]` crosses by reference only (4596), and
+anything else is refused (5301).  **A `str` is handed over as a C string**: a copy of its bytes followed by a nul, made in the
+heap for the call and given back after it -- what C means by text, which a `str` is not, holding its length beside its bytes and
+no nul.  The answer is nothing or a number (5302).  Like an external function, a host function is impure by being one, since
+nothing here can see what it does.
+
+Compare: **LuaJIT**'s `ffi.cdef`, which declares C functions and finds them with `dlsym` when first called, and **Python**'s
+ctypes, whose `c_char_p` makes the same nul-terminated copy of a string; **Julia**'s `@ccall`, looked up the first time it runs;
+**C**, **Zig** and **Rust**, whose `extern` declarations are this one with a linker resolving them before the program starts
+rather than the program resolving them as it goes.
+
+##### Shared objects
+
+**A program may be compiled into a shared object rather than an executable** (`-shared`): a library a program written in
+anything else loads with `dlopen` and calls.  What it offers is its `@[visible]` functions, as dynamic symbols, and each has to
+follow the system's convention -- `@[cdecl]` or `@[abi]` written on it (5303) -- since what calls it is compiled by something
+else.  It needs no startup function, and one it has is not run; its constructors run when it is loaded and its destructors when
+it is unloaded, as a C library's do.  It depends on the C library and nothing else, for `dlsym`, which is what finds the host
+functions it calls.
+
 ##### Exporting and Being Visible
 
 **Nothing a program defines is let out of it.**  There are two ways out and they are different questions, so there are two
