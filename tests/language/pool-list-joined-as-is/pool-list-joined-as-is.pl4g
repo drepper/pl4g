@@ -16,6 +16,11 @@
 ※
 ※ What is put in is still a value: a list joined on and changed afterwards
 ※ leaves what went in as it was.
+※
+※ And a list of an arena's handed through a writer that recurses, walking a
+※ tree by reference in a loop, is handed on as it is and answered as the
+※ arena's: what a call in the loop answers is what its signature says, read off
+※ it before the loop is lowered -- not everything the loop names.
 
 unit ¤size → ¤idx
 
@@ -69,6 +74,21 @@ fn counted(t: &Tree) → 〈u64, u64〉:
                 sum ← sum + c⟦1⟧
             〈count, sum〉
 
+※ The tree written out onto `into`, which is `a`'s: a byte for each leaf and
+※ name, and brackets around the kids.
+fn spelled(t: &Tree, into: mut [u8] in a, a: &mut arena) → [u8] in a:
+    match t⌖:
+        [Tree](kids):
+            into ⧺← ⟦91u8⟧
+            foreach &k: Tree = kids:
+                into ← spelled(k, into, a)
+            into ⧺← ⟦93u8⟧
+        u64(_):
+            into ⧺← ⟦108u8⟧
+        str(_):
+            into ⧺← ⟦110u8⟧
+    into
+
 @[startup]
 fn main(init: std.Init) → u6:
     let pool: mut arena = ⎕arena
@@ -83,6 +103,11 @@ fn main(init: std.Init) → u6:
                 return 1u6
             if c⟦1⟧ ≠ 32u64:
                 return 2u6
+            let text: [u8] = spelled(&t, [] in pool, &mut pool)
+            ※ 36 leaves and names, and a pair of brackets for each of the 1 + 2 + 4
+            ※ lists of kids
+            if #text ≠ 36 + 14:
+                return 8u6
         ⊥(_):
             return 3u6
     ※ a list joined onto one of the arena's and changed afterwards

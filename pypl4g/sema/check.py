@@ -10089,6 +10089,11 @@ class Checker:
             case ast.SetLit() | ast.DictLit() if node.arena is not None:
                 # Made in the arena it names, which the walk below finds.
                 pass
+            case ast.Call() if (func := self._read_ahead_callee(node)) is not None:
+                # Not lowered yet: what the signature says it answers in, which
+                # is what lowering it will say.
+                self._answered_in(node, func, into)
+                return
             case ast.JoinAssign() if isinstance(node.value, ast.ListLit) \
                     and self._pool_joined_onto(node.target) is not None:
                 # A list written out and joined onto a pool's list is never
@@ -10157,6 +10162,48 @@ class Checker:
                     for each in held:
                         if isinstance(each, ast.Node):
                             self._collect_arenas(each, into)
+
+    def _read_ahead_callee(self, expr: ast.Call) -> Function | None:
+        """The function a call names where its signature alone says what its
+        answer was made in: one of this file's top level, named by itself and
+        by nothing a body binds, and not defined somewhere else."""
+        if not isinstance(expr.callee, ast.NameRef) \
+                or self._find_local(expr.callee.name) is not None:
+            return None
+        func = self._top.get(expr.callee.name)
+        if not isinstance(func, Function) or func.attrs.external is not None:
+            return None
+        return func
+
+    def _answered_in(self, expr: ast.Call, func: Function, into: set[int]) -> None:
+        """What a call of *func* answers was made in, read off its signature as
+        `_where_made` reads it: nothing for an answer that points nowhere, the
+        heap for one whose signature names no allocator, and what was handed to
+        the parameters it names -- or the arena in force, for one left out.  An
+        answer the signature cannot speak for, a reference among it, was made in
+        anything the call was handed."""
+        ret = func.ty.ret
+        if not _points_somewhere(ret):
+            return
+        if not (owned.points(ret) or _holds_a_lambda(ret)) \
+                or func.made_in == (HANDS_AT,):
+            for one in expr.args:
+                self._collect_arenas(one, into)
+            return
+        if func.made_in is None:
+            into.add(_HEAP)
+            return
+        written = self._written_for(expr, func)
+        for at in func.made_in:
+            if at == HEAP_AT:
+                into.add(_HEAP)
+            elif at == STATIC_AT:
+                if len(func.made_in) > 1:
+                    into.add(_IMAGE)
+            elif at in written:
+                into.update(self._arenas_in(written[at]))
+            else:
+                into.update(self._out_of_arenas)
 
     def _array_frame_of(self, local: _Local) -> frozenset[int]:
         """The key for where an array a name holds has its elements, which a view
