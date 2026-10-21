@@ -1,0 +1,19 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4548 LANG_NARROW_NOT_AN_INTEGER
+※ pl4g-test: expect-diag 4559 LANG_GENERIC_ASKED_HERE
+
+※ `std.string.parse_int` reads a whole number, of whichever whole-number type
+※ it is handed; a floating-point one is `parse_f64`'s, whose grammar has a point
+※ and an exponent.  Handed `⌜f64⌝`, the narrowing it ends with is refused for
+※ that type, with a note at the call that asked for it -- the refusal of every
+※ narrowing to a type that is not a whole number.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    match std.string.parse_int(⎕bytes("10"), ⌜f64⌝):
+        std.string.Parsed(f64)(_):
+            0u6
+        ⊥:
+            1u6

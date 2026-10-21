@@ -11020,6 +11020,91 @@ and each settled as the form most like the rest of the language:
 - **`(_)`, which the specification gives as how an arm binds nothing after a type given its types, said that `_` was not read**
   (4006).  `_` is never reported.
 
+## 2026-10-22T14:00+02:00 — language, library and compiler
+
+### `std.string`: numbers read out of bytes and written onto lists of them, in the language
+
+The user asked for a JSON module and that what is of general interest go "inside the std module (e.g., string parsing functions
+inside std.string or so)", and approved this as one of the list ("go ahead with all points"): **text to numbers and numbers to
+text, as a module of the standard library written in PL4G**, `modules/string.pl4g`, reached as `std.string` the way `std.fs` and
+`std.io` are, `@[system]`, every binding with its full type.  It offers `parse_f64`, `parse_int`, `format_f64`, `format_int`,
+`format_char`, `decode_char` and `digit_value`, with `Parsed(T')`, `ParseError` and the flags `Allow`.
+
+**Reading a decimal number is Eisel and Lemire's algorithm, as fast_float and simdjson have it**, with Clinger's shortcut before
+it and an exact comparison behind it.  The digits are gathered into a `u64` with nothing asked about fitting while there are no
+more than nineteen that count; a significand below 2⁵³ and a power of ten up to 10²² are both exact as `f64`, and one
+multiplication or division rounds once (Clinger); every other significand of nineteen digits is multiplied by a 128-bit power of
+five with `⎕wide_mul`, the upper half holding the answer and where to round it -- which Mushtak and Lemire proved always enough, so
+no fallback is wanted there; and a number of more than nineteen digits whose nineteen and one more round apart is decided by
+comparing it, as a big integer of up to 800 digits, with the point half way between the two neighbours (fast_float's
+`digit_comp`).  **Writing one is Giulietti's Schubfach**, chosen over Ryu and Dragonbox for what it costs to write and to trust:
+one table of 617 powers of ten where Ryu has two, three products of a 64-bit number by a 128-bit one and a handful of comparisons
+where Dragonbox has many cases each with a proof of its own, and the digits all three give.  **The form is JavaScript's**
+`Number.prototype.toString`, so that what `JSON.stringify` writes is what this writes: `100`, `1.5`, `1e+21`, `1.5e-7`, `5e-324`,
+checked against `node` for two hundred thousand numbers.  The tables are data in the image, as the brief said (`⎕static`).
+
+Settled without asking, each the form most like the rest of the language, and recorded here as the instructions ask:
+
+- **A list is handed in and handed back, `out ← format_f64(x, out)`, and not lent as `&mut [u8]`.**  Writing through a reference
+  is writing somebody else's memory (4479), so every writer, and everything calling one, would have been `@[impure]`; a `mut`
+  parameter the body changes is the body's own room, moved in and out without a copy (Lists), and the writer stays pure.  Making
+  that hold through the calls between -- an encoder's recursion -- wanted the compiler change below.
+- **What is read answers where the bytes after it begin**: `Parsed(T') = value : T' ; end : u64 ¤idx`, the brief's "the value
+  and how many bytes it took".  A record and not a tuple, a tuple having no result type to be (`〈f64, u64〉 ? E` does not parse);
+  `end` an index rather than a count, being what a caller adds to the place it read from -- an index and a count are not added.
+- **One `parse_int(bytes, ⌜T⌝)` rather than `parse_i64` and `parse_u64`**: the type handed as `Dir.open` hands one, one body for
+  every whole-number type -- the magnitude gathered in a `u64`, each step asking `⎕wide_mul` whether it still fits, narrowed once
+  at the end -- and one spelling for one meaning.  A minus is read for every type, `-0` being nought, and what does not fit is
+  `out_of_range`.
+- **`ParseError` is `absent`, `malformed` or `out_of_range`**, which is what a decoder does three different things about: nothing
+  there, something broken off, something too large.  **A number too small for any `f64` but nought is nought**, with its sign,
+  that being the nearest; one too large is `out_of_range` -- the nearest is an infinity, which this language does not compute
+  with, and `Allow.special` is how a caller reads one written as such.
+- **The flags are `plus`, `special`, `hex`, `underscores` and `loose`**, the extensions the brief named and one it implied: noughts
+  in front, `.5` and `5.`, and an `e` with nothing after it left unread, which is C's `strtod`.  `json`, nought, is the default.
+  `0x` with no digit after it is a nought and something else, as C reads it.  JSON's rule against a nought in front is a rule of
+  base ten; `parse_int` in another base reads `00e9`, which a `\u` escape is.
+- **Nought with its sign is written `-0`**, where JavaScript writes `0`: the brief asked for the shortest text that reads back as the
+  same `f64`, and `0` is the other nought.  A number that is not finite, which JSON cannot write, is `Infinity`, `-Infinity` or
+  `NaN`, JavaScript's names, which `Allow.special` reads back; a JSON encoder decides what to do about one before it gets here.
+- **A minus is ASCII's**, where `std.text` writes the raised minus of this language's literals: this is data, read by others.
+- **`format_int(n, into, base, digits, upper)`** is `std.text`'s base and capitals and one more, `digits`, a minimum filled with
+  noughts, which is how a `\u` escape's four hexadecimal digits are written.  **`decode_char`** reads one UTF-8 sequence by Table
+  3-7, what `⎕text` checks a run of; **`format_char`** writes one; **`digit_value`** is a digit of any base up to thirty-six, which is
+  what a decoder reads four of in a `\u` escape.
+- **The big integers are one function's two rows**, `u64⟦2, 48⟧`, and not values handed between functions: a big integer handed to
+  a function and answered by it is copied each way, and a frame holding the copies passes the 4095 bytes an AArch64 offset reaches
+  and the 2047 a RISC-V one does.  Every multiplication is one loop, told which row, by what and what to add.
+- **The tables are the answers of functions of the module**, `let POWERS_OF_FIVE: u64⟦1302⟧ = powers_of_five() in ⎕static`, and
+  not written out at the top level: written there, every program reading `std` read all 2 500 numbers, which tripled the time the
+  compiler spends on a program that does nothing -- 22 ms to 64 in pypl4g, 3.5 to 7.7 in the C++ one.  Worked out when something
+  names them (the entry before this one), a trivial program's semantic analysis is 35 ms in pypl4g and 4.2 ms in the C++ compiler:
+  what is left is the module's declarations, and the three bodies a signature needs read to say whether a `mut` list parameter is
+  taken as the body's own.
+- **The compiler fixes the module wanted** are the entry before this one: a list handed on through calls, a unit standing for
+  another in a definition and in a generic function made for another file, the type arguments of a result's answer, an error
+  whose answer holds a floating-point number, and tables in the image worked out when named.
+
+**Measured** (x86-64, Zen 5, `bin/pl4g-run`, user time, the best of several runs, the program in `examples/numbers`): writing a
+million random `f64` of every exponent takes about 85 ns a number with `format_f64`, list growth included -- Ryu and Schubfach in C
+take some 20 to 25; reading them back, some 21 bytes each, 50 ns a number with `parse_f64`, about 400 MB/s -- fast_float reads such
+numbers at 1 to 1.5 GB/s; short numbers, six digits and a point and up to six more, 24 ns each.  So three to four times what C takes,
+and what is between is the code generator's, not the algorithms': a condition joined with `and` is a truth value made and tested
+rather than a branch, an index is checked against a length the loop has just compared it with, `at + 1` asks whether it overflowed
+where `at < n` already says it cannot, a division by a constant is the machine's division (written here as a multiplication by the
+inverse, by hand), small functions are called and not put where they are called, and the hot loops keep values in the frame.  The
+to-do lists hold each.
+
+Compare: **C**'s `strtod`, correctly rounded in glibc and reading the locale's point, and `printf("%.17g")`, which is not the
+shortest; **C++17**'s `std::from_chars` and `std::to_chars`, which are this pair -- answering where reading stopped, writing the
+shortest -- and whose implementations in libstdc++ and MSVC are fast_float's and Ryu's; **Rust**, whose `str::parse::<f64>` has
+been Eisel and Lemire's since 1.55 and whose `Display` writes the shortest; **Go**'s `strconv.ParseFloat`, Eisel and Lemire's too,
+and `FormatFloat(x, 'g', -1, 64)`, Ryu's; **Zig**'s `std.fmt.parseFloat`, Eisel and Lemire's, and its Ryu; **Java**, whose
+`Double.toString` is Schubfach since JDK 19, written for it by Giulietti; **Python**'s `float` and `repr`, David Gay's; **D**'s
+`std.conv` and **Odin**'s `strconv`; **Haskell**'s `read` and `show`; **JavaScript**, whose form this writes; **APL**'s `⍎` and `⍕`,
+**BQN**'s `•ParseFloat` and `•Repr`, **Uiua**'s `parse`, **Lisp**'s `read-from-string` and **Wolfram**'s `ToExpression`, which read
+their own notations.  What is unusual is only that all of it, tables included, is written in the language the program is.
+
 Open questions
 --------------
 

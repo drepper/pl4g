@@ -1,0 +1,105 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ What `std.string.parse_f64` reads is JSON's grammar, and nothing looser unless
+※ it is told: an optional minus, digits with no nought in front of others, a
+※ point with digits after it, an `e` with digits after it.  Reading stops at the
+※ first byte that cannot go on, which is the caller's to look at -- `1.5]` is one
+※ and a half, and three bytes, which is what lets a decoder read in place.
+※
+※ What stops is told apart from what is wrong.  `absent` is that nothing a number
+※ begins with is there; `malformed` that one was begun and broken off -- a sign
+※ alone, `1.`, `1e`, `01`; `out_of_range` that it is well written and too large
+※ for any `f64`.  A number too small for any but nought is nought, which is the
+※ nearest.
+※
+※ And what a caller may allow besides, as flags of `std.string.Allow`: a `+` in
+※ front, `inf` and `nan`, C's hexadecimal numbers -- correctly rounded too -- `_`
+※ between digits, and `loose`: noughts in front, a point with digits on one side
+※ only, an `e` with nothing after it left unread.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+
+※ Whether `text` reads as the f64 whose bits are `bits`, taking `end` bytes.
+fn reads(text: str, allow: std.string.Allow, bits: u64, end: u64 ¤idx) → bool:
+    match std.string.parse_f64(⎕bytes(text), .allow ← allow):
+        std.string.Parsed(f64)(p):
+            ⎕bits(p.value) = bits ∧ p.end = end
+        ⊥:
+            false
+
+※ Whether `text` is refused, and why.
+fn refused(text: str, allow: std.string.Allow, why: std.string.ParseError) → bool:
+    match std.string.parse_f64(⎕bytes(text), .allow ← allow):
+        std.string.Parsed(f64)(_):
+            false
+        ⊥(said):
+            said = why
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let json: std.string.Allow = std.string.Allow.json
+    let loose: std.string.Allow = std.string.Allow.loose
+    let absent: std.string.ParseError = std.string.ParseError.absent
+    let malformed: std.string.ParseError = std.string.ParseError.malformed
+    let range: std.string.ParseError = std.string.ParseError.out_of_range
+    ※ stopping where the number does
+    if (¬reads("1.5]", json, 0x3FF8000000000000u64, 3) ∨ ¬reads("-2e1,", json, 0xC034000000000000u64, 4)
+            ∨ ¬reads("0 ", json, 0u64, 1) ∨ ¬reads("12x", json, 0x4028000000000000u64, 2)):
+        return 1u6
+    ※ what JSON refuses, and why
+    if (¬refused("", json, absent) ∨ ¬refused("x", json, absent) ∨ ¬refused("+1", json, absent)
+            ∨ ¬refused(".5", json, absent) ∨ ¬refused("inf", json, absent)):
+        return 2u6
+    if (¬refused("-", json, malformed) ∨ ¬refused("-x", json, malformed) ∨ ¬refused("1.", json, malformed)
+            ∨ ¬refused("1.e5", json, malformed) ∨ ¬refused("1e", json, malformed)
+            ∨ ¬refused("1e+", json, malformed) ∨ ¬refused("01", json, malformed)
+            ∨ ¬refused("00.5", json, malformed) ∨ ¬reads("1_0", json, 0x3FF0000000000000u64, 1)):
+        return 3u6
+    if (¬refused("1e309", json, range) ∨ ¬refused("-1.8e308", json, range)
+            ∨ ¬refused("10e999999999999999999999", json, range)):
+        return 4u6
+    ※ too small for any but nought: nought, with the sign written
+    if ¬reads("1e-999999999999", json, 0u64, 15) ∨ ¬reads("-1e-400", json, 0x8000000000000000u64, 7):
+        return 5u6
+    ※ the flags, one at a time
+    if (¬reads("+1.5", std.string.Allow.plus, 0x3FF8000000000000u64, 4)
+            ∨ ¬refused("+-1", std.string.Allow.plus, malformed)):
+        return 6u6
+    let special: std.string.Allow = std.string.Allow.special
+    if (¬reads("inf", special, 0x7FF0000000000000u64, 3) ∨ ¬reads("-Infinity", special, 0xFFF0000000000000u64, 9)
+            ∨ ¬reads("NaN,", special, 0x7FF8000000000000u64, 3) ∨ ¬reads("INFx", special, 0x7FF0000000000000u64, 3)
+            ∨ ¬refused("-in", special, malformed) ∨ ¬refused("i", special, absent)):
+        return 7u6
+    let hex: std.string.Allow = std.string.Allow.hex
+    ※ C's way of writing a number exactly: 1.5 × 2^3, and one with more digits
+    ※ than an f64 holds, which rounds -- the half way one to even
+    if (¬reads("0x1.8p3", hex, 0x4028000000000000u64, 7) ∨ ¬reads("0X10", hex, 0x4030000000000000u64, 4)
+            ∨ ¬reads("0x1.00000000000008p0", hex, 0x3FF0000000000000u64, 20)
+            ∨ ¬reads("0x1.000000000000081p0", hex, 0x3FF0000000000001u64, 21)
+            ∨ ¬reads("0x1.00000000000018p0", hex, 0x3FF0000000000002u64, 20)
+            ∨ ¬reads("-0x1p-1074", hex, 0x8000000000000001u64, 10)
+            ∨ ¬reads("0x1p-1075", hex, 0u64, 9) ∨ ¬reads("0x1.1p-1075", hex, 1u64, 11)
+            ∨ ¬reads("0x1.fffffffffffffp1023", hex, 0x7FEFFFFFFFFFFFFFu64, 22)
+            ∨ ¬refused("0x1p1024", hex, range) ∨ ¬refused("0x1.fffffffffffff8p1023", hex, range)
+            ∨ ¬reads("0xg", hex, 0u64, 1) ∨ ¬refused("0x1p", hex, malformed)):
+        return 8u6
+    let underscores: std.string.Allow = std.string.Allow.underscores
+    if (¬reads("1_000.000_5", underscores, 0x408F40010624DD2Fu64, 11) ∨ ¬reads("1__0", underscores, 0x3FF0000000000000u64, 1)
+            ∨ ¬reads("1_e2", underscores, 0x3FF0000000000000u64, 1) ∨ ¬refused("_1", underscores, absent)
+            ∨ ¬reads("2e1_0", underscores, 0x4212A05F20000000u64, 5)):
+        return 9u6
+    if (¬reads(".5", loose, 0x3FE0000000000000u64, 2) ∨ ¬reads("5.", loose, 0x4014000000000000u64, 2)
+            ∨ ¬reads("007", loose, 0x401C000000000000u64, 3) ∨ ¬reads("1e", loose, 0x3FF0000000000000u64, 1)
+            ∨ ¬reads("2e+x", loose, 0x4000000000000000u64, 1) ∨ ¬refused(".", loose, absent)
+            ∨ ¬refused("-.", loose, malformed)):
+        return 10u6
+    ※ and together
+    let all: std.string.Allow = (std.string.Allow.plus | std.string.Allow.special | std.string.Allow.hex
+                                 | std.string.Allow.underscores | std.string.Allow.loose)
+    ※ `0x` and no digit is a nought and something else, as C reads it
+    if (¬reads("+0x_1p1", all, 0u64, 2) ∨ ¬reads("+0xF_Fp0", all, 0x406FE00000000000u64, 8)
+            ∨ ¬reads("-nan", all, 0xFFF8000000000000u64, 4)):
+        return 11u6
+    0u6

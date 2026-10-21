@@ -777,3 +777,31 @@ Optimizations
 [ ] run the shared objects of AArch64 and RISC-V.  They are checked by `eu-elflint` and by being pypl4g's byte for byte, and not
     run: a host for them needs that architecture's C library and loader.  Fedora packages one for AArch64
     (`sysroot-aarch64-fc44-glibc`, run with `qemu-aarch64 -L`); there is none for RISC-V.
+
+[ ] a frame larger than an offset reaches, on AArch64 and RISC-V, in every function.  `sub sp, sp, N` past 4095 and a place past
+    2047 bytes into a RISC-V frame are refused (8501) except in a function that works on runs, which keeps `t6` for it; a
+    function holding two records of 392 bytes and the copies a call of them makes reaches both.  `std.string` keeps its big
+    integers as one function's rows for this reason.  A frame whose size is known before allocation -- what the IR's `frame`
+    instructions hold -- can say whether the register is wanted.
+
+[ ] code generation the `std.string` measurements point at (2026-10-22): three to four times what C takes for the same
+    algorithms.  A condition joined with `and` or `∧` is a truth value made with `setcc` and tested, where a branch on each part
+    would do; an index is checked against a length the loop condition has just compared it with; `at + 1` asks whether it
+    overflowed where `at < n` says it cannot; a small function (`tenth`, `decimal_count`, `to_odd`) is called rather than put where
+    it is called; and the parsing loops keep values in the frame.  Each is visible in `perf annotate` of `examples/numbers`.
+
+[ ] divide by a constant with a multiplication.  `÷ 10u64` and `÷ 100u64` are the machine's division -- some thirty times the
+    multiplication by the inverse and the shift every C compiler emits, which `std.string` writes out by hand (`tenth`).
+
+[ ] answer a local list without copying it.  `fn f() → [u8]: let out: mut [u8] = [] … out` copies the whole list on the way out,
+    only a temporary of the heap's being answered as it is; a `mut` local changed in place has room no other name shares, and a
+    last use of it could go as it is, as a parameter taken as the body's own already does.
+
+[ ] the compile-time evaluator works out `⍴`, `⎕unit` and `⎕drop` (7000 today).  A table built by a loop for the image is the
+    obvious use; `std.string` writes its tables out instead.
+
+[ ] what `std.string` costs every program.  Semantic analysis of a program that names nothing of it went from 22 ms to 35
+    (pypl4g) and from 3.5 to 4.2 (C++): its declarations, and the three bodies `_takes_owned` reads to say whether a `mut` list
+    parameter is the body's own -- which a body set aside could say without being parsed, were the question asked of the
+    tokens.
+

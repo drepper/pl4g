@@ -1,0 +1,133 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `std.string.format_f64` writes the shortest text that reads back as the same
+※ `f64` -- and of several as short, the nearest -- in the form JavaScript's
+※ `Number.prototype.toString` gives it, so that what `JSON.stringify` writes is
+※ what this writes: `100`, `1.5`, `1e+21`, `1.5e-7`, `5e-324`.  Where the two part
+※ is nought with its sign, `-0` here and `0` there, a text that reads back as
+※ the number it came from being the point.
+※
+※ What each should be is what JavaScript writes, read off `node` when the test
+※ was made.  And then the other way round, for many numbers: twenty thousand bit
+※ patterns from a xorshift, of every exponent -- written, read back by
+※ `parse_f64`, and compared bit for bit, the text being all of what was read.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+
+let NUMBERS: u64⟦34⟧ = ⟦
+    0x0000000000000000,  ※ nought
+    0x8000000000000000,  ※ nought with its sign, which JavaScript writes 0
+    0x3FF0000000000000,
+    0xBFF0000000000000,
+    0x3FF8000000000000,
+    0xC028800000000000,
+    0x3FB999999999999A,  ※ the shortest that reads back, not the 55 digits it is
+    0x3FD3333333333334,  ※ and the number next to it, which needs seventeen
+    0x3FD5555555555555,
+    0x3FE5555555555555,
+    0x400921FB54442D18,
+    0x4059000000000000,  ※ a whole number, no point
+    0x441AABDF2145B430,  ※ twenty-one digits, the noughts written
+    0x444B1AE4D6E2EF50,  ※ twenty-two: the exponent
+    0x4480F0CF064DD592,
+    0x44B52D02C7E14AF6,  ※ the nearest is 9.999999999999999e22, and the shortest is this
+    0x3EB0C6F7A0B5ED8D,  ※ the last before the exponent
+    0x3E7AD7F29ABCAF48,  ※ the first with it
+    0x3E8421F5F40D8376,
+    0x3F201F31F46ED246,
+    0x4340000000000000,  ※ 2^53
+    0x4340000000000001,
+    0x00538CC7168670FB,
+    0x0000000000000001,  ※ 2^-1074, the smallest above nought
+    0x000FFFFFFFFFFFFF,  ※ the largest below the normal numbers
+    0x0010000000000000,  ※ the smallest normal one
+    0x7FEFFFFFFFFFFFFF,  ※ the largest
+    0x8000000000000001,
+    0x43E0000000000000,
+    0x0170000000000000,
+    0x40934A456D5CFAAD,
+    0x7FF0000000000000,  ※ what JavaScript calls them, which JSON has no way to write
+    0xFFF0000000000000,
+    0x7FF8000000000000
+⟧ in ⎕static
+
+let TEXTS: str⟦34⟧ = ⟦
+    "0",
+    "-0",
+    "1",
+    "-1",
+    "1.5",
+    "-12.25",
+    "0.1",
+    "0.30000000000000004",
+    "0.3333333333333333",
+    "0.6666666666666666",
+    "3.141592653589793",
+    "100",
+    "123000000000000000000",
+    "1e+21",
+    "1e+22",
+    "1e+23",
+    "0.000001",
+    "1e-7",
+    "1.5e-7",
+    "0.000123",
+    "9007199254740992",
+    "9007199254740994",
+    "4.35e-307",
+    "5e-324",
+    "2.225073858507201e-308",
+    "2.2250738585072014e-308",
+    "1.7976931348623157e+308",
+    "-5e-324",
+    "9223372036854776000",
+    "9.332636185032189e-302",
+    "1234.5678",
+    "Infinity",
+    "-Infinity",
+    "NaN"
+⟧ in ⎕static
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let count: u64 ¤idx = #NUMBERS
+    let i: mut u64 ¤idx = 0
+    while i < count:
+        let written: [u8] = std.string.format_f64(⎕from_bits(NUMBERS⟦i⟧, ⌜f64⌝), [])
+        if (⎕text(written) ?? "") ≠ TEXTS⟦i⟧:
+            return 1u6
+        i ← i + 1
+    ※ written onto what is there, which stays
+    let after: mut [u8] = []
+    after ⧺← ⎕bytes("[")
+    after ← std.string.format_f64(2.5f64, after)
+    after ⧺← ⎕bytes(",")
+    after ← std.string.format_f64(⁻0.001f64, after)
+    if (⎕text(after) ?? "") ≠ "[2.5,-0.001":
+        return 2u6
+    ※ twenty thousand patterns, written and read back
+    let state: mut u64 = 88172645463325252u64
+    let n: mut u64 = 0u64
+    while n < 20000u64:
+        state ← state ^ (state » 12u64)
+        state ← state ^ (state « 25u64)
+        state ← state ^ (state » 27u64)
+        let r: u64 = ⎕wrap(state × 2685821657736338717u64)
+        ※ every exponent but the one that is not a number, below the normal
+        ※ ones a fifth of the time
+        let pattern: u64 = if r % 5u64 ?? 0u64 = 0u64: r & 0x800FFFFFFFFFFFFFu64 else: r
+        if pattern & 0x7FF0000000000000u64 ≠ 0x7FF0000000000000u64:
+            let text: [u8] = std.string.format_f64(⎕from_bits(pattern, ⌜f64⌝), [])
+            let length: u64 ¤idx = #text
+            match std.string.parse_f64(text):
+                std.string.Parsed(f64)(back):
+                    if ⎕bits(back.value) ≠ pattern:
+                        return 3u6
+                    if back.end ≠ length:
+                        return 4u6
+                ⊥:
+                    return 5u6
+        n ← n + 1u64
+    0u6

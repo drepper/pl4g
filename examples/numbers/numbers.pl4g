@@ -1,0 +1,72 @@
+※ A million numbers written and read back, to time `std.string` by.
+※
+※     time bin/pl4g-run ./numbers MODE ROUNDS
+※
+※ MODE is what the million are: `f`, the bits of an f64 a xorshift gives -- of
+※ every exponent, seventeen digits most of them, as `format_f64` writes them --
+※ or `s`, short ones, six digits before a point and up to six after.  `r` is
+※ neither: a byte for each, which is what the rest costs.  They are written into
+※ one list, a comma after each, and then read ROUNDS times over by
+※ `parse_f64` -- in place, each number's length saying where the next begins.
+※ So the time of `MODE 0` is the writing, and what `MODE 10` takes more, over
+※ ten million, is a number read.  The answer is the bits of every number read,
+※ exclusive or'd together, which is nought only where an even number of
+※ rounds cancel out: the status says only that nothing was refused.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+
+※ The million numbers, a comma after each.
+fn numbers(count: u64, mode: u8) → [u8]:
+    let out: mut [u8] = []
+    let state: mut u64 = 88172645463325252u64
+    let i: mut u64 = 0u64
+    while i < count:
+        state ← state ^ (state » 12u64)
+        state ← state ^ (state « 25u64)
+        state ← state ^ (state » 27u64)
+        let r: u64 = ⎕wrap(state × 2685821657736338717u64)
+        if mode = 114u8:
+            out ⧺← ⟦⎕narrow(r & 63u64, ⌜u8⌝) ?? 0u8⟧
+        elif mode = 115u8:
+            out ← std.string.format_int(r % 1000000u64 ?? 0u64, out)
+            out ⧺← ⟦46u8⟧
+            out ← std.string.format_int(r » 44u64, out)
+        else:
+            out ← std.string.format_f64(⎕from_bits(r & 0x7FEFFFFFFFFFFFFFu64, ⌜f64⌝), out)
+        out ⧺← ⟦44u8⟧
+        i ← i + 1u64
+    out
+
+※ The bits of every number in `text`, read `rounds` times over, exclusive or'd --
+※ and nothing, where one was refused.
+fn read(text: u8⟦⟧, rounds: u64) → u64?:
+    let n: u64 ¤idx = #text
+    let mixed: mut u64 = 0u64
+    let round: mut u64 = 0u64
+    while round < rounds:
+        let at: mut u64 ¤idx = 0
+        while at < n:
+            match std.string.parse_f64(text⟦at…n⟧):
+                std.string.Parsed(f64)(p):
+                    mixed ← mixed ^ ⎕bits(p.value)
+                    at ← at + p.end + 1
+                ⊥:
+                    return ⊥
+        round ← round + 1u64
+    mixed
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let mode: u8 = if #init.args > 1: ⎕bytes(init.args⟦1⟧)⟦0⟧ else: 102u8
+    let rounds: u64 = if #init.args > 2:
+        (std.string.parse_int(⎕bytes(init.args⟦2⟧), ⌜u64⌝) ?? std.string.Parsed(.value ← 1u64, .end ← 0)).value
+    else:
+        1u64
+    let text: [u8] = numbers(1000000u64, mode)
+    match read(text, rounds):
+        u64(_):
+            0u6
+        ⊥:
+            1u6

@@ -101,16 +101,16 @@ def _built(tmp_path: Path, triple: str, source: str, name: str = "t") -> Path:
 def test_the_table_is_there_and_says_what_went_in(triple: str, tmp_path: Path) -> None:
     """Every kind of row, in the order the format puts them."""
     rows = _rows_of(_built(tmp_path, triple, LAYOUT))
-    # Every program imports `std`, and `std` hands on `fs` and `io`, which `fs`
-    # imports itself; what of them was read follows the program's own.
-    assert [r.tag for r in rows][:6] == [Tag.COMPILER, Tag.SOURCE, Tag.SOURCE,
-                                         Tag.SOURCE, Tag.SOURCE, Tag.SOURCES]
-    assert {r.tag for r in rows[6:]} == {Tag.FUNCTION}
+    # Every program imports `std`, and `std` hands on `fs`, `io` and `string`,
+    # `fs` importing `io` itself; what of them was read follows the program's own.
+    assert [r.tag for r in rows][:7] == [Tag.COMPILER, Tag.SOURCE, Tag.SOURCE,
+                                         Tag.SOURCE, Tag.SOURCE, Tag.SOURCE, Tag.SOURCES]
+    assert {r.tag for r in rows[7:]} == {Tag.FUNCTION}
     # The compiler that built it, by the name and version it gives itself.
     assert rows[0].name == run_compiler(["--version"]).stdout.strip()
     assert rows[1].name.endswith("t.pl4g")
-    assert [rows[at].name.rsplit("/", 1)[-1] for at in (2, 3, 4)] == \
-        ["std.pl4g", "fs.pl4g", "io.pl4g"]
+    assert [rows[at].name.rsplit("/", 1)[-1] for at in (2, 3, 4, 5)] == \
+        ["std.pl4g", "fs.pl4g", "io.pl4g", "string.pl4g"]
     functions = [r.name for r in rows if r.tag == Tag.FUNCTION]
     assert functions[:2] == ["main", "twice"]
     assert all(len(r.digest) == 64 for r in rows), "SHA-256, written out in full"

@@ -1,0 +1,22 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=89 diag=none
+
+※ A base is two to thirty-six, which `std.string.parse_int` and `format_int` say
+※ as a condition of their signatures: there are only so many digits and letters.
+※ A base outside that is the caller's mistake, so it stops the program with the
+※ status a condition on the way in has, while running -- a generic function's
+※ conditions are checked in each body it becomes, the base being known here
+※ only to the function a value comes from.
+
+let std := ⎕import("std")
+
+@[opaque]
+fn given(base: u8) → u8:
+    base
+
+@[startup]
+fn main(init: std.Init) → u6:
+    match std.string.parse_int(⎕bytes("10"), ⌜u8⌝, .base ← given(37u8)):
+        std.string.Parsed(u8)(_):
+            1u6
+        ⊥:
+            2u6
