@@ -1701,6 +1701,26 @@ and read back before each use.  The value is in memory for its whole life, and w
 for the single instruction reading or writing it.  Splitting a range so that a value is in a register where it is busy and in
 memory where it is not would generate better code and is a great deal more machinery; this is the version that is obviously right.
 
+**One split is made, around a call.**  A value live across a call needs a register the call leaves alone, and a convention has five
+to a dozen of those against twice as many it does not; so in a function that calls something on one way of a branch inside a loop,
+the values the loop reads are the ones that run out of registers, and spilled whole, each of them is read from the frame on every
+turn -- the turns that do not call paying for the ones that do.  Where the scan gives up a value that lives across calls, and the
+calls are made less than half as often as the value is read and written, the value is put in its slot just before each such call
+and read back just after, and is in an ordinary register -- one a call destroys will do -- everywhere else.  How often is the one
+question the depth of the loops cannot answer, a block behind a test in a loop being as deep as the test, so it is asked of
+`block_frequencies` (`mc/loops.py`): ten turns of every loop as before, and either way of every branch alike, the ways that stay in
+a loop sharing a turn and a way out of one taken once whichever turn takes it -- the uniform guess LLVM's block frequencies begin
+with where there is no profile.  The guess decides that and nothing else: which value is given up is still the price above.  A
+value split so and still in the way in the next round goes to the frame everywhere, in the slot it has, what put it there across
+the calls taken out again; a call that destroys nothing -- the one to the fault path, which does not come back -- is no reason to
+move anything.
+
+**A value moved to or from another is given the other's register**, where that is free at every point the value is live, after the
+hint and before the order.  The moves the builder writes are mostly between values whose lives touch end to end: a block's
+parameter and what each branch hands it, the operand an instruction writes over and what it writes.  So the copies a loop's back
+edge makes into the values it carries become moves of a register to itself and go, and `w ← w × 10 + d` is a multiplication and
+an addition into the register `w` is in rather than both into a temporary and a move back.
+
 A value read again by the instruction straight after the one that read it is not read from the frame twice: the register it is
 already in serves both, and the register is held across exactly as many instructions as are reading it and no further.  The same
 rule covers a value read straight after it was computed, which is used from the register it was written from rather than read back
@@ -2173,6 +2193,22 @@ a lane at a time on `rv64gc` -- sixty-four bytes compared, widened, shifted and 
 kilobytes, past the twelve bits a load or a store carries.  Which functions those are is asked before the runs are settled, since
 afterwards a build without the extension has none left; every other function has every register it had.  The frame is then made
 and given back with the size built in `t6`, and a slot past two kilobytes is reached through it.
+
+**A frame of any size works on AArch64 and RISC-V, and costs a register only where it is that large.**  A load or a store carries
+twelve bits of offset on both -- unsigned and counted in what is read on AArch64, so 4095 bytes of a byte and 32760 of a word;
+signed bytes on RISC-V, 2047 -- and so does what moves the stack pointer.  AArch64 moves it by twelve bits a page at a time and the
+rest (`sub.lsl12`, `sub`), sixteen megabytes in two instructions and no register, and past that by a number built in a register and
+the extended-register form (`sub.uxtx`), the one that reads register 31 as the stack pointer where the shifted-register form reads
+it as nought.  A place in the frame no offset reaches is built in a register: in the destination, for a load into an ordinary
+register, which is about to be written anyway; otherwise in the register the selector names, `x16` on AArch64 -- the first of the
+two the standard convention leaves to the linker's veneers -- and `t6` on RISC-V.  **Which functions set it aside is found by
+allocating:** the size of a frame is known only once the allocator has said what it spilled, and what it spills depends on how many
+registers it had.  So every function is allocated with every register, and where a selector, once the frame stands, finds a place
+out of reach with no register set aside, it raises `FrameOutOfReach`; the builder puts the function back as it was before
+allocation, takes the register out of the order, tells the selector it has one, and allocates again.  A frame that large can
+afford the second allocation, and every other function keeps the register.  A place of the lowering's own -- a `frame`'s address,
+the stack pointer and a constant -- is a value the lowering computes, built a page at a time on AArch64 and with the number in a
+register of its own on RISC-V, and asks for nothing set aside.
 
 **A view given to an array whose type states its shape** goes through `_copy_elements` as an assignment does, which compares the
 counts while running.  `_move_elements` asks a view of one dimension whether its stride is one before copying up to
@@ -3965,6 +4001,58 @@ generated before their callees; with the order reversed, a caller of a function
 that calls through a value kept a value in a register the call overwrote.  Both
 rebuilds carry them now, and a test in `test_regalloc.py` holds them there.
 
+Branching on the parts of a condition
+-------------------------------------
+
+**`if a ∧ b:` is two comparisons and two branches.**  The checker writes a condition joined with `∧` or `∨` in one of two shapes:
+where the second operand costs nothing to work out and cannot stop the program, both truth values and an `and.bool` or `or.bool`
+of them; where the second waits for the first -- an element read only where the index was said to be inside -- a block working it
+out, a block answering the constant without it, and a block where the two meet that takes the answer as a parameter.  The branch
+then tests what came out, which on every machine here is a comparison set into a register and the register tested: `setb`,
+`movzbl`, `and`, `test`, `je` for what is `cmp`, `jb`.  The pass `conditions` (`opt/passes/conditions.py`, -O1, after the second
+folding and before `facts`) rewrites both shapes until neither is left:
+
+- a branch on a truth value made with `∧`, `∨` or `¬`, read by nothing else, becomes a branch on the first operand into a new block,
+  laid out after it, that branches on the second -- for `∧`, the first being false goes where the whole being false went; for
+  `∨`, the first being true where its being true went; `¬` swaps the two ways.  What works out the second operand moves into the
+  new block where nothing else reads it and nothing in it touches memory, a load staying where it stands since what it reads is
+  ordered by the token and not by position;
+- a block that is nothing but a branch on its own parameter, the parameters read nowhere else, is gone through: a jump into it
+  carrying a value becomes a branch on that value with the block's targets, a branch carrying a constant goes where the constant
+  goes; and a block that is nothing but a jump, taking nothing, is gone through likewise, except from a branch of two ways where
+  what the jump carries would only be given a block again to move it in.
+
+What is left nothing reaches, and is taken out before the pass ends: a block nothing reaches still reads what it read, and what it
+read may now be defined on no way to it.  Before `facts` because a part branched on is a fact on the edge it settled: in `while at
+< n and bytes⟦at⟧ ≠ 32u8`, `at < n` holds on the way into the block that reads the element, where before it was half of a truth
+value.  A truth value that is answered or stored is left as it was made, nothing branching on it.
+
+Dividing by a constant
+----------------------
+
+**`x ÷ 10` is the upper word of a product and a shift.**  The pass `divisions` (`opt/passes/divisions.py`, -O1, after simplifying the
+graph and before the second folding) rewrites `udiv`, `urem`, `sdiv` and `srem` whose divisor is a constant other than nought --
+and, signed, other than minus one, the one divisor with a dividend it has no answer for -- into ordinary arithmetic every back end
+already has.  A division the language writes answers a result; one by such a constant never fails, so it is made the answer beside
+a `false`, and folding reads through that: `failed` of a result made of its parts is the truth value it was made with and `unwrap`
+its answer (not an answer that is `undef`, which stands for nothing).  Everything is done at 64 bits, a narrower dividend widened
+first and the answer narrowed after:
+
+- by one, the dividend; by a power of two, unsigned, a shift, signed, a shift after adding `2^k - 1` to a negative dividend, so
+  that it rounds toward nought, and negated for a negative divisor;
+- otherwise unsigned, Granlund and Montgomery's multiplier: the smallest `s` at which `m = ⌈2^(64+s) ÷ d⌉` fits a word and `(m × d
+  - 2^(64+s)) × largest < 2^(64+s)` for the largest dividend the type holds, and the quotient is `⎕wide_mul`'s upper word shifted
+  by `s` -- for a type of 32 bits or fewer always `s = 0` and no shift.  Where no `m` fits, an even divisor is tried again on the
+  dividend shifted down by its twos, and an odd one takes the multiplier a bit too wide, `t = hi(x × (m - 2^64))` and
+  `(t + (x - t) ÷ 2) » (s - 1)`;
+- otherwise signed, Hacker's Delight's multiplier and shift, the signed upper word (`⎕wide_mul` of an `i64`), the dividend added
+  or taken away where the multiplier's sign is not the divisor's, the arithmetic shift, and the sign bit added.
+
+A remainder is `x - q × d` with wrapping arithmetic, which cannot wrap.  `samevalues` runs again after it, so `x ÷ 10` beside `x %
+10` multiply once.  `tests/language/divides-by-a-constant` compares every quotient and remainder by some ninety divisors of ten
+types with the machine's division, over the ends of each type and the neighbours of each divisor, on all three targets.  `tenth` in
+`std.string` is now what the compiler writes for `÷ 10u64` and stays as it is.
+
 Putting a callee where it was called
 ------------------------------------
 
@@ -3991,8 +4079,7 @@ That last part was found by measuring `std.string`.  Counted, the copy of
 `tenth`, `decimal_count`, `byte_of` and `to_odd` -- three instructions, a
 handful, six, nineteen -- were then called on every number written; reading the
 number back was the same story with `parse_f64`.  With nothing counted that does
-not grow the program, the writer took 87 ns a number rather than 126, and the
-reader 49 rather than 87.
+not grow the program, every one of them is put where it is called.
 
 What it never inlines: a function that can reach
 itself, one that follows another convention -- the call *is* the convention --
