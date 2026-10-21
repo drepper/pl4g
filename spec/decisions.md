@@ -11256,6 +11256,114 @@ and `FormatFloat(x, 'g', -1, 64)`, Ryu's; **Zig**'s `std.fmt.parseFloat`, Eisel 
 **BQN**'s `•ParseFloat` and `•Repr`, **Uiua**'s `parse`, **Lisp**'s `read-from-string` and **Wolfram**'s `ToExpression`, which read
 their own notations.  What is unusual is only that all of it, tables included, is written in the language the program is.
 
+## 2026-10-22T23:00+02:00 — library and compiler
+
+### `json`: documents read into a recursive value in an arena, by simdjson's two stages, and written back as Python writes them
+
+The brief asked for **a JSON module written in the language**, `modules/json.pl4g`, `@[system]`, every binding with its full type:
+a recursive value, a decoder taking extensions and a depth limit and saying where it failed, an encoder compact and pretty, and
+the decoder built the way simdjson is, on `⎕mask`, a prefix exclusive or and `⎕trail`.  It is imported as `⎕import("json")`;
+`std` does not hand it on.  What the brief left to decide was decided as follows, each the form most like the rest of the
+language, and is recorded here as the instructions ask.
+
+- **The value keeps a whole number exactly**: `Value = null : void | boolean : bool | integer : i64 | large : u64 | number : f64 |
+  text : str | array : [Value] | object : [Member]`.  A whole number -- no point, no exponent -- is an `i64` where it fits and a
+  `u64` above that, and only what neither holds, and everything with a point or an exponent, is the nearest `f64`.  Identifiers of
+  64 bits are the case that decides it: an `f64` keeps 53 bits, and an API that hands out 64-bit identifiers to JavaScript writes
+  them twice, once as text, because of it.  Considered: every number an `f64` (JavaScript, Go's default) -- loses them; every
+  number its text, read on demand (simdjson's on-demand API, Haskell's `Scientific` in spirit) -- exact, and every program reads
+  them again; one `i128` case -- a type this language does not have.  `large` is the one case a reader may forget; `integer` is
+  what nearly every document has.
+- **An object is a list of members, in the order written, and not a table.**  Order is what a document has and what `encode`
+  writes back -- a round trip is the bytes it began as, which the tests hold it to -- and a list is built with nothing hashed while
+  reading, which is most of what a table would cost.  A key written twice is two members unless `duplicates` says otherwise.
+  Considered: `⸨str: Value⸩` -- this language's tables keep their order too, but hashing every key of every object is a cost a
+  program that walks the document never asks for, and a program that looks keys up makes one from the list in one line.  Rust's
+  `serde_json` made the same choice the other way and offers `preserve_order`; Python's `dict`, ordered, is a table.
+- **Everything a document is made of is made in an arena the caller hands over**: `decode(bytes, a, ...) → Value ? Error in a` and
+  `encode(v, a, ...) → [u8]? in a`.  The heap keeps what it is given for as long as the program runs -- a list of the heap's is not
+  given back -- so a program decoding a document a second, a server's, would have grown without end; in an arena the whole document
+  is given back at once.  It also makes the decoder fast: a value is put into the list holding it as it is, where a heap value
+  joined onto a list was a deep copy of it (the compiler fix below).  yyjson's document is such a pool.
+- **Numbers are written as Python's `repr` writes them**, `1.0`, `1e+16`, `1.5e-07`: a number with a point or an exponent always,
+  so that a `number` is read back as a `number` and a whole one as an `integer`.  JavaScript's form, which `format_f64` writes by
+  default, writes `1` for `1.0`, and a document round-tripped would come back with an `integer` in it.  It is `std.string`'s
+  `Form.python`, added for this, and with it **the encoder's output is what Python's `json.dumps` writes**, compact with
+  `separators=(',', ':')` and pretty with `indent=2`, byte for byte -- a reference anyone can check against, which
+  `tests/compiler/test_json_module.py` does.
+- **Infinities and not-a-numbers are refused unless asked for**, on both sides: `encode` answers no bytes for a value holding one
+  unless `special`, and `decode` reads `NaN` and `Infinity` only with `Extensions.special_numbers`.  Python writes and reads them
+  unasked, which is JSON no other reader takes.
+- **The extensions are flags, `Extensions`, one each**: `comments`, `hash_comments`, `trailing_commas`, `single_quotes`,
+  `unquoted_keys`, `special_numbers`, `hex_numbers`, `leading_plus`, `loose_points`, `byte_order_mark`, `control_characters`,
+  `several`, `lone_surrogates`, `escapes`, `whitespace`, and `json5` the ten JSON5 is.  RapidJSON's parse flags are the model;
+  `several` is JSON Lines, answered as one array of the values, which costs a caller nothing to take apart.  `lone_surrogates`
+  reads half a pair as U+FFFD, the one thing a `str`, well formed by construction, can hold for it.
+- **The depth limit is 1024 unless said**, simdjson's, and reading keeps what is open on a stack of its own, a list in the arena,
+  and not on the machine's: a parser that recursed took some 1.2 KB of stack a level at `-O0`, and a thousand levels was a megabyte,
+  the default stack.  So the limit is a policy and not what keeps a program on its stack.  Writing, `equal` and `finite` recurse;
+  their frames are small, and a document deeper than the limit is never read.
+- **An error is its kind, its offset, and its line and column**, counted from one, a column a character and not a byte: what an
+  editor shows.  Twelve kinds, `Problem`, each a different thing for a caller to say.  The line and column are worked out only
+  when there is an error, from the offset.  **It is the first problem found reading from the start, and a key written twice is
+  found when its object is read whole** -- the members are compared once the object closes, which keeps the reading loop free of
+  them; a document with a duplicate and a later syntax error reports the syntax error only if it comes before the object closes.
+- **A document of four gigabytes or more is `too_large`**: the places the first stage finds are `u32`, half the memory of `u64`
+  places for a document's worth of them, as simdjson's are.
+- **`ascii` escapes DEL too**, as Python's `ensure_ascii` does, so that the output is its byte for byte.
+- **Comments, single quotes and JSON5's white space are found a byte at a time**, by a second first stage that answers the same
+  places.  Each changes where a string or white space is in a way the block arithmetic would have to learn -- a quote inside a
+  comment is no quote, a `'` opens a string -- and documents with them are configuration, not data; the fast stage is the one data
+  goes through.
+- **`std.string` answers a number's text as a value**, `Numeral`, seventy-two bytes and where the text is in them: the encoder
+  joins it onto an arena's list, which `format_int`'s `mut [u8]` parameter would have answered as a copy in the heap (4624).
+
+**The compiler fixes the module wanted**, each with a test of its own, in both compilers:
+
+- a value joined onto a list in an arena, or written into one of its elements, is stored as it is and not copied (`_pool_joined_onto`,
+  `_stored`) -- a deep copy at each level had made decoding O(n·depth);
+- where an answer is made from is worked out through a call answering a type that points nowhere, through an array in a frame
+  whose type cannot hold a view, through a set or table made in an arena, and through a call read ahead of a loop by its
+  signature -- each a 4624 the decoder ran into;
+- an answer of a result is kept in the caller's room where any part of it is held in memory, and a part that is not there is
+  not copied -- a pointer into a frame that had gone, and a segmentation fault;
+- floating-point registers are destroyed by a call on all three targets -- an `f64` kept across a recursive call came back as what
+  the callee left in the register;
+- a condition used by a branch once is folded into it only when the branch's arguments do not use it too, `and` and `or` that wrote
+  nothing hand a join the chain of memory as it began, and a sum of another module's type is made through the module's name;
+- a mask handed to the block a branch goes to is what the vector pass made of it;
+- pypl4g's lexer counted brackets inside text with an escaped quote, its patterns not written raw; and the interpreter took an arena
+  asked for nought bytes as having run out of memory.
+
+**Measured** (x86-64, Zen 5, `-O1`, `examples/documents`, three generated documents of four megabytes: `twitter` the mix of a
+social network's API, `numbers` arrays of numbers, `strings` long strings with escapes and characters beyond ASCII; cycles a byte,
+the best of three runs of ten rounds, the reading of the file taken out): at `x86-64-v4`, the default on this machine, decoding is
+16.5, 23.9 and 18.8 cycles a byte -- some 240, 195 and 240 MB/s -- writing compact 12.5, 21.0 and 10.5, pretty 16.1, 23.6 and 10.1.
+`v3` is the same to within one per cent, `v1`, with sixteen bytes a comparison where `v3` has thirty-two, five per cent slower at
+decoding `twitter` and the same elsewhere.  On the same machine simdjson's DOM parser reads the three at 3 000, 1 040 and 2 800
+MB/s and yyjson at 1 240, 940 and 800; yyjson writes them at 2 100, 1 200 and 680 MB/s; Python's `json`, in C, reads them at 166, 140
+and 229 and writes them at 234, 94 and 275.  So ahead of Python's C everywhere, a fifth of yyjson, a tenth of simdjson.  What is
+between is the code generator's, `spec/details.md` saying where: `⧺←` is three calls into the runtime even where the list has
+room, an index into a view is multiplied by a stride read at run time, constants are put in vector registers again in every
+iteration, the reading loops keep their values in the frame, and the last block of a short string is copied a byte at a time into
+the frame and read back at once as thirty-two -- a store that cannot be forwarded to the load, and the hottest instruction of
+writing.
+
+Compare: **simdjson**, whose two stages these are -- its first stage the same arithmetic on the same bits, its second reading a tape
+of its own rather than making values, and its on-demand API reading where asked; **yyjson**, a pool given back whole, numbers kept
+as `i64`, `u64` or `f64` as here, and a writer that is a third of its code; **RapidJSON**, whose parse flags the extensions follow,
+and whose `kParseIterativeFlag` is the stack of its own; **Rust**'s `serde_json`, `Value` with `u64`, `i64` and `f64` numbers,
+objects a `BTreeMap` unless `preserve_order`, a recursion limit of 128; **Python**'s `json`, whose output this is, objects a
+`dict`, `NaN` read and written unasked; **Go**'s `encoding/json`, `float64` and `map[string]any` unless `UseNumber`; **C**'s cJSON,
+a linked tree, `double` numbers; **C++**'s nlohmann `json`, `int64_t`, `uint64_t` and `double` as here, `ordered_json` for order;
+**D**'s `std.json`, `JSONValue` with `integer`, `uinteger` and `floating`; **Zig**'s `std.json`, `Value` with `integer`, `float` and
+`number_string`, objects an `ArrayHashMap` in the order read, and an arena the parse is made in, as here; **Odin**'s
+`core:encoding/json`, `Integer`, `Float` and an allocator; **Haskell**'s aeson, `Scientific` numbers and `KeyMap` objects;
+**Lisp**'s and **Scheme**'s libraries, a document as lists and alists, an object's order kept by the alist; **Wolfram**'s
+`"RawJSON"`, an `Association` in order; **APL**'s `⎕JSON`, a namespace or a matrix of name and value; **BQN**'s and **Uiua**'s
+libraries, nested arrays for both.  What is unusual is that the whole of it, the bit arithmetic included, is in the language the
+program is, with no intrinsic a C library would not have.
+
 Open questions
 --------------
 

@@ -826,3 +826,11 @@ Optimizations
     parameter is the body's own -- which a body set aside could say without being parsed, were the question asked of the
     tokens.
 
+
+[ ] code generation the `json` measurements point at (2026-10-22), each with its instructions in `spec/details.md` ("What `json`
+    is built from"): `⧺←` three runtime calls where the list has room; an index multiplied by its stride with `imul` where an
+    addressing mode scales it; bounds and overflow checks a loop already answers (`count < 64` of a word's bits, `base + ⎕trail`);
+    vector constants splat again every iteration and all-ones spilled to the frame; `x < 32u8` as max, compare and xor; the
+    padded last block copied a byte at a time into the frame and read back as one, a store-forwarding stall that is 58 % of
+    `quoted`; loop values reloaded from the frame; `and` made a truth value; sums written as a tag byte and copied with word loads,
+    and every sum a slot of its own (`tree_at` 1 300 bytes of frame); small functions not inlined without `@[inline]`.

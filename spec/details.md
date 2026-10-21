@@ -5576,3 +5576,125 @@ x86-64 at `-O1` and some 190 000 each on AArch64 and RISC-V under QEMU and at `-
 point between random neighbours written out exactly and a digit past it, random long digit strings, every power of ten and of two,
 hexadecimal numbers of up to 120 bits, the flags.  What `format_f64` writes was compared with `node`'s `String(x)` for 200 000
 numbers.  None differed.
+
+
+What `json` is built from
+-------------------------
+
+**`modules/json.pl4g` is PL4G and imports only `std`**, for `std.string`'s numbers.  It says `unit ¤size → ¤idx` once, as
+`std.string` does.  Decoding is two stages; encoding is one recursion.
+
+**The first stage, `quickly`**, takes sixty-four bytes at a time -- the last block a copy padded with spaces -- and `block_starts`,
+inlined into it, answers a `u64` with a bit for every byte the second stage begins something at, and what is carried into the next
+block, a `Carry` of four words.  It is simdjson's arithmetic, written out: `⎕mask` of the block compared with `\` gives the
+backslashes; the bytes a run of them escapes are `((potential « 1) | ODD) - potential ^ ODD` on the bits of the runs, the run
+carried over a block's end in `escaped`; the quotes that are not escaped, run through a prefix exclusive or -- six shifts and
+exclusive ors, `x ^ (x « 1)`, `« 2`, ... `« 32`, what was inside at the last block's end carried in `inside` -- are the bits inside
+a string; the six structural characters and the white space are two more masks, and a scalar's first byte is one that is neither
+and follows one of them or a quote that closes a string.  The answer is the structural characters and the opening quotes outside
+strings, and the scalars' first bytes.  The bits are walked with `⎕trail` and `bits & (bits - 1)` into `places: u32⟦64⟧` in the
+frame, and joined onto the index once a block: one join a block rather than one a place, which with three runtime calls a join
+(below) is most of the first stage's time.  The index is `[u32]` in an arena of `decode`'s own, given back when it returns, and
+ends with the document's length, so that the second stage reads one place past the last without asking.  **`slowly`** answers the
+same index a byte at a time, for `comments`, `hash_comments`, `single_quotes` and `whitespace`, which change where a string or
+white space is; `lexing(allow)` picks it.
+
+**The second stage, `tree_at`**, walks the index with a stack of its own: `open: [Open] in a`, each an array or an object begun and
+where its values and keys begin in `pending: [Value] in a` and `keys: [str] in a`, which hold the values read so far of every open
+container one after another.  A value read is written at `pending⟦live⟧`, the room reused once a container has closed; a container
+closing makes its list, exactly as long as it is (`elements_of`, `members_of`), of the values above its mark, and that becomes the
+value in its parent's place.  So nothing recurses, and the depth limit is a comparison with `#open`.  An object's keys' places are
+kept in `spots`, so that `settled` can say, when the object closes, where a duplicate was and what `duplicates` makes of it.
+Scalars are `leaf_at`, never inlined: it holds the number reader's frame, and inlined it put `tree_at`'s past the 2047 bytes a
+RISC-V offset reaches.  **A string** (`string_at`) is read from after its quote with `stop_at`, thirty-two bytes at a time to the
+first quote, backslash or control character -- the last block a copy padded with the quote -- and where that is the closing quote
+the bytes between are checked as UTF-8 by `⎕text` and made a `str` in the arena in one move.  Where it is a backslash, `escaped`
+takes over, building a `[u8] in a` of the runs between escapes, each found by `stop_at` and joined in one move, and each escape
+decoded (`unicode_escape` pairs the halves of a surrogate pair; `json5_escape` the rest), and makes the text once it is all there.
+**A number** (`number_at`) of up to nineteen digits and no point is read into a `u64` in one loop, which nearly every whole number
+in a document is; anything else is `std.string.parse_int` for a `u64` beyond `i64`, or `parse_f64`, with `number_allow` handing on
+the flags the extensions are.  `ends_here` asks that what follows a scalar is a structural character, white space or the end, which
+the first stage does not.
+
+**An error** is a `Fault`, its problem and offset, inside the module, and `failure(input, fault)` makes the `Error` a caller sees,
+counting lines and characters up to the offset only then.
+
+**Encoding** (`written`) recurses through arrays and objects only and writes everything else with `leaf_written`, never inlined,
+so that the numeral's seventy-two bytes and the string writer's blocks are in one frame and not in one a level.  Every writer takes
+`into: mut [u8] in a` and answers it, `→ [u8] in a`, the list moved in and out without a copy.  **A string** (`quoted`) is written
+thirty-two bytes at a time to the first byte that wants an escape, by `wanted_at`: `⎕mask` of the block below 32, equal to `"` or
+equal to `\`, or'ed with the mask of the bytes from DEL up `and`ed with `high` -- all ones with `ascii`, nought without, so that
+the loop has no branch on it -- and the run before it is joined in one move.  `escape` writes the five named escapes by name and the
+other control characters as `\u00XX`, and with `ascii` the character it decodes there (`unicode`) as one `\u` escape or a surrogate
+pair's two, `four` writing four small hexadecimal digits.  **A number** is `std.string.numeral_f64(x, Form.python)` or
+`numeral_int(n)`, joined from the `Numeral` in one move; `format_int` keeps its own body rather than joining a `Numeral`, the record's
+copy into its frame and out costing more than its digits.
+
+**What was checked.**  The language tests -- `json-round-trip`, `json-errors`, `json-extensions`, `json-depth`, `json-strings`,
+`json-numbers`, `json-duplicates` and `json-big`, on all three targets at `-O0` and `-O1` -- and `tests/compiler/test_json_module.py`,
+which runs a driver over documents made at random -- nested arrays and objects, text of every length of UTF-8 and every escape,
+whole numbers of every size, floating-point numbers of every exponent -- and holds what is written, compact, pretty and ASCII, to
+`json.dumps`'s bytes on every target, and what is refused of documents broken a byte at a time to what Python refuses, natively.
+The three benchmark documents are read and written back byte for byte as `json.dumps` writes them, at every `x86-64` level.
+
+### Measured
+
+`examples/documents`: `make data` writes three documents of four megabytes with `generate.py` -- `twitter`, the mix of a social
+network's API; `numbers`, arrays of numbers of every form; `strings`, long strings, escapes and characters beyond ASCII -- and the
+program decodes (`d`), encodes (`e`) or pretty-prints (`p`) one `ROUNDS` times.  x86-64, Zen 5, `-O1`, cycles a byte with the
+reading of the file taken out, the best of three runs of ten rounds:
+
+| level | twitter decode | encode | pretty | numbers decode | encode | pretty | strings decode | encode | pretty |
+|---|---|---|---|---|---|---|---|---|---|
+| `v4` (the default here) | 16.5 | 12.5 | 16.1 | 23.9 | 21.0 | 23.6 | 18.8 | 10.5 | 10.1 |
+| `v3` | 16.7 | 12.7 | 16.2 | 23.8 | 21.0 | 23.8 | 18.8 | 10.4 | 9.8 |
+| `v1` | 17.5 | 12.6 | 17.3 | 24.1 | 22.0 | 24.6 | 18.9 | 11.2 | 10.3 |
+
+In MB/s at `v4`: decoding 240, 195 and 240; writing compact 330, 240 and 400; pretty 240, 210 and 475.  On the same machine, built
+with `g++ -O2 -march=native`: **simdjson** 3.12's DOM parser reads them at 3 010, 1 040 and 2 810 MB/s and its `minify` writes them
+at 640, 420 and 600; **yyjson** 0.12 reads them at 1 240, 940 and 800 and writes them at 2 110, 1 200 and 680 (pretty 1 900, 1 160,
+675); **Python** 3.14's `json`, its C accelerator, reads them at 166, 140 and 229 and writes them at 234, 94 and 275.
+
+**Where the time goes**, `perf record`: decoding `twitter` is `tree_at` 16 %, `string_at` 14 %, `quickly` 12 %, `leaf_at` 11 %,
+`__pl4g_str_valid` 8 % (the UTF-8 check, a byte at a time in the runtime), `escaped` 7 %, and `__pl4g_list_grow` and
+`__pl4g_bytes_move` 5 % each; decoding `numbers`, `leaf_at` 33 %, `parse_f64` 20 % and `__pl4g_list_grow` 13 %; encoding `twitter`,
+`quoted` 36 %, `__pl4g_list_grow` 17 %, `written` 9 % and `leaf_written` 7 %.  `v3` against `v1` is thirty-two bytes a comparison
+against sixteen, and is worth five per cent at most: the blocks are not where the time is.
+
+**What the code generator does that it should not**, each seen in `perf annotate` of the program above:
+
+- **`l ⧺← x` is three calls into the runtime** -- `__pl4g_list_allocator`, `__pl4g_list_grow` and `__pl4g_list_release` -- even
+  where the list has room for what is joined, which is nearly always.  It should be a comparison of the length and what is joined
+  with the capacity, a store or a `memcpy` and an add, inline, and a call only where the list grows.  This is the 13 to 17 % of
+  `__pl4g_list_grow`, and the reason `quickly` gathers a block's places in the frame first.
+- **An index is multiplied by its stride as a run-time product**: `places⟦count⟧ ← …` in `quickly` is `mov $4, %rdx; mov %r9,
+  %rsi; imul %rdx, %rsi; mov 0x320(%rsp), %rdx; add %rsi, %rdx; mov %r10d, (%rdx)`, where `mov %r10d, (%rdx,%r9,4)`, the base in a
+  register, is the whole of it.
+- **Checks the loop has already answered**: in the same loop `count` is compared with 64 every iteration (`cmp $0x40, %r9; jb`)
+  though a word has no more than 64 bits to walk; `base + ⎕trail(bits)` asks whether a `u32` sum overflowed (`add %edx, %r10d;
+  jae`) where `base` is below the input's length and `⎕trail` below 64; `count + 1` asks too.  Each is a compare, a branch and a call
+  of `__pl4g_abort` laid out inline, in the hottest loop of the first stage.
+- **Constants made again in every iteration**: `wanted_at`'s comparisons with 32, 34, 92 and 127 are each `mov $imm, %edx; movd
+  %edx, %xmm2; vpbroadcastb %xmm2, %ymm2` inside the loop, and the all-ones vector `¬` needs is `vpcmpeqd` stored to and loaded
+  from `0xc0(%rsp)` every block.  Four splats and a constant belong before the loop, in registers that are free.
+- **A comparison spelled the long way**: `block < 32u8` is `vpmaxub` with 32, `vpcmpeqb` and `vpxor` with all ones; it is one
+  `vpminub` with 31 and `vpcmpeqb`, or on AVX-512 one `vpcmpub` into a mask register -- which `⎕mask` then wants anyway, where today
+  every comparison goes through `vpmovmskb`.
+- **The last block of a short string is a store that cannot be forwarded**: `last⟦0…n - at⟧ ← text⟦at…n⟧` is a loop of byte loads
+  and stores into the frame, and the 32-byte load of `last` right after it waits for all of them: 58 % of the samples in `quoted`
+  fall on that load.  Most strings in a document are shorter than a block, so this is most of writing a string.  A masked load
+  (`vmovdqu8` with a mask from `bzhi`), or the block ending at `n` loaded and shifted into place, reads the same bytes without the
+  frame.
+- **Values in the frame across iterations**: `quickly` reloads the index's base (`0x320(%rsp)`) and the word of bits through a
+  pointer (`0x308(%rsp)`, then `(%rcx)`) in every pass of the bit walk, and `quoted` reloads its `high` mask from `0x128(%rsp)`
+  every block; the loops have registers to spare for all three.
+- **A truth value made to be tested**: a condition joined with `and` is `setcc`, `movzx` and `test` before the branch, as
+  `std.string`'s measurements showed; `while at < n and input⟦at⟧ ≠ q` should be two compares and two branches.
+- **A sum built and copied**: `Value(.text ← s)` made in a frame slot stores its tag byte and its payload separately and is then
+  copied out with eight-byte loads, the load of the tag's word waiting for the byte store; and every sum a function holds gets a
+  frame slot of its own, never shared with one that is dead, which is why `tree_at`'s frame is some 1 300 bytes.
+- **Small functions not inlined**: `byte_at`, `place_of`, `is_space` and `allows` are a handful of instructions each and were called
+  in every iteration until the module said `@[inline]`; a function shorter than its call should not need saying so.
+- **The prefix exclusive or is six shifts and exclusive ors**, the language having no carry-less multiplication: simdjson's is one
+  `pclmulqdq` of the quote bits by all ones (`pmull` on AArch64, `clmul` in RISC-V's Zbc).  A `⎕clmul`, or the compiler knowing the
+  ladder for what it is, would make it one instruction.
