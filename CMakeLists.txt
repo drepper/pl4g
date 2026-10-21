@@ -417,7 +417,9 @@ add_test(NAME embed-example
 # And the same in C++, through the object embed/pl4g-embed.hh wraps it in.
 add_executable(pl4g-embed-example-cc src/examples/embed/host.cc)
 target_include_directories(pl4g-embed-example-cc PRIVATE ${CMAKE_SOURCE_DIR}/src/lib)
-target_compile_options(pl4g-embed-example-cc PRIVATE -Wall -Wextra)
+# With its contracts, which are reported by what -fcontracts links.
+target_compile_options(pl4g-embed-example-cc PRIVATE -Wall -Wextra -fcontracts)
+target_link_options(pl4g-embed-example-cc PRIVATE -fcontracts)
 target_link_libraries(pl4g-embed-example-cc PRIVATE ${CMAKE_DL_LIBS})
 set_target_properties(pl4g-embed-example-cc PROPERTIES ENABLE_EXPORTS ON)
 add_dependencies(pl4g-embed-example-cc pl4g-embed)

@@ -1219,7 +1219,10 @@ works out a sum, the extremes and a sum of squares, and delivers them through a 
 checks against what it works out itself.  **A C++ program has an object for it** (`src/lib/embed/pl4g-embed.hh`, header
 only): `pl4g::embed::LoadedInterpreter` loads the library, finds the three functions and makes a state when it is made -- throwing,
 with what went wrong, where any of that fails -- and gives the state and the library back when it is destroyed; it can be moved
-and not copied, and `run(text, name)` runs a program in its state.  `src/examples/embed/host.cc` is the example again through it,
+and not copied, and `run(text, name)` runs a program in its state.  What it asks and promises is said as contracts, through `PL4G_PRE` and `PL4G_POST`, which
+are `pre` and `post` where the compiler has contracts (`__cpp_contracts`) and nothing where it has not.  GCC 16 has them in C++26
+without `-fcontracts` but links what reports a violation only with it, which no macro shows: a program using the header with
+GCC is compiled and linked with `-fcontracts`, or defines `PL4G_NO_CONTRACTS`.  `src/examples/embed/host.cc` is the example again through it,
 which ctest's `embed-example-cc` runs.
 
 **What a run leaves behind is its state's.**  The interpreter had no state of its own between runs, but the runtime it calls did,

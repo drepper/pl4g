@@ -27,6 +27,25 @@
 #include "embed/pl4g-embed.h"
 
 
+// What a function asks of its caller and promises in return, as contracts
+// where the compiler has them (C++26's, P2900) and as nothing where it has
+// not: a program including this need not be compiled with them.  PL4G_POST
+// takes what `post` takes, a name for the result first where one is wanted.
+//
+// Where the compiler has them, the program has to be linked with what reports
+// a violation.  GCC has them in C++26 whether or not -fcontracts is given, but
+// links what reports one (libstdc++exp) only where it is, so a program using
+// this is compiled and linked with -fcontracts -- or defines
+// PL4G_NO_CONTRACTS, which leaves the conditions unsaid.
+#if defined(__cpp_contracts) && __cpp_contracts >= 202502L && ! defined(PL4G_NO_CONTRACTS)
+# define PL4G_PRE(...) pre(__VA_ARGS__)
+# define PL4G_POST(...) post(__VA_ARGS__)
+#else
+# define PL4G_PRE(...)
+# define PL4G_POST(...)
+#endif
+
+
 namespace pl4g::embed {
 
   // The interpreter in libpl4g-embed.so, with a state of its own.
@@ -40,6 +59,8 @@ namespace pl4g::embed {
     // std::runtime_error saying which of the three failed, having given back
     // whatever the ones before it took.
     explicit LoadedInterpreter(const char* library = default_library)
+      PL4G_PRE(library != nullptr)
+      PL4G_POST(valid())
     {
       handle = ::dlopen(library, RTLD_NOW);
       if (handle == nullptr) [[unlikely]]
@@ -60,12 +81,14 @@ namespace pl4g::embed {
     // The other's state and its hold on the library, the other left with
     // neither.
     LoadedInterpreter(LoadedInterpreter&& other) noexcept
+      PL4G_POST(! other.valid())
       : handle(std::exchange(other.handle, nullptr)), state_new(other.state_new), state_free(other.state_free),
         run_source(other.run_source), state(std::exchange(other.state, nullptr))
     {
     }
 
     LoadedInterpreter& operator=(LoadedInterpreter&& other) noexcept
+      PL4G_POST(this == &other || ! other.valid())
     {
       if (this != &other) {
         release();
@@ -81,12 +104,19 @@ namespace pl4g::embed {
     // Give back the state, and everything its runs took, and the library.
     ~LoadedInterpreter() { release(); }
 
+    // Whether this holds an interpreter, which one moved from does not.
+    bool valid() const noexcept { return state != nullptr; }
+
     // Compile the PL4G program `text` and run it in this interpreter's
     // state, `name` being what its diagnostics and faults call the file.
     // Answers what pl4g_embed_run_source answers: the status it exited with,
     // 1 where it did not compile, 128 plus a signal's number, or -1 where
     // the interpreter itself failed.
+    // Asked of an interpreter that has not been moved from; one that has
+    // answers -1 where nothing checks.
     int run(std::string_view text, const std::string& name = "embedded.pl4g")
+      PL4G_PRE(valid())
+      PL4G_PRE(text.data() != nullptr || text.empty())
     {
       if (state == nullptr) [[unlikely]]
         return -1;
@@ -98,6 +128,8 @@ namespace pl4g::embed {
     // none, having let the library go.
     template<typename F>
     F found(const char* symbol)
+      PL4G_PRE(handle != nullptr && symbol != nullptr)
+      PL4G_POST(f: f != nullptr)
     {
       void* address = ::dlsym(handle, symbol);
       if (address == nullptr) [[unlikely]] {
@@ -111,6 +143,7 @@ namespace pl4g::embed {
 
     // Give back what this holds, which a moved-from object holds nothing of.
     void release() noexcept
+      PL4G_POST(handle == nullptr && state == nullptr)
     {
       if (state != nullptr)
         state_free(std::exchange(state, nullptr));
