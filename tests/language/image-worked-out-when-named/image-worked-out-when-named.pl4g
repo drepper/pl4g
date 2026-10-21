@@ -1,0 +1,45 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A variable in the image whose value is a call is worked out the first time
+※ something names it -- in a module lowered as far as a program names it, which
+※ is every module a program imports.  The constant is the call's answer
+※ whenever it is worked out, nothing about the call being able to change; what
+※ moves is only when the compiler spends the time on it.  So a library may hold
+※ a table of thousands of numbers in the body of a function and a program that
+※ never reads it does not have the compiler read it either: the body is set
+※ aside unread, and the call is never run.  `std.string` holds its powers of
+※ five and of ten that way, which every program reaches through `std`.
+※
+※ `tables` holds two such tables.  This program names `squared`, which reads
+※ one of them, and not `never`, which reads the other -- and that other cannot be
+※ worked out, there being a lambda in the way.  Nothing asks for it, so nothing
+※ says so; a program naming `never` is refused (see
+※ image-worked-out-when-named-refused).  A program's own file is worked out
+※ whole, as its functions are lowered whole.
+※
+※ The answer may be an array whose type says its length, as here and in the
+※ program's own `CUBES`, laid out as the array written down would be.
+
+let std := ⎕import("std")
+let tables := ⎕import("tables")
+
+let CUBES: u64⟦4⟧ = cubes() in ⎕static
+
+fn cubes() → u64⟦4⟧:
+    ⟦0, 1, 8, 27⟧
+
+let HALVES: f64⟦3⟧ = halves() in ⎕static
+
+fn halves() → f64⟦3⟧:
+    ⟦0.5, 1.5, 2.5⟧
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if tables.squared(3u64) ≠ 9u64 ∨ tables.squared(7u64) ≠ 49u64:
+        1u6
+    elif CUBES⟦3⟧ ≠ 27u64:
+        2u6
+    elif ⎕bits(HALVES⟦1⟧) ≠ ⎕bits(1.5f64):
+        3u6
+    else:
+        0u6

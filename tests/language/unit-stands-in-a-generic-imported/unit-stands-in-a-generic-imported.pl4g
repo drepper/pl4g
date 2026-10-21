@@ -1,0 +1,17 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ What a unit may stand for is said by a file and holds in that file, and a
+※ generic function made for another file is the file that wrote it all the
+※ same: `counting` says `unit ¤size → ¤idx`, and `how_many` made here for a
+※ `u8⟦⟧` gives `#v` to an index as its own file lets it, though this file says
+※ nothing of the kind.  The body means what it means where it was written,
+※ which is the rule for the names it reads, and now for its units as well.
+
+let std := ⎕import("std")
+let counting := ⎕import("counting")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let bytes: u8⟦5⟧ = ⟦1u8, 2u8, 1u8, 3u8, 1u8⟧ in ⎕static
+    let words: u16⟦3⟧ = ⟦7u16, 7u16, 9u16⟧ in ⎕static
+    if counting.how_many(bytes, 1u8) = 3u64 ∧ counting.how_many(words, 7u16) = 2u64: 0u6 else: 1u6

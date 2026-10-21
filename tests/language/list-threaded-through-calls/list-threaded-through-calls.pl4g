@@ -1,0 +1,54 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A list is built through calls the way it is built in place: `out ← f(x, out)`
+※ hands the room to `f`, which grows it and hands it back, and nothing is
+※ copied.  This is about the calls in between.  A body that hands a `mut` list
+※ parameter on to such a call and takes back what it answers -- `into ←
+※ letter(c, into)`, or answering the call outright -- is the room's owner as
+※ much as one joining onto it itself: its caller hands the room over to it, and
+※ it hands the room on.  Before, a parameter was never handed on as it was, so
+※ every call between the one that made the list and the one that grew it made
+※ a copy, and building a list of a hundred thousand bytes through two of them
+※ asked for some thousands of millions -- more than the program may have.
+※
+※ A parameter joined onto in place is a place of the body's own, and that does
+※ not stop it being handed on; one a reference is taken of, or a walk is over,
+※ is reached a second way, and is copied as before.  What the caller still reads
+※ afterwards is copied too, so what it holds is what it held.
+
+let std := ⎕import("std")
+
+fn letter(c: u8, into: mut [u8]) → [u8]:
+    into ⧺← ⟦c⟧
+    into
+
+※ handed on twice, and answered as the second call answers it
+fn pair(c: u8, into: mut [u8]) → [u8]:
+    into ← letter(c, into)
+    letter(c + 1u8, into)
+
+※ joined onto here too, and handed on between
+fn line(c: u8, out: mut [u8]) → [u8]:
+    out ← pair(c, out)
+    out ⧺← ⟦10u8⟧
+    out ← pair(c, out)
+    out
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let text: mut [u8] = []
+    let i: mut u64 = 0u64
+    while i < 25000u64:
+        text ← line(97u8, text)
+        i ← i + 1u64
+    if #text ≠ 125000 ∨ text⟦0⟧ ≠ 97u8 ∨ text⟦1⟧ ≠ 98u8 ∨ text⟦2⟧ ≠ 10u8 ∨ text⟦124999⟧ ≠ 98u8:
+        return 1u6
+    ※ read again afterwards: what is handed is a copy, and `kept` is as it was
+    let kept: mut [u8] = [1u8]
+    let grown: [u8] = pair(5u8, kept)
+    if #kept ≠ 1 ∨ #grown ≠ 3 ∨ grown⟦2⟧ ≠ 6u8:
+        return 2u6
+    kept ← line(7u8, kept)
+    if #kept ≠ 6 ∨ kept⟦3⟧ ≠ 10u8:
+        return 3u6
+    0u6

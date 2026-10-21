@@ -1,0 +1,69 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A result whose answer is a type given its types carries an error of a type
+※ of its own: `Read(f64) ? Why` is a `Read(f64)` or a `Why`, and the types in the
+※ parentheses are the answer's and nothing the error is told.  Before, they
+※ were handed to the error's name as well, which takes none.
+※
+※ And an error stands where an answer holding a floating-point number would
+※ have: what the answer would have been is nought, in a floating-point
+※ register as much as an ordinary one -- which the back ends had no way to put
+※ there, an `f64 ? u8` failing being something no program had yet said.
+
+let std := ⎕import("std")
+
+type Read(T') = value : T' ; taken : u64
+
+enum Why { short ; long }
+
+@[opaque]
+fn read(n: u64) → Read(f64) ? Why:
+    if n = 0u64:
+        ⊥ Why.short
+    elif n > 9u64:
+        ⊥ Why.long
+    else:
+        Read(.value ← ⎕float(n, ⌜f64⌝) × 0.5f64, .taken ← n)
+
+@[opaque]
+fn halved(n: u64) → f64 ? u8:
+    if n = 0u64: ⊥ 7u8 else: ⎕float(n, ⌜f64⌝) × 0.5f64
+
+@[opaque]
+fn either(n: u64) → f32?:
+    if n = 0u64: ⊥ else: 1.5f32
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let fine: Read(f64) ? Why = read(3u64)
+    let low: Read(f64) ? Why = read(0u64)
+    let high: Read(f64) ? Why = read(10u64)
+    match fine:
+        Read(f64)(r):
+            if ⎕bits(r.value) ≠ ⎕bits(1.5f64) ∨ r.taken ≠ 3u64:
+                return 1u6
+        ⊥:
+            return 2u6
+    match low:
+        Read(f64)(_):
+            return 3u6
+        ⊥(why):
+            if why ≠ Why.short:
+                return 4u6
+    match high:
+        Read(f64)(_):
+            return 5u6
+        ⊥(why):
+            if why ≠ Why.long:
+                return 6u6
+    match halved(0u64):
+        f64(_):
+            return 7u6
+        ⊥(code):
+            if code ≠ 7u8:
+                return 8u6
+    if ⎕bits(halved(4u64) ?? 0.0f64) ≠ ⎕bits(2.0f64):
+        return 9u6
+    if ⎕bits(either(0u64) ?? 2.5f32) ≠ ⎕bits(2.5f32) ∨ ⎕bits(either(1u64) ?? 0.0f32) ≠ ⎕bits(1.5f32):
+        return 10u6
+    0u6

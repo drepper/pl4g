@@ -1,0 +1,16 @@
+※ pl4g-test: module
+※※ A generic function whose file says a count may stand for an index.
+
+unit ¤size → ¤idx
+
+※※ How many of the elements are the one asked about.
+@[export]
+fn how_many(v: T'⟦⟧, one: T') → u64 pre(T' = T' → bool):
+    let n: u64 ¤idx = #v
+    let at: mut u64 ¤idx = 0
+    let found: mut u64 = 0u64
+    while at < n:
+        if v⟦at⟧ = one:
+            found ← found + 1u64
+        at ← at + 1
+    found

@@ -2772,7 +2772,9 @@ whatever file names it.
 
 **In a pattern, one name in parentheses after a type is the name the value is bound to**, as it always was: `u8(v)`.  A type with
 type parameters is written with its own before that -- `Maybe(u8)(inner)` -- and one with neither binding nor anything after it
-would read its single type as a binding, so it takes `(_)`.
+would read its single type as a binding, so it takes `(_)` -- which binds nothing, and nothing is said of it not being read.
+**A result of one is written with its types before the mark**, `Read(f64) ? Why`, and they are the answer's: the error is a
+name of its own, a type of the answer's module or one the language has, which takes none.
 
 Compare Haskell's `data Pair a = Pair a a`, Rust's `struct Pair<T>` with `where` bounds, C++ class templates with `requires`
 clauses, Go's `type Pair[T any] struct`, and Zig, where a function returning a type is how a type takes parameters.  The
@@ -2824,6 +2826,11 @@ let at: u64 ¤idx = 2
 v⟦at⟧                                ※ which one
 v⟦#v - 1⟧                             ※ a count, where `unit ¤size → ¤idx` says it may stand
 ```
+
+**A name defined with one unit and given a number of another that may stand there is of the type it was written with**:
+`let n: u64 ¤idx = #v` is an index, and a comparison of it with another index compares two of one type.  The bits are the same
+bits, so the crossing is a cast of nothing.  **What may stand where is the file's**: a generic function made for another file reads
+its own file's `unit … → …`, as it reads its own file's names (Generic Functions).
 
 **Any other unit is introduced before it is used** (4539), which is what keeps a unit mistyped in one place from quietly becoming
 a unit of its own -- the one mistake a language with no such rule cannot tell from a new kind of quantity.  Three forms:
@@ -4403,6 +4410,13 @@ nothing of the callee, the value's code copies.  Compare **C++**, where `v = f(s
 still be read; **Rust**, where `v = f(v)` moves and reading the old `v` is refused; **Swift**, whose copy-on-write would copy here
 if a second reference were alive, and does not when none is.
 
+**A body handing such a parameter on is its owner as much as one changing it in place.**  `into ← f(x, into)`, or answering
+`f(x, into)` outright, takes the room the call answers back -- so the body takes the parameter as its own, its caller hands the room
+over to it as above, and it hands the room on, the parameter not being read again.  A list is then built through any number of
+calls between the one that made it and the one that grows it, `std.string`'s writers among them, and nothing on the way copies
+it.  A parameter joined onto in place is a place of the body's own and is handed on all the same; one a reference is taken of, a
+lambda brings in by reference or a cursor walks is reached a second way, and is copied.
+
 ```
 let l: mut [u8] = [1u8, 2u8, 3u8]
 let m: [u8] = l                       ※ l is used below: m gets a copy
@@ -4659,8 +4673,9 @@ while running.  A table made out of one -- a union, say -- comes out of `⎕heap
 the same one.
 
 **A call in the initializer is run while compiling.**  `let names: ⸨Colour: str⸩ = named() in ⎕static` calls a pure function of the
-program before the program runs, and what it answers is laid out as the literal it comes to would be -- a set, a dictionary, a list
-or text, of numbers, truth values, characters, text and values of enumerations.  The function may build what it answers the way any
+program before the program runs, and what it answers is laid out as the literal it comes to would be -- a set, a dictionary, a list,
+an array of one dimension whose type says its length, or text, of numbers, truth values, characters, text and values of
+enumerations.  The function may build what it answers the way any
 does: from a table written empty, entries put in one at a time, `comptime foreach` over `⎕fields(⌜E⌝)`, loops, set operators.  So a
 table of an enumeration's names is read off the enumeration rather than written out beside it.  The function is not in the
 program for that: nothing of it runs while the program does.  A function marked `@[impure]` or `@[io]` is refused (4665), as is a
@@ -4675,6 +4690,13 @@ fn named() → ⸨Colour: str⸩:
 
 let names: ⸨Colour: str⸩ = named() in ⎕static
 ```
+
+**In a module a program imports, the call is run when something names the variable**, as a function there is lowered when
+something names it.  What it comes to is the same whenever it is worked out -- a pure call of constants -- and what moves is when the
+compiler spends the time, and whether: a library holding a table of thousands of numbers in a function's body costs a program that
+never reads it nothing, the body being set aside unread and the call never made.  `std.string`'s tables are held so, and every
+program reaches `std.string` through `std`.  What cannot be worked out is said where something names it, then (7000); a program's
+own file is worked out whole, as its functions are lowered whole.
 
 Compare **Zig**, whose `std.StaticStringMap.initComptime` builds a lookup table from a list worked out by comptime code; **D**, whose
 compile-time function evaluation builds the value of a `static immutable` associative array; **C++**'s `constexpr` functions, which
@@ -8403,7 +8425,8 @@ t.text(1234u64)
 ```
 
 **An instance made for an importing file is checked where the function was written**, not where it was called: its body names
-what its own file can see, and a name the calling file happens to have of the same spelling does not change what the body means.
+what its own file can see -- the units and what may stand for what among them -- and a name the calling file happens to have of
+the same spelling does not change what the body means.
 That is the rule a bundle's lines already follow and it is the same reason -- substituting *into* a definition is not
 substituting the definition into the place that used it.  The arguments are the calling file's expressions and are lowered
 there, which is the line between the two.

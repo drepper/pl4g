@@ -1,0 +1,36 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `unit ¤size → ¤idx` lets a count stand where an index is wanted, and a name
+※ defined with the one and given the other is a name of the type it was
+※ written with: `n` below is an index, and what reads it -- a comparison with
+※ another index, a sum of two -- reads one.  The bits are the same bits, so the
+※ crossing is a cast of nothing.
+※
+※ It used to be the value that kept its unit, the name being written with the
+※ other: a comparison of the two then had nothing it could be, and the loop
+※ never learned when to stop.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+
+@[opaque]
+fn counted(bytes: u8⟦⟧) → u64 ¤idx:
+    let n: u64 ¤idx = #bytes
+    let at: mut u64 ¤idx = 0
+    while at < n:
+        at ← at + 1
+    at + n
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let doubled: u64 ¤idx = counted(⎕bytes("twelve bytes"))
+    ※ and a definition whose type has one unit, given a number of the other,
+    ※ is the one it was written with when it is handed on
+    let size: u64 ¤idx = #⎕bytes("seven..")
+    if doubled ≠ 24 ∨ counted(⎕bytes("")) ≠ 0:
+        1u6
+    elif size + doubled ≠ 31:
+        2u6
+    else:
+        0u6

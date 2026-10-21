@@ -5373,3 +5373,45 @@ list grows and the element perhaps shared until written.
 
 **Giving back a list of records holding text failed an assertion**, `__pl4g_disown` having been written for text and lists only;
 that and the merge above are in their own sections.
+
+
+A list handed on, units where they stand, and the image worked out when named
+-----------------------------------------------------------------------------
+
+**A parameter threaded through a call is taken as the body's own.**  `_takes_owned` asks `_threaded(name, body)` beside
+`_changed_in_place`: an assignment `name ← CALL(…)` with `name` bare among the call's arguments (or a `Named` one's value), a
+`return CALL(…)` likewise, or such a call as the body's last statement.  Read off what is written, as `_changed_in_place` is.
+`_movable(written, current)` then lets a parameter be handed on where `_owned_parameter(written, current)` says the function being
+lowered takes it as its own -- which asks `_Local.named_parameter`, set where the name is bound as a parameter and, unlike
+`is_parameter`, not cleared when the body gives it a value -- and a name in `_addressed` is refused only where `_referenced(body,
+name)` finds `&` in front of it, a capture by reference, a `[&]` lambda naming it or `⎕iter` of it in the function's body
+(`_node_of_func`; a function with no node there, a lambda's, is refused as before).  A join, an element written or one taken out
+gives a name storage of its own for the write and makes no second way to it.  `_answered` keeps answering such a parameter through
+`_heaps_or_copied`, the room being the heap's from the call that answered it.  The C++ is `threaded`, `referenced`,
+`Local::named_parameter` and `movable(written, current)`.
+
+**A unit that may stand is a cast.**  `_shorter_life`, which every non-result `_lower_into` goes through, casts a number whose type
+differs from the one wanted only in a unit `_stands_for` lets stand -- `bitcast`, which no back end emits anything for.  `_accepts`
+already let it through; `_as_declared` then found the value's type not the name's and bound `UndefConst`.  `_Generic` keeps the
+defining file's `_stands` and its top-level unit scope, and the call that makes an instance (`_lower_generic_call`) swaps them in
+beside `_top` and `_bundles`, as `written.scope` already was; the C++ `Generic` copies the two when it is collected, the units of a
+file being settled before any function is.
+
+**A result's error is resolved with no type arguments** (`replace(ref, …, args=())`, `other->args = {}`).  **`_report_unused` skips
+`_`.**
+
+**The nought of an error's answer reaches a floating-point register.**  `_select_float_move` on each machine took a register or
+memory; an `MCImm` -- what `undefined()` answers for an `UndefConst` -- now goes into a fresh ordinary register by `select_move` and
+across by `select_move_bits`: `mov`/`movq` on x86-64, `movz`/`fmov` on AArch64, `li`/`fmv.d.x` on RISC-V.
+
+**A variable in the image whose value is a call waits to be named.**  `_collect_global` leaves `initializer` nothing and puts the
+variable in `_waiting_images`, by name, where it is `in ⎕static`, its value an `Allocated` call, nothing `@[expect]`s of it, and the
+checker is not `_images_now` -- which `run` sets for a whole program, `whole_modules`, the macros' checker and the language server's,
+everything lowered there being lowered at once.  `want(names)` works out every waiting variable among `names` (`_image_now`, which
+is `_constant_value` with `_for_the_image` set) before it lowers anything, so a body reading the variable is lowered after it is
+known; and `_constant` of a waiting name works it out on the spot, for a number read where it may fold.  A variable nothing names
+keeps no initializer and `dropunreached` drops it, being named by nothing -- the one reader of an initializer before that is
+`dropunreached` itself, of what is named.  The C++ keeps `waiting_images` as a vector in the order written, so the two compilers
+work them out, and lay out what they hold, in the same order.  **An array may be what such a call answers**: `_constant_value`'s
+`Call` arm takes an `ArrayType` of one dimension whose type says its length, and `_as_literal` makes an `ArrayLit` of a list where
+one is wanted and a `FloatLit` of a float.

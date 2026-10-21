@@ -10979,6 +10979,47 @@ Compare: C's casts and `memcpy`, undefined out of range; C++20's `std::bit_cast`
 `truncate` with no answer out of range; APL's and BQN's numbers, which are one kind and need no crossing; Wolfram's
 `IntegerPart`.  None of them says which way a number did not fit.
 
+## 2026-10-22T13:00+02:00 — language and compiler
+
+### A list handed on through calls, units where a definition and a generic stand, and the image worked out when named
+
+Writing `std.string` (the next entry) in the language found these, each wrong or wanting for every program and not only for it,
+and each settled as the form most like the rest of the language:
+
+- **A `mut` list parameter handed on to a call whose answer the body takes back is taken as the body's own**, and handed on as it
+  is: `into ← f(x, into)`, or answering `f(x, into)` outright.  The rule so far was that a caller hands its own `mut` list to a
+  callee changing it in place without a copy, and a parameter never; so every call between a list's maker and its writer copied
+  it, and building a hundred thousand bytes through two of them asked for gigabytes -- which is the shape of every encoder that
+  recurses.  A body that hands its parameter on and takes it back is the room's owner as much as one joining onto it itself.  A
+  parameter joined onto in place is a place of its own, given storage for the join, and is handed on all the same; one reached a
+  second way -- `&` in front of it, a lambda bringing it in by reference, a cursor -- is copied, as before.  Compare **C++**'s
+  `std::move` of a parameter, which this is, written by nobody; **Rust**, where a `Vec` parameter is moved on by being named and the
+  borrow checker says when it may be; **Swift**'s `inout`, which hands the caller's storage down through every call; **Mojo**'s
+  ownership transfer at a value's last use.
+- **A variable in the image whose value is a call is worked out when something names it**, in a module a program imports -- lowered
+  as far as the program names it, as its functions are.  The specification already said a constant is worked out from what was
+  written for it when first asked for; the image's were worked out where they were collected, so every program reading `std`
+  worked out `std.string`'s tables.  The value is the same whenever it is worked out, a pure call of constants; what moves is when
+  the compiler spends the time, and what cannot be worked out is said where something names it (7000).  A program's own file is
+  worked out whole, as its functions are lowered whole.  **And such a call may answer an array whose type says its length**, of
+  one dimension, and floating-point numbers among what it holds.  Compare **Zig**, whose comptime values are evaluated lazily, as
+  far as something refers to them; **D**, whose CTFE runs where an initializer is needed; **C++**'s `inline constexpr` variables,
+  made once whoever names them, and its static initialization order, which is the trouble eagerness has; **Rust**'s `const`, folded
+  where used, and `LazyLock` for what is worked out while running.
+- **A name defined with one unit and given a number of another that may stand there is of the type it was written with**:
+  `let n: u64 ¤idx = #v` under `unit ¤size → ¤idx`.  It bound an undefined value, the definition comparing the value's type with
+  its own and finding a mismatch it had already allowed, so `while i < n` never ended; it now casts, a cast of nothing.  **And a
+  generic function made for another file reads its own file's `unit … → …`**, as it reads its own file's names; it read the
+  caller's, so `std.string.parse_int` failed in a program that did not happen to say the same.  F# has the unit's scope too, and
+  its generics carry their units with them.
+- **The types a result's answer is given are the answer's**: `Parsed(f64) ? ParseError` handed `(f64)` to the error's name too,
+  which takes none (4654).
+- **An error whose answer holds a floating-point number is compiled on all three machines**: the nought standing for the answer
+  nobody reads had no way into a floating-point register.  It goes through an ordinary one, as a value splatted into a vector
+  register already did -- `mov` and `movq`, `mov` and `fmov`, `li` and `fmv.d.x`.
+- **`(_)`, which the specification gives as how an arm binds nothing after a type given its types, said that `_` was not read**
+  (4006).  `_` is never reported.
+
 Open questions
 --------------
 
