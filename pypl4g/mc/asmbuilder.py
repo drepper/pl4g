@@ -92,7 +92,7 @@ class InstructionSelector(Protocol):
         """Instructions that return from the current function."""
         ...
 
-    def select_jump(self, target: MCSymRef, span: Span) -> Sequence[MCInst]:
+    def select_jump(self, target: MCOperand, span: Span) -> Sequence[MCInst]:
         """Instructions that transfer control to *target*."""
         ...
 
@@ -325,6 +325,12 @@ class InstructionSelector(Protocol):
         """How much room a function that calls has to set aside for its own
         return address, which is none where a call has already put it somewhere
         a further call cannot reach."""
+        ...
+
+    def frame_size(self, total: int, calls: bool) -> int:
+        """How large a frame of *total* bytes has to be made, for the stack to
+        be as aligned as the system's convention says where it has to be.
+        *calls* is whether the function was called and calls in turn."""
         ...
 
     def frame_walk(self, total: int, size: int,
@@ -670,7 +676,14 @@ class Assembler:
         # having when a call would destroy the others -- so a function that took
         # one has to put it back, or its caller loses whatever it held.
         kept = self._kept_registers(function) if returns else []
-        total = size + link + 8 * len(kept)
+        # And rounded, so that the stack is aligned at every call as the
+        # system's convention has it: what is called may be C, and C keeps
+        # what it puts on the stack aligned by assuming it found it so.
+        # A function that does not return was not called, or not as one that
+        # comes back -- the entry point is begun by the kernel -- and says how
+        # its stack stands for itself.
+        total = self._selector.frame_size(size + link + 8 * len(kept),
+                                          calls and returns)
         # Where a walk of the stack would find this function's return address --
         # and nowhere, for a function that calls nothing, which is a function no
         # walk can ever meet: every frame standing when a fault is reported has
@@ -1085,14 +1098,22 @@ class Assembler:
             raise RegisterAssignmentError("a function with no register file", 1)
         return self._registers.new_virtual(like.cls, like.bits)
 
-    def tail_jump(self, target: str, span: Span = INVALID_SPAN) -> None:
+    def tail_jump(self, target: MCOperand | str, span: Span = INVALID_SPAN,
+                  reads: Sequence[Reg] = ()) -> None:
         """Go to another function, which returns in this one's place.
 
         Unlike `jump` this records no successor: what it names is not a block of
         this function, and the graph this function's own passes walk would be
-        wrong to have it in.  Control does not come back here.
+        wrong to have it in.  Control does not come back here.  *target* is a
+        symbol, or a register holding where to go; *reads* is the registers
+        the other function's arguments are in, which is what keeps them wanted
+        up to here, as a call's are.
         """
-        self._emit(self._selector.select_jump(self.symref(target), span))
+        operand = self.symref(target) if isinstance(target, str) else target
+        selected = list(self._selector.select_jump(operand, span))
+        for inst in selected:
+            inst.reads = tuple(reads)
+        self._emit(selected)
 
     def frame(self, size: int, span: Span = INVALID_SPAN) -> None:
         """Make room for *size* bytes on the stack, and give it back with

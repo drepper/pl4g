@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Final, Mapping
 
 from ..diag.style import ColourWhen
+from ..ir.module import Output
 from ..sema.clauses import Conditions
 from ..paths import share_file
 
@@ -105,6 +106,9 @@ class Options:
     #: Whether `@[system]` is acted on: with this set, a system module is warned
     #: about and logged like any other module.
     ignore_system: bool = False
+    #: What the program is made into: an executable, or with `-shared` a shared
+    #: object a program loads.
+    output_kind: Output = Output.EXECUTABLE
     #: Whether the intermediate representation is checked after every stage
     #: that changed it -- what finds a defect in the compiler where it is made,
     #: and what an ordinary compilation does without.

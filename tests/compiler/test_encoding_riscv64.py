@@ -193,6 +193,7 @@ SAMPLES = [
      MCSymRef(SymExpr(MCSymbol("s")))),
     ("jal ra, .", "jal", MCSymRef(SymExpr(MCSymbol("s")))),
     ("jalr ra, a0, 0", "jalr", MCReg(reg("a0"))),
+    ("jr t2", "jr", MCReg(reg("t2"))),
     ("ret", "ret"),
     ("ecall", "ecall"),
     # The fence an acquiring read is followed by, and the one a releasing write

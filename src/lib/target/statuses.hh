@@ -42,5 +42,7 @@ namespace pl4g::target::statuses {
   inline constexpr int POST_CONDITION = FIRST + 11;
   // A range whose step was worked out while running and came to nought.
   inline constexpr int ZERO_STEP = FIRST + 12;
+  // A function the host defines whose symbol the host does not.
+  inline constexpr int HOST_SYMBOL_MISSING = FIRST + 13;
 
 } // namespace pl4g::target::statuses

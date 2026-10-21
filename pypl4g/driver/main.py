@@ -35,7 +35,7 @@ from ..front.expand import expand
 from ..front.parser import parse
 from ..ir.reports import Report, ReportLog
 from ..ir.function import Function, SpecialKind
-from ..ir.module import Module
+from ..ir.module import Module, Output
 from ..ir.printer import render_module
 from ..ir.verify import verify
 from ..mc.asmbuilder import RegisterAssignmentError
@@ -328,9 +328,13 @@ class Driver:
         """Check the program and lower it to the IR."""
         start = perf_counter()
         name = self.options.inputs[0].name if self.options.inputs else "<none>"
+        # A shared object runs on the stack of whatever calls it, so it makes
+        # none of its own.
+        shared = self.options.output_kind is Output.SHARED
         module = Module(name=name, triple=self.options.triple,
-                        stack_size=self.options.stack_size,
+                        stack_size=0 if shared else self.options.stack_size,
                         guard_size=self.options.guard_size,
+                        output=self.options.output_kind,
                         reports=self.reports)
         registry = self._registry()
         check(module, units, self.diags, registry, self.sources, self.notes,
@@ -400,6 +404,8 @@ class Driver:
             return ExitCode.ERRORS
 
         from ..elf.layout import ImageKind
+        from ..target.host import DLSYM, DLSYM_SLOT
+        from ..target.shared import LIBC, exports
         from ..elf.writer import ImageError, ImageSettings, write_image
         from ..mc.layout import layout_section, resolve_symbol_offsets
 
@@ -421,12 +427,20 @@ class Driver:
         self._emit_sbom(asm)
         start = perf_counter()
         defaults = target.image_defaults()
-        settings = ImageSettings(machine=defaults.machine, base_vaddr=defaults.base_vaddr,
+        shared = module.output is Output.SHARED
+        # A shared object needs the C library where it calls what the host
+        # defines, `dlsym` being there, and nothing else ever.
+        hosted = shared and DLSYM_SLOT in streamer.symbols
+        settings = ImageSettings(machine=defaults.machine,
+                                 base_vaddr=0 if shared else defaults.base_vaddr,
                                  page_size=defaults.page_size,
                                  entry_symbol=target.entry_symbol,
                                  header_flags=defaults.header_flags,
-                                 kind=ImageKind.EXECUTABLE,
-                                 stack_size=self.options.stack_size)
+                                 kind=ImageKind.SHARED if shared else ImageKind.EXECUTABLE,
+                                 stack_size=module.stack_size,
+                                 needed=(LIBC,) if hosted else (),
+                                 exports=exports(module) if shared else (),
+                                 imports=((DLSYM_SLOT, DLSYM),) if hosted else ())
         try:
             image, _ = write_image(settings, list(streamer.sections.values()),
                                    list(streamer.symbols.values()), module.source_paths,

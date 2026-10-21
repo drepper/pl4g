@@ -30,6 +30,7 @@ PT_INTERP: Final[int] = 3
 PT_NOTE: Final[int] = 4
 PT_PHDR: Final[int] = 6
 PT_GNU_STACK: Final[int] = 0x6474E551
+PT_GNU_RELRO: Final[int] = 0x6474E552
 PT_GNU_PROPERTY: Final[int] = 0x6474E553
 
 PF_X: Final[int] = 1
@@ -41,7 +42,12 @@ SHT_PROGBITS: Final[int] = 1
 SHT_SYMTAB: Final[int] = 2
 SHT_STRTAB: Final[int] = 3
 SHT_RELA: Final[int] = 4
+SHT_HASH: Final[int] = 5
+SHT_DYNAMIC: Final[int] = 6
 SHT_NOBITS: Final[int] = 8
+SHT_DYNSYM: Final[int] = 11
+SHT_INIT_ARRAY: Final[int] = 14
+SHT_FINI_ARRAY: Final[int] = 15
 
 SHF_WRITE: Final[int] = 0x1
 SHF_ALLOC: Final[int] = 0x2
@@ -69,6 +75,32 @@ EHDR_SIZE: Final[int] = 64
 PHDR_SIZE: Final[int] = 56
 SHDR_SIZE: Final[int] = 64
 SYM_SIZE: Final[int] = 24
+RELA_SIZE: Final[int] = 24
+DYN_SIZE: Final[int] = 16
+
+#: The entries of a dynamic section a shared object of this compiler has.
+DT_NULL: Final[int] = 0
+DT_NEEDED: Final[int] = 1
+DT_HASH: Final[int] = 4
+DT_STRTAB: Final[int] = 5
+DT_SYMTAB: Final[int] = 6
+DT_RELA: Final[int] = 7
+DT_RELASZ: Final[int] = 8
+DT_RELAENT: Final[int] = 9
+DT_STRSZ: Final[int] = 10
+DT_SYMENT: Final[int] = 11
+DT_INIT_ARRAY: Final[int] = 25
+DT_FINI_ARRAY: Final[int] = 26
+DT_INIT_ARRAYSZ: Final[int] = 27
+DT_FINI_ARRAYSZ: Final[int] = 28
+DT_RELACOUNT: Final[int] = 0x6FFFFFF9
+
+#: The two relocations a shared object has, by machine: the one that adds
+#: where the object was loaded, and the one that fills a slot with where a
+#: symbol is.  RISC-V has no relocation for a slot of its own and fills one
+#: as any other word holding an address.
+RELATIVE: Final[dict[int, int]] = {EM_X86_64: 8, EM_AARCH64: 1027, EM_RISCV: 3}
+GLOB_DAT: Final[dict[int, int]] = {EM_X86_64: 6, EM_AARCH64: 1025, EM_RISCV: 2}
 
 
 def st_info(binding: int, kind: int) -> int:

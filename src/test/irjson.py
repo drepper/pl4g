@@ -387,7 +387,7 @@ class Writer:
             "name": func.name, "t": self.type(func.ty), "linkage": func.linkage.value, "cconv": func.cconv,
             "attrs": {"special": None if attrs.special is None else attrs.special.value,
                       "priority": attrs.priority, "inline": attrs.inline.value, "abi": attrs.abi,
-                      "external": attrs.external, "builtin": attrs.builtin, "can_ignore": attrs.can_ignore,
+                      "external": attrs.external, "host": attrs.host, "builtin": attrs.builtin, "can_ignore": attrs.can_ignore,
                       "impure": attrs.impure, "io": attrs.io, "opaque": attrs.opaque,
                       "answer_in_storage": attrs.answer_in_storage, "chained": attrs.chained,
                       "listable": attrs.listable},

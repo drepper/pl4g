@@ -154,6 +154,7 @@ class _FunctionReader:
         special: SpecialKind | None = None
         priority: int | None = None
         abi: str | None = None
+        host: str | None = None
         impure = False
         opaque = False
         in_storage = False
@@ -177,8 +178,10 @@ class _FunctionReader:
                 priority = int(word[len("priority("):-1])
             elif word.startswith("abi("):
                 abi = word[len("abi("):-1]
+            elif word.startswith("host("):
+                host = word[len("host("):-1]
         attrs = FuncAttrs(special=special, priority=priority, inline=InlineHint.DEFAULT,
-                          abi=abi, impure=impure, opaque=opaque,
+                          abi=abi, host=host, impure=impure, opaque=opaque,
                           answer_in_storage=in_storage,
                           chained=chained)
         func = Function(name=name, ty=self._module.types.func_type(params, ret),

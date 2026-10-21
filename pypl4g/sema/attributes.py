@@ -174,9 +174,14 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
                      "is moved and never copied, and every variable holding one "
                      "closes it or moves it on before its scope ends"),
         AttrSpec("external", AttrTarget.FUNCTION,
-                 (_param("symbol", "string"),),
+                 (_param("symbol", "string"),), group="elsewhere",
                  doc="the function is defined somewhere else, under this "
                      "symbol, and the compiler fills it in"),
+        AttrSpec("host", AttrTarget.FUNCTION,
+                 (_param("symbol", "string"),), group="elsewhere",
+                 doc="the function is defined by the program this one is loaded "
+                     "into, under this symbol, and is looked up when it is "
+                     "first called"),
         AttrSpec("system", AttrTarget.FILE,
                  doc="a system module: what it alone would be warned about or "
                      "have logged is left unsaid, as a system header is in C"),

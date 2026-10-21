@@ -75,8 +75,10 @@ class Verifier:
             symbol = symbol_name(func)
             previous = seen.get(symbol)
             if previous is not None:
-                if previous.attrs.external is not None \
-                        and func.attrs.external is not None \
+                if (previous.attrs.external is not None
+                        and func.attrs.external is not None
+                        or previous.attrs.host is not None
+                        and func.attrs.host is not None) \
                         and not previous.blocks and not func.blocks:
                     # One function of the runtime declared by two files -- a
                     # program and `std` -- each in its own types: the one

@@ -112,3 +112,8 @@ POST_CONDITION: Final[int] = FIRST + 11
 #: A range whose step was worked out while running and came to nought, which
 #: would never end.  One written down is refused while compiling instead.
 ZERO_STEP: Final[int] = FIRST + 12
+#: A function the host defines was called and the host defines no such symbol.
+#: It is a stop of its own because it is no fault of the program's and none of
+#: its data's: it is the program and the host disagreeing about what is there,
+#: which only the first call can find out.
+HOST_SYMBOL_MISSING: Final[int] = FIRST + 13

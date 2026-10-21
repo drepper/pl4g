@@ -45,10 +45,12 @@ from .fixups import apply_fixup
 from .isel import A64Selector, UnsupportedOperation, lower_function
 from .opcodes import AARCH64_INSTRS, PAD_BYTE
 from .regs import GPR, INFO, VEC
-from .startup import (ALLOCATOR_REGS, ABORT_SYMBOL, ENTRY_SYMBOL,
+from .startup import (ALLOCATOR_REGS, ABORT_SYMBOL, ENTRY_SYMBOL, HOST_ABI,
                       SYSCALLS, STACK_ABI, WALK_ABI, emit_abort, emit_report,
                       emit_start)
 from ..stack import emit_handler, emit_state
+from ...ir.module import Output
+from ..shared import emit as emit_shared
 
 #: EM_AARCH64.  The page size is the largest a kernel may be configured with, so
 #: that one image loads whatever the running kernel chose; the congruence the
@@ -195,8 +197,16 @@ class AArch64Target:
         # program, and the walk stops rather than reading a row that is not
         # there.
         asm.label(FRAMES_END)
-        if module.startup is None:
+        shared = module.output is Output.SHARED
+        if module.startup is None and not shared:
             return
+        if shared:
+            # What the host defines, reached through stubs, and the tables the
+            # loader runs the constructors and destructors from.  Before the
+            # question below: a stub says what it did not find through the same
+            # helper a fault does.
+            emit_shared(asm, module, HOST_ABI, lookup_cconv(SYSTEM_CCONV), messages,
+                        sources, self.image_defaults().text_alignment, ABORT_SYMBOL)
         if wanted_by(module):
             # The allocator is emitted where something calls it and nowhere
             # else, so a program that never allocates carries none of it.
@@ -222,8 +232,9 @@ class AArch64Target:
             # What the kernel calls where the program follows a bad address,
             # which is how running off the bottom of the stack is caught.
             emit_handler(asm, SYSCALLS, STACK_ABI)
-        emit_start(asm, module, lookup_cconv(module.startup.cconv),
-                   failures, layout)
+        if module.startup is not None and not shared:
+            emit_start(asm, module, lookup_cconv(module.startup.cconv),
+                       failures, layout)
         runtime.emit(asm, BY_NAME)
         messages.emit(asm)
         constants.emit(asm)

@@ -1004,6 +1004,13 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
                 fields=(_reg_field(0, _RN),),
                 implicit_defs=(X30,), flags=InstFlags.CALL,
                 est_size=INSTRUCTION_SIZE),
+    # br Xn
+    # A jump through a register, which is how a stub that found what it stands
+    # for goes there, with the arguments and the link register as they came.
+    A64InstDesc("br", (_r(64),), template=0xD61F0000,
+                fields=(_reg_field(0, _RN),),
+                flags=InstFlags.TERMINATOR | InstFlags.BARRIER,
+                est_size=INSTRUCTION_SIZE),
     # ret   (returns through the link register)
     A64InstDesc("ret", (), template=0xD65F03C0, implicit_uses=(X30,),
                 flags=InstFlags.TERMINATOR | InstFlags.RETURN, est_size=INSTRUCTION_SIZE),

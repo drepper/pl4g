@@ -5991,7 +5991,7 @@ fn puts(text: str) → i32
 **Where it is found is the host's business, and when is the first call.**  The interpreter embedded in a program, and a shared
 object the compiler made and a program loaded, each ask `dlsym` for the symbol the first time the function is called, keep what
 it answered, and call it from then on with the system's convention.  A symbol `dlsym` does not find stops the program, with a
-status of its own (`host-symbol-missing`), at that first call: what is in the host is known only once there is a host.  **An
+status of its own (92), at that first call: what is in the host is known only once there is a host.  **An
 executable has none**, so a host function in one is refused (5300): the image a kernel starts has nobody to ask.
 
 **What crosses is what C has.**  A parameter is an integer, a floating-point number, a truth value, a character, a reference --
@@ -7882,6 +7882,7 @@ allocation that could not be met are three different things.
 | 89 | a pre-condition written in a signature did not hold, which is the **caller's** fault |
 | 90 | a post-condition written in a signature did not hold, which is the **callee's** |
 | 91 | a range whose step was worked out while running and came to nought, which would never end |
+| 92 | a function the host defines was called and the host defines no such symbol |
 
 **89 and 90 are two numbers because they have two culprits.**  A caller acting on
 a status can tell "I called this wrongly" from "the thing I called is broken",

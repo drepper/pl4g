@@ -22,6 +22,8 @@ this language, and that world knows the function by the name it was given.
 
 from __future__ import annotations
 
+from typing import Final
+
 from .function import Function
 from .types import FuncType
 
@@ -43,6 +45,12 @@ def mangle(name: str, ty: FuncType, module: str = "") -> str:
     return "".join(parts)
 
 
+#: What the stub that finds a function the host defines is called, before the
+#: host's symbol.  It carries the compiler's own prefix, which nothing a program
+#: writes can collide with.
+HOST_PREFIX: Final[str] = "__pl4g_host."
+
+
 def symbol_name(func: Function) -> str:
     """The name *func* is known by in the generated image.
 
@@ -53,6 +61,11 @@ def symbol_name(func: Function) -> str:
         # Defined somewhere else and under a name of its own: nothing here
         # chose it, so nothing here may decorate it.
         return func.attrs.external
+    if func.attrs.host is not None:
+        # What a call reaches is not the host's function but the stub that
+        # finds it, which is this image's own and is named so that it is never
+        # the host's symbol: a lookup that found the stub would find itself.
+        return "".join((HOST_PREFIX, func.attrs.host))
     if func.attrs.abi is not None:
         return func.name
     return mangle(func.name, func.ty, func.module)

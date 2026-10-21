@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Sequence
 
 from ..source.location import INVALID_SPAN, Span
@@ -69,6 +70,25 @@ class GlobalVar(Value):
         return "".join(("GlobalVar(@", self.name, ")"))
 
 
+class Output(Enum):
+    """What the program is made into, which decides whether there is a host.
+
+    An executable is started by the kernel and is loaded into nothing, so
+    nothing outside it can be asked for a function.  A shared object is loaded
+    into a program, and so is a program an interpreter embedded in one runs:
+    both have a host, and the functions it defines can be looked up in it.
+    """
+
+    EXECUTABLE = "executable"
+    SHARED = "shared"
+    INTERPRETED = "interpreted"
+
+    @property
+    def hosted(self) -> bool:
+        """Whether there is a program this one is loaded into."""
+        return self is not Output.EXECUTABLE
+
+
 @dataclass(slots=True, eq=False)
 class Module:
     """The whole program.
@@ -123,6 +143,10 @@ class Module:
     #: from the module.
     stack_size: int = 1 << 20
     guard_size: int = 1 << 16
+    #: What the program is made into: the command line's to say, and asked by
+    #: the checker, which refuses a function the host defines where there is
+    #: no host, and by the backend, which writes a shared object differently.
+    output: Output = Output.EXECUTABLE
     reports: ReportLog = field(default_factory=ReportLog)
     _int_consts: dict[tuple[int, bool, int], IntConst] = field(default_factory=dict)
     _float_consts: dict[tuple[int, bytes], FloatConst] = field(default_factory=dict)

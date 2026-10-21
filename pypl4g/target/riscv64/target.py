@@ -51,10 +51,12 @@ from . import attributes, isa
 from .isel import RVSelector, UnsupportedOperation, lower_function
 from .opcodes import PAD_BYTE, RISCV_INSTRS
 from .regs import FPR, GPR, INFO
-from .startup import (ALLOCATOR_REGS, ABORT_SYMBOL, ENTRY_SYMBOL,
+from .startup import (ALLOCATOR_REGS, ABORT_SYMBOL, ENTRY_SYMBOL, HOST_ABI,
                       SYSCALLS, STACK_ABI, WALK_ABI, emit_abort, emit_report,
                       emit_start)
 from ..stack import emit_handler, emit_state
+from ...ir.module import Output
+from ..shared import emit as emit_shared
 
 #: What the header's flag word says on this architecture.  The low bit says the
 #: code uses the compressed encoding, the two above it say which floating-point
@@ -273,8 +275,16 @@ class RISCV64Target:
         # program, and the walk stops rather than reading a row that is not
         # there.
         asm.label(FRAMES_END)
-        if module.startup is None:
+        shared = module.output is Output.SHARED
+        if module.startup is None and not shared:
             return
+        if shared:
+            # What the host defines, reached through stubs, and the tables the
+            # loader runs the constructors and destructors from.  Before the
+            # question below: a stub says what it did not find through the same
+            # helper a fault does.
+            emit_shared(asm, module, HOST_ABI, lookup_cconv(SYSTEM_CCONV), messages,
+                        sources, self.image_defaults().text_alignment, ABORT_SYMBOL)
         if wanted_by(module):
             # The allocator is emitted where something calls it and nowhere
             # else, so a program that never allocates carries none of it.
@@ -300,8 +310,9 @@ class RISCV64Target:
             # What the kernel calls where the program follows a bad address,
             # which is how running off the bottom of the stack is caught.
             emit_handler(asm, SYSCALLS, STACK_ABI)
-        emit_start(asm, module, lookup_cconv(module.startup.cconv),
-                   failures, layout)
+        if module.startup is not None and not shared:
+            emit_start(asm, module, lookup_cconv(module.startup.cconv),
+                       failures, layout)
         runtime.emit(asm, BY_NAME)
         messages.emit(asm)
         constants.emit(asm)

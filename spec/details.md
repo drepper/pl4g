@@ -1127,6 +1127,50 @@ bias of zero, a dynamic section, a relocation list and a self-relocation prologu
 **the backend materializes the address of a symbol only through one helper, which emits a program-counter-relative computation.**
 Nothing anywhere may put a symbol into an immediate.
 
+A Shared Object, and What the Host Defines
+------------------------------------------
+
+`-shared` writes an `ET_DYN` image linked at nought, which a program loads with `dlopen`.  **The code is the code an executable
+has**: every back end reaches what it reaches relative to where it is, so only data that holds an address is relocated.  The
+writer finds those words as the C++ compiler's `-fpie` does -- an absolute eight-byte fixup in data; one in code, or one of another
+width, is refused -- and what was read-only but for being relocated is made writable, renamed `.data.rel.ro`, put in a segment of
+its own and said with `PT_GNU_RELRO`, which the loader acts on once it has relocated it.
+
+**The tables are last, in two segments of their own**, so that nothing before them moves with their size: `.hash`, `.dynsym`,
+`.dynstr` and `.rela.dyn`, read-only, and then `.dynamic`, which is writable because glibc adds the load address to the addresses
+in it where it stands.  The symbols are the null one, `dlsym` where the object needs it, and then what it offers -- its visible
+functions and then its visible variables, in the order the module holds them.  The hash table is a System V `DT_HASH` with a bucket
+per symbol, each symbol put at the head of its chain in order.  The relocations are an `R_*_RELATIVE` per word in the order of
+their places, whose addend is what the word holds as linked, then a `GLOB_DAT` -- `R_RISCV_64` on RISC-V, which has none -- for
+the slot `dlsym` is put in.  `RELA` rather than `RELR`, which glibc accepts only from an object that also asks for the symbol
+version `GLIBC_ABI_DT_RELR`: one table of one kind is less than two tables and a version requirement.  `DT_NEEDED` names
+`libc.so.6` where something needs `dlsym`, and nothing otherwise.
+
+**There is no entry point and no startup code.**  The constructors are in `.init_array` and the destructors in `.fini_array`,
+reversed, since the loader reads that one from its end and the program's order is what has to come out; each was given the
+system's convention, the loader being what calls it.  A startup function the program has is not called.  The stack is the caller's,
+so the program makes none of its own and there is no handler for running off it.
+
+**A call to a function the host defines reaches a stub**, `__pl4g_host.SYMBOL`, local to the image so that `dlsym` can never find
+it in place of the host's.  It reads `__pl4g_host_slot.SYMBOL` and goes where it says, the arguments and the return address as
+the caller left them; while the slot holds nothing it calls `__pl4g_host_find` with the slot and the name in two registers no
+argument is in, and then goes where that answered -- or, where `dlsym` answered nothing, stops the program with status 92 and a
+message naming the symbol.  The finder is written once for the three architectures, from what each convention says its argument
+registers are: it keeps every one of them, sixteen bytes a register, and the slot, calls `dlsym(RTLD_DEFAULT, name)` through the
+slot the loader filled, and stores what came back.  The registers each architecture uses are `r11`, `r10` and `rax` on x86-64; the
+two AArch64 keeps for code between a call and what it calls, `x16` and `x17`, and `x9`; and `t1`, `t2` and `t0` on RISC-V, which,
+like AArch64, has the stub keep its return address across its call to the finder.
+
+**A `str` is made C's text by the checker.**  A host function taking one is split in two: a declaration taking an address in its
+place (`NAME.host`), and the function the program calls, whose body copies each `str` into the heap with a nul after it
+(`__pl4g_str_c`), calls the declaration and gives the copies back.  It is done in the representation so that the interpreter's call
+into the host and the compiled stub both see only what C sees.
+
+**A stop in a shared object ends the process it is in**, as it ends a program: the message is written to standard error and the
+process exits with the status, through the system call and not through the C library's `exit`.  What the host had buffered and not
+yet written is lost with it.  Whether a stop there should leave through `exit`, so that the host's own handlers run, is open
+(TODO-pypl4g.md).
+
 Diagnostics
 -----------
 
@@ -1150,6 +1194,7 @@ that diagnostics of one family stay numerically adjacent as they grow while unre
 | 4800-4899 | products and sums |
 | 4900-4999 | conditions on functions, and bundles |
 | 5000-5299 | control flow and returns |
+| 5300-5399 | functions the host defines, and shared objects |
 | 6000-6999 | purity, effects, aliasing and parallelization |
 | 7000-7499 | compile-time evaluation and reflection |
 | 7500-7999 | testing |
@@ -2266,6 +2311,17 @@ block it is what the graph says is live coming in and going out.
 
 That splitting is what turns `fn f(p: u8) → u8: p` into a bare `ret`: without it the register the argument arrives in looks busy
 from the entry to the return, so the value is copied out of it and back into it.
+
+**The stack is aligned at every call as the system's convention has it**, sixteen bytes on all three.  It was not, for a long
+time, and nothing noticed: what was called was this compiler's own code, which never asks, and the runtime compiled from C, which
+happened not to.  A function the host defines is C that does ask, and the first call to one through a function with no frame
+stopped inside `dlsym`.  So a frame's size is the target's to round (`frame_size`): on x86-64, a function that calls and returns
+makes one eight past a multiple of sixteen, the return address having taken the other eight -- which is a frame of eight bytes for
+a function that would otherwise have none; on AArch64 and RISC-V every frame is a multiple of sixteen, which is what the stack
+pointer is held to everywhere there and not only at a call.  AArch64 checks it on real hardware, so an image whose frame was not one
+would have stopped there with an alignment fault; QEMU does not check, which is why the tests did not see it.  A function that
+does not return -- the entry point, the fault helper, a stub -- was not called as one that comes back and says how its stack stands
+for itself.
 
 The allocator
 -------------

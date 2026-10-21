@@ -759,3 +759,16 @@ Optimizations
 [ ] an ISA string for `--mclevel` on RISC-V is read by Unicode's rules: a version written in another script's digits,
     `rv64i٣`, is taken, and case and blanks are folded as Unicode folds them.  The C++ implementation reads ASCII only and
     refuses such a string; a level is something a build script writes, and the RISC-V specification's strings are ASCII.
+
+[?] decide how a stop in a shared object leaves.  It ends the process through the system call, as it ends a program, so what
+    the host had buffered and not yet written is lost and its own `atexit` handlers do not run.
+    Question: leave as now, which is what a program does and runs nothing in a process the library has just found broken;
+    or through the C library's `exit`, which runs the host's handlers and flushes what it buffered.
+
+[ ] check the processor in a shared object.  An executable built for more than the oldest x86-64 asks the processor at its entry
+    point; a shared object has no entry point, so one built for v3 loaded on a v1 machine stops with an illegal instruction
+    rather than saying so.  A constructor run first would be the place.
+
+[ ] run the shared objects of AArch64 and RISC-V.  They are checked by `eu-elflint` and by being pypl4g's byte for byte, and not
+    run: a host for them needs that architecture's C library and loader.  Fedora packages one for AArch64
+    (`sysroot-aarch64-fc44-glibc`, run with `qemu-aarch64 -L`); there is none for RISC-V.

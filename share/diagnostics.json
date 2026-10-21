@@ -121,6 +121,15 @@
       }
     },
     {
+      "first": 5300,
+      "last": 5399,
+      "topic": "functions the host defines, and shared objects",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition"
+      }
+    },
+    {
       "first": 6000,
       "last": 6999,
       "topic": "purity, effects, aliasing and parallelization"
@@ -10626,6 +10635,105 @@
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Comparisons",
         "requirement": "An assignment is written `NAME ← VALUE`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 5300,
+      "name": "LANG_HOST_IN_AN_EXECUTABLE",
+      "severity": "error",
+      "message": "'{name}' is defined by the host, and an executable has none",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "A function the 'host' attribute marks is found when it is first called, by asking the program the code was loaded into.  An executable is not loaded into anything: the kernel starts it, and there is nobody to ask.  Build a shared object instead ('-shared'), or run the program in an interpreter embedded in the host.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 5301,
+      "name": "LANG_HOST_PARAMETER_TYPE",
+      "severity": "error",
+      "message": "'{type}' does not cross into the host, which is what parameter '{param}' of '{name}' would have it do",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        },
+        {
+          "name": "param",
+          "type": "string",
+          "description": "the parameter"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "What a function the host defines is handed is what C has: an integer, a floating-point number, a truth value, a character, a reference, which is handed over as the address of the place it names, or a 'str', handed over as a nul-terminated copy.  Anything else has a layout of this compiler's own that nothing compiled by something else could read.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 5302,
+      "name": "LANG_HOST_RESULT_TYPE",
+      "severity": "error",
+      "message": "'{name}' would answer the host's '{type}', which does not cross back",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        }
+      ],
+      "cause": "What a function the host defines answers with is nothing or a number: an integer, a floating-point number, a truth value or a character.  Anything else would be memory the host made, and nothing here could say how long it lasts or who gives it back.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 5303,
+      "name": "LANG_SHARED_VISIBLE_CONVENTION",
+      "severity": "error",
+      "message": "'{name}' is offered by a shared object, so it has to follow the system's convention",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "A shared object offers its visible functions to programs compiled by something else, which call them the way the system calls things.  A function that follows this compiler's own convention would be called in a way it does not expect; mark it 'cdecl', or 'abi' with the convention it follows.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition"
       },
       "since": "0.1",
       "default_enabled": true,

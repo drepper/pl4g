@@ -10695,6 +10695,22 @@ first time it is called and called with its parameters and answer converted.  As
   is loaded.  **pypl4g and the C++ compiler both write it**, held to each other byte for byte as the executables are, **for all
   three architectures**.
 
+## 2026-10-21T14:40+02:00 — compiler
+
+### The stack aligned at every call, as the system's convention has it
+
+Found writing the stubs that call what the host defines: **no back end kept the stack aligned to sixteen bytes at a call**.  A
+function with no frame called with the stack eight bytes off on x86-64, and an AArch64 frame of an odd number of words left the
+stack pointer off as well.  Nothing noticed, because what was called was this compiler's own code, which never asks, and the
+runtime compiled from C, which happened not to; the first call to `dlsym` through a function with no frame stopped inside it.  On
+real AArch64 hardware the second is an alignment fault the moment the stack pointer is used, which QEMU does not check for.
+
+It is a fix rather than a choice -- the convention is the system's, and it says sixteen -- and the fix is the convention's own
+rule: a frame is rounded by the target, eight past a multiple of sixteen on x86-64 in a function that calls and returns, a multiple
+of sixteen always on the other two.  A function that calls and would have had no frame now makes one of eight bytes on x86-64.
+Compare GCC and Clang, which keep the same invariant and assume it on entry; Go, whose own convention keeps its own stack aligned
+and switches to a system stack, aligned, to call C; Rust and Zig, which follow LLVM's targets in this as in everything.
+
 Open questions
 --------------
 

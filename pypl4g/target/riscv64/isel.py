@@ -486,8 +486,11 @@ class RVSelector(InstructionSelector):
         """Instructions that return from the current function."""
         return (self._inst("ret", (), span),)
 
-    def select_jump(self, target: MCSymRef, span: Span) -> Sequence[MCInst]:
+    def select_jump(self, target: MCOperand, span: Span) -> Sequence[MCInst]:
         """Instructions that transfer control to *target*."""
+        if not isinstance(target, MCSymRef):
+            # Through a register: wherever it holds.
+            return (self._inst("jr", (target,), span),)
         return (self._inst("j", (target,), span),)
 
     def select_branch(self, cond: Condition, lhs: MCOperand, rhs: MCOperand,
@@ -866,6 +869,12 @@ class RVSelector(InstructionSelector):
     def link_slot_size(self) -> int:
         """A whole stack unit, the stack having to stay aligned to sixteen."""
         return 16
+
+    def frame_size(self, total: int, calls: bool) -> int:
+        """A multiple of sixteen, which is what the stack pointer is aligned to
+        everywhere and not only where a call is made."""
+        del calls
+        return (total + 15) & ~15
 
     def frame_walk(self, total: int, size: int,
                    link: int) -> tuple[int | None, int]:

@@ -136,6 +136,10 @@ class Expectations:
     #: is the words a program was started with.
     run_args: list[str] = field(default_factory=list)
     xfail: str | None = None
+    #: The C program that loads what a test builds, where it builds a shared
+    #: object: a file beside the test, compiled with the system's compiler and
+    #: run with the object's path after its own name.
+    host: str | None = None
     #: Whether the file is a module another test imports rather than a test of
     #: its own.  One has no startup function, so compiling it alone would fail
     #: for a reason that says nothing about the compiler.
@@ -185,6 +189,8 @@ def parse_directives(text: str) -> Expectations:
                     result.opt_levels = [int(v) for v in value.split(",")]
                 case "xfail":
                     result.xfail = value
+                case "host":
+                    result.host = value
     return result
 
 
@@ -329,11 +335,33 @@ class PL4GItem(pytest.Item):
         if not self.expectations.compiles:
             return
         check_conformance(output)
+        if self.expectations.host is not None:
+            self._check_hosted(source.parent / self.expectations.host, output)
+            return
         runner = runner_for(self.triple)
         if runner and not shutil.which(runner[0]):
             pytest.skip("".join((runner[0], " is not installed")))
         how = "natively" if not runner else "".join(("under ", runner[0]))
         self._check_run([*runner, str(output)], how)
+
+    def _check_hosted(self, host: Path, built: Path) -> None:
+        """Run the C program that loads the shared object the test built.
+
+        Only where it runs natively: a host for another architecture needs that
+        architecture's C library and its loader, which this machine need not
+        have, and a shared object has nothing to run without one.
+        """
+        if architecture_of(self.triple) != HOST_ARCH:
+            pytest.skip("".join(("a host for ", architecture_of(self.triple),
+                                 " needs its C library")))
+        compiler = shutil.which("cc") or shutil.which("gcc")
+        if compiler is None:
+            pytest.skip("no C compiler to build the host with")
+        program = built.with_name("".join((built.name, ".host")))
+        made = subprocess.run([compiler, "-O2", "-rdynamic", "-o", str(program), str(host)],
+                              capture_output=True, text=True, timeout=120)
+        assert made.returncode == 0, describe(made)
+        self._check_run([*limited(), str(program), str(built)], "in its host")
 
     def _check_compile(self, proc: subprocess.CompletedProcess[str]) -> None:
         """Check the compilation itself against what the file expects."""

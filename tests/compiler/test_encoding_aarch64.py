@@ -302,6 +302,7 @@ SAMPLES = [
     ("cmp x3, #16", "cmp", MCReg(reg("x3")), MCImm(16, 12, False)),
     ("bl .", "bl", MCSymRef(SymExpr(MCSymbol("s")))),
     ("blr x9", "blr", MCReg(reg("x9"))),
+    ("br x17", "br", MCReg(reg("x17"))),
     ("ret", "ret"),
     ("svc #0", "svc", MCImm(0, 16, False)),
     ("brk #1", "brk", MCImm(1, 16, False)),

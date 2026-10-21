@@ -122,6 +122,13 @@
       "help": "write an executable loaded at a fixed address, which is the default"
     },
     {
+      "short": "-shared",
+      "long": null,
+      "arg": "none",
+      "since": "0.1",
+      "help": "write a shared object, which a program loads and calls, rather than an executable"
+    },
+    {
       "short": "-W",
       "long": null,
       "arg": "joined",

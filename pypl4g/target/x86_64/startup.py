@@ -21,6 +21,7 @@ from ...mc import ops
 from ...mc.asmbuilder import Assembler
 from .. import backtrace, statuses
 from ..callconv import CallConvDesc
+from ..host import HostABI
 from .abi import lookup as lookup_cconv
 from .. import started
 from ..tests import Failure, run_by
@@ -506,3 +507,10 @@ SYSCALLS: Final[SyscallABI] = SyscallABI(
 ALLOCATOR_REGS: Final[AllocatorRegs] = AllocatorRegs(
     arena=RDI, size=RSI, answer=RAX,
     scratch=(RDX, RCX, reg("r11")))
+
+
+#: The registers a stub for what the host defines works in: none of them an
+#: argument's.  The call to the finder pushes the return address, and the
+#: eight bytes more the stub makes room for are what align the stack for it.
+HOST_ABI: Final[HostABI] = HostABI(slot=reg("r11"), name=reg("r10"), through=RAX,
+                                   room=8)

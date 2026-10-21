@@ -53,6 +53,11 @@ class FixupKind:
     #: The number of bytes the patch reads and writes back.
     size: int
     base: FixupBase = FixupBase.ABSOLUTE
+    #: Whether what is stored is only the address's offset within a 4 KiB page,
+    #: as the second half of an AArch64 address pair is: the same wherever an
+    #: image aligned to pages is loaded, so nothing a shared object has to
+    #: relocate.
+    within_a_page: bool = False
 
     @property
     def label(self) -> str:

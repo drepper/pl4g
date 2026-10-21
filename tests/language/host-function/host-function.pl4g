@@ -1,0 +1,69 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none host=host.c
+※ pl4g-test: args -shared
+
+※ `@[host("SYMBOL")]` on a function with no body says the program this one is
+※ loaded into defines it, under that symbol.  It is looked up with `dlsym` the
+※ first time it is called, kept, and called from then on with the system's
+※ convention.
+※
+※ **What crosses is what C has**: integers, floating-point numbers, truth
+※ values, characters and references, a reference handed over as the address of
+※ the place it names -- an `@[abi]` record among them -- and a `str` as C's text,
+※ a nul-terminated copy made for the call and given back after it.
+※
+※ **This is a shared object** (`-shared`), which is what has a host: `host.c`
+※ loads it, calls the one function it offers and checks what came back, and
+※ that it ran the constructor when loaded and the destructor when unloaded.
+※ Every argument register is among what it checks: the stub that finds each
+※ function keeps them all while it asks.
+※
+※ Compare: **LuaJIT**'s `ffi.cdef`, which declares C functions and finds them by
+※ name when first called; **Python**'s ctypes, whose `c_char_p` makes the same
+※ copy of a string; **C**, **Zig** and **Rust**, whose `extern` declarations are
+※ this one with a linker resolving them before the program starts.
+
+@[abi]
+type Pair =
+    first : i64 ; second : f64
+
+@[host("note")]
+fn note(what: i64)
+
+@[host("join_words")]
+fn join_words(a: str, b: str) → i64
+
+@[host("many")]
+fn many(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: f64, h: f64) → i64
+
+@[host("scale")]
+fn scale(p: &mut Pair, by: f64) → bool
+
+@[host("bump")]
+fn bump(n: &mut i64)
+
+@[host("next_char")]
+fn next_char(c: char) → char
+
+let started: mut i64 = 0i64
+
+@[constructor, impure]
+fn begin():
+    started ← 1i64
+    note(1i64)
+
+@[destructor, impure]
+fn finish():
+    note(4i64)
+
+※ What the host calls.  It follows the system's convention, as everything a
+※ shared object offers has to (5303).
+@[visible, cdecl, impure]
+fn run(n: i64) → i64:
+    let p: mut Pair = Pair(.first ← n, .second ← 1.5f64)
+    let k: mut i64 = 40i64
+    bump(&mut k)
+    let words: i64 = join_words("host", "functions")
+    let all: i64 = many(1i64, 2i64, 3i64, 4i64, 5i64, 6i64, 7f64, 0.5f64)
+    let scaled: bool = scale(&mut p, 2f64)
+    let c: char = next_char('a')
+    if scaled ∧ c = 'b' ∧ p.first = 2i64 × n: k + words + all + started else: 0i64

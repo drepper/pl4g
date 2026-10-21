@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=5302
+※ pl4g-test: args -shared
+※ pl4g-test: expect-diag 5302 LANG_HOST_RESULT_TYPE
+
+※ What a function the host defines answers with is nothing or a number.  Text
+※ would be memory the host made, and nothing here could say how long it lasts
+※ or who gives it back.
+
+@[host("getenv")]
+fn getenv(name: str) → str
+
+@[visible, cdecl, impure]
+fn run() → i64:
+    let found: str = getenv("HOME")
+    0i64

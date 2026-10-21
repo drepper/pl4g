@@ -20,12 +20,19 @@ from ..mc.fragment import (MCDataFragment, MCFragment, MCInstFragment,
 from ..mc.layout import (layout_section, resolve_symbol_offsets,
                          section_bytes)
 from ..mc.symbol import MCSection, MCSymbol, SymBinding, SymKind, SymVisibility
-from .const import (ET_EXEC, PF_R, PF_W, PF_X, PT_GNU_STACK, PT_LOAD, SHF_ALLOC,
-                    SHF_EXECINSTR, SHF_WRITE, SHN_ABS, SHN_UNDEF, SHT_NULL,
-                    SHT_PROGBITS, SHT_STRTAB, SHT_SYMTAB, STB_GLOBAL, STB_LOCAL,
-                    STB_WEAK, STT_FILE, STT_FUNC, STT_NOTYPE, STT_OBJECT,
-                    STV_DEFAULT, STV_HIDDEN, STV_INTERNAL, STV_PROTECTED,
-                    EHDR_SIZE, PHDR_SIZE, SHDR_SIZE, SYM_SIZE, st_info)
+from .const import (DT_FINI_ARRAY, DT_FINI_ARRAYSZ, DT_HASH, DT_INIT_ARRAY,
+                    DT_INIT_ARRAYSZ, DT_NEEDED, DT_NULL, DT_RELA, DT_RELACOUNT,
+                    DT_RELAENT, DT_RELASZ, DT_STRSZ, DT_STRTAB, DT_SYMENT,
+                    DT_SYMTAB, DYN_SIZE, ET_DYN, ET_EXEC, GLOB_DAT, PF_R, PF_W,
+                    PF_X, PT_DYNAMIC, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD,
+                    RELA_SIZE, RELATIVE, SHF_ALLOC, SHF_EXECINSTR, SHF_WRITE,
+                    SHN_ABS, SHN_UNDEF, SHT_DYNAMIC, SHT_DYNSYM, SHT_FINI_ARRAY,
+                    SHT_HASH, SHT_INIT_ARRAY, SHT_NULL, SHT_PROGBITS, SHT_RELA,
+                    SHT_STRTAB, SHT_SYMTAB, STB_GLOBAL, STB_LOCAL, STB_WEAK,
+                    STT_FILE, STT_FUNC, STT_NOTYPE, STT_OBJECT, STV_DEFAULT,
+                    STV_HIDDEN, STV_INTERNAL, STV_PROTECTED, EHDR_SIZE,
+                    PHDR_SIZE, SHDR_SIZE, SYM_SIZE, st_info)
+from .dynamic import Relocation, dynamic_entry, hash_size, hash_table
 from .layout import (Chunk, FunctionExtent, ImageKind, ImageLayout, SectionPlan,
                      SegmentPlan, SymbolPlan, align_up)
 from .strtab import StringTable
@@ -86,6 +93,23 @@ class ImageSettings:
     #: image know what it was built to want -- and on the systems that honour
     #: the header, what lets them give it.
     stack_size: int = 0
+    #: For a shared object: the libraries it needs, the symbols it offers, and
+    #: the slots the loader fills with where a symbol it needs is -- each the
+    #: slot's own symbol and the one it is filled with.
+    needed: tuple[str, ...] = ()
+    exports: tuple[str, ...] = ()
+    imports: tuple[tuple[str, str], ...] = ()
+
+
+#: The sections a shared object's tables are in, in the order they are placed.
+#: The first four are read-only and share a segment; the dynamic section is
+#: written by the loader, which adds where the object was put to the addresses
+#: it holds, and is in a segment of its own.
+HASH_SECTION: Final[str] = ".hash"
+DYNSYM_SECTION: Final[str] = ".dynsym"
+DYNSTR_SECTION: Final[str] = ".dynstr"
+RELA_SECTION: Final[str] = ".rela.dyn"
+DYNAMIC_SECTION: Final[str] = ".dynamic"
 
 
 class ElfWriter:
@@ -100,6 +124,16 @@ class ElfWriter:
         self._source_paths = list(source_paths)
         #: How this target stores a fixup's value once it has been computed.
         self._apply_fixup = apply_fixup
+        #: For a shared object: each word holding an address, as its section
+        #: and where in it, and the sections that were read-only but for being
+        #: relocated, which are made writable and say so with PT_GNU_RELRO.
+        self._relocated: list[tuple[MCSection, int]] = []
+        self._relro: list[MCSection] = []
+        self._relro_at = 0
+        #: And the names of its dynamic symbols, the null one first, and their
+        #: strings.
+        self._dynamic_names: list[str] = []
+        self._dynstr = StringTable()
 
     # -- planning --------------------------------------------------------------
 
@@ -112,21 +146,35 @@ class ElfWriter:
         for section in self._sections:
             layout_section(section)
             resolve_symbol_offsets(section, self._symbols)
+        shared = settings.kind is ImageKind.SHARED
+        if shared:
+            self._collect_relocations()
 
         # Sections that are mapped are grouped by the permissions they need,
         # because a segment carries one set of permissions for all of it.  A
         # group that needs nothing gets no segment: an empty one would still
         # cost a page, since no two groups may share one.
-        groups = [(self._mapped(executable=False, writable=False), PF_R),
-                  (self._mapped(executable=True, writable=False), PF_R | PF_X),
-                  (self._mapped(executable=False, writable=True), PF_R | PF_W)]
-        groups = [(sections, flags) for sections, flags in groups if sections]
+        groups: list[tuple[list[MCSection], int]] = []
+        for executable, writable, flags in ((False, False, PF_R),
+                                            (True, False, PF_R | PF_X),
+                                            (False, True, PF_R | PF_W)):
+            found = self._mapped(executable=executable, writable=writable)
+            if writable and self._relro:
+                # What is read-only but for being relocated comes first, in a
+                # segment of its own, so that its pages are none of the
+                # writable data's.
+                found = [one for one in found if one not in self._relro]
+                groups.append((self._relro, PF_R | PF_W))
+            if found:
+                groups.append((found, flags))
         placed = sum(len(sections) for sections, _ in groups)
         if placed != sum(1 for s in self._sections if s.alloc):
             # The only combination left is writable and executable, which no
             # loader should be asked to grant and which nothing here produces.
             raise ImageError("a mapped section asks for permissions no segment gives")
-        phnum = len(groups) + 1
+        # A shared object's tables are in two segments of their own, last, and
+        # the dynamic section is said where it is by a header of its own.
+        phnum = len(groups) + 1 + (3 if shared else 0) + (1 if self._relro else 0)
         offset = EHDR_SIZE + phnum * PHDR_SIZE
 
         self._add_chunk(layout, "ehdr", EHDR_SIZE, 1, 0)
@@ -147,6 +195,11 @@ class ElfWriter:
                 bias = align_up(end_vaddr, page) + (offset % page) - offset
             offset = self._place_group(layout, sections, offset, bias, flags,
                                        page, loads)
+            if self._relro and sections is self._relro:
+                self._relro_at = len(loads) - 1
+        dynamic: SegmentPlan | None = None
+        if shared:
+            offset, dynamic = self._place_dynamic(layout, offset, loads)
         self._place_symbols()
         layout.functions = self._function_extents(layout)
 
@@ -193,11 +246,131 @@ class ElfWriter:
             SegmentPlan(p_type=PT_GNU_STACK, p_flags=PF_R | PF_W, p_align=0x10,
                         p_memsz=self._settings.stack_size),
         ]
-        layout.entry_vaddr = self._entry_vaddr()
+        if dynamic is not None:
+            layout.segments.insert(len(loads), dynamic)
+        if self._relro:
+            # What is read-only once relocated, said as a loader is told it.
+            held = loads[self._relro_at]
+            layout.segments.append(SegmentPlan(
+                p_type=PT_GNU_RELRO, p_flags=PF_R, p_align=1, p_offset=held.p_offset,
+                p_vaddr=held.p_vaddr, p_filesz=held.p_filesz, p_memsz=held.p_memsz))
+        self._link_dynamic(layout)
+        layout.entry_vaddr = 0 if shared else self._entry_vaddr()
         layout.total_size = offset
         self._shstrtab = shstrtab
         self._strtab = strtab
         return layout
+
+    def _collect_relocations(self) -> None:
+        """Find every word that holds an address, which a shared object relocates.
+
+        An address in the code would be an instruction the loader rewrites, and
+        nothing here makes one: every back end reaches what it reaches relative
+        to where it is, which is the same wherever that is.  What is relocated is
+        data, and data read-only but for that is made writable for the loader,
+        and named as linkers name it.
+        """
+        self._relocated = []
+        self._relro = []
+        for section in self._sections:
+            for fragment in section.fragments:
+                if not isinstance(fragment, (MCInstFragment, MCDataFragment)):
+                    continue
+                for fixup in fragment.fixups:
+                    if fixup.kind.is_pcrel or fixup.kind.within_a_page:
+                        continue
+                    where = "".join(("'", section.name, "' at ",
+                                     str(fragment.offset + fixup.offset)))
+                    if section.executable:
+                        raise ImageError("".join((
+                            "a shared object holds an absolute address in its code, in ",
+                            where)))
+                    if fixup.kind.size != 8:
+                        raise ImageError("".join((
+                            "a shared object holds a ", str(fixup.kind.size),
+                            "-byte absolute address, in ", where,
+                            "; only eight bytes can be relocated")))
+                    self._relocated.append((section, fragment.offset + fixup.offset))
+                    if not section.writable:
+                        section.writable = True
+                        self._relro.append(section)
+                    if section.name == ".rodata" or section.name.startswith(".rodata."):
+                        section.name = "".join((".data.rel.ro",
+                                                section.name[len(".rodata"):]))
+
+    def _dynamic_entries(self) -> int:
+        """How many entries the dynamic section has, its terminator among them."""
+        settings = self._settings
+        count = len(settings.needed) + 5 + 1
+        if self._relocated or settings.imports:
+            count += 4
+        for name in (".init_array", ".fini_array"):
+            if any(s.name == name for s in self._sections):
+                count += 2
+        return count
+
+    def _place_dynamic(self, layout: ImageLayout, offset: int,
+                       loads: list[SegmentPlan]) -> tuple[int, SegmentPlan]:
+        """Place a shared object's tables, after everything else.
+
+        The symbols are the null one, what it needs and then what it offers; the
+        strings are the libraries' names and then the symbols'.  Every size is
+        known here, every address only once this is done.
+        """
+        settings = self._settings
+        page = settings.page_size
+        self._dynamic_names = ["", *(name for _, name in settings.imports),
+                               *settings.exports]
+        self._dynstr = StringTable()
+        for name in (*settings.needed, *self._dynamic_names):
+            self._dynstr.add(name)
+        relocations = len(self._relocated) + len(settings.imports)
+        tables = [(HASH_SECTION, SHT_HASH, hash_size(len(self._dynamic_names)), 8, 4),
+                  (DYNSYM_SECTION, SHT_DYNSYM, len(self._dynamic_names) * SYM_SIZE, 8,
+                   SYM_SIZE),
+                  (DYNSTR_SECTION, SHT_STRTAB, self._dynstr.size, 1, 0)]
+        if relocations:
+            tables.append((RELA_SECTION, SHT_RELA, relocations * RELA_SIZE, 8, RELA_SIZE))
+        segments: list[tuple[int, int, int]] = []
+        for group, flags in ((tables, PF_R),
+                             ([(DYNAMIC_SECTION, SHT_DYNAMIC,
+                                self._dynamic_entries() * DYN_SIZE, 8, DYN_SIZE)],
+                              PF_R | PF_W)):
+            offset = align_up(offset, 8)
+            end_vaddr = loads[-1].p_vaddr + loads[-1].p_memsz
+            bias = align_up(end_vaddr, page) + (offset % page) - offset
+            start = offset
+            for name, sh_type, size, align, entsize in group:
+                offset = align_up(offset, align)
+                plan = SectionPlan(name=name, sh_type=sh_type,
+                                   sh_flags=SHF_ALLOC | (SHF_WRITE if flags & PF_W else 0),
+                                   sh_addralign=align, alloc=True, sh_entsize=entsize)
+                plan.offset = offset
+                plan.addr = offset + bias
+                plan.size = size
+                layout.sections.append(plan)
+                self._add_chunk(layout, name, size, align, offset, plan.addr)
+                offset += size
+            loads.append(SegmentPlan(p_type=PT_LOAD, p_flags=flags, p_align=page,
+                                     p_offset=start, p_vaddr=start + bias,
+                                     p_filesz=offset - start, p_memsz=offset - start))
+            segments.append((start, start + bias, offset - start))
+        start, vaddr, size = segments[-1]
+        return offset, SegmentPlan(p_type=PT_DYNAMIC, p_flags=PF_R | PF_W, p_align=8,
+                                   p_offset=start, p_vaddr=vaddr, p_filesz=size,
+                                   p_memsz=size)
+
+    def _link_dynamic(self, layout: ImageLayout) -> None:
+        """Link a shared object's tables to the ones they index."""
+        indices = {plan.name: i + 1 for i, plan in enumerate(layout.sections)}
+        for plan in layout.sections:
+            if plan.name in (HASH_SECTION, RELA_SECTION):
+                plan.sh_link = indices[DYNSYM_SECTION]
+            elif plan.name in (DYNSYM_SECTION, DYNAMIC_SECTION):
+                plan.sh_link = indices[DYNSTR_SECTION]
+                # The first symbol that is not local, which is the one after
+                # the null one.
+                plan.sh_info = 1 if plan.name == DYNSYM_SECTION else 0
 
     def _mapped(self, *, executable: bool, writable: bool) -> list[MCSection]:
         """The mapped sections that need exactly these permissions."""
@@ -377,7 +550,8 @@ class ElfWriter:
         out = bytearray(layout.total_size)
 
         out[0:EHDR_SIZE] = pack_ehdr(
-            e_type=ET_EXEC, e_machine=layout.machine, e_entry=layout.entry_vaddr,
+            e_type=ET_DYN if layout.kind is ImageKind.SHARED else ET_EXEC,
+            e_machine=layout.machine, e_entry=layout.entry_vaddr,
             e_phoff=EHDR_SIZE,
             e_shoff=layout.by_name["shdrs"].file_offset if "shdrs" in layout.by_name else 0,
             e_phnum=len(layout.segments),
@@ -401,9 +575,87 @@ class ElfWriter:
             data = section_bytes(section)
             out[chunk.file_offset:chunk.file_offset + len(data)] = data
 
+        if layout.kind is ImageKind.SHARED:
+            self._write_dynamic(out, layout)
         if ".shstrtab" in layout.by_name:
             self._write_tables(out, layout)
         return bytes(out)
+
+    def _write_dynamic(self, out: bytearray, layout: ImageLayout) -> None:
+        """Write a shared object's tables, now that every address is known."""
+        settings = self._settings
+        by_name = {symbol.name: symbol for symbol in self._symbols}
+        chunk = layout.by_name[DYNSYM_SECTION]
+        position = chunk.file_offset + SYM_SIZE
+        for _, name in settings.imports:
+            out[position:position + SYM_SIZE] = pack_sym(
+                st_name=self._dynstr.add(name), st_info=st_info(STB_GLOBAL, STT_FUNC),
+                st_other=STV_DEFAULT, st_shndx=SHN_UNDEF, st_value=0, st_size=0)
+            position += SYM_SIZE
+        for name in settings.exports:
+            symbol = by_name.get(name)
+            if symbol is None or symbol.vaddr is None or symbol.section is None:
+                raise ImageError("".join(("'", name, "' is offered but never defined")),
+                                 name)
+            out[position:position + SYM_SIZE] = pack_sym(
+                st_name=self._dynstr.add(name),
+                st_info=st_info(STB_GLOBAL, _KINDS[symbol.kind]), st_other=STV_DEFAULT,
+                st_shndx=self._index_of(layout, symbol.section.name),
+                st_value=symbol.vaddr, st_size=symbol.size)
+            position += SYM_SIZE
+        table = hash_table(self._dynamic_names)
+        at = layout.by_name[HASH_SECTION].file_offset
+        out[at:at + len(table)] = table
+        strings = self._dynstr.bytes_of()
+        at = layout.by_name[DYNSTR_SECTION].file_offset
+        out[at:at + len(strings)] = strings
+
+        # The words that hold an address first, in the order of their places,
+        # each adding where the object was put to what it holds; then the slots,
+        # each filled with where its symbol is.
+        relocations: list[Relocation] = []
+        offsets = {plan.name: plan.offset for plan in layout.sections}
+        places = sorted((section.vaddr + at, offsets[section.name] + at)
+                        for section, at in self._relocated)
+        for address, in_file in places:
+            if address % 8 != 0:
+                raise ImageError("".join((
+                    "an absolute address at ", hex(address),
+                    " is not eight-byte aligned, which a shared object cannot relocate")))
+            relocations.append(Relocation(
+                offset=address, kind=RELATIVE[layout.machine],
+                addend=int.from_bytes(out[in_file:in_file + 8], "little")))
+        for index, (slot, _) in enumerate(settings.imports):
+            symbol = by_name.get(slot)
+            if symbol is None or symbol.vaddr is None:
+                raise ImageError("".join(("'", slot, "' is referenced but never defined")),
+                                 slot)
+            relocations.append(Relocation(offset=symbol.vaddr,
+                                          kind=GLOB_DAT[layout.machine],
+                                          symbol=index + 1))
+        if relocations:
+            at = layout.by_name[RELA_SECTION].file_offset
+            out[at:at + RELA_SIZE * len(relocations)] = b"".join(
+                one.packed() for one in relocations)
+
+        entries = [(DT_NEEDED, self._dynstr.add(name)) for name in settings.needed]
+        entries.extend(((DT_HASH, layout.by_name[HASH_SECTION].vaddr or 0),
+                        (DT_STRTAB, layout.by_name[DYNSTR_SECTION].vaddr or 0),
+                        (DT_SYMTAB, layout.by_name[DYNSYM_SECTION].vaddr or 0),
+                        (DT_STRSZ, self._dynstr.size), (DT_SYMENT, SYM_SIZE)))
+        if relocations:
+            entries.extend(((DT_RELA, layout.by_name[RELA_SECTION].vaddr or 0),
+                            (DT_RELASZ, RELA_SIZE * len(relocations)),
+                            (DT_RELAENT, RELA_SIZE), (DT_RELACOUNT, len(places))))
+        for name, tags in ((".init_array", (DT_INIT_ARRAY, DT_INIT_ARRAYSZ)),
+                           (".fini_array", (DT_FINI_ARRAY, DT_FINI_ARRAYSZ))):
+            for section in self._sections:
+                if section.name == name:
+                    entries.extend(((tags[0], section.vaddr), (tags[1], section.size)))
+        entries.append((DT_NULL, 0))
+        at = layout.by_name[DYNAMIC_SECTION].file_offset
+        out[at:at + DYN_SIZE * len(entries)] = b"".join(
+            dynamic_entry(tag, value) for tag, value in entries)
 
     def _write_tables(self, out: bytearray, layout: ImageLayout) -> None:
         """Write the string tables, the symbol table and the section headers."""

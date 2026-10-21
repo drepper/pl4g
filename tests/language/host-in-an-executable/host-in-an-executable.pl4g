@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=5300
+※ pl4g-test: expect-diag 5300 LANG_HOST_IN_AN_EXECUTABLE
+
+※ A function the host defines is found by asking the program this one was
+※ loaded into.  An executable is loaded into nothing -- the kernel starts it --
+※ so there is nobody to ask, and the function is refused where it is declared
+※ rather than left to fail at the first call.
+
+@[host("puts")]
+fn puts(text: str) → i32
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    if puts("hello") ≥ 0i32: 0u6 else: 1u6

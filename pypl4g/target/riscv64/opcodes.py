@@ -499,6 +499,13 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
                fields=(_reg(0, _RS1),),
                implicit_defs=(RA,), flags=InstFlags.CALL,
                est_size=INSTRUCTION_SIZE),
+    # jr rs              is  jalr zero, rs, 0
+    # A jump through a register, which is how a stub that found what it stands
+    # for goes there, with the arguments and the return address as they came.
+    RVInstDesc("jr", (_r(),), template=0x00000067,
+               fields=(_reg(0, _RS1),),
+               flags=InstFlags.TERMINATOR | InstFlags.BARRIER,
+               est_size=INSTRUCTION_SIZE),
     # ret                is  jalr zero, ra, 0
     RVInstDesc("ret", (), template=0x00008067, implicit_uses=(RA,),
                flags=InstFlags.TERMINATOR | InstFlags.RETURN, est_size=INSTRUCTION_SIZE),

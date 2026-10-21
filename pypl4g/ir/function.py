@@ -79,6 +79,12 @@ class FuncAttrs:
     #: thing it calls is called need not agree: one is a name in a language and
     #: the other a name in an image.
     external: str | None = None
+    #: The symbol a function the host defines is known by there, which is
+    #: looked up the first time the function is called.  The host is the program
+    #: this one was loaded into -- the one an interpreter is embedded in, or the
+    #: one that loaded the shared object -- and it is the only place the symbol
+    #: can be found.
+    host: str | None = None
     #: Whether the compiler provides this function itself while it works out a
     #: build.  Such a function has no body and no symbol: what it does is change
     #: something the compiler is holding, so a program that called one would be

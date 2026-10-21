@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=5301
+※ pl4g-test: args -shared
+※ pl4g-test: expect-diag 5301 LANG_HOST_PARAMETER_TYPE
+
+※ What a function the host defines is handed is what C has.  A record not
+※ marked `@[abi]` is laid out as this compiler lays it out, which nothing
+※ compiled by something else could read, so it does not cross.
+
+type Point =
+    x : i64 ; y : i64
+
+@[host("takes_a_point")]
+fn takes_a_point(both: Point) → i64
+
+@[visible, cdecl, impure]
+fn run() → i64:
+    takes_a_point(Point(.x ← 1i64, .y ← 2i64))

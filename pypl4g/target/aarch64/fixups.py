@@ -30,7 +30,7 @@ BRANCH19: Final[FixupKind] = FixupKind("aarch64_branch19", 4, FixupBase.FIELD_ST
 ADR_PAGE21: Final[FixupKind] = FixupKind("aarch64_adr_page21", 4, FixupBase.PAGE_4K)
 
 #: The offset of an address within its page, for the add that follows the above.
-ADD_LO12: Final[FixupKind] = FixupKind("aarch64_add_lo12", 4)
+ADD_LO12: Final[FixupKind] = FixupKind("aarch64_add_lo12", 4, within_a_page=True)
 
 #: The same offset, for a load or a store that follows the page instead of an
 #: add.  Those carry the offset in units of what they touch, so there is one
@@ -38,11 +38,11 @@ ADD_LO12: Final[FixupKind] = FixupKind("aarch64_add_lo12", 4)
 #: instruction is the offset divided by how many bytes it reads or writes.  The
 #: runtime built from C uses them where a compiler chose to reach a constant
 #: directly rather than compute its address first.
-LDST8_LO12: Final[FixupKind] = FixupKind("aarch64_ldst8_lo12", 4)
-LDST16_LO12: Final[FixupKind] = FixupKind("aarch64_ldst16_lo12", 4)
-LDST32_LO12: Final[FixupKind] = FixupKind("aarch64_ldst32_lo12", 4)
-LDST64_LO12: Final[FixupKind] = FixupKind("aarch64_ldst64_lo12", 4)
-LDST128_LO12: Final[FixupKind] = FixupKind("aarch64_ldst128_lo12", 4)
+LDST8_LO12: Final[FixupKind] = FixupKind("aarch64_ldst8_lo12", 4, within_a_page=True)
+LDST16_LO12: Final[FixupKind] = FixupKind("aarch64_ldst16_lo12", 4, within_a_page=True)
+LDST32_LO12: Final[FixupKind] = FixupKind("aarch64_ldst32_lo12", 4, within_a_page=True)
+LDST64_LO12: Final[FixupKind] = FixupKind("aarch64_ldst64_lo12", 4, within_a_page=True)
+LDST128_LO12: Final[FixupKind] = FixupKind("aarch64_ldst128_lo12", 4, within_a_page=True)
 
 
 def _insert(data: bytearray, offset: int, value: int, lsb: int, width: int) -> None:

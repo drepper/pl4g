@@ -1013,6 +1013,12 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     # jmp rel32                          E9 cd
     X86InstDesc("jmp", (_rel(32),), opcode=0xE9, rel_op=0, rel_bits=32,
                 flags=InstFlags.TERMINATOR | InstFlags.BARRIER, est_size=5),
+    # jmp r/m64                          FF /4
+    # A jump through a register, which is how a stub that found what it stands
+    # for goes there: the arguments are where the caller put them and the return
+    # address is the caller's.  No REX.W, as for the call below.
+    X86InstDesc("jmp", (_rm(64),), opcode=0xFF, modrm=ModRMUse.EXT_RM, ext=4,
+                rm_op=0, flags=InstFlags.TERMINATOR | InstFlags.BARRIER, est_size=3),
     # je rel32                           0F 84 cd
     X86InstDesc("je", (_rel(32),), opcode=0x84, map=OpMap.M0F,
                 rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),

@@ -24,6 +24,9 @@ class ImageKind(Enum):
 
     EXECUTABLE = "exec"
     PIE = "pie"
+    #: A shared object: linked at nought, with what it offers and needs in a
+    #: dynamic section a loader reads, and no entry point.
+    SHARED = "shared"
 
 
 @dataclass(slots=True)

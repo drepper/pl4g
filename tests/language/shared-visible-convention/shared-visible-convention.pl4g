@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=5303
+※ pl4g-test: args -shared
+※ pl4g-test: expect-diag 5303 LANG_SHARED_VISIBLE_CONVENTION
+
+※ A shared object offers its visible functions to programs compiled by
+※ something else, which call the way the system calls.  One of this compiler's
+※ own convention would be called in a way it does not expect, so it has to say
+※ `@[cdecl]`, or `@[abi]` with the convention it follows.
+
+@[visible]
+fn offered(n: i64) → i64:
+    n

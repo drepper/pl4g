@@ -21,6 +21,7 @@ from ...mc.ops import Condition
 from ...mc.asmbuilder import Assembler
 from .. import backtrace, statuses
 from ..callconv import CallConvDesc
+from ..host import HostABI
 from .abi import lookup as lookup_cconv
 from .. import started
 from ..tests import Failure, run_by
@@ -386,3 +387,9 @@ WALK_ABI: Final[backtrace.WalkABI] = backtrace.WalkABI(
     enter=lambda asm: asm.op(rvops.ENVIRONMENT_CALL),
     kept=(S1, reg("s2"), reg("s3"), reg("s4")),
     scratch=(reg("t0"), reg("t1")))
+
+
+#: The registers a stub for what the host defines works in: temporaries no
+#: argument is in, and the return address a call to the finder writes.
+HOST_ABI: Final[HostABI] = HostABI(slot=reg("t1"), name=reg("t2"), through=reg("t0"),
+                                   link=RA)

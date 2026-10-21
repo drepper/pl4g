@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=92 host=host.c
+※ pl4g-test: args -shared
+
+※ What the host defines is known only once there is a host, so a symbol it
+※ does not define is found out at the first call, which stops the program with
+※ a status of its own (92) and a message saying which symbol it was.
+
+@[host("pl4g_nowhere_to_be_found")]
+fn nowhere() → i32
+
+@[visible, cdecl, impure]
+fn run() → i32:
+    nowhere()

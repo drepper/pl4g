@@ -61,8 +61,8 @@ from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
                            FuncType, Function,
                            InlineHint,
                            Linkage, SpecialKind)
-from ..ir.module import GlobalVar, Module
-from ..ir.types import (ARENA, ARENA_NAME, StrType, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
+from ..ir.module import GlobalVar, Module, Output
+from ..ir.types import (ARENA, ARENA_NAME, StrType, ArrayType, BOOL, BoolType, BUILTIN_TYPES, CharType,
                         SYNTAX, SyntaxType, I64,
                         CursorType,
                         DictType,
@@ -6743,8 +6743,7 @@ class Checker:
                             lifetimes=_carried_lifetimes(node, params),
                             made_in=made_in, param_made_in=param_made_in,
                             exported=self._is_export(attrs),
-                            cconv=(func_attrs.abi if func_attrs.abi is not None
-                                   else DEFAULT_CCONV),
+                            cconv=self._convention_of(func_attrs),
                             span=node.span, name_span=node.name_span,
                             source_path=path, doc=node.doc or "")
             self._node_of_func[id(func)] = node
@@ -6752,6 +6751,8 @@ class Checker:
                 self._diags.emit(D.LANG_LISTABLE_TAKES_NOTHING, node.name_span,
                                  name=node.name)
             self._check_external(node, func_attrs)
+            self._check_host(node, func_attrs, params, ret)
+            self._check_offered(node, func_attrs, linkage)
             # Wherever it stands and whoever wrote it: a record laid out for
             # something else to read travels as a reference or not at all, so
             # that one type is not passed two ways.
@@ -6763,6 +6764,7 @@ class Checker:
             if node.ret_type is not None:
                 self._not_by_value(ret, node.ret_type.span)
             self._module.add_function(func, key=self._key(whole))
+            self._hand_over_text(func)
             if node.held is None:
                 self._top[node.name] = func
             else:
@@ -6957,7 +6959,7 @@ class Checker:
         defines, there being no linker and nothing else to reach.
         """
         if attrs.external is None:
-            if node.body is None and not attrs.builtin:
+            if node.body is None and not attrs.builtin and attrs.host is None:
                 self._diags.emit(D.LANG_FUNCDEF_NO_BODY, node.name_span,
                                  name=node.name)
             return
@@ -6967,6 +6969,111 @@ class Checker:
         if attrs.external not in runtime_names():
             self._diags.emit(D.LANG_FUNCDEF_EXTERNAL_UNKNOWN, node.name_span,
                              symbol=attrs.external)
+
+    def _convention_of(self, attrs: FuncAttrs) -> str:
+        """The convention a function is called with.
+
+        The one it names, where it names one.  A constructor or a destructor of
+        a shared object is called by the loader, from the table of them the
+        object carries, which calls the way the system calls things -- so in
+        one that is the convention it follows, there being nothing in between
+        to translate.
+        """
+        if attrs.abi is not None:
+            return attrs.abi
+        if self._module.output is Output.SHARED \
+                and attrs.special in (SpecialKind.CONSTRUCTOR, SpecialKind.DESTRUCTOR):
+            return SYSTEM_CCONV
+        return DEFAULT_CCONV
+
+    def _check_host(self, node: ast.FuncDef, attrs: FuncAttrs,
+                    params: Sequence[Type], ret: Type) -> None:
+        """Check a function the host defines.
+
+        It has no body, as an external function has none; there has to be a
+        host, which an executable has not; and what crosses is what C has.
+        """
+        if attrs.host is None:
+            return
+        if node.body is not None:
+            self._diags.emit(D.LANG_FUNCDEF_EXTERNAL_HAS_A_BODY, node.name_span,
+                             name=node.name)
+        if not self._module.output.hosted:
+            self._diags.emit(D.LANG_HOST_IN_AN_EXECUTABLE, node.name_span,
+                             name=node.name)
+        for ty, param in zip(params, node.params):
+            if ty is ERROR or isinstance(ty, ProductType) and ty.abi:
+                # Not known, or a record laid out for C, which 4596 is about.
+                continue
+            if not isinstance(ty, (IntType, FloatType, BoolType, CharType, PtrType,
+                                   StrType)):
+                self._diags.emit(D.LANG_HOST_PARAMETER_TYPE, param.type.span,
+                                 type=ty.written(), param=param.name, name=node.name)
+        if ret is not ERROR and ret is not VOID \
+                and not isinstance(ret, (IntType, FloatType, BoolType, CharType)):
+            self._diags.emit(D.LANG_HOST_RESULT_TYPE,
+                             node.ret_type.span if node.ret_type is not None
+                             else node.name_span, name=node.name, type=ret.written())
+
+    def _check_offered(self, node: ast.FuncDef, attrs: FuncAttrs,
+                       linkage: Linkage) -> None:
+        """Check that what a shared object offers can be called from outside.
+
+        What calls it was compiled by something else, which calls the way the
+        system does; a function of this compiler's own convention would be
+        called in a way it does not expect.
+        """
+        if self._module.output is Output.SHARED and linkage is Linkage.VISIBLE \
+                and attrs.abi is None and node.body is not None:
+            self._diags.emit(D.LANG_SHARED_VISIBLE_CONVENTION, node.name_span,
+                             name=node.name)
+
+    def _hand_over_text(self, func: Function) -> None:
+        """Make a function the host defines that takes text into two.
+
+        C has no `str`: what it calls text is the address of bytes ending in a
+        nul.  So the function the program calls is made a function of its own,
+        whose body makes that copy of each `str` in the heap, calls the host's
+        function -- a declaration taking an address in its place -- and gives
+        the copies back.  Here, in the representation, the copy is made once for
+        every way the program is run: the interpreter's host call and the
+        compiled stub see only what C sees.
+        """
+        if func.attrs.host is None \
+                or not any(isinstance(ty, StrType) for ty in func.ty.params):
+            return
+        bytes_ = strings.bytes_type(self._module)
+        crossing = self._module.add_function(Function(
+            "".join((func.name, ".host")),
+            self._module.types.func_type(
+                tuple(bytes_ if isinstance(ty, StrType) else ty
+                      for ty in func.ty.params), func.ty.ret),
+            func.attrs, linkage=Linkage.INTERNAL, cconv=func.cconv, span=func.span,
+            name_span=func.name_span, source_path=func.source_path,
+            module=func.module, param_names=func.param_names))
+        func.attrs = replace(func.attrs, host=None, abi=None)
+        func.cconv = DEFAULT_CCONV
+        entry = func.add_block()
+        builder = IRBuilder(self._module, func)
+        builder.position_at(entry)
+        given: list[Value] = []
+        copies: list[tuple[Value, Value]] = []
+        for ty, name in zip(func.ty.params, func.param_names):
+            param = entry.add_param(ty, name)
+            if not isinstance(ty, StrType):
+                given.append(param)
+                continue
+            text = builder.extract(param, 0, bytes_)
+            length = builder.extract(param, 1, U64)
+            copy = builder.call(strings.c_string_function(self._module),
+                                (text, length), bytes_)
+            copies.append((copy, builder.binary(BinOp.WRAP_ADD, length,
+                                                builder.int_const(U64, 1))))
+            given.append(copy)
+        answer = builder.call(crossing, given, func.ty.ret, func.span)
+        for copy, size in copies:
+            builder.call(tables.heap_free_function(self._module), (copy, size), VOID)
+        builder.ret(None if func.ty.ret is VOID else answer)
 
     def _not_by_value(self, ty: Type, where: Span) -> None:
         """Report a record laid out for something else crossing a call whole.
@@ -7844,6 +7951,7 @@ class Checker:
         inline = InlineHint.DEFAULT
         abi: str | None = None
         external: str | None = None
+        host: str | None = None
         can_ignore = False
         impure = False
         io = False
@@ -7904,6 +8012,15 @@ class Checker:
                     abi = attr.as_str("name") or SYSTEM_CCONV
                     self._known_convention(abi, attr)
                     extra["variadic"] = attr.as_bool("variadic")
+                case "host":
+                    # Defined by the program this one is loaded into, found
+                    # there by name at the first call, and called the way the
+                    # system calls things -- which is the only way the host
+                    # can be called -- and impure for the reason an external
+                    # function is.
+                    host = attr.as_str("symbol")
+                    abi = SYSTEM_CCONV
+                    impure = True
                 case "external":
                     # Defined somewhere else, under a name of its own, and
                     # called the way this system calls things: there is no
@@ -7930,7 +8047,8 @@ class Checker:
             inline = InlineHint.NEVER
         return FuncAttrs(special=special, priority=priority, inline=inline, abi=abi,
                          io=io, opaque=opaque,
-                         external=external, can_ignore=can_ignore, impure=impure,
+                         external=external, host=host, can_ignore=can_ignore,
+                         impure=impure,
                          listable=listable, builtin=builtin, extra=extra), linkage
 
     # -- types -----------------------------------------------------------------
@@ -28621,7 +28739,8 @@ class Checker:
 
     def _check_program(self) -> None:
         """Check the properties the whole program must have."""
-        if self._module.startup is None and self._module.build is None:
+        if self._module.startup is None and self._module.build is None \
+                and self._module.output is not Output.SHARED:
             # A file with a build function in it describes a build rather than
             # being a program, so nothing of it is ever started.
             self._diags.emit(D.LANG_FUNCDEF_SPECIAL_NO_STARTUP)

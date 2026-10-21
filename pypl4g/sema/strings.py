@@ -47,6 +47,7 @@ LENGTH_SYMBOL: Final[str] = "__pl4g_str_length"
 COMPARE_SYMBOL: Final[str] = "__pl4g_str_compare"
 CHAR_SYMBOL: Final[str] = "__pl4g_str_of_char"
 BYTE_COUNT_SYMBOL: Final[str] = "__pl4g_str_char_bytes"
+C_STRING_SYMBOL: Final[str] = "__pl4g_str_c"
 
 #: What the leading byte of a sequence says.  The first number is the value the
 #: byte must be below for the row to apply, the second how many bits of the code
@@ -129,6 +130,34 @@ def joined(builder: IRBuilder, arena: Value, pieces: tuple[Value, ...],
                             answer, where)
     return builder.call(join_function(builder.module), (arena, *pieces), answer,
                         where)
+
+
+def c_string_function(module: Module) -> Function:
+    """The one that makes C's text of a string, built on first ask.
+
+    C means by text the address of bytes ending in a nul, which a `str` is not:
+    it holds how many bytes it has beside them, and has no nul.  So this makes a
+    copy in the heap one byte longer and puts the nul there, and whoever asked
+    for it gives it back.
+    """
+    func, fresh = _generated(module, C_STRING_SYMBOL, (bytes_type(module), U64),
+                             bytes_type(module), impure=True)
+    if not fresh:
+        return func
+    from .tables import heap_new_function  # noqa: PLC0415 -- one place
+    entry = func.add_block()
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    text = entry.add_param(bytes_type(module), "text")
+    length = entry.add_param(U64, "text.length")
+    into = builder.call(heap_new_function(module),
+                        (builder.binary(BinOp.WRAP_ADD, length,
+                                        builder.int_const(U64, 1)),),
+                        bytes_type(module))
+    copy_bytes(builder, into, builder.int_const(U64, 0), text, length)
+    builder.store(builder.binary(BinOp.ADD, into, length), builder.int_const(U8, 0))
+    builder.ret(into)
+    return func
 
 
 def char_function(module: Module) -> Function:

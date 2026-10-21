@@ -423,8 +423,11 @@ class X86Selector(InstructionSelector):
         """Instructions that return from the current function."""
         return (self._inst("ret", (), span),)
 
-    def select_jump(self, target: MCSymRef, span: Span) -> Sequence[MCInst]:
+    def select_jump(self, target: MCOperand, span: Span) -> Sequence[MCInst]:
         """Instructions that transfer control to *target*."""
+        if not isinstance(target, MCSymRef):
+            # Through a register: wherever it holds.
+            return (self._inst("jmp", (target,), span),)
         return (self._inst("jmp", (target,), span),)
 
     def select_branch(self, cond: Condition, lhs: MCOperand, rhs: MCOperand,
@@ -1075,6 +1078,16 @@ class X86Selector(InstructionSelector):
         """None.  The call instruction here pushes the return address onto the
         stack, where a further call cannot reach it."""
         return 0
+
+    def frame_size(self, total: int, calls: bool) -> int:
+        """Eight past a multiple of sixteen, in a function that calls.
+
+        The stack is aligned to sixteen bytes where a call is made, so it is
+        eight past that where the called function begins, the return address
+        having been pushed: a frame of eight past a multiple of sixteen brings
+        it back.  A function that calls nothing has no call to align for.
+        """
+        return total + (8 - total) % 16 if calls else total
 
     def frame_walk(self, total: int, size: int,
                    link: int) -> tuple[int | None, int]:

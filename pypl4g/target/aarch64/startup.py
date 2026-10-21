@@ -21,6 +21,7 @@ from ...mc.ops import Condition
 from ...mc.asmbuilder import Assembler
 from .. import backtrace, statuses
 from ..callconv import CallConvDesc
+from ..host import HostABI
 from .abi import lookup as lookup_cconv
 from .. import started
 from ..tests import Failure, run_by
@@ -417,3 +418,10 @@ WALK_ABI: Final[backtrace.WalkABI] = backtrace.WalkABI(
     enter=lambda asm: asm.op(a64ops.SUPERVISOR_CALL),
     kept=(X19, reg("x20"), reg("x21"), reg("x22")),
     scratch=(reg("x9"), reg("x10")))
+
+
+#: The registers a stub for what the host defines works in: the two the
+#: architecture keeps for code between a call and what it calls, which is what
+#: a stub is, and the link register a call to the finder writes.
+HOST_ABI: Final[HostABI] = HostABI(slot=reg("x16"), name=reg("x17"), through=reg("x9"),
+                                   link=X30)
