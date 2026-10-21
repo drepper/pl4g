@@ -1553,6 +1553,21 @@ namespace pl4g::sema {
   }
 
 
+  bool Checker::owned_local(const ast::Expr* written, ir::Function* func)
+  {
+    auto name = ast::as<ast::NameRef>(written);
+    if (name == nullptr)
+      return false;
+    Local* local = find_local(name->name);
+    if (local == nullptr || ! local->is_mutable || local->named_parameter)
+      return false;
+    auto node = node_of_func.get(id_of(func));
+    if (node == nullptr || *node == nullptr || (*node)->body == nullptr)
+      return false;
+    return given_its_own(name->name, (*node)->body);
+  }
+
+
   ir::Value* Checker::heaps_or_copied(ir::Builder& builder, ir::Value* value, const ir::ListType* ty, Span span)
   {
     ir::Value* heap = owner_place(builder, heap_key, span);

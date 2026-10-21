@@ -5610,4 +5610,4 @@ taking a tuple apart; every `AssignStmt` to it, likewise; each value a `ListLit`
 (`Allocated` looked through); no `ForEach`, `Param`, `Pattern` or `Capture` of the name and none in a `more`; no `Defer` that
 `_mentions` it; and not `_referenced`.  The answer then goes through `_heaps_or_copied`, as the parameter's does: the allocator the
 value carries compared with `⎕heap`'s address, the room answered where they are one and `__pl4g_own` of it where not.  The C++ is
-`given_its_own` and `owned_local` in `sema/check.cc`.
+`given_its_own` (`sema/check-helpers.cc`) and `Checker::owned_local` (`sema/check-places.cc`).

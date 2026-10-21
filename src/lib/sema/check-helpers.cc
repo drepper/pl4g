@@ -2876,6 +2876,67 @@ namespace pl4g::sema {
   }
 
 
+  bool given_its_own(std::string_view name, const ast::Block* body)
+  {
+    // A list written out, a join, or what a function of the program answers:
+    // each a list nothing else names.  Not another name, which a binding may
+    // leave holding the same room, and not what the language's own functions
+    // answer, some of which are their argument.
+    auto made_here = [](const ast::Expr* value) {
+      while (auto allocated = ast::as<ast::Allocated>(value))
+        value = allocated->value;
+      if (auto call = ast::as<ast::Call>(value)) {
+        auto callee = callee_name(call);
+        return callee == nullptr || ! callee->name.starts_with(names::builtin_glyph);
+      }
+      if (ast::is<ast::ListLit>(value))
+        return true;
+      auto binary = ast::as<ast::Binary>(value);
+      return binary != nullptr && binary->op == ast::BinaryOp::concat;
+    };
+    auto among = [&](std::span<const ast::NameAt> more) {
+      return std::ranges::any_of(more, [&](const ast::NameAt& one) { return one.name == name; });
+    };
+    int bound = 0;
+    bool fine = true;
+    auto visit = [&](this auto& self, const ast::Node* one) -> void {
+      if (! fine || one == nullptr)
+        return;
+      if (auto def = ast::as<ast::VarDef>(one)) {
+        if (among(def->more))
+          fine = false;
+        else if (def->name == name) {
+          ++bound;
+          fine = def->mutable_ && made_here(def->value);
+        }
+      } else if (auto assign = ast::as<ast::AssignStmt>(one)) {
+        if (among(assign->more))
+          fine = false;
+        else if (assign->name == name)
+          fine = made_here(assign->value);
+      } else if (auto loop = ast::as<ast::ForEach>(one)) {
+        if (loop->name == name || among(loop->more))
+          fine = false;
+      } else if (auto param = ast::as<ast::Param>(one)) {
+        if (param->name == name)
+          fine = false;
+      } else if (auto pattern = ast::as<ast::Pattern>(one)) {
+        if (pattern->name && *pattern->name == name)
+          fine = false;
+      } else if (auto capture = ast::as<ast::Capture>(one)) {
+        if (capture->name == name)
+          fine = false;
+      } else if (ast::is<ast::Defer>(one) && mentions(one, name) != 0)
+        // What is put off runs after the answer is made and could change the
+        // room under it.
+        fine = false;
+      ast::for_each_child(one, [&](const ast::Node* child) { self(child); });
+    };
+    visit(body);
+    return fine && bound == 1 && ! referenced(body, name);
+  }
+
+
   std::vector<std::int64_t> takes_owned(const ast::FuncDef* node, std::span<const ir::Type* const> params)
   {
     std::vector<std::int64_t> found;

@@ -349,6 +349,9 @@ namespace pl4g::sema {
   // Whether anything below *node* reaches the variable *name* other than by
   // its name: `&`, a lambda bringing it in by reference, a cursor.
   bool referenced(const ast::Node* node, std::string_view name);  // check.py:_referenced
+  // Whether the list *name* holds in *body* is room nothing else holds: a `mut` variable bound once and
+  // given only lists made where it is given them, reached no other way and named by no `defer`.
+  bool given_its_own(std::string_view name, const ast::Block* body);  // check.py:_given_its_own
   std::vector<std::int64_t> takes_owned(const ast::FuncDef* node, std::span<const ir::Type* const> params);  // check.py:3095
   // How many times `name` is read in `node`.
   std::int64_t mentions(const ast::Node* node, std::string_view name);  // check.py:3105

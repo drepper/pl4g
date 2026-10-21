@@ -907,10 +907,12 @@ namespace pl4g::sema {
                    { "type", ty->written() } });
       return undef(module, ir::error_type());
     }
-    if (*target == heap_key && ir::is<ir::ListType>(ty) && owned_parameter(written, func)) {
+    if (*target == heap_key && ir::is<ir::ListType>(ty)
+        && (owned_parameter(written, func) || owned_local(written, func))) {
       // A parameter taken as this call's own is nobody else's room and goes
       // when the call does: where it is the heap's already it is answered as
-      // it is, which is how `v ← f(v)` moves both ways.
+      // it is, which is how `v ← f(v)` moves both ways.  So does a variable
+      // of the body's own that holds room of its own.
       answer_kinds.emplace_back("heap");
       return heaps_or_copied(builder, value, ir::as<ir::ListType>(ty), span);
     }

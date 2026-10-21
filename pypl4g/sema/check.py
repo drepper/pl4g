@@ -576,7 +576,7 @@ def _given_its_own(name: str, body: ast.Block) -> bool:
             case ast.VarDef() if one.name == name:
                 bound += 1
                 fine = one.mutable and not one.more and made_here(one.value)
-            case ast.VarDef() | ast.AssignStmt() \
+            case ast.VarDef() | ast.AssignStmt() | ast.ForEach() \
                     if any(other == name for other, _ in one.more):
                 fine = False
             case ast.AssignStmt() if one.name == name:

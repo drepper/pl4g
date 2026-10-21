@@ -193,6 +193,9 @@
     bool movable(const ast::Expr* written, ir::Function* current);  // check.py:16578
     // Whether `written` is a parameter `func` takes as its own.
     bool owned_parameter(const ast::Expr* written, ir::Function* func);  // check.py:16600
+    // Whether `written`, which `func` answers, is a variable of its body's own whose room nothing else
+    // holds -- which, the call ending, nothing will hold but the caller.
+    bool owned_local(const ast::Expr* written, ir::Function* func);  // check.py:_owned_local
     // `value` as it is where its allocator is `⎕heap`, and a copy in the heap where it is anything else --
     // an arena of the caller's -- asked while running, since which it is was the caller's to know.
     ir::Value* heaps_or_copied(ir::Builder& builder, ir::Value* value, const ir::ListType* ty, Span span);  // check.py:16609
