@@ -39,8 +39,8 @@ from dataclasses import dataclass, field
 
 from ..ir.function import BasicBlock, Function
 from ..ir.inst import (AnyLaneInst, BinaryInst, BinOp, CastInst, CastKind,
-                       CmpInst, Instruction, LoadInst, SplatInst, StoreInst,
-                       UnaryInst, UnOp)
+                       CmpInst, CmpPred, Instruction, LoadInst, SplatInst,
+                       StoreInst, UnaryInst, UnOp)
 from ..ir.layout import DataLayout, stride_of
 from ..ir.module import Module
 from ..ir.types import IntType, BOOL, Type, TypeContext, U64, VecType
@@ -71,6 +71,9 @@ class Vectors:
     unary: dict[UnOp, frozenset[int]] = field(default_factory=dict)
     #: The lane widths it can compare at, answering a truth value per lane.
     compares: frozenset[int] = frozenset()
+    #: Whether it can gather a register of truth values into the bits of an
+    #: ordinary one, one bit per lane, which is what `\N{APL FUNCTIONAL SYMBOL QUAD}mask` asks.
+    masks: bool = False
 
     def lanes_at_once(self, element: Type, layout: DataLayout,
                       widths: frozenset[int]) -> int:
@@ -147,6 +150,21 @@ def _is_a_run(inst: Instruction) -> bool:
         isinstance(operand.ty, VecType) for operand in inst.operands)
 
 
+def works_on_runs(func: Function) -> bool:
+    """Whether *func* has anything to do with a run of elements held as one
+    value -- asked before they are brought down to what a machine has, after
+    which a machine with no registers of them has none left to ask about."""
+    return any(_is_a_run(inst) for block in func.blocks for inst in block.insts)
+
+
+def _runs_of(inst: Instruction) -> list[Value]:
+    """The runs this instruction makes and reads, the one it makes first."""
+    found: list[Value] = [inst] if isinstance(inst.ty, VecType) else []
+    found.extend(operand for operand in inst.operands
+                 if isinstance(operand.ty, VecType))
+    return found
+
+
 class _Settler:
     """Rewrites one function's run-at-a-time operations."""
 
@@ -169,6 +187,7 @@ class _Settler:
 
     def run(self, func: Function) -> None:
         """Rewrite the whole function."""
+        self._plan(func)
         for block in func.blocks:
             self._rewrite(block)
 
@@ -176,7 +195,6 @@ class _Settler:
         """Rewrite one block in place."""
         self._made = []
         self._block = block
-        self._plan(block)
         for inst in block.insts:
             if self._one(inst):
                 continue
@@ -197,52 +215,93 @@ class _Settler:
             if found is not None:
                 inst.operands[at] = found
 
-    def _plan(self, block: BasicBlock) -> None:
-        """Decide how every run in this block is cut up, before anything moves.
+    def _plan(self, func: Function) -> None:
+        """Decide how every run in this function is cut up, before anything moves.
 
-        The cut is the operation's to decide and not each value's: what a run is
-        read into has to be what the operation reads, so the question is asked of
-        the operation and the answer is handed to the values that reach it and to
-        the one it comes to.  A run that reaches no operation of its own -- there
-        is none today, every one the front end writes being read by exactly one --
-        falls to an element at a time, which is always right.
+        **A run is cut as everything it meets is.**  What a run is read into has
+        to be what the operation reads, and what an operation answers has to be
+        what the next one reads, so the runs an operation joins -- what it reads
+        and what it answers -- are cut alike, and so, by the same rule, are the
+        runs joined to those.  Each such family is cut by the operation in it
+        that can do the least at once: an operation that has sixteen lanes at a
+        time does eight just as well, and one that has none does every lane on
+        its own.  For long that was one operation and its operands, everything
+        the front end wrote going through room of its own between operations;
+        what a mask is made of does not, and `(w = 3u16) \N{LOGICAL OR} (w = 5u16)`
+        would otherwise read a comparison answered a lane apiece as though it
+        were answered eight at a time.
+
+        **A family with no operation in it is only being moved**: read out of
+        one place and written into another, which is what joining two arrays
+        asks for.  There is no operation to ask which widths it exists at, and
+        none is needed -- a register holds a run of any lane width, so what cuts
+        it up is only how wide the register is.  A run that is neither moved nor
+        worked on falls to an element at a time, which is always right.
+
+        Over the whole function and not a block at a time, so that a run made
+        in one block and read in another is cut the same in both.
         """
         self._cuts = {}
-        for inst in block.insts:
-            match inst:
-                case BinaryInst() | UnaryInst() | CmpInst() \
-                        if isinstance(inst.ty, VecType):
-                    self._spread(inst, self._cut_for(inst))
-                case _:
-                    pass
-        # A run that reaches no operation is one that is only being moved: read
-        # out of one place and written into another, which is what joining two
-        # arrays asks for.  There is no operation to ask which widths it exists
-        # at, and none is needed -- a register holds a run of any lane width, so
-        # what cuts it up is only how wide the register is.
-        for inst in block.insts:
-            if isinstance(inst, StoreInst) \
-                    and isinstance(inst.operands[2].ty, VecType) \
-                    and id(inst.operands[2]) not in self._cuts:
-                self._spread(inst, self._moving(inst.operands[2].ty))
+        family: dict[int, int] = {}
+        members: dict[int, Value] = {}
 
-    def _moving(self, held: VecType) -> list[int]:
-        """How a run that is only being moved is cut up."""
-        stride = stride_of(held.element, self._layout)
-        at_once = 0 if self._able.bits == 0 or stride == 0 \
-            else self._able.bits // (stride * 8)
-        return _pieces(held.lanes, stride, at_once)
+        def root(one: Value) -> int:
+            key = id(one)
+            members.setdefault(key, one)
+            while family.setdefault(key, key) != key:
+                family[key] = family[family[key]]
+                key = family[key]
+            return key
 
-    def _spread(self, inst: Instruction, cut: list[int]) -> None:
-        """Give this cut to an operation, to what reaches it and to nothing else."""
-        self._cuts[id(inst)] = cut
-        for operand in inst.operands:
-            if isinstance(operand.ty, VecType):
-                self._cuts.setdefault(id(operand), cut)
+        doing: dict[int, int] = {}
+        moved: set[int] = set()
+        for block in func.blocks:
+            for inst in block.insts:
+                runs = _runs_of(inst)
+                if not runs:
+                    continue
+                first = root(runs[0])
+                for one in runs[1:]:
+                    other = root(one)
+                    if other == first:
+                        continue
+                    family[other] = first
+                    if other in doing:
+                        found = doing.pop(other)
+                        doing[first] = min(doing.get(first, found), found)
+                    if other in moved:
+                        moved.discard(other)
+                        moved.add(first)
+                at_once = self._at_once(inst)
+                if at_once is not None:
+                    doing[first] = min(doing.get(first, at_once), at_once)
+                elif isinstance(inst, StoreInst):
+                    moved.add(first)
+        stride: dict[int, int] = {}
+        lanes: dict[int, int] = {}
+        for one in members.values():
+            held = one.ty
+            assert isinstance(held, VecType)
+            top = root(one)
+            stride[top] = max(stride.get(top, 0),
+                              stride_of(held.element, self._layout))
+            lanes[top] = held.lanes
+        cut_of: dict[int, list[int]] = {}
+        for top, count in lanes.items():
+            if top in doing:
+                at_once = doing[top]
+            elif top in moved:
+                at_once = 0 if self._able.bits == 0 or stride[top] == 0 \
+                    else self._able.bits // (stride[top] * 8)
+            else:
+                at_once = 0
+            cut_of[top] = _pieces(count, stride[top], at_once)
+        for key, one in members.items():
+            self._cuts[key] = cut_of[root(one)]
 
-    def _cut_for(self, inst: Instruction) -> list[int]:
-        """How the run an operation works on is cut up: how many lanes in each
-        piece, in order.
+    def _at_once(self, inst: Instruction) -> int | None:
+        """How many lanes at once this operation can be done to here, nought
+        where it is done a lane apiece; nothing where it is not an operation.
 
         As many whole registers' worth as the machine can do this operation to,
         and then one lane apiece.  A tail shorter than a register could be done
@@ -250,15 +309,28 @@ class _Settler:
         own instruction on every target and a different one on each, where an
         element at a time is the code that is already there.
         """
-        held = inst.ty
-        assert isinstance(held, VecType)
-        # A comparison answers truth values and reads something else, and what
-        # says how many fit in a register is what it reads.
-        read = inst.operands[0].ty
-        element = read.element if isinstance(read, VecType) else held.element
-        at_once = self._able.lanes_at_once(element, self._layout,
-                                           self._widths(inst))
-        return _pieces(held.lanes, stride_of(element, self._layout), at_once)
+        match inst:
+            case BinaryInst() | UnaryInst() | CmpInst() \
+                    if isinstance(inst.ty, VecType):
+                # A comparison answers truth values and reads something else,
+                # and what says how many fit in a register is what it reads.
+                read = inst.operands[0].ty
+                assert isinstance(read, VecType)
+                if isinstance(inst, CmpInst) and read.element is BOOL \
+                        and inst.pred not in (CmpPred.EQ, CmpPred.NE):
+                    # A truth value in a register of them is every bit of its
+                    # lane set or every bit clear, which a signed comparison
+                    # would order the wrong way round; whether two are equal is
+                    # the question worth asking of a run of them.
+                    return 0
+                return self._able.lanes_at_once(read.element, self._layout,
+                                                self._widths(inst))
+            case UnaryInst() if inst.op is UnOp.MASK:
+                return self._able.lanes_at_once(
+                    BOOL, self._layout,
+                    frozenset((8,)) if self._able.masks else frozenset())
+            case _:
+                return None
 
     def _widths(self, inst: Instruction) -> frozenset[int]:
         """Which lane widths this machine has this operation at; none where it
@@ -290,6 +362,8 @@ class _Settler:
                 self._binary(inst)
             case UnaryInst() if isinstance(inst.ty, VecType):
                 self._unary(inst)
+            case UnaryInst() if inst.op is UnOp.MASK:
+                self._mask(inst)
             case CmpInst() if isinstance(inst.ty, VecType):
                 self._compare(inst, inst.ty)
             case AnyLaneInst() if isinstance(inst.operands[0].ty, VecType):
@@ -432,6 +506,29 @@ class _Settler:
             made.append(self._add(CmpInst(inst.pred, one, other, answer,
                                           inst.span)))
         self._pieces[id(inst)] = made
+
+    def _mask(self, inst: UnaryInst) -> None:
+        """The bits of each piece, each moved up to where its first lane is.
+
+        A piece of one lane is a truth value, which is its own bit once it is a
+        number; a piece of more is asked with the instruction that gathers a
+        register's lanes.  What comes back is ored together.
+        """
+        found: Value | None = None
+        at = 0
+        for piece in self._held(inst.operands[0]):
+            one: Value = self._add(
+                UnaryInst(UnOp.MASK, piece, inst.span, inst.ty)
+                if isinstance(piece.ty, VecType)
+                else CastInst(CastKind.ZEXT, piece, inst.ty, inst.span))
+            if at:
+                one = self._add(BinaryInst(BinOp.SHL, one,
+                                           IntConst(inst.ty, at), inst.span))
+            found = one if found is None else self._add(
+                BinaryInst(BinOp.OR, found, one, inst.span))
+            at += piece.ty.lanes if isinstance(piece.ty, VecType) else 1
+        assert found is not None
+        self._became[id(inst)] = found
 
     def _any_lane(self, inst: AnyLaneInst) -> None:
         """Whether any lane is true, asked of each piece and then of the answers.

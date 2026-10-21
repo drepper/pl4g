@@ -82,6 +82,16 @@ namespace pl4g::mc {
                                         bool is_signed, int bits, Span span);
     virtual Insts select_run_splat(Reg dst, const MCOperand& src, int bits, Span span);
     virtual Insts select_run_ones(Reg dst, Span span);
+    // Compare every lane of two runs of `bits`-bit elements, every bit of a
+    // lane of `dst` set where they stand in `cond` and every bit clear where not.
+    virtual Insts select_run_compare(Condition cond, Reg dst, const MCOperand& left, const MCOperand& right,
+                                     int bits, Span span);
+    // One bit for each of the first `lanes` byte lanes of `src` in the ordinary
+    // register `dst`, the first lane the lowest bit and every bit above clear.
+    virtual Insts select_run_mask(Reg dst, const MCOperand& src, int lanes, Span span);
+    // Every byte lane of `src` subtracted from nought, which takes a run of
+    // truth values as memory holds them to one as a register does and back.
+    virtual Insts select_run_truths(Reg dst, const MCOperand& src, Span span);
     virtual Insts select_float_op(const Op* op, Reg dst, const MCOperand& left, const MCOperand& right, int bits,
                                   Span span);
     virtual Insts select_float_compare(Condition cond, Reg dst, const MCOperand& lhs, const MCOperand& rhs, int bits,
@@ -243,6 +253,13 @@ namespace pl4g::mc {
                         int bits, Span span = invalid_span);
     void run_splat(Reg dst, const MCOperand& src, int bits, Span span = invalid_span);
     void run_ones(Reg dst, Span span = invalid_span);
+    void run_compare(Condition cond, Reg dst, const MCOperand& left, const MCOperand& right, int bits,
+                     Span span = invalid_span);
+    void run_mask(Reg dst, const MCOperand& src, int lanes, Span span = invalid_span);
+    void run_truths(Reg dst, const MCOperand& src, Span span = invalid_span);
+    // Append instructions a backend's own selector chose, for what one
+    // architecture does in a way no name the three share describes.
+    void emit(const Insts& insts);
     void float_op(const Op* op, Reg dst, const MCOperand& left, const MCOperand& right, int bits,
                   Span span = invalid_span);
     void float_compare(Condition cond, Reg dst, const MCOperand& lhs, const MCOperand& rhs, int bits,
@@ -281,7 +298,6 @@ namespace pl4g::mc {
     std::vector<MachineFunction*> functions;
 
   private:
-    void emit(const Insts& insts);
     MCSymRef block_ref(const std::string& label);
     static bool is_branch_target(const MachineFunction& function, const MachineBasicBlock& block);
     void assign_registers(MachineFunction& function);

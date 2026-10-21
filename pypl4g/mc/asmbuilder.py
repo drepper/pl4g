@@ -271,6 +271,44 @@ class InstructionSelector(Protocol):
         """Instructions that set every bit of a run register."""
         ...
 
+    def select_run_compare(self, cond: Condition, dst: Reg, left: MCOperand,
+                           right: MCOperand, bits: int,
+                           span: Span) -> Sequence[MCInst]:
+        """Instructions that compare every lane of two runs of *bits*-bit
+        elements, setting every bit of a lane of *dst* where the two stand in
+        *cond* and clearing every bit of it where they do not.
+
+        Every bit and not one: that is what each of these machines' comparisons
+        answers, and it is what a run of truth values is held as in a register,
+        so that `and`, `or` and exclusive or of two of them are the bitwise
+        operations a register already has.
+        """
+        ...
+
+    def select_run_mask(self, dst: Reg, src: MCOperand, lanes: int,
+                        span: Span) -> Sequence[MCInst]:
+        """Instructions that put one bit for each of the first *lanes* byte lanes
+        of *src* into the ordinary register *dst*, the first lane the lowest
+        bit, and clear every bit above them.
+
+        Each lane holds a truth value the way a comparison leaves one, every bit
+        of it set or every bit clear, so which of its bits is read is the
+        target's choice.
+        """
+        ...
+
+    def select_run_truths(self, dst: Reg, src: MCOperand,
+                          span: Span) -> Sequence[MCInst]:
+        """Instructions that put into *dst* every byte lane of *src* subtracted
+        from nought.
+
+        A truth value is one byte holding one or nought where it is in memory,
+        and a lane of every bit set or clear where it is in a register; nought
+        less one is every bit set and nought less every bit set is one, so the
+        same instructions go either way.
+        """
+        ...
+
     def select_float_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
                         bits: int, span: Span) -> Sequence[MCInst]:
         """Instructions that compute *op* over two floating-point values."""
@@ -784,6 +822,12 @@ class Assembler:
         for inst in insts:
             self._block.append(inst)
 
+    def emit(self, insts: Sequence[MCInst]) -> None:
+        """Append instructions a backend's own selector chose, for what one
+        architecture does in a way no name the three share describes: a run of
+        truth values held as a mask, say, which only one of them has."""
+        self._emit(insts)
+
     def loadreg(self, dst: Reg, src: MCOperand | int, span: Span = INVALID_SPAN) -> None:
         """Place *src* into the register *dst*."""
         operand = self.imm(src) if isinstance(src, int) else src
@@ -1008,6 +1052,25 @@ class Assembler:
     def run_ones(self, dst: Reg, span: Span = INVALID_SPAN) -> None:
         """Set every bit of a run register."""
         self._emit(self._selector.select_run_ones(dst, span))
+
+    def run_compare(self, cond: Condition, dst: Reg, left: MCOperand,
+                    right: MCOperand, bits: int,
+                    span: Span = INVALID_SPAN) -> None:
+        """Compare every lane of two runs, each lane of *dst* every bit set where
+        *cond* holds of it and every bit clear where it does not."""
+        self._emit(self._selector.select_run_compare(cond, dst, left, right,
+                                                     bits, span))
+
+    def run_mask(self, dst: Reg, src: MCOperand, lanes: int,
+                 span: Span = INVALID_SPAN) -> None:
+        """Put one bit for each of the first *lanes* lanes of *src* into *dst*."""
+        self._emit(self._selector.select_run_mask(dst, src, lanes, span))
+
+    def run_truths(self, dst: Reg, src: MCOperand,
+                   span: Span = INVALID_SPAN) -> None:
+        """Turn a run of truth values held as memory holds them into one held as
+        a register holds them, or back."""
+        self._emit(self._selector.select_run_truths(dst, src, span))
 
     def float_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
                  bits: int, span: Span = INVALID_SPAN) -> None:

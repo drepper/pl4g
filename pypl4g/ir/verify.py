@@ -347,6 +347,19 @@ class Verifier:
                     self._fail(where, "".join(("'", inst.opcode,
                                                "' answering with something "
                                                "that is not a whole number")))
+            case UnaryInst() if inst.op is UnOp.MASK:
+                # A run of truth values read as the bits of a number: one lane
+                # per bit, so the number has to have a bit for every lane.
+                asked = inst.operands[0].ty
+                if not (isinstance(asked, VecType) and asked.element is BOOL):
+                    self._fail(where, "".join((
+                        "a mask of ", asked.render(),
+                        ", which holds no truth values")))
+                elif not (isinstance(inst.ty, IntType) and not inst.ty.signed
+                          and inst.ty.bits >= asked.lanes):
+                    self._fail(where, "".join((
+                        "a mask of ", asked.render(), " read as ",
+                        inst.ty.render())))
             case UnaryInst():
                 if inst.ty != inst.operands[0].ty:
                     self._fail(where, "".join(("'", inst.opcode,

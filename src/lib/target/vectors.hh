@@ -22,6 +22,9 @@ namespace pl4g::target {
     std::map<ir::UnOp, std::set<unsigned>> unary;
     // The lane widths it can compare at.
     std::set<unsigned> compares;
+    // Whether it can gather a register of truth values into the bits of an
+    // ordinary one, one bit per lane, which is what `⎕mask` asks.
+    bool masks = false;
 
     // How many elements of this type fit in one of its registers, for an
     // operation it has at `widths`.
@@ -38,5 +41,9 @@ namespace pl4g::target {
   // Rewrite every run-at-a-time operation of `module` into what `able` says it
   // can do.
   void settle(ir::Module& module, const Vectors& able, const ir::DataLayout& layout);
+
+  // Whether `func` has anything to do with a run of elements held as one value
+  // -- asked before they are brought down to what a machine has.
+  bool works_on_runs(const ir::Function& func);
 
 } // namespace pl4g::target

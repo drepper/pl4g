@@ -125,7 +125,8 @@ class AArch64Target:
                     BinOp.SAT_ADD: EVERY, BinOp.SAT_SUB: EVERY,
                     BinOp.WRAP_ADD: EVERY, BinOp.WRAP_SUB: EVERY,
                     BinOp.WRAP_MUL: frozenset((8, 16, 32))},
-            unary={UnOp.NOT: EVERY})
+            unary={UnOp.NOT: EVERY},
+            compares=frozenset((8,)), masks=True)
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
                  opt_level: int, sources: SourceManager | None = None) -> None:

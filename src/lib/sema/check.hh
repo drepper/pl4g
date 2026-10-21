@@ -326,6 +326,13 @@ namespace pl4g::sema {
     // The values that are copied where they are lowered, by identity: a list
     // read out of a place into another, where either may change it in place.
     KeySet copying;  // check.py:3996
+    // The operators, by identity, whose answer is wanted as one run of lanes
+    // held as a value rather than as an array in room of its own: what `⎕mask`
+    // was handed, and every operator walked over arrays inside it.
+    KeySet as_run;  // check.py:4002
+    // The values that are such a run, until the operator they stand in or the
+    // mask takes them.
+    KeySet runs;  // check.py:4006
     Dict<std::int64_t, std::set<std::tuple<std::int64_t, std::int64_t>>> live_reach;  // check.py:3997
     Dict<std::int64_t, Dict<std::tuple<std::int64_t, std::int64_t>, std::string>> live_ends;  // check.py:3998
     Dict<std::int64_t, std::set<std::tuple<std::int64_t, std::int64_t>>> live_ends_after;  // check.py:3999

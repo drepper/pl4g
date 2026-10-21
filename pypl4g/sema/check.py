@@ -35,7 +35,7 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            ASSIGN_GLYPH, CONCAT_GLYPH,
                            ARRAY_OPEN_GLYPH, ARRAY_CLOSE_GLYPH,
                            SET_OPEN_GLYPH, SET_CLOSE_GLYPH,
-                           DROP_NAME, LEAD_NAME, NARROW_NAME, ONES_NAME,
+                           DROP_NAME, LEAD_NAME, MASK_NAME, NARROW_NAME, ONES_NAME,
                            UNIT_NAME,
                           ENUMERATE_NAME, TYPEOF_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
@@ -2945,6 +2945,13 @@ _ALL_AT_ONCE: Final[frozenset[ast.BinaryOp]] = frozenset((
 _ALL_AT_ONCE_UNARY: Final[frozenset[ast.UnaryOp]] = frozenset((
     ast.UnaryOp.LOGIC_NOT, ast.UnaryOp.BIT_NOT))
 
+#: The most bytes a view copied into an array is read as one value where it
+#: turns out to be one run.  A register or a few: what a scanner reads a block of
+#: input at a time in.  Past it the elements are copied in a loop, which is what
+#: they were before a view was asked whether it is one run, and is code that does
+#: not grow with the count.
+_AS_ONE_AT_MOST: Final[int] = 256
+
 #: What each operator means where it is written inside `⎕wrap`.  Every one of them
 #: answers with the low bits of what it came to, whatever it came to -- so the
 #: ones that would have stopped the program do not, and the ones that would have
@@ -4019,6 +4026,16 @@ class Checker:
         #: The values that are copied where they are lowered, by identity: a list
         #: read out of a place into another, where either may change it in place.
         self._copying: set[int] = set()
+        #: The operators, by identity, whose answer is wanted as one run of
+        #: lanes held as a value rather than as an array in room of its own:
+        #: what `\N{APL FUNCTIONAL SYMBOL QUAD}mask` was handed, and every operator walked over arrays
+        #: inside it.  A mask is made of the lanes, so building the array only
+        #: to read it back would be two copies of what is already in hand.
+        self._as_run: set[int] = set()
+        #: The values that are such a run, until the operator they stand in or
+        #: the mask takes them.  An array is walked; one of these is walked the
+        #: same way, being the elements of one without the room around them.
+        self._runs: set[int] = set()
         self._live_reach: dict[int, frozenset[tuple[int, int]]] = {}
         self._live_ends: dict[int, dict[tuple[int, int], str]] = {}
         self._live_ends_after: dict[int, frozenset[tuple[int, int]]] = {}
@@ -21724,6 +21741,10 @@ class Checker:
                 self._answer_made_in = (frozenset({id(local)}), "".join(
                     ("'", node.name, "'")))
             return
+        if isinstance(declared, ArrayType) and declared.fixed and not node.more \
+                and self._given_a_view(node.value):
+            self._lower_view_copied(builder, node, declared)
+            return
         self._initializing = node.name
         try:
             value = self._lower_into(builder, node.value, declared, node.span)
@@ -21737,6 +21758,53 @@ class Checker:
         self._kept_by_a_name(declared, node.name_span)
         self._name_value(bound, node.name, node.name_span)
         self._bind_local(node.name, bound, node.name_span, node.mutable,
+                         value_span=node.span, builder=builder)
+
+    def _given_a_view(self, expr: ast.Expr) -> bool:
+        """Whether *expr* is elements whose type does not state their shape: a
+        run sliced out of an array, or a name bound to one."""
+        match expr:
+            case ast.Element():
+                return any(isinstance(one, ast.Range) for one in expr.indices)
+            case ast.NameRef():
+                local = self._find_local(expr.name)
+                if local is None:
+                    return False
+                held = self._held_by(local)
+                return isinstance(held, ArrayType) and not held.fixed
+            case _:
+                return False
+
+    def _lower_view_copied(self, builder: IRBuilder, node: ast.VarDef,
+                           declared: ArrayType) -> None:
+        """Lower `let a: T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}N\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = v\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{HORIZONTAL ELLIPSIS}j\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`: the elements of a view, copied into room of
+        the name's own.
+
+        Giving an array to an array copies its elements, and where how many
+        there are is known only while the program runs the two are compared
+        before anything is copied -- the rule `a \N{LEFTWARDS ARROW} v` follows, held here to
+        the definition that gives a name its first elements.  A name whose type
+        states its shape owns elements that are one run, so this is a copy even
+        where nothing may write either side: a view need not be one run, and
+        the type says this is.
+        """
+        self._initializing = node.name
+        try:
+            value = self._lower_expr(builder, node.value, None)
+            found = self._value_type_of(value)
+            room: Value = UndefConst(ERROR)
+            if found is not ERROR:
+                made = builder.cast(CastKind.BITCAST,
+                                    builder.frame(declared, node.span), declared,
+                                    node.span)
+                if self._copy_elements(builder, made, declared, value, found,
+                                       node.value.span):
+                    room = made
+        finally:
+            self._initializing = None
+        self._kept_by_a_name(declared, node.name_span)
+        self._name_value(room, node.name, node.name_span)
+        self._bind_local(node.name, room, node.name_span, node.mutable,
                          value_span=node.span, builder=builder)
 
     def _lower_derived(self, builder: IRBuilder, node: ast.VarDef) -> None:
@@ -22160,6 +22228,17 @@ class Checker:
             self._copying.discard(id(expr))
             return self._copy_of(builder, self._lower_expr(builder, expr, expected),
                                  expr.span)
+        if self._as_run and id(expr) in self._as_run:
+            # An operator whose answer is wanted as a run asks the same of the
+            # operators it is made of, so that `(c = 34u8) \N{LOGICAL OR} (c = 92u8)` is
+            # three operations on lanes and no array at all.
+            match expr:
+                case ast.Binary() if expr.op in _ALL_AT_ONCE:
+                    self._as_run.update((id(expr.left), id(expr.right)))
+                case ast.Unary() if expr.op in _ALL_AT_ONCE_UNARY:
+                    self._as_run.add(id(expr.operand))
+                case _:
+                    pass
         if self._abstract is not None and isinstance(expr, _APPLYING):
             handled = self._abstractly(builder, expr)
             if isinstance(handled, Value):
@@ -24953,6 +25032,87 @@ class Checker:
             return builder.int_const(U8, _counted(op, given.value, found))
         return builder.unary(op, given, U8, expr.span)
 
+    def _lower_mask(self, builder: IRBuilder, expr: ast.Call,
+                    expected: Type | None) -> Value:
+        """Lower `\N{APL FUNCTIONAL SYMBOL QUAD}mask(B)`: a run of truth values as the bits of a whole number,
+        the first of them the lowest bit.
+
+        **The answer is the narrowest of the four machine widths that has a bit
+        for every truth value**, so sixteen of them are a `u16` and five a `u8`
+        whose top three bits are clear.  How many there are is the type's to
+        say, which is why the run has to state its length (4261), and the widest
+        there is has sixty-four bits (4262).
+
+        **An operator walked over an array is not built into one here.**  What it
+        is handed is lowered with its answer wanted as one run of lanes, and so
+        is every walked operator inside it: `(c = 34u8) \N{LOGICAL OR} (c = 92u8)` over a
+        `u8\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}32\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` is two comparisons and an `or` of thirty-two lanes each and
+        the mask of what came out, with no room taken for any of it.  Anything
+        else -- a name, a row, what a call answered -- is an array, whose elements
+        are read as one run.
+        """
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=MASK_NAME, expected=1, found=len(expr.args))
+            return UndefConst(ERROR)
+        written = expr.args[0]
+        outer, self._as_run = self._as_run, {id(written)}
+        try:
+            given = self._lower_expr(builder, written, None)
+        finally:
+            self._as_run = outer
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        held = id(given) in self._runs
+        self._runs.discard(id(given))
+        if held:
+            assert isinstance(found, VecType)
+            if found.element is not BOOL:
+                # An operator walked at once that answers something other than
+                # truth values -- a sum of two runs of bytes.
+                self._diags.emit(D.LANG_MASK_NOT_TRUTH_VALUES, written.span,
+                                 name=MASK_NAME,
+                                 found=self._module.types.array_type(
+                                     found.element, (found.lanes,)).written())
+                return UndefConst(ERROR)
+            lanes = found.lanes
+        else:
+            if not isinstance(found, ArrayType) or found.element is not BOOL:
+                self._diags.emit(D.LANG_MASK_NOT_TRUTH_VALUES, written.span,
+                                 name=MASK_NAME, found=found.written())
+                return UndefConst(ERROR)
+            if found.rank != 1 or not found.fixed:
+                self._diags.emit(D.LANG_MASK_SHAPE_NOT_ONE_RUN, written.span,
+                                 name=MASK_NAME, found=found.written())
+                return UndefConst(ERROR)
+            lanes = found.shape[0]
+            assert lanes is not None
+        if lanes > 64:
+            self._diags.emit(D.LANG_MASK_TOO_LONG, written.span, name=MASK_NAME,
+                             found=lanes)
+            return UndefConst(ERROR)
+        answer = next(one for one in (U8, U16, U32, U64) if one.bits >= lanes)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        if held:
+            return builder.unary(UnOp.MASK, given, answer, expr.span)
+        if lanes == 0:
+            return builder.int_const(answer, 0)
+        start, _ = self._shape_of(builder, given, found, expr.span)
+        if lanes == 1:
+            # One truth value is one bit already, and a run of one is not a run.
+            one = builder.load(builder.cast(
+                CastKind.BITCAST, start,
+                self._module.types.ptr_type(BOOL, mutable=True), expr.span),
+                expr.span)
+            return builder.cast(CastKind.ZEXT, one, answer, expr.span)
+        run = self._module.types.vec_type(BOOL, lanes)
+        return builder.unary(UnOp.MASK, builder.load(builder.cast(
+            CastKind.BITCAST, start, self._module.types.ptr_type(run, mutable=True),
+            expr.span), expr.span), answer, expr.span)
+
     def _lower_code_point(self, builder: IRBuilder, expr: ast.Call,
                           expected: Type | None) -> Value:
         """Lower `\N{APL FUNCTIONAL SYMBOL QUAD}ord(C)` and `\N{APL FUNCTIONAL SYMBOL QUAD}chr(N)`: the two conversions between a code
@@ -25194,6 +25354,8 @@ class Checker:
                 return self._lower_code_point(builder, expr, expected)
             if given in (ONES_NAME, LEAD_NAME):
                 return self._lower_bit_count(builder, expr, expected)
+            if given == MASK_NAME:
+                return self._lower_mask(builder, expr, expected)
             if given in (DROP_NAME, UNIT_NAME):
                 return self._lower_unit_call(builder, expr, expected)
             if given == ENTRY_NAME:
@@ -26028,13 +26190,53 @@ class Checker:
             return
         if known is not None and into_shape[3] and from_shape[3] \
                 and isinstance(element, (IntType, FloatType, BoolType)):
-            held = self._module.types.vec_type(element, known)
-            pointer = self._module.types.ptr_type(held, mutable=True)
-            builder.store(builder.cast(CastKind.BITCAST, into, pointer, span),
-                          builder.load(builder.cast(CastKind.BITCAST, from_,
-                                                    pointer, span), span),
-                          span)
+            self._move_as_one(builder, into, from_, element, known, span)
             return
+        if known is not None and into_shape[3] and len(from_shape[2]) == 1 \
+                and known * stride_of(element, _LAYOUT) <= _AS_ONE_AT_MOST \
+                and isinstance(element, (IntType, FloatType, BoolType)):
+            # A view whose type cannot say its elements are one run nearly
+            # always is one -- a run sliced out of a buffer -- and one value read
+            # and written is what copying a run is; the loop is for the view
+            # that is not, which is asked while the program runs.
+            one_run = builder.compare(CmpPred.EQ, from_shape[2][0],
+                                      builder.int_const(U64, 1), span)
+            whole = builder.new_block("copy.run")
+            apart = builder.new_block("copy.apart")
+            done = builder.new_block("copied.run")
+            before = builder.memory()
+            builder.condbr(one_run, whole, apart, span=span)
+            builder.position_at(whole)
+            builder.set_memory(before)
+            self._move_as_one(builder, into, from_, element, known, span)
+            builder.br(done, (builder.memory(),), span)
+            builder.position_at(apart)
+            builder.set_memory(before)
+            self._move_apart(builder, into_shape, from_shape, element, count, span)
+            builder.br(done, (builder.memory(),), span)
+            builder.position_at(done)
+            builder.set_memory(done.add_param(MEM, "mem"))
+            return
+        self._move_apart(builder, into_shape, from_shape, element, count, span)
+
+    def _move_as_one(self, builder: IRBuilder, into: Value, from_: Value,
+                     element: Type, known: int, span: Span) -> None:
+        """Copy *known* elements that are one run on both sides, read as one
+        value and then written -- which every target cuts up as it can, and
+        which reads all of them before it writes any."""
+        held = self._module.types.vec_type(element, known)
+        pointer = self._module.types.ptr_type(held, mutable=True)
+        builder.store(builder.cast(CastKind.BITCAST, into, pointer, span),
+                      builder.load(builder.cast(CastKind.BITCAST, from_,
+                                                pointer, span), span),
+                      span)
+
+    def _move_apart(self, builder: IRBuilder, into_shape: _Laid,
+                    from_shape: _Laid, element: Type, count: Value,
+                    span: Span) -> None:
+        """Copy *count* elements one at a time, from whichever end keeps two
+        views that overlap from writing an element before it is read."""
+        into, from_ = into_shape[0], from_shape[0]
         later = builder.compare(CmpPred.UGT,
                                 builder.cast(CastKind.BITCAST, into, U64, span),
                                 builder.cast(CastKind.BITCAST, from_, U64, span),
@@ -27438,7 +27640,8 @@ class Checker:
         that every check it makes is made for each, by the code that makes it.
         """
         values = [value for _, value in given]
-        if not any(isinstance(value.ty, ArrayType) for value in values):
+        if not any(isinstance(value.ty, ArrayType) or id(value) in self._runs
+                   for value in values):
             return None
         wanted = [self._scalar_of(value.ty) for value in values]
         if any(ty is None or ty is ERROR for ty in wanted):
@@ -27449,7 +27652,12 @@ class Checker:
         names = [name for name, _ in given]
         if self._all_at_once(expr, wanted, shape):
             return self._run_at_a_time(builder, expr, names, values, wanted,
-                                       shape, expected)
+                                       shape, expected,
+                                       id(expr) in self._as_run and len(shape) == 1)
+        # An element at a time reads elements out of an array, so a run that
+        # came as one value is given the room it would have had.
+        values = [self._as_array(builder, value, expr.span)
+                  if id(value) in self._runs else value for value in values]
         total = 1
         for along in shape:
             total *= along
@@ -27510,7 +27718,7 @@ class Checker:
     def _run_at_a_time(self, builder: IRBuilder, expr: ast.Expr,
                        names: Sequence[str], values: Sequence[Value],
                        wanted: Sequence[Type], shape: tuple[int, ...],
-                       expected: Type | None) -> Value:
+                       expected: Type | None, as_run: bool = False) -> Value:
         """Apply the operator to the innermost run of elements all at once.
 
         The last dimension is the one whose elements are next to each other, so
@@ -27524,6 +27732,9 @@ class Checker:
         elements -- so every check it makes is still made by the code that makes
         it, and asking a run rather than an element changes only how many values
         the answer covers.
+
+        *as_run* says the answer is wanted as the run itself, which a shape of
+        one dimension is: one value of as many lanes, and no room taken for it.
         """
         lanes = shape[-1]
         outer = shape[:-1]
@@ -27543,6 +27754,12 @@ class Checker:
         held = self._value_type_of(made[0])
         assert isinstance(held, VecType)
         answer = self._module.types.array_type(held.element, shape)
+        if as_run:
+            if not self._accepts(expected, answer):
+                self._report_mismatch(expr.span, answer, expected)
+                return UndefConst(ERROR)
+            self._runs.add(id(made[0]))
+            return made[0]
         place = builder.frame(answer, expr.span)
         for at, one in enumerate(made):
             builder.store(
@@ -27565,8 +27782,12 @@ class Checker:
         exactly the elements.
 
         An operand not being walked is one value used at every turn, so it goes
-        in every lane.
+        in every lane.  And one that already is a run held as a value is that
+        run, taken by the operator it stands in.
         """
+        if id(value) in self._runs:
+            self._runs.discard(id(value))
+            return value
         picked = value
         for along in index:
             ty = self._value_type_of(picked)
@@ -27582,6 +27803,16 @@ class Checker:
             builder.cast(CastKind.BITCAST, start,
                          self._module.types.ptr_type(held, mutable=True), span),
             span)
+
+    def _as_array(self, builder: IRBuilder, value: Value, span: Span) -> Value:
+        """A run held as one value, put in room of its own as the array it is."""
+        self._runs.discard(id(value))
+        held = value.ty
+        assert isinstance(held, VecType)
+        answer = self._module.types.array_type(held.element, (held.lanes,))
+        place = builder.frame(answer, span)
+        builder.store(self._run_place(builder, place, held, 0, span), value, span)
+        return builder.cast(CastKind.BITCAST, place, answer, span)
 
     def _run_place(self, builder: IRBuilder, base: Value, held: VecType,
                    at: int, span: Span) -> Value:
@@ -27605,6 +27836,17 @@ class Checker:
             along: int | None = None
             for at in walked:
                 ty = seen[at]
+                if isinstance(ty, VecType):
+                    # A run held as a value, which is one dimension of as many
+                    # as it has lanes.
+                    if along is None:
+                        along = ty.lanes
+                    elif along != ty.lanes:
+                        self._diags.emit(D.LANG_LISTABLE_SHAPES_DIFFER, span,
+                                         found=ty.lanes, wanted=along)
+                        return None
+                    seen[at] = ty.element
+                    continue
                 if not (isinstance(ty, ArrayType) and ty.fixed):
                     self._diags.emit(D.LANG_LISTABLE_CANNOT_WALK, span,
                                      found=ty.written(), wanted=wanted[at].written())

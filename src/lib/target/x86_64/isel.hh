@@ -65,6 +65,10 @@ namespace pl4g::target::x86_64 {
                                     bool is_signed, int bits, Span span) override;
     mc::Insts select_run_any_lane(mc::Reg dst, const mc::MCOperand& src, int stride, int lanes, Span span) override;
     mc::Insts select_run_ones(mc::Reg dst, Span span) override;
+    mc::Insts select_run_compare(mc::Condition cond, mc::Reg dst, const mc::MCOperand& left,
+                                 const mc::MCOperand& right, int bits, Span span) override;
+    mc::Insts select_run_mask(mc::Reg dst, const mc::MCOperand& src, int lanes, Span span) override;
+    mc::Insts select_run_truths(mc::Reg dst, const mc::MCOperand& src, Span span) override;
     mc::Insts select_set(mc::Condition cond, mc::Reg dst, const mc::MCOperand& lhs, const mc::MCOperand& rhs,
                          Span span) override;
     mc::Insts select_address(mc::Reg dst, const mc::MCSymRef& symbol, Span span) override;

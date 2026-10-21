@@ -52,7 +52,7 @@ from ...ir.function import DEFAULT_CCONV, SYSTEM_CCONV
 from .abi import lookup as lookup_cconv
 from .startup import ABORT_SYMBOL, REPORT_SYMBOL, SYSCALLS
 from .opcodes import IMM12_MAX, IMM12_MIN, RISCV_INSTRS
-from .regs import FPR, GPR, INFO, RA, SP, ZERO
+from .regs import FPR, GPR, INFO, RA, SP, SPARE, V0, VEC, VECTOR_REGISTERS, ZERO
 
 if TYPE_CHECKING:
     from ...mc.reg import PhysReg
@@ -183,6 +183,12 @@ class RVSelector(InstructionSelector):
         #: extensions the code generator can use today are asked of it here.
         self.isa: isa.ISA = (built_for if built_for is not None
                              else isa.parse(isa.DEFAULT))
+        #: The register the function being lowered keeps to itself, where it
+        #: works on runs: what reaches a place in the frame that no offset an
+        #: instruction carries can, and what a run register is set aside
+        #: through.  Nothing in a function that does not, which then has every
+        #: register it always had.
+        self.spare: PhysReg | None = None
 
     def _inst(self, mnemonic: str, operands: Sequence[MCOperand], span: Span) -> MCInst:
         """Select the encoding of *mnemonic* for *operands*."""
@@ -207,6 +213,13 @@ class RVSelector(InstructionSelector):
 
     def select_move(self, dst: Reg, src: MCOperand, span: Span) -> Sequence[MCInst]:
         """Instructions that place *src* into *dst*."""
+        if dst.cls is VEC:
+            if isinstance(src, MCReg) and src.reg.cls is VEC:
+                if src.reg is dst:
+                    return ()
+                return (self._inst("vmv1r.v", (MCReg(dst), MCReg(src.reg)), span),)
+            raise UnsupportedOperation(
+                "putting that kind of operand in a run register", span)
         if self._is_float(dst):
             return self._select_float_move(dst, src, span)
         if isinstance(src, MCReg) and self._is_float(src.reg):
@@ -883,53 +896,305 @@ class RVSelector(InstructionSelector):
         nothing, which is a function that can only be the innermost frame."""
         return (size if link else None, total)
 
+    def _in_frame(self, offset: int,
+                  span: Span) -> tuple[Sequence[MCInst], MCReg, int]:
+        """How a place *offset* bytes into the frame is reached: what has to be
+        done first, the register to measure from and how far from it.
+
+        The stack pointer and the offset itself, wherever the offset fits the
+        twelve bits a load or a store carries.  Past that the place is built
+        in the register a function that works on runs keeps to itself, whose
+        frame is the one that grows that large -- an operation done a lane at a
+        time is many values at once.
+        """
+        if IMM12_MIN <= offset <= IMM12_MAX:
+            return (), MCReg(SP), offset
+        if self.spare is None:
+            raise UnsupportedOperation("".join((
+                "a place ", str(offset), " bytes into the frame")), span)
+        spare = MCReg(self.spare)
+        return ((*self._materialize(self.spare, offset, span),
+                 self._inst("add", (spare, spare, MCReg(SP)), span)), spare, 0)
+
+    def _frame_word(self, mnemonic: str, register: Reg, offset: int,
+                    span: Span) -> Sequence[MCInst]:
+        """One load or store of a register at *offset* into the frame."""
+        if register.cls is VEC:
+            # A run register is set aside whole, by an instruction that takes
+            # its address in a register and no offset at all.
+            if self.spare is None:
+                raise UnsupportedOperation(
+                    "setting a run register aside with nowhere to say where", span)
+            spare = MCReg(self.spare)
+            before: Sequence[MCInst]
+            if IMM12_MIN <= offset <= IMM12_MAX:
+                before = (self._inst("addi", (spare, MCReg(SP),
+                                              MCImm(offset, 12)), span),)
+            else:
+                before, _, _ = self._in_frame(offset, span)
+            whole = "vs1r.v" if mnemonic in ("sd", "fsd") else "vl1re8.v"
+            return (*before, self._inst(whole, (MCReg(register), spare), span))
+        before, base, at = self._in_frame(offset, span)
+        return (*before, self._inst(mnemonic, (MCReg(register), base,
+                                               MCImm(at, 12)), span))
+
     def select_save_link(self, offset: int, span: Span) -> Sequence[MCInst]:
         """Instructions that put the return address into the frame at *offset*."""
-        return (self._inst("sd", (MCReg(RA), MCReg(SP), MCImm(offset, 12)), span),)
+        return self._frame_word("sd", RA, offset, span)
 
     def select_restore_link(self, offset: int, span: Span) -> Sequence[MCInst]:
         """Instructions that take it back out again."""
-        return (self._inst("ld", (MCReg(RA), MCReg(SP), MCImm(offset, 12)), span),)
+        return self._frame_word("ld", RA, offset, span)
 
     def select_spill(self, slot: int, source: Reg, span: Span) -> Sequence[MCInst]:
         """Instructions that write *source* to the frame slot at *slot*."""
         mnemonic = "fsd" if self._is_float(source) else "sd"
-        return (self._inst(mnemonic, (MCReg(source), MCReg(SP), MCImm(slot, 12)),
-                           span),)
+        return self._frame_word(mnemonic, source, slot, span)
 
     def select_reload(self, destination: Reg, slot: int,
                       span: Span) -> Sequence[MCInst]:
         """Instructions that read the frame slot at *slot* into *destination*."""
         mnemonic = "fld" if self._is_float(destination) else "ld"
-        return (self._inst(mnemonic, (MCReg(destination), MCReg(SP),
-                                      MCImm(slot, 12)), span),)
+        return self._frame_word(mnemonic, destination, slot, span)
 
     def select_frame(self, size: int, span: Span) -> Sequence[MCInst]:
         """Instructions that make room for *size* bytes on the stack."""
-        return (self._inst("addi", (MCReg(SP), MCReg(SP), MCImm(-size, 12)), span),)
+        if size <= IMM12_MAX + 1 or self.spare is None:
+            return (self._inst("addi", (MCReg(SP), MCReg(SP), MCImm(-size, 12)),
+                               span),)
+        return (*self._materialize(self.spare, size, span),
+                self._inst("sub", (MCReg(SP), MCReg(SP), MCReg(self.spare)), span))
 
     def select_unframe(self, size: int, span: Span) -> Sequence[MCInst]:
         """Instructions that give that room back."""
-        return (self._inst("addi", (MCReg(SP), MCReg(SP), MCImm(size, 12)), span),)
+        if size <= IMM12_MAX or self.spare is None:
+            return (self._inst("addi", (MCReg(SP), MCReg(SP), MCImm(size, 12)),
+                               span),)
+        return (*self._materialize(self.spare, size, span),
+                self._inst("add", (MCReg(SP), MCReg(SP), MCReg(self.spare)), span))
+
+    # -- runs, where the build has the vector extension -------------------------
+    #
+    # Every vector instruction does what `vtype` and `vl` say -- how wide an
+    # element is and how many there are -- and neither is part of the
+    # instruction, so each group of them here begins by saying both.  Always,
+    # rather than only where the last group said something else: what was said
+    # last is a question about the order the blocks run in, which a group does
+    # not know, and one instruction is what it costs to need no answer.
+    #
+    # A run of truth values is held as a mask register, one bit per lane, which
+    # is what a comparison answers and what `\N{APL FUNCTIONAL SYMBOL QUAD}mask` reads; the bitwise
+    # operations on two of them are the mask instructions.  In memory a truth
+    # value is a byte, so a run of them is made bytes on the way out and a mask
+    # on the way in.
+
+    #: The element widths `vtype` names, by bits.
+    _SEW: Final[dict[int, int]] = {8: 0, 16: 1, 32: 2, 64: 3}
+
+    def _vset(self, count: int, bits: int, span: Span) -> MCInst:
+        """Say that what follows works on *count* elements of *bits* bits, one
+        register to a group, with what is beyond them left as it may be."""
+        # Tail and inactive elements agnostic, which is bits seven and six: what
+        # lies beyond the run is no one's, and saying so is what lets a machine
+        # write it however is fastest.
+        vtype = 0xC0 | (self._SEW[bits] << 3)
+        return self._inst("vsetivli", (MCReg(ZERO), MCImm(count, 5, signed=False),
+                                       MCImm(vtype, 10, signed=False)), span)
+
+    def _address(self, place: MCMem,
+                 span: Span) -> tuple[Sequence[MCInst], MCReg]:
+        """The address *place* names, in a register: a vector load or store
+        takes it there and takes no offset."""
+        if place.disp_sym is not None:
+            symbol = MCSymRef(place.disp_sym)
+            held = MCReg(INFO.new_virtual(GPR, 64, spillable=False))
+            made = [self._inst("auipc.hi20", (held, symbol), span),
+                    self._inst("addi.lo12", (held, held, symbol), span)]
+            if place.disp:
+                made.extend(self._added(held, held, place.disp, span))
+            return made, held
+        if place.base is None:
+            raise UnsupportedOperation("a run read from nowhere", span)
+        if not place.disp:
+            return (), MCReg(place.base)
+        held = MCReg(INFO.new_virtual(GPR, 64))
+        return self._added(held, MCReg(place.base), place.disp, span), held
+
+    def _added(self, dst: MCReg, base: MCReg, offset: int,
+               span: Span) -> Sequence[MCInst]:
+        """*base* and *offset* added into *dst*."""
+        if IMM12_MIN <= offset <= IMM12_MAX:
+            return (self._inst("addi", (dst, base, MCImm(offset, 12)), span),)
+        carried = INFO.new_virtual(GPR, 64)
+        return (*self._materialize(carried, offset, span),
+                self._inst("add", (dst, base, MCReg(carried)), span))
+
+    def select_vector_load(self, dst: Reg, place: MCMem, size: int,
+                           span: Span) -> Sequence[MCInst]:
+        """Read *size* bytes of a run into *dst*."""
+        before, address = self._address(place, span)
+        return (*before, self._vset(size, 8, span),
+                self._inst("vle8.v", (MCReg(dst), address), span))
+
+    def select_vector_store(self, place: MCMem, src: Reg, size: int,
+                            span: Span) -> Sequence[MCInst]:
+        """Write *size* bytes of a run out of *src*."""
+        before, address = self._address(place, span)
+        return (*before, self._vset(size, 8, span),
+                self._inst("vse8.v", (MCReg(src), address), span))
+
+    def select_truths_in(self, dst: Reg, src: Reg, lanes: int,
+                         span: Span) -> Sequence[MCInst]:
+        """A run of truth values held as bytes, made a mask: which are not
+        nought."""
+        return (self._vset(lanes, 8, span),
+                self._inst("vmsne.vi", (MCReg(dst), MCReg(src),
+                                        MCImm(0, 5)), span))
+
+    def select_truths_out(self, dst: Reg, src: Reg, lanes: int,
+                          span: Span) -> Sequence[MCInst]:
+        """A mask made bytes of one or nought: nought everywhere, and one merged
+        in where the mask is set -- which it is read from v0 for."""
+        return (self._vset(lanes, 8, span),
+                self._inst("vmv1r.v", (MCReg(V0), MCReg(src)), span),
+                self._inst("vmv.v.i", (MCReg(dst), MCImm(0, 5)), span),
+                self._inst("vmerge.vim", (MCReg(dst), MCReg(dst), MCImm(1, 5)),
+                           span))
+
+    def select_vector_splat(self, dst: Reg, src: MCOperand, lanes: int,
+                            bits: int, span: Span) -> Sequence[MCInst]:
+        """One value of *bits* in each of *lanes* elements."""
+        if isinstance(src, MCImm) and -16 <= src.value <= 15:
+            return (self._vset(lanes, bits, span),
+                    self._inst("vmv.v.i", (MCReg(dst), MCImm(src.value, 5)), span))
+        value, before = self._as_register(src, span)
+        return (*before, self._vset(lanes, bits, span),
+                self._inst("vmv.v.x", (MCReg(dst), value), span))
+
+    def select_truth_splat(self, dst: Reg, src: MCOperand, lanes: int,
+                           span: Span) -> Sequence[MCInst]:
+        """One truth value in every lane of a mask.  One the program wrote
+        down is every bit set or every bit clear; one worked out is spread as a
+        byte and asked which bytes are not nought."""
+        target = MCReg(dst)
+        if isinstance(src, MCImm):
+            return (self._vset(lanes, 8, span),
+                    self._inst("vmxnor.mm" if src.value else "vmxor.mm",
+                               (target, target, target), span))
+        value, before = self._as_register(src, span)
+        spread = MCReg(INFO.new_virtual(VEC, 128))
+        return (*before, self._vset(lanes, 8, span),
+                self._inst("vmv.v.x", (spread, value), span),
+                self._inst("vmsne.vi", (target, spread, MCImm(0, 5)), span))
+
+    #: The bitwise three, of runs of anything and of masks.
+    _VECTOR_BITWISE: Final[dict[str, tuple[str, str]]] = {
+        ops.AND.name: ("vand.vv", "vmand.mm"),
+        ops.OR.name: ("vor.vv", "vmor.mm"),
+        ops.XOR.name: ("vxor.vv", "vmxor.mm"),
+    }
+
+    def select_vector_op(self, op: Op, dst: Reg, left: Reg, right: Reg,
+                         count: int, truths: bool,
+                         span: Span) -> Sequence[MCInst]:
+        """One of the bitwise three over *count* bytes of a run, or over the
+        lanes of two masks where *truths* says that is what they are."""
+        found = self._VECTOR_BITWISE.get(op.name)
+        if found is None:
+            raise UnsupportedOperation("".join((
+                "'", op.name, "' over a whole run")), span)
+        return (self._vset(count, 8, span),
+                self._inst(found[1] if truths else found[0],
+                           (MCReg(dst), MCReg(left), MCReg(right)), span))
+
+    def select_vector_not(self, dst: Reg, src: Reg, count: int, truths: bool,
+                          span: Span) -> Sequence[MCInst]:
+        """Every bit of *count* bytes of a run turned round, or every lane of a
+        mask."""
+        if truths:
+            return (self._vset(count, 8, span),
+                    self._inst("vmnand.mm", (MCReg(dst), MCReg(src), MCReg(src)),
+                               span))
+        return (self._vset(count, 8, span),
+                self._inst("vnot.v", (MCReg(dst), MCReg(src)), span))
+
+    #: The comparisons of a run of bytes, by the condition: the instruction and
+    #: whether the operands are exchanged for it.
+    _VECTOR_COMPARISONS: Final[dict[Condition, tuple[str, bool]]] = {
+        Condition.EQ: ("vmseq.vv", False), Condition.NE: ("vmsne.vv", False),
+        Condition.SLT: ("vmslt.vv", False), Condition.SGT: ("vmslt.vv", True),
+        Condition.SLE: ("vmsle.vv", False), Condition.SGE: ("vmsle.vv", True),
+        Condition.ULT: ("vmsltu.vv", False), Condition.UGT: ("vmsltu.vv", True),
+        Condition.ULE: ("vmsleu.vv", False), Condition.UGE: ("vmsleu.vv", True),
+    }
+
+    def select_vector_compare(self, cond: Condition, dst: Reg, left: Reg,
+                              right: Reg, lanes: int, truths: bool,
+                              span: Span) -> Sequence[MCInst]:
+        """Compare *lanes* bytes of two runs into a mask, or two masks where
+        *truths* says that is what they are -- which are equal where their
+        exclusive or is clear."""
+        if truths:
+            if cond not in (Condition.EQ, Condition.NE):
+                raise UnsupportedOperation("ordering two runs of truth values",
+                                           span)
+            return (self._vset(lanes, 8, span),
+                    self._inst("vmxnor.mm" if cond is Condition.EQ else "vmxor.mm",
+                               (MCReg(dst), MCReg(left), MCReg(right)), span))
+        mnemonic, exchanged = self._VECTOR_COMPARISONS[cond]
+        first, second = (right, left) if exchanged else (left, right)
+        return (self._vset(lanes, 8, span),
+                self._inst(mnemonic, (MCReg(dst), MCReg(first), MCReg(second)),
+                           span))
+
+    def select_vector_mask(self, dst: Reg, src: Reg, lanes: int,
+                           span: Span) -> Sequence[MCInst]:
+        """The first *lanes* bits of a mask in an ordinary register.
+
+        A mask is its own bits, the first lane the lowest, so what is wanted is
+        the first sixty-four bits of the register: its first element, read at an
+        element width of sixty-four.  The bits beyond the run are whatever the
+        comparison left there, which nothing promised, so they are cleared.
+        """
+        target = MCReg(dst)
+        made = [self._vset(1, 64, span),
+                self._inst("vmv.x.s", (target, MCReg(src)), span)]
+        if lanes < 64:
+            if (1 << lanes) - 1 <= IMM12_MAX:
+                made.append(self._inst("andi", (target, target,
+                                                MCImm((1 << lanes) - 1, 12)),
+                                       span))
+            else:
+                apart = MCImm(64 - lanes, 6, signed=False)
+                made.extend((self._inst("slli", (target, target, apart), span),
+                             self._inst("srli", (target, target, apart), span)))
+        return tuple(made)
 
 
 def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                    registers: RegisterInfo, messages: Messages | None = None,
                    sources: SourceManager | None = None,
                    constants: Constants | None = None,
-                   known_clobbers: Mapping[str, frozenset[RegUnit]] | None = None
-                   ) -> None:
-    """Build the machine form of one IR function."""
+                   known_clobbers: Mapping[str, frozenset[RegUnit]] | None = None,
+                   works_on_runs: bool = False) -> None:
+    """Build the machine form of one IR function.
+
+    *works_on_runs* says the function did, before the runs were brought down to
+    what this machine has: it then keeps one register to itself, for its run
+    registers to be set aside through and for a frame larger than an offset
+    reaches -- which a run done a lane apiece makes.
+    """
     from ...ir.inst import (SelectInst, CodeInst, AddressInst, BinaryInst, BrInst, CallInst, CmpInst,
                             CondBrInst, SwitchInst,
                             FrameInst, AssertInst,
-                            LoadInst, MemStartInst, RetInst, StoreInst,
+                            LoadInst, MemStartInst, RetInst, SplatInst, StoreInst,
                             UnaryInst, UnreachableInst, SyscallInst)
     from ...ir.function import Function as _Function
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
     from ...ir.types import (BOOL, BoolType, DictType, EnumType, FloatType,
-                             IntType, MEM, PtrType, ResultType, SetType, VOID)
+                             IntType, MEM, PtrType, ResultType, SetType,
+                             VecType, VOID)
     from ...ir.inst import (CastInst, CastKind, ExtractInst, FailedInst,
                             ErrorInst, TupleInst, UnwrapInst, WrapInst)
     from ...ir.value import FloatConst, UndefConst
@@ -946,9 +1211,19 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
     # be given out and which have to be handed back as they were found are two
     # of the things a convention settles, and the specification lets two
     # functions of one compilation settle them differently.
+    orders = dict(cconv.orders(GPR.name, FPR.name))
+    if isinstance(selector, RVSelector):
+        selector.spare = SPARE if works_on_runs else None
+    if works_on_runs:
+        orders[GPR.name] = tuple(unit for unit in orders[GPR.name]
+                                 if unit is not SPARE.unit)
+        # Every vector register but the one masks are read from; none of them
+        # survives a call.
+        orders[VEC.name] = tuple(registers.registers["".join(("v", str(at)))].unit
+                                 for at in range(1, 32))
     asm.begin_function(symbol_name(func),
                        exported=func.linkage.value == "visible",
-                       allocation_order=cconv.orders(GPR.name, FPR.name),
+                       allocation_order=orders,
                        callee_saved=cconv.callee_saved)
     #: Where each value the function computes is held.  A value gets a register
     #: of its own and the allocator decides which; nothing here knows or cares.
@@ -1249,6 +1524,90 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     held[id(inst)] = destination
                     asm.address(destination,
                                 symbol_of(inst.operands[0]), inst.span)
+                case LoadInst() if isinstance(inst.ty, VecType):
+                    destination = registers.new_virtual(VEC, 128)
+                    held[id(inst)] = destination
+                    size = _run_covers(inst.ty) // 8
+                    read = destination
+                    if inst.ty.element is BOOL:
+                        read = registers.new_virtual(VEC, 128)
+                    asm.emit(selector.select_vector_load(
+                        read, place_of(inst.operands[1], span), size, inst.span))
+                    if read is not destination:
+                        asm.emit(selector.select_truths_in(
+                            destination, read, inst.ty.lanes, inst.span))
+                case StoreInst() if isinstance(inst.operands[2].ty, VecType):
+                    written = inst.operands[2]
+                    assert isinstance(written.ty, VecType)
+                    source = operands.register_of(written, inst.span)
+                    if written.ty.element is BOOL:
+                        bytes_of = registers.new_virtual(VEC, 128)
+                        asm.emit(selector.select_truths_out(
+                            bytes_of, source, written.ty.lanes, inst.span))
+                        source = bytes_of
+                    asm.emit(selector.select_vector_store(
+                        place_of(inst.operands[1], span), source,
+                        _run_covers(written.ty) // 8, inst.span))
+                case SplatInst():
+                    assert isinstance(inst.ty, VecType)
+                    destination = registers.new_virtual(VEC, 128)
+                    held[id(inst)] = destination
+                    given = operands.value(inst.operands[0], inst.span)
+                    if inst.ty.element is BOOL:
+                        asm.emit(selector.select_truth_splat(
+                            destination, given, inst.ty.lanes, inst.span))
+                    else:
+                        asm.emit(selector.select_vector_splat(
+                            destination, given, inst.ty.lanes,
+                            _width_of(inst.ty.element), inst.span))
+                case BinaryInst() if isinstance(inst.ty, VecType):
+                    destination = registers.new_virtual(VEC, 128)
+                    held[id(inst)] = destination
+                    operation = _OPERATIONS.get(inst.op)
+                    if operation is None:
+                        raise UnsupportedOperation("".join((
+                            "'", inst.op.value, "' over a whole run")), span)
+                    truths = inst.ty.element is BOOL
+                    asm.emit(selector.select_vector_op(
+                        operation, destination,
+                        operands.register_of(inst.operands[0], inst.span),
+                        operands.register_of(inst.operands[1], inst.span),
+                        inst.ty.lanes if truths else _run_covers(inst.ty) // 8,
+                        truths, inst.span))
+                case UnaryInst() if isinstance(inst.ty, VecType):
+                    if inst.op is not UnOp.NOT:
+                        raise UnsupportedOperation("".join((
+                            "'", inst.op.value, "' over a whole run")), span)
+                    destination = registers.new_virtual(VEC, 128)
+                    held[id(inst)] = destination
+                    truths = inst.ty.element is BOOL
+                    asm.emit(selector.select_vector_not(
+                        destination,
+                        operands.register_of(inst.operands[0], inst.span),
+                        inst.ty.lanes if truths else _run_covers(inst.ty) // 8,
+                        truths, inst.span))
+                case CmpInst() if isinstance(inst.ty, VecType):
+                    compared = inst.operands[0].ty
+                    assert isinstance(compared, VecType)
+                    destination = registers.new_virtual(VEC, 128)
+                    held[id(inst)] = destination
+                    asm.emit(selector.select_vector_compare(
+                        CONDITIONS[inst.pred], destination,
+                        operands.register_of(inst.operands[0], inst.span),
+                        operands.register_of(inst.operands[1], inst.span),
+                        compared.lanes, compared.element is BOOL, inst.span))
+                case UnaryInst() if inst.op is UnOp.MASK:
+                    gathered = inst.operands[0].ty
+                    assert isinstance(gathered, VecType)
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.emit(selector.select_vector_mask(
+                        destination,
+                        operands.register_of(inst.operands[0], inst.span),
+                        gathered.lanes, inst.span))
                 case LoadInst() if made_of_parts(inst.ty):
                     # A value of several parts is several values one after
                     # another in memory, so reading one is one read per part at
@@ -1834,8 +2193,12 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                                            source=operands.value(one, span)))
                     for move in sequenced(handed, asm.temporary):
                         asm.loadreg(move.into, move.source, span)
+                    # The kernel keeps nothing of the vector extension across a
+                    # system call, which is this system's convention and the
+                    # extension's own advice.
                     asm.kernel(SYSCALLS.enter, span,
-                               clobbers=(SYSCALLS.answer, *SYSCALLS.clobbers),
+                               clobbers=(SYSCALLS.answer, *SYSCALLS.clobbers,
+                                         *VECTOR_REGISTERS),
                                reads=[move.into for move in handed])
                     taken_back = _new_value(inst.ty, registers)
                     held[id(inst)] = taken_back
@@ -2082,6 +2445,15 @@ def _new_value(ty: Type, registers: RegisterInfo,
         return registers.new_virtual(FPR, _FLOAT_REGISTER_BITS,
                                      hint=hint)
     return registers.new_virtual(GPR, 64, hint=hint)
+
+
+def _run_covers(ty: Type) -> int:
+    """How many bits of memory a whole run of elements occupies."""
+    from ...ir.layout import stride_of
+    from ...ir.types import VecType
+
+    assert isinstance(ty, VecType)
+    return ty.lanes * stride_of(ty.element, _LAYOUT) * 8
 
 
 def _value_of(value: object, held: dict[int, VirtReg],

@@ -1,0 +1,48 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=0
+※ pl4g-test: diag=none
+
+※ A name whose type states its shape may be given a view whose type does not:
+※ the elements are copied into the name's own room, and how many there are is
+※ compared with what the type says while the program runs -- the rule giving an
+※ array to an array follows, held to the definition that gives a name its first
+※ elements.  It is how a block of input is read a register's width at a time:
+※ `let chunk: u8⟦32⟧ = input⟦at…at + 32⟧`.
+※
+※ A view of one run is read as one value and written as one, which is a load or
+※ two on a machine with registers of runs; a view that is not one run -- every
+※ other element -- is copied an element at a time, and comes to the same.
+
+fn summed(v: u8⟦4⟧) → u8:
+    v⟦0⟧ + v⟦1⟧ + v⟦2⟧ + v⟦3⟧
+
+fn taken(input: u8⟦⟧, at: u64 ¤idx) → u8:
+    let chunk: u8⟦4⟧ = input⟦at…at + 4⟧
+    summed(chunk)
+
+fn every_other(input: u8⟦⟧) → u8:
+    let spread: u8⟦4⟧ = input⟦0…8…2⟧
+    summed(spread)
+
+fn named(input: u8⟦⟧) → u8:
+    let rest: u8⟦⟧ = input⟦2…6⟧
+    let held: u8⟦4⟧ = rest
+    summed(held)
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let b: u8⟦8⟧ = ⟦1u8, 2u8, 4u8, 8u8, 16u8, 32u8, 64u8, 128u8⟧ in ⎕static
+    if taken(b, 0) ≠ 15u8:
+        1u6
+    elif taken(b, 3) ≠ 120u8:
+        2u6
+    elif taken(b, 4) ≠ 240u8:
+        3u6
+    elif every_other(b) ≠ 85u8:
+        4u6
+    elif named(b) ≠ 60u8:
+        5u6
+    else:
+        0u6

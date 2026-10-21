@@ -751,6 +751,10 @@ namespace pl4g::interp {
             op.sub = std::uint8_t(inst->un);
             if (auto vec = as<VecType>(inst->ty))
               op.lanes = vec->lanes;
+            else if (auto read = as<VecType>(inst->operands[0]->ty))
+              // A mask reads a run and answers a number: how many lanes it
+              // gathers.
+              op.value = read->lanes;
             op.from = scalar_of(inst->operands[0]->ty);
             break;
           case InstKind::CmpInst:
@@ -1132,6 +1136,15 @@ namespace pl4g::interp {
           break;
         case InstKind::UnaryInst: {
           auto src = in(0);
+          if (UnOp(op.sub) == UnOp::mask) {
+            // A truth value per lane, the first the lowest bit.
+            Cell bits = 0;
+            for (std::uint64_t i = 0; i < op.value; ++i)
+              if (src[i] != 0)
+                bits |= Cell(1) << i;
+            frame[op.dst] = bits;
+            break;
+          }
           if (op.lanes > 0)
             for (unsigned i = 0; i < op.lanes; ++i)
               frame[op.dst + i] = unary(op, op.from, src[i]);

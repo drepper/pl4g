@@ -661,6 +661,23 @@ namespace pl4g::target::x86_64 {
         // being no instruction that puts a constant in one of these.
         row("pcmpeqd", { x(), xm(128) }).opcode(0x76).map(OpMap::m0f).mandatory_prefix(0x66).modrm(ModRMUse::reg_rm)
           .reg_op(0).rm_op(1).est_size(4).roles(accumulate),
+        // pcmpeqb xmm, xmm/m128              66 0F 74 /r
+        // The comparisons of a run of bytes, each lane every bit set where it holds
+        // and every bit clear where it does not.  Equality and the signed "greater"
+        // are all there is; the rest are these with the operands exchanged, the
+        // answer turned round, or the unsigned order asked through the larger and
+        // the smaller of two bytes.
+        row("pcmpeqb", { x(), xm(128) }).opcode(0x74).map(OpMap::m0f).mandatory_prefix(0x66).modrm(ModRMUse::reg_rm)
+          .reg_op(0).rm_op(1).est_size(4).roles(accumulate),
+        // pcmpgtb xmm, xmm/m128              66 0F 64 /r
+        row("pcmpgtb", { x(), xm(128) }).opcode(0x64).map(OpMap::m0f).mandatory_prefix(0x66).modrm(ModRMUse::reg_rm)
+          .reg_op(0).rm_op(1).est_size(4).roles(accumulate),
+        // pminub xmm, xmm/m128               66 0F DA /r
+        row("pminub", { x(), xm(128) }).opcode(0xDA).map(OpMap::m0f).mandatory_prefix(0x66).modrm(ModRMUse::reg_rm)
+          .reg_op(0).rm_op(1).est_size(4).roles(accumulate),
+        // pmaxub xmm, xmm/m128               66 0F DE /r
+        row("pmaxub", { x(), xm(128) }).opcode(0xDE).map(OpMap::m0f).mandatory_prefix(0x66).modrm(ModRMUse::reg_rm)
+          .reg_op(0).rm_op(1).est_size(4).roles(accumulate),
         // punpcklbw xmm, xmm/m128            66 0F 60 /r
         // The three that double the width of what is in the low half by taking every
         // value twice, which is how one value is spread over a whole register: a
@@ -710,6 +727,15 @@ namespace pl4g::target::x86_64 {
         row("pxor", { y(), y(), ym() }).opcode(0xEF).map(OpMap::m0f).enc(EncKind::vex).mandatory_prefix(0x66)
           .modrm(ModRMUse::reg_rm).reg_op(0).rm_op(2).vex(256, 1).est_size(5).roles(three_operand),
         row("pcmpeqd", { y(), y(), ym() }).opcode(0x76).map(OpMap::m0f).enc(EncKind::vex).mandatory_prefix(0x66)
+          .modrm(ModRMUse::reg_rm).reg_op(0).rm_op(2).vex(256, 1).est_size(5).roles(three_operand),
+        // The comparisons of a run of bytes, and the larger and smaller of two.
+        row("pcmpeqb", { y(), y(), ym() }).opcode(0x74).map(OpMap::m0f).enc(EncKind::vex).mandatory_prefix(0x66)
+          .modrm(ModRMUse::reg_rm).reg_op(0).rm_op(2).vex(256, 1).est_size(5).roles(three_operand),
+        row("pcmpgtb", { y(), y(), ym() }).opcode(0x64).map(OpMap::m0f).enc(EncKind::vex).mandatory_prefix(0x66)
+          .modrm(ModRMUse::reg_rm).reg_op(0).rm_op(2).vex(256, 1).est_size(5).roles(three_operand),
+        row("pminub", { y(), y(), ym() }).opcode(0xDA).map(OpMap::m0f).enc(EncKind::vex).mandatory_prefix(0x66)
+          .modrm(ModRMUse::reg_rm).reg_op(0).rm_op(2).vex(256, 1).est_size(5).roles(three_operand),
+        row("pmaxub", { y(), y(), ym() }).opcode(0xDE).map(OpMap::m0f).enc(EncKind::vex).mandatory_prefix(0x66)
           .modrm(ModRMUse::reg_rm).reg_op(0).rm_op(2).vex(256, 1).est_size(5).roles(three_operand),
         // The arithmetic, one per lane width.
         row("paddb", { y(), y(), ym() }).opcode(0xFC).map(OpMap::m0f).enc(EncKind::vex).mandatory_prefix(0x66)

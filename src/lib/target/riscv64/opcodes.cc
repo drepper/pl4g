@@ -46,6 +46,16 @@ namespace pl4g::target::riscv64 {
       return made;
     }
 
+    // A register of the vector extension, at the narrowest width it allows.
+    OperandSpec v()
+    {
+      OperandSpec made;
+      made.kinds = OperandKind::reg;
+      made.rclass = registers().vec;
+      made.bits = 128;
+      return made;
+    }
+
     OperandSpec imm(std::int64_t min, std::int64_t max)
     {
       OperandSpec made;
@@ -65,6 +75,13 @@ namespace pl4g::target::riscv64 {
     OperandSpec rm() { return imm(0, 7); }
     // Which accesses a fence orders, as the twelve bits holding all of it.
     OperandSpec fence_bits() { return imm(0, 0xFFF); }
+
+    // The signed five-bit immediate of the vector instructions that carry one.
+    OperandSpec simm5() { return imm(-16, 15); }
+    // How many elements `vsetivli` asks for, five bits unsigned.
+    OperandSpec uimm5() { return imm(0, 31); }
+    // The ten bits of `vtype`.
+    OperandSpec vtype() { return imm(0, 0x3FF); }
 
     // A branch target, given as a symbol reference.
     OperandSpec sym()
@@ -125,6 +142,13 @@ namespace pl4g::target::riscv64 {
 
     // A store and a branch read every operand they name.
     const std::vector<OperandRole> reads_all_three{ OperandRole::use, OperandRole::use, OperandRole::use };
+    // A vector store names the value and where it goes and reads both.
+    const std::vector<OperandRole> reads_both{ OperandRole::use, OperandRole::use };
+
+    // Where the two sources of a vector instruction sit: written destination,
+    // `vs2`, `vs1`.
+    constexpr int vs2 = 20;
+    constexpr int vs1 = 15;
 
     struct Built {
       std::deque<mc::FixedWidthInstDesc> rows;
@@ -172,6 +196,8 @@ namespace pl4g::target::riscv64 {
         add("xori", { r(), r(), i12() }, 0x00004013, { reg(0, rd), reg(1, rs1), simm(2, imm12, 12) });
         add("srai", { r(), r(), shamt() }, 0x40005013, { reg(0, rd), reg(1, rs1), uimm(2, 20, 6) });
         add("slli", { r(), r(), shamt() }, 0x00001013, { reg(0, rd), reg(1, rs1), uimm(2, 20, 6) });
+        add("srli", { r(), r(), shamt() }, 0x00005013, { reg(0, rd), reg(1, rs1), uimm(2, 20, 6) });
+        add("andi", { r(), r(), i12() }, 0x00007013, { reg(0, rd), reg(1, rs1), simm(2, imm12, 12) });
         rrr("mul", 0x02000033);
         rrr("mulh", 0x02001033);
         rrr("mulhu", 0x02003033);
@@ -271,6 +297,42 @@ namespace pl4g::target::riscv64 {
         add("ebreak", {}, 0x00100073, {});
         add("unimp", {}, 0xC0001073, {}, InstFlags::terminator | InstFlags::barrier);
         add("nop", {}, 0x00000013, {});
+        // -- the vector extension ------------------------------------------------
+        // What every one of them works on is said beforehand, by `vsetivli`; each
+        // row is the unmasked form, and the one that reads a mask reads it from
+        // v0, which is why that register is never given out.
+        add("vsetivli", { r(), uimm5(), vtype() }, 0xC0007057, { reg(0, rd), uimm(1, 15, 5), uimm(2, 20, 10) });
+        add("vle8.v", { v(), r() }, 0x02000007, { reg(0, rd), reg(1, rs1) }, InstFlags::may_load);
+        add("vse8.v", { v(), r() }, 0x02000027, { reg(0, rd), reg(1, rs1) }, InstFlags::may_store).roles =
+          reads_both;
+        add("vl1re8.v", { v(), r() }, 0x02800007, { reg(0, rd), reg(1, rs1) }, InstFlags::may_load);
+        add("vs1r.v", { v(), r() }, 0x02800027, { reg(0, rd), reg(1, rs1) }, InstFlags::may_store).roles =
+          reads_both;
+        add("vmv1r.v", { v(), v() }, 0x9E003057, { reg(0, rd), reg(1, vs2) }, InstFlags::move);
+        add("vmv.v.x", { v(), r() }, 0x5E004057, { reg(0, rd), reg(1, rs1) });
+        add("vmv.v.i", { v(), simm5() }, 0x5E003057, { reg(0, rd), simm(1, 15, 5) });
+        auto vv = [&](std::string mnemonic, std::uint64_t word) {
+          add(std::move(mnemonic), { v(), v(), v() }, word, { reg(0, rd), reg(1, vs2), reg(2, vs1) });
+        };
+        vv("vand.vv", 0x26000057);
+        vv("vor.vv", 0x2A000057);
+        vv("vxor.vv", 0x2E000057);
+        add("vnot.v", { v(), v() }, 0x2E0FB057, { reg(0, rd), reg(1, vs2) });
+        vv("vmseq.vv", 0x62000057);
+        vv("vmsne.vv", 0x66000057);
+        vv("vmsltu.vv", 0x6A000057);
+        vv("vmslt.vv", 0x6E000057);
+        vv("vmsleu.vv", 0x72000057);
+        vv("vmsle.vv", 0x76000057);
+        add("vmsne.vi", { v(), v(), simm5() }, 0x66003057, { reg(0, rd), reg(1, vs2), simm(2, 15, 5) });
+        add("vmerge.vim", { v(), v(), simm5() }, 0x5C003057, { reg(0, rd), reg(1, vs2), simm(2, 15, 5) })
+          .implicit_uses = { regs.v0 };
+        vv("vmand.mm", 0x66002057);
+        vv("vmor.mm", 0x6A002057);
+        vv("vmxor.mm", 0x6E002057);
+        vv("vmnand.mm", 0x76002057);
+        vv("vmxnor.mm", 0x7E002057);
+        add("vmv.x.s", { r(), v() }, 0x42002057, { reg(0, rd), reg(1, vs2) });
       }
     };
 

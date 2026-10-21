@@ -8,6 +8,7 @@
 
 #include <array>
 #include <string_view>
+#include <vector>
 
 #include "mc/reg.hh"
 
@@ -35,6 +36,15 @@ namespace pl4g::target::riscv64 {
     // Where a system call number is passed.
     const mc::PhysReg* a7 = nullptr;
     const mc::PhysReg* s1 = nullptr;
+    // The one register a masked vector instruction reads its mask from;
+    // nothing is ever given it.
+    const mc::PhysReg* v0 = nullptr;
+    // The register a function that works on runs keeps to itself: for the
+    // address of a place in its frame no offset reaches, which a vector
+    // register is set aside through, and for a frame too large for one.
+    const mc::PhysReg* spare = nullptr;
+    // Every register of the vector extension, in order.
+    std::vector<const mc::PhysReg*> vector_registers;
 
     Registers();
     Registers(const Registers&) = delete;

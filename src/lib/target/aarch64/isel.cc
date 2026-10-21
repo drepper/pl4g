@@ -252,6 +252,7 @@ namespace pl4g::target::aarch64 {
     MCImm offset_of(std::int64_t disp) { return MCImm{ disp, 12, false }; }
 
     Reg new_gpr(int bits = 64) { return regs().info.new_virtual(regs().gpr, bits); }
+    Reg new_vec(int bits = 128) { return regs().info.new_virtual(regs().vec, bits); }
 
     // A run register named as the whole of one, which is what these read.
     MCOperand run_whole(const MCOperand& operand)
@@ -449,6 +450,60 @@ namespace pl4g::target::aarch64 {
     // round is every bit set.
     MCReg target = named(dst, 128);
     return { inst("eor.16b", { target, target, target }, span), inst("not.16b", { target, target }, span) };
+  }
+
+
+  Insts A64Selector::select_run_compare(Condition cond, Reg dst, const MCOperand& left, const MCOperand& right,
+                                        int bits, Span span)
+  {
+    // One instruction for each of the orders, the less ones being the greater
+    // ones the other way round; "not equal" is equality turned round.
+    if (bits != 8) [[unlikely]]
+      throw UnsupportedOperation(std::format("comparing a run of {}-bit elements", bits), span);
+    std::string_view mnemonic;
+    bool exchanged = false;
+    switch (cond) {
+    case Condition::eq: case Condition::ne: mnemonic = "cmeq.16b"; break;
+    case Condition::sgt: mnemonic = "cmgt.16b"; break;
+    case Condition::slt: mnemonic = "cmgt.16b"; exchanged = true; break;
+    case Condition::sge: mnemonic = "cmge.16b"; break;
+    case Condition::sle: mnemonic = "cmge.16b"; exchanged = true; break;
+    case Condition::ugt: mnemonic = "cmhi.16b"; break;
+    case Condition::ult: mnemonic = "cmhi.16b"; exchanged = true; break;
+    case Condition::uge: mnemonic = "cmhs.16b"; break;
+    case Condition::ule: mnemonic = "cmhs.16b"; exchanged = true; break;
+    }
+    MCReg target = named(dst, 128);
+    Insts made{ inst(mnemonic, { target, run_whole(exchanged ? right : left), run_whole(exchanged ? left : right) },
+                     span) };
+    if (cond == Condition::ne)
+      made.push_back(inst("not.16b", { target, target }, span));
+    return made;
+  }
+
+
+  Insts A64Selector::select_run_mask(Reg dst, const MCOperand& src, int lanes, Span span)
+  {
+    // What it is handed is already a byte per lane holding the bit that lane
+    // stands for, the caller having anded the comparison with the weights:
+    // three pairwise additions leave the first eight lanes' bits in the low
+    // byte and the next eight's in the one above it.
+    auto found = as_reg(src);
+    if (found == nullptr) [[unlikely]]
+      throw UnsupportedOperation("gathering the lanes of something not in a register", span);
+    if (lanes > 16) [[unlikely]]
+      throw UnsupportedOperation(std::format("gathering {} lanes of one register", lanes), span);
+    MCReg held = named(found->reg, 128);
+    MCReg summed = named(new_vec(), 128);
+    return { inst("addp.16b", { summed, held, held }, span), inst("addp.16b", { summed, summed, summed }, span),
+             inst("addp.16b", { summed, summed, summed }, span), inst("umov.h0", { named(dst, 32), summed }, span) };
+  }
+
+
+  Insts A64Selector::select_run_truths(Reg dst, const MCOperand& src, Span span)
+  {
+    // Every byte taken from nought, which is one instruction.
+    return { inst("neg.16b", { named(dst, 128), run_whole(src) }, span) };
   }
 
 
@@ -1700,6 +1755,31 @@ namespace pl4g::target::aarch64 {
       auto span = valid(inst->span);
       const ir::Type* ty = inst->ty;
       ir::UnOp op = inst->un;
+      if (op == ir::UnOp::mask) {
+        auto gathered = ir::as<ir::VecType>(inst->operands[0]->ty);
+        if (constants == nullptr) [[unlikely]]
+          throw UnsupportedOperation("a mask, with nowhere to put the bits it weighs by", span);
+        auto made = destination_for(inst, ty);
+        held[inst] = made;
+        // The bit each lane stands for, one byte per lane and nought beyond
+        // the run, so that what the comparison said about lanes the run does
+        // not cover weighs nothing.
+        auto weights = registers.new_virtual(regs().vec, 128);
+        mc::Bytes pattern;
+        for (unsigned lane = 0; lane < 16; ++lane)
+          pattern.push_back(lane < gathered->lanes ? std::uint8_t(1u << (lane % 8)) : std::uint8_t(0));
+        auto symbol = constants->symbol(pattern, 16);
+        MCMem place;
+        place.disp_sym = mc::sym_expr(asm_.streamer().symbol(symbol));
+        place.rip_relative = true;
+        place.size_bits = 128;
+        asm_.run_move(Reg(weights), place, 128, inst->span);
+        auto weighed = registers.new_virtual(regs().vec, 128);
+        asm_.run_op(mc::ops::and_, weighed, named(operands.register_of(inst->operands[0], inst->span), 128),
+                    named(weights, 128), 8, inst->span);
+        asm_.run_mask(made, named(weighed, 128), int(gathered->lanes), inst->span);
+        return;
+      }
       if (auto vec = ir::as<ir::VecType>(ty)) {
         if (op != ir::UnOp::not_)
           throw UnsupportedOperation(std::format("'{}' over a whole run", enum_describe(op)), span);
@@ -1930,9 +2010,16 @@ namespace pl4g::target::aarch64 {
             int bits = run_covers(vec, layout);
             auto made = new_value(ty, registers, layout);
             held[inst] = made;
+            auto into = made;
+            if (vec->element == ir::bool_type())
+              // A truth value is a byte of one or nought in memory and a lane
+              // of every bit set or clear in a register.
+              into = new_value(ty, registers, layout);
             auto read = place_of(address, span);
             read.size_bits = bits;
-            asm_.run_move(Reg(made), read, bits, inst->span);
+            asm_.run_move(Reg(into), read, bits, inst->span);
+            if (into != made)
+              asm_.run_truths(made, named(into, 128), inst->span);
             break;
           }
           if (ir::made_of_parts(ty)) {
@@ -1969,10 +2056,16 @@ namespace pl4g::target::aarch64 {
           const ir::Value* address = inst->operands[1];
           const ir::Value* written = inst->operands[2];
           if (auto run = ir::as<ir::VecType>(written->ty)) {
+            auto source = operands.register_of(written, inst->span);
+            if (run->element == ir::bool_type()) {
+              // And back to a byte of one or nought.
+              auto bytes_of = new_value(written->ty, registers, layout);
+              asm_.run_truths(bytes_of, named(source, 128), inst->span);
+              source = bytes_of;
+            }
             auto place = place_of(address, span);
             place.size_bits = run_covers(run, layout);
-            asm_.run_store(place, named(operands.register_of(written, inst->span), run_bits(run, layout)),
-                           run_covers(run, layout), inst->span);
+            asm_.run_store(place, named(source, run_bits(run, layout)), run_covers(run, layout), inst->span);
             break;
           }
           if (ir::made_of_parts(written->ty)) {
@@ -2015,7 +2108,14 @@ namespace pl4g::target::aarch64 {
         case InstKind::SplatInst: {
           auto made = new_value(ty, registers, layout);
           held[inst] = made;
-          asm_.run_splat(made, operands.operand(inst->operands[0], inst->span), width_of(vec->element), inst->span);
+          auto spread = made;
+          if (vec->element == ir::bool_type())
+            spread = new_value(ty, registers, layout);
+          asm_.run_splat(spread, operands.operand(inst->operands[0], inst->span), width_of(vec->element), inst->span);
+          if (spread != made)
+            // A truth value spread over every lane is a run of them as memory
+            // holds one.
+            asm_.run_truths(made, named(spread, 128), inst->span);
           break;
         }
         case InstKind::RetInst: {
@@ -2223,6 +2323,15 @@ namespace pl4g::target::aarch64 {
           break;
         }
         case InstKind::CmpInst: {
+          if (vec != nullptr) {
+            auto compared = ir::as<ir::VecType>(inst->operands[0]->ty);
+            auto made = new_value(ty, registers, layout);
+            held[inst] = made;
+            auto left = operands.operand(inst->operands[0], inst->span);
+            auto right = operands.operand(inst->operands[1], inst->span);
+            asm_.run_compare(condition_for(inst->pred), made, left, right, width_of(compared->element), inst->span);
+            break;
+          }
           if (auto floating = ir::as<ir::FloatType>(inst->operands[0]->ty)) {
             // Never folded into a branch: the answer a not-a-number gives needs
             // more than one reading of the flags.

@@ -12,6 +12,7 @@ from ...diag.engine import DiagEngine
 from ...ir.function import SYSTEM_CCONV, Function
 from ...ir.mangle import symbol_name
 from ...ir.module import Module
+from ...ir.inst import BinOp, UnOp
 from ...mc.asmbuilder import Assembler
 from ...source.manager import SourceManager
 from ...mc.desc import InstrTable
@@ -42,7 +43,7 @@ from ..runtime import Runtime, reaches
 from ...runtime import blob_for
 from .fixups import BRANCH, BY_NAME, JAL
 from ..globals import emit_globals
-from ..vectors import Vectors, settle as settle_vectors
+from ..vectors import EVERY, Vectors, settle as settle_vectors, works_on_runs
 from ..target import ImageDefaults
 from .abi import CC_PL4G, lookup as lookup_cconv
 from .encoder import EncodingError, encode
@@ -50,6 +51,7 @@ from .fixups import apply_fixup
 from . import attributes, isa
 from .isel import RVSelector, UnsupportedOperation, lower_function
 from .opcodes import PAD_BYTE, RISCV_INSTRS
+from .peephole import SaidOnce
 from .regs import FPR, GPR, INFO
 from .startup import (ALLOCATOR_REGS, ABORT_SYMBOL, ENTRY_SYMBOL, HOST_ABI,
                       SYSCALLS, STACK_ABI, WALK_ABI, emit_abort, emit_report,
@@ -183,6 +185,7 @@ class RISCV64Target:
         return Assembler(self.selector(streamer), streamer,
                          function_alignment=IMAGE_DEFAULTS.function_alignment,
                          pad_byte=PAD_BYTE, registers=self.registers,
+                         machine_passes=(SaidOnce(),),
                          allocation_order=CC_PL4G.orders(GPR.name, FPR.name),
                          callee_saved=CC_PL4G.callee_saved)
 
@@ -190,12 +193,25 @@ class RISCV64Target:
     def vectors(self) -> Vectors:
         """What this machine can do to a run of elements at once.
 
-        Nothing.  The vector extension is not in the base this compiler builds
-        for and there is no level to ask for it with, so a run is done an
-        element at a time -- which is what the program means, and is the whole
-        of what this target has to say about it.
+        What the build says, which on this architecture is the list of
+        extensions it was built for.  Without the vector extension, nothing: a
+        run is done an element at a time, which is what the program means.
+        With it, sixteen bytes at a time -- the narrowest register the
+        extension allows, which is what a program built for it may count on
+        whatever the processor it meets turns out to have -- and of them what
+        has been written so far: moving a run, the bitwise three, comparing
+        bytes and gathering what the comparison said into a mask.  The
+        arithmetic is still done an element at a time; asking whether a lane
+        went past is its own piece of work here, the answer being a mask and not
+        a top bit.
         """
-        return Vectors()
+        if not self.isa.has("v"):
+            return Vectors()
+        return Vectors(
+            bits=128,
+            binary={BinOp.AND: EVERY, BinOp.OR: EVERY, BinOp.XOR: EVERY},
+            unary={UnOp.NOT: EVERY},
+            compares=frozenset((8,)), masks=True)
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
                  opt_level: int, sources: SourceManager | None = None) -> None:
@@ -216,6 +232,11 @@ class RISCV64Target:
         # down to what this machine has -- which is done to the program before a
         # single instruction is chosen, so that everything below sees only
         # operations it can emit.
+        # Which functions work on runs is asked first: on a build without the
+        # vector extension none does once this is done, and it is those that
+        # keep a register to themselves for the frame a lane apiece makes.
+        on_runs = {id(func) for func in module.functions.values()
+                   if not func.is_declaration and works_on_runs(func)}
         settle_vectors(module, self.vectors, layout)
         emit_globals(asm, module, layout)
         # What the program was started with, where it takes it: an object of the
@@ -248,7 +269,8 @@ class RISCV64Target:
                 return
             try:
                 lower_function(asm, func, lookup_cconv(func.cconv), self.registers,
-                               messages, sources, constants, clobbers)
+                               messages, sources, constants, clobbers,
+                               works_on_runs=id(func) in on_runs)
                 clobbers[symbol_name(func)] = clobbered_units(asm.functions[-1])
                 built = asm.functions[-1]
                 walked.record(symbol_name(func), func.name,

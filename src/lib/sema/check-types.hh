@@ -458,6 +458,9 @@ namespace pl4g::sema {
   inline constexpr std::string_view build_type_name = "Build";
   // How many arguments the kernel takes after the number.
   inline constexpr std::int64_t syscall_arguments = 6;
+  // The most bytes a view copied into an array is read as one value where it
+  // turns out to be one run; past it the elements are copied in a loop.
+  inline constexpr std::int64_t as_one_at_most = 256;
   extern const std::string lambda_prefix;
   extern const std::string shim_prefix;
   inline constexpr std::string_view generic_mark = "'";

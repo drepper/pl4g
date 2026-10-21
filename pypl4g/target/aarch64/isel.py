@@ -398,6 +398,77 @@ class A64Selector(InstructionSelector):
         return (self._inst("eor.16b", (target, target, target), span),
                 self._inst("not.16b", (target, target), span))
 
+    #: The comparisons of a run of bytes, by the condition: the instruction,
+    #: whether the operands are exchanged before it, and whether its answer is
+    #: turned round afterwards.
+    _RUN_COMPARISONS: Final[dict[Condition, tuple[str, bool, bool]]] = {
+        Condition.EQ: ("cmeq.16b", False, False),
+        Condition.NE: ("cmeq.16b", False, True),
+        Condition.SGT: ("cmgt.16b", False, False),
+        Condition.SLT: ("cmgt.16b", True, False),
+        Condition.SGE: ("cmge.16b", False, False),
+        Condition.SLE: ("cmge.16b", True, False),
+        Condition.UGT: ("cmhi.16b", False, False),
+        Condition.ULT: ("cmhi.16b", True, False),
+        Condition.UGE: ("cmhs.16b", False, False),
+        Condition.ULE: ("cmhs.16b", True, False),
+    }
+
+    def select_run_compare(self, cond: Condition, dst: Reg, left: MCOperand,
+                           right: MCOperand, bits: int,
+                           span: Span) -> Sequence[MCInst]:
+        """Compare every byte of two runs, each lane of *dst* every bit set where
+        *cond* holds and every bit clear where it does not.
+
+        One instruction for each of the orders, signed and unsigned, the less
+        ones being the greater ones of the operands the other way round; only
+        "not equal" takes a second, which turns equality round.
+        """
+        if bits != 8:
+            raise UnsupportedOperation("".join((
+                "comparing a run of ", str(bits), "-bit elements")), span)
+        mnemonic, exchanged, turned = self._RUN_COMPARISONS[cond]
+        first, second = (right, left) if exchanged else (left, right)
+        target = MCReg(dst, bits=128)
+        made = [self._inst(mnemonic, (target, _run_whole(first),
+                                      _run_whole(second)), span)]
+        if turned:
+            made.append(self._inst("not.16b", (target, target), span))
+        return tuple(made)
+
+    def select_run_mask(self, dst: Reg, src: MCOperand, lanes: int,
+                        span: Span) -> Sequence[MCInst]:
+        """Add each eight bytes of *src* together into two, and read the two.
+
+        There is no instruction here that gathers a bit of every byte, so what
+        it is handed is already a byte per lane holding the bit that lane stands
+        for -- the comparison's answer anded with the weights one, two, four up
+        to a hundred and twenty-eight, twice, which is a constant and so the
+        caller's to have read, the caller having the pool it lives in.  Bytes of
+        distinct bits add up to the bits together, so three pairwise additions
+        leave the first eight lanes' bits in the low byte and the next eight's in
+        the one above it; the weights of lanes beyond the run are nought, so
+        nothing above the run's own bits is set.
+        """
+        if not isinstance(src, MCReg):
+            raise UnsupportedOperation(
+                "gathering the lanes of something not in a register", span)
+        if lanes > 16:
+            raise UnsupportedOperation("".join((
+                "gathering ", str(lanes), " lanes of one register")), span)
+        held = MCReg(src.reg, bits=128)
+        summed = MCReg(INFO.new_virtual(VEC, 128), bits=128)
+        return (self._inst("addp.16b", (summed, held, held), span),
+                self._inst("addp.16b", (summed, summed, summed), span),
+                self._inst("addp.16b", (summed, summed, summed), span),
+                self._inst("umov.h0", (MCReg(dst, bits=32), summed), span))
+
+    def select_run_truths(self, dst: Reg, src: MCOperand,
+                          span: Span) -> Sequence[MCInst]:
+        """Every byte of *src* taken from nought, which is one instruction."""
+        return (self._inst("neg.16b", (MCReg(dst, bits=128), _run_whole(src)),
+                           span),)
+
     def select_run_any_lane(self, dst: Reg, src: MCOperand, stride: int,
                             lanes: int, span: Span) -> Sequence[MCInst]:
         """Whether any lane the run covers has its top bit set.
@@ -1468,24 +1539,85 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     bits = _run_covers(inst.ty)
                     destination = _new_value(inst.ty, registers)
                     held[id(inst)] = destination
-                    asm.run_move(destination,
+                    read = destination
+                    if inst.ty.element is BOOL:
+                        # A truth value is a byte of one or nought in memory and
+                        # a lane of every bit set or clear in a register.
+                        read = _new_value(inst.ty, registers)
+                    asm.run_move(read,
                                  place_of(address, span, size_bits=bits),
                                  bits, inst.span)
+                    if read is not destination:
+                        asm.run_truths(destination, MCReg(read, bits=128),
+                                       inst.span)
                 case StoreInst() if isinstance(inst.operands[2].ty, VecType):
                     written = inst.operands[2]
                     assert isinstance(written.ty, VecType)
+                    source = operands.register_of(written, inst.span)
+                    if written.ty.element is BOOL:
+                        # And back to a byte of one or nought.
+                        bytes_of = _new_value(written.ty, registers)
+                        asm.run_truths(bytes_of, MCReg(source, bits=128),
+                                       inst.span)
+                        source = bytes_of
                     asm.run_store(place_of(inst.operands[1], span,
                                            size_bits=_run_covers(written.ty)),
-                                  MCReg(operands.register_of(written, inst.span),
-                                        bits=_run_bits(written.ty)),
+                                  MCReg(source, bits=_run_bits(written.ty)),
                                   _run_covers(written.ty), inst.span)
                 case SplatInst():
                     assert isinstance(inst.ty, VecType)
                     destination = _new_value(inst.ty, registers)
                     held[id(inst)] = destination
-                    asm.run_splat(destination,
+                    spread = destination
+                    if inst.ty.element is BOOL:
+                        spread = _new_value(inst.ty, registers)
+                    asm.run_splat(spread,
                                   operands.value(inst.operands[0], inst.span),
                                   _width_of(inst.ty.element), inst.span)
+                    if spread is not destination:
+                        # A truth value spread over every lane is a run of them
+                        # as memory holds one, which the register holds as every
+                        # bit of the lane.
+                        asm.run_truths(destination, MCReg(spread, bits=128),
+                                       inst.span)
+                case CmpInst() if isinstance(inst.ty, VecType):
+                    compared = inst.operands[0].ty
+                    assert isinstance(compared, VecType)
+                    destination = _new_value(inst.ty, registers)
+                    held[id(inst)] = destination
+                    asm.run_compare(CONDITIONS[inst.pred], destination,
+                                    operands.value(inst.operands[0], inst.span),
+                                    operands.value(inst.operands[1], inst.span),
+                                    _width_of(compared.element), inst.span)
+                case UnaryInst() if inst.op is UnOp.MASK:
+                    gathered = inst.operands[0].ty
+                    assert isinstance(gathered, VecType)
+                    if constants is None:
+                        raise UnsupportedOperation(
+                            "a mask, with nowhere to put the bits it weighs by",
+                            span)
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    # The bit each lane stands for, one byte per lane and nought
+                    # beyond the run, so that what the comparison said about
+                    # lanes the run does not cover weighs nothing.
+                    weights = registers.new_virtual(VEC, 128)
+                    symbol = constants.symbol(
+                        bytes(1 << (lane % 8) if lane < gathered.lanes else 0
+                              for lane in range(16)), 16)
+                    asm.run_move(weights, asm.mem(
+                        disp_sym=SymExpr(asm.streamer.symbol(symbol)),
+                        rip_relative=True, size_bits=128), 128, inst.span)
+                    weighed = registers.new_virtual(VEC, 128)
+                    asm.run_op(ops.AND, weighed,
+                               MCReg(operands.register_of(inst.operands[0],
+                                                          inst.span), bits=128),
+                               MCReg(weights, bits=128), 8, inst.span)
+                    asm.run_mask(destination, MCReg(weighed, bits=128),
+                                 gathered.lanes, inst.span)
                 case BinaryInst() if isinstance(inst.ty, VecType) \
                         and inst.op in TRAPPING:
                     destination = _new_value(inst.ty, registers)

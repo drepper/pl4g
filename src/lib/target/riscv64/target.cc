@@ -1,6 +1,7 @@
 // The RISC-V 64-bit back end.  A port of pypl4g/target/riscv64/target.py.
 #include <format>
 #include <memory>
+#include <set>
 #include <stdexcept>
 
 #include "diag/ids.hh"
@@ -25,6 +26,7 @@
 #include "target/riscv64/fixups.hh"
 #include "target/riscv64/isa.hh"
 #include "target/riscv64/isel.hh"
+#include "target/riscv64/peephole.hh"
 #include "target/riscv64/opcodes.hh"
 #include "target/riscv64/regs.hh"
 #include "target/riscv64/startup.hh"
@@ -177,7 +179,26 @@ namespace pl4g::target {
           options.registers = &regs.info;
           options.allocation_order = mc::AllocationOrder::per_class(cc_pl4g().orders(regs.gpr->name, regs.fpr->name));
           options.callee_saved = cc_pl4g().callee_saved;
+          options.machine_passes.push_back(&said_once);
           return std::make_unique<mc::Assembler>(*selector, streamer, std::move(options));
+        }
+
+        // What this machine can do to a run of elements at once: what the build
+        // says.  Without the vector extension nothing; with it sixteen bytes at
+        // a time -- the narrowest register the extension allows -- moved, the
+        // bitwise three, bytes compared and what they said gathered into a mask.
+        Vectors vectors() const
+        {
+          Vectors made;
+          if (! isa.has("v"))
+            return made;
+          made.bits = 128;
+          for (auto op : { ir::BinOp::and_, ir::BinOp::or_, ir::BinOp::xor_ })
+            made.binary[op] = every_width;
+          made.unary[ir::UnOp::not_] = every_width;
+          made.compares = { 8 };
+          made.masks = true;
+          return made;
         }
 
         void generate(ir::Module& module, mc::Assembler& asm_, DiagEngine& diags, int opt_level,
@@ -244,6 +265,7 @@ namespace pl4g::target {
         // What a program is built for: the base and every extension of it.
         isa::ISA isa;
         std::unique_ptr<RVSelector> selector;
+        SaidOnce said_once;
       };
 
 
@@ -266,9 +288,14 @@ namespace pl4g::target {
         ir::DataLayout layout;
         layout.pointer_size = pointer_bits() / 8;
         layout.frames = &module.frame_sizes;
-        // Nothing of a run of elements at once: the vector extension is not in
-        // the base this compiler builds for.
-        settle(module, Vectors{}, layout);
+        // Which functions work on runs is asked first: on a build without the
+        // vector extension none does once they are settled, and it is those that
+        // keep a register to themselves for the frame a lane apiece makes.
+        std::set<const ir::Function*> on_runs;
+        for (auto& [_, func] : module.functions)
+          if (! func->is_declaration() && works_on_runs(*func))
+            on_runs.insert(func.get());
+        settle(module, vectors(), layout);
         emit_globals(asm_, module, layout);
         emit_started(asm_, module, layout);
         if (module.stack_size > 0)
@@ -289,7 +316,7 @@ namespace pl4g::target {
           }
           try {
             lower_function(asm_, *func, lookup_cconv(func->cconv), regs.info, &messages, sources, &constants,
-                           &clobbers, layout);
+                           &clobbers, layout, on_runs.contains(func));
             auto built = asm_.functions.back();
             clobbers[ir::symbol_name(*func)] = mc::clobbered_units(*built);
             walked.record(ir::symbol_name(*func), func->name, built->return_at, built->caller_at);

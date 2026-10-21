@@ -163,7 +163,8 @@ class X86_64Target:
                     BinOp.SAT_ADD: NARROW, BinOp.SAT_SUB: NARROW,
                     BinOp.WRAP_ADD: EVERY, BinOp.WRAP_SUB: EVERY,
                     BinOp.WRAP_MUL: _MULTIPLIES},
-            unary={UnOp.NOT: EVERY})
+            unary={UnOp.NOT: EVERY},
+            compares=frozenset((8,)), masks=True)
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
                  opt_level: int, sources: SourceManager | None = None) -> None:

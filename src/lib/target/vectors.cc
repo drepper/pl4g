@@ -44,6 +44,18 @@ namespace pl4g::target {
       return false;
     }
 
+    // The runs this instruction makes and reads, the one it makes first.
+    std::vector<const ir::Value*> runs_of(const ir::Instruction* inst)
+    {
+      std::vector<const ir::Value*> found;
+      if (ir::is<ir::VecType>(inst->ty))
+        found.push_back(inst);
+      for (auto operand : inst->operands)
+        if (is_vec(operand))
+          found.push_back(operand);
+      return found;
+    }
+
 
     // Rewrites one function's run-at-a-time operations.
     class Settler {
@@ -53,6 +65,7 @@ namespace pl4g::target {
 
       void run()
       {
+        plan();
         for (auto& block : func.blocks)
           rewrite(*block);
       }
@@ -65,7 +78,6 @@ namespace pl4g::target {
       {
         made.clear();
         current = &block;
-        plan(block);
         for (auto inst : block.insts) {
           if (one(inst))
             continue;
@@ -103,43 +115,100 @@ namespace pl4g::target {
             operand = found->second;
       }
 
-      void plan(const ir::BasicBlock& block)
+      // Decide how every run in the function is cut up, before anything moves:
+      // a run is cut as everything it meets is, each family -- an operation,
+      // what it reads and what it answers, and the runs joined to those -- by
+      // the operation in it that can do the fewest at once.  A family with no
+      // operation that is written somewhere is only moved, and is cut by the
+      // register; one neither moved nor worked on falls to a lane apiece.
+      void plan()
       {
         cuts.clear();
-        for (auto inst : block.insts)
-          if ((inst->kind == ir::InstKind::BinaryInst || inst->kind == ir::InstKind::UnaryInst
-               || inst->kind == ir::InstKind::CmpInst)
-              && ir::is<ir::VecType>(inst->ty))
-            spread(inst, cut_for(inst));
-        // A run that reaches no operation is only being moved.
-        for (auto inst : block.insts)
-          if (inst->kind == ir::InstKind::StoreInst && is_vec(inst->operands[2]) && ! cuts.contains(inst->operands[2]))
-            spread(inst, moving(ir::as<ir::VecType>(inst->operands[2]->ty)));
+        std::unordered_map<const Value*, const Value*> family;
+        std::vector<const Value*> members;
+        auto root = [&](const Value* one) {
+          auto [at, fresh] = family.try_emplace(one, one);
+          if (fresh)
+            members.push_back(one);
+          auto key = one;
+          while (family.at(key) != key) {
+            family[key] = family.at(family.at(key));
+            key = family.at(key);
+          }
+          return key;
+        };
+        std::unordered_map<const Value*, std::uint64_t> doing;
+        std::set<const Value*> moved;
+        for (const auto& block : func.blocks)
+          for (auto inst : block->insts) {
+            auto runs = runs_of(inst);
+            if (runs.empty())
+              continue;
+            auto first = root(runs[0]);
+            for (std::size_t i = 1; i < runs.size(); ++i) {
+              auto other = root(runs[i]);
+              if (other == first)
+                continue;
+              family[other] = first;
+              if (auto found = doing.find(other); found != doing.end()) {
+                auto was = found->second;
+                doing.erase(found);
+                auto mine = doing.find(first);
+                doing[first] = mine == doing.end() ? was : std::min(mine->second, was);
+              }
+              if (moved.erase(other) != 0)
+                moved.insert(first);
+            }
+            if (auto at_once = at_once_of(inst)) {
+              auto mine = doing.find(first);
+              doing[first] = mine == doing.end() ? *at_once : std::min(mine->second, *at_once);
+            } else if (inst->kind == ir::InstKind::StoreInst)
+              moved.insert(first);
+          }
+        std::unordered_map<const Value*, std::uint64_t> stride;
+        std::unordered_map<const Value*, std::uint64_t> lanes;
+        std::vector<const Value*> tops;
+        for (auto one : members) {
+          auto held = ir::as<ir::VecType>(one->ty);
+          auto top = root(one);
+          auto [at, fresh] = stride.try_emplace(top, 0);
+          if (fresh)
+            tops.push_back(top);
+          at->second = std::max(at->second, ir::stride_of(held->element, layout));
+          lanes[top] = held->lanes;
+        }
+        std::unordered_map<const Value*, std::vector<std::uint64_t>> cut_of;
+        for (auto top : tops) {
+          std::uint64_t at_once = 0;
+          if (auto found = doing.find(top); found != doing.end())
+            at_once = found->second;
+          else if (moved.contains(top))
+            at_once = able.bits == 0 || stride[top] == 0 ? 0 : able.bits / (stride[top] * 8);
+          cut_of[top] = pieces(lanes[top], stride[top], at_once);
+        }
+        for (auto one : members)
+          cuts[one] = cut_of.at(root(one));
       }
 
-      std::vector<std::uint64_t> moving(const ir::VecType* held)
+      // How many lanes at once this operation can be done to here, nought where
+      // it is done a lane apiece; nothing where it is not an operation.
+      std::optional<std::uint64_t> at_once_of(const Inst* inst) const
       {
-        auto stride = ir::stride_of(held->element, layout);
-        std::uint64_t at_once = able.bits == 0 || stride == 0 ? 0 : able.bits / (stride * 8);
-        return pieces(held->lanes, stride, at_once);
-      }
-
-      void spread(const Inst* inst, const std::vector<std::uint64_t>& cut)
-      {
-        cuts[inst] = cut;
-        for (auto operand : inst->operands)
-          if (is_vec(operand))
-            cuts.emplace(operand, cut);
-      }
-
-      std::vector<std::uint64_t> cut_for(const Inst* inst)
-      {
-        auto held = ir::as<ir::VecType>(inst->ty);
-        // A comparison reads something other than what it answers.
-        auto read = ir::as<ir::VecType>(inst->operands[0]->ty);
-        auto element = read != nullptr ? read->element : held->element;
-        auto at_once = able.lanes_at_once(element, layout, widths(inst));
-        return pieces(held->lanes, ir::stride_of(element, layout), at_once);
+        auto vec = ir::as<ir::VecType>(inst->ty);
+        if ((inst->kind == ir::InstKind::BinaryInst || inst->kind == ir::InstKind::UnaryInst
+             || inst->kind == ir::InstKind::CmpInst) && vec != nullptr) {
+          // A comparison answers truth values and reads something else, and
+          // what says how many fit in a register is what it reads.
+          auto read = ir::as<ir::VecType>(inst->operands[0]->ty);
+          if (inst->kind == ir::InstKind::CmpInst && read->element == ir::bool_type()
+              && inst->pred != ir::CmpPred::eq && inst->pred != ir::CmpPred::ne)
+            // An order of truth values is asked a lane at a time.
+            return 0;
+          return able.lanes_at_once(read->element, layout, widths(inst));
+        }
+        if (inst->kind == ir::InstKind::UnaryInst && inst->un == ir::UnOp::mask)
+          return able.lanes_at_once(ir::bool_type(), layout, able.masks ? std::set<unsigned>{ 8 } : std::set<unsigned>{});
+        return std::nullopt;
       }
 
       std::set<unsigned> widths(const Inst* inst) const
@@ -192,8 +261,12 @@ namespace pl4g::target {
           binary(inst);
           return true;
         case ir::InstKind::UnaryInst:
-          if (vec == nullptr)
-            return false;
+          if (vec == nullptr) {
+            if (inst->un != ir::UnOp::mask)
+              return false;
+            mask(inst);
+            return true;
+          }
           unary(inst);
           return true;
         case ir::InstKind::CmpInst:
@@ -368,6 +441,52 @@ namespace pl4g::target {
         pieces_of[inst] = std::move(pieces);
       }
 
+      // The bits of each piece, each moved up to where its first lane is, ored
+      // together; a piece of one lane is a truth value, its own bit once it is
+      // a number.
+      void mask(Inst* inst)
+      {
+        Value* found = nullptr;
+        std::uint64_t at = 0;
+        auto answer = ir::as<ir::IntType>(inst->ty);
+        for (auto piece : held(inst->operands[0])) {
+          Inst* one = nullptr;
+          if (auto lanes = ir::as<ir::VecType>(piece->ty)) {
+            one = make(ir::InstKind::UnaryInst, inst->ty, { piece }, inst->span);
+            one->un = ir::UnOp::mask;
+            add(one);
+            if (at != 0)
+              one = shifted(one, answer, at, inst->span);
+            at += lanes->lanes;
+          } else {
+            one = make(ir::InstKind::CastInst, inst->ty, { piece }, inst->span);
+            one->cast = ir::CastKind::zext;
+            add(one);
+            if (at != 0)
+              one = shifted(one, answer, at, inst->span);
+            at += 1;
+          }
+          if (found == nullptr)
+            found = one;
+          else {
+            auto either = make(ir::InstKind::BinaryInst, inst->ty, { found, one }, inst->span);
+            either->bin = ir::BinOp::or_;
+            found = add(either);
+          }
+        }
+        if (found == nullptr) [[unlikely]]
+          throw InternalError("a mask of no pieces");
+        became[inst] = found;
+      }
+
+      Inst* shifted(Inst* value, const ir::IntType* ty, std::uint64_t by, Span span)
+      {
+        auto distance = const_cast<ir::IntConst*>(module.constant<ir::IntConst>(ty, by));
+        auto moved = make(ir::InstKind::BinaryInst, ty, { value, distance }, span);
+        moved->bin = ir::BinOp::shl;
+        return add(moved);
+      }
+
       void any_lane(Inst* inst)
       {
         Value* found = nullptr;
@@ -413,6 +532,16 @@ namespace pl4g::target {
     if (! widths.contains(unsigned(wide)))
       return 0;
     return bits / wide;
+  }
+
+
+  bool works_on_runs(const ir::Function& func)
+  {
+    for (const auto& block : func.blocks)
+      for (auto inst : block->insts)
+        if (is_a_run(inst))
+          return true;
+    return false;
   }
 
 

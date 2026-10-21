@@ -803,6 +803,27 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("pcmpeqd", (_x(), _xm(128)), opcode=0x76, map=OpMap.M0F,
                 mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # pcmpeqb xmm, xmm/m128              66 0F 74 /r
+    # The comparisons of a run of bytes, each lane every bit set where it holds
+    # and every bit clear where it does not.  Equality and the signed "greater"
+    # are all there is; the rest are these with the operands exchanged, the
+    # answer turned round, or the unsigned order asked through the larger and
+    # the smaller of two bytes.
+    X86InstDesc("pcmpeqb", (_x(), _xm(128)), opcode=0x74, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # pcmpgtb xmm, xmm/m128              66 0F 64 /r
+    X86InstDesc("pcmpgtb", (_x(), _xm(128)), opcode=0x64, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # pminub xmm, xmm/m128               66 0F DA /r
+    X86InstDesc("pminub", (_x(), _xm(128)), opcode=0xDA, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # pmaxub xmm, xmm/m128               66 0F DE /r
+    X86InstDesc("pmaxub", (_x(), _xm(128)), opcode=0xDE, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
     # punpcklbw xmm, xmm/m128            66 0F 60 /r
     # The three that double the width of what is in the low half by taking every
     # value twice, which is how one value is spread over a whole register: a
@@ -868,6 +889,27 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 vex=VexInfo(length=256, vvvv_op=1), est_size=5,
                 roles=_THREE_OPERAND),
     X86InstDesc("pcmpeqd", (_y(), _y(), _ym()), opcode=0x76, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    # The comparisons of a run of bytes, and the larger and smaller of two.
+    X86InstDesc("pcmpeqb", (_y(), _y(), _ym()), opcode=0x74, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("pcmpgtb", (_y(), _y(), _ym()), opcode=0x64, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("pminub", (_y(), _y(), _ym()), opcode=0xDA, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("pmaxub", (_y(), _y(), _ym()), opcode=0xDE, map=OpMap.M0F,
                 enc=EncKind.VEX, mandatory_prefix=0x66,
                 modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
                 vex=VexInfo(length=256, vvvv_op=1), est_size=5,

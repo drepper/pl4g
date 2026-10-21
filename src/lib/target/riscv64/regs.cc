@@ -37,6 +37,10 @@ namespace pl4g::target::riscv64 {
     a1 = reg("a1");
     a7 = reg("a7");
     s1 = reg("s1");
+    v0 = reg("v0");
+    spare = reg("t6");
+    for (int at = 0; at < 32; ++at)
+      vector_registers.push_back(reg(std::format("v{}", at)));
   }
 
 

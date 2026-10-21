@@ -68,6 +68,17 @@ def reg(name: str) -> PhysReg:
 ZERO: Final[PhysReg] = reg("zero")
 #: The return address, which a call writes.
 RA: Final[PhysReg] = reg("ra")
+#: The one register a masked vector instruction reads its mask from.  Nothing is
+#: ever given it: what is put there is put there for the next instruction.
+V0: Final[PhysReg] = reg("v0")
+#: The register a function that works on runs keeps to itself, for the address
+#: of a place in its frame that no offset an instruction carries can reach -- a
+#: vector register is set aside and fetched by an instruction that takes no
+#: offset at all -- and for a frame too large for one.
+SPARE: Final[PhysReg] = reg("t6")
+#: Every register of the vector extension, in order.
+VECTOR_REGISTERS: Final[tuple[PhysReg, ...]] = tuple(
+    reg("".join(("v", str(at)))) for at in range(32))
 SP: Final[PhysReg] = reg("sp")
 #: The frame pointer.
 FP: Final[PhysReg] = reg("s0")
@@ -83,4 +94,7 @@ CALLEE_SAVED_NAMES: Final[tuple[str, ...]] = (
 #: Registers a call is free to change, the return address among them.
 CALLER_SAVED_NAMES: Final[tuple[str, ...]] = (
     "ra", "t0", "t1", "t2", "t3", "t4", "t5", "t6",
-    "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7")
+    "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7",
+    # Every register of the vector extension: the convention keeps none of
+    # them across a call.
+    *("".join(("v", str(at))) for at in range(32)))

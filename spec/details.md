@@ -2120,6 +2120,66 @@ index to be worked out at run time, which is the same machinery a dynamic array 
 is here.  What it costs today is code proportional to the shape, which is why a shape the type states is required and not merely
 convenient.
 
+A mask, and a run of bytes compared at once
+-------------------------------------------
+
+`⎕mask(b)` is one more operation of the representation, `mask`, a unary one whose operand is a run of truth values and whose
+answer is a whole number -- the one operation that reads a run and does not answer one.  Three places do the work: the checker,
+which keeps the run it is handed from ever being an array; `settle_vectors`, which cuts the run as it cuts every other; and each
+back end, which gathers a register's lanes its own way.
+
+**The checker lowers what it is handed as a run.**  An operator walked over arrays answers an array in a frame of its own --
+`_run_at_a_time` stores each run it worked out into one -- and reading thirty-two truth values back out of room taken to hold
+them would be two copies of what is already in a register.  So `_lower_mask` puts the argument in `_as_run`, and `_lower_expr`
+passes the mark on to the operands of any operator walked at once; `_walk_operands` then answers the run itself, recording it in
+`_runs`, where the shape is one dimension.  A recorded run is walked as an array of that many lanes would be -- `_shape_walked`
+counts its lanes, `_run_or_one` hands it on and forgets it -- and the one place it may meet that wants elements, an operator
+walked an element at a time, is given an array after all by `_as_array`.  So `(c = 34u8) ∨ (c = 92u8)` is two comparisons, an
+`or` and a `mask`, and no frame; samevalues then folds the two reads of `c` into one.
+
+**A family of runs is cut as one.**  `settle_vectors` decided how to cut a run by asking the operation that read it, and gave the
+answer to what the operation read; that was enough while every operation's answer went through a frame before the next read it.
+A run that goes straight from one operation to the next has to be cut the same way by both, and a comparison of halfwords --
+asked a lane apiece, there being no instruction answering a byte per lane -- feeding an `or` of truth values, asked sixteen at a
+time, would not be.  So `_plan` joins every run to the runs the instruction making it reads, over the whole function, and cuts each
+family by the operation in it that can do the fewest at once; a family with no operation is only moved, and is cut by the
+register.  Over the function and not a block, so a run that crosses into another block is cut alike in both.  `_mask` then gathers
+each piece -- a piece of one lane being a truth value, which is its own bit once widened -- shifts it to where its first lane is
+and ors the pieces together.
+
+**What a run of truth values is in a register is the back end's.**  In memory each is a byte of one or nought, as one truth value
+is.  On x86-64 and AArch64 a register holds each as every bit of its lane set or clear, which is what their comparisons answer, so
+`and`, `or` and exclusive or of two of them are the instructions a register already has and `¬`, an exclusive or with a run of
+`true`, turns every bit; `run_truths` -- nought less each byte, which takes one to every bit set and back -- is what reading,
+writing and spreading one value over a run do on the way.  x86-64 gathers with `pmovmskb`, the top bit of every byte, and clears
+the bits beyond a run shorter than the register, a comparison having answered for the lanes beyond it too.  AArch64 has no such
+instruction: the lanes are anded with their weights, one to a hundred and twenty-eight twice over and nought beyond the run, read
+out of the pool of constants, and three pairwise additions leave each eight lanes' bits in a byte.  The unsigned orders on x86-64
+are asked through `pminub` and `pmaxub` -- `a` is at least `b` where the larger of the two is `a` -- and turned round with an
+exclusive or of every bit, which is three instructions against four for flipping each top bit and asking the signed order.
+
+**On RISC-V a run of truth values is a mask register**, one bit per lane, which is what `vmseq` and the rest answer; `vmv.x.s` at
+an element width of sixty-four reads the first sixty-four bits, and the bits past the run, which nothing promised, are cleared.
+`and`, `or` and exclusive or of two masks are `vmand.mm` and the rest; a mask is made of bytes with `vmsne.vi` against nought, and
+made bytes again by merging one into nought, which reads the mask from `v0` -- the one register a masked instruction reads it
+from, never given out for that reason.  Every vector instruction does what `vtype` says, which no instruction carries, so each
+group the selector writes begins with a `vsetivli`; within a block, a machine pass, `SaidOnce`, drops one that says what the one
+before said, forgetting at a call and at `ecall`, after which the kernel promises nothing about vector state.  None of the
+vector registers survives a call or a system call, which is what the convention and the kernel say.
+
+**A RISC-V function that works on runs keeps `t6` to itself.**  A vector register is set aside in the frame by `vs1r.v`, which
+takes its address in a register and no offset, so the spill needs a register the allocator has not given anything; and a run done
+a lane at a time on `rv64gc` -- sixty-four bytes compared, widened, shifted and ored, all live at once -- makes a frame of a few
+kilobytes, past the twelve bits a load or a store carries.  Which functions those are is asked before the runs are settled, since
+afterwards a build without the extension has none left; every other function has every register it had.  The frame is then made
+and given back with the size built in `t6`, and a slot past two kilobytes is reached through it.
+
+**A view given to an array whose type states its shape** goes through `_copy_elements` as an assignment does, which compares the
+counts while running.  `_move_elements` asks a view of one dimension whether its stride is one before copying up to
+`_AS_ONE_AT_MOST` bytes, and where it is, reads the whole block as one value and writes it as one; the loop is for the view that is
+not one run, and for a block larger than that, which is code that does not grow with the count.
+
+
 What a function may change
 --------------------------
 

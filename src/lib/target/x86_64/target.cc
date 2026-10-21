@@ -136,6 +136,10 @@ namespace pl4g::target {
           made.binary[ir::BinOp::sat_sub] = { 8, 16 };
           made.binary[ir::BinOp::wrap_mul] = mclevel == "v1" ? std::set<unsigned>{ 16 } : std::set<unsigned>{ 16, 32 };
           made.unary[ir::UnOp::not_] = every_width;
+          // Comparing bytes, and gathering a register of truth values into the
+          // bits of an ordinary one.
+          made.compares = { 8 };
+          made.masks = true;
           return made;
         }
 

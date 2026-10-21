@@ -384,6 +384,52 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     A64InstDesc("cmlt.2d", (_v(128), _v(128)), template=0x4EE0A800,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
                 est_size=INSTRUCTION_SIZE),
+    # The comparisons of a run of bytes, each lane every bit set where it holds
+    # and every bit clear where it does not.  Equality, and both orders both
+    # ways round of "greater" and "at least"; the "less" ones are these with the
+    # operands exchanged, and "not equal" is equality turned round.
+    # cmeq Vd.16B, Vn.16B, Vm.16B
+    A64InstDesc("cmeq.16b", (_v(128), _v(128), _v(128)), template=0x6E208C00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    # cmgt Vd.16B, Vn.16B, Vm.16B -- signed
+    A64InstDesc("cmgt.16b", (_v(128), _v(128), _v(128)), template=0x4E203400,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    # cmge Vd.16B, Vn.16B, Vm.16B -- signed
+    A64InstDesc("cmge.16b", (_v(128), _v(128), _v(128)), template=0x4E203C00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    # cmhi Vd.16B, Vn.16B, Vm.16B -- unsigned "greater"
+    A64InstDesc("cmhi.16b", (_v(128), _v(128), _v(128)), template=0x6E203400,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    # cmhs Vd.16B, Vn.16B, Vm.16B -- unsigned "at least"
+    A64InstDesc("cmhs.16b", (_v(128), _v(128), _v(128)), template=0x6E203C00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    # neg Vd.16B, Vn.16B -- every byte taken from nought, which is how a truth
+    # value of one in memory becomes a lane of every bit set and back.
+    A64InstDesc("neg.16b", (_v(128), _v(128)), template=0x6E20B800,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
+    # addp Vd.16B, Vn.16B, Vm.16B -- each two neighbouring bytes added, the
+    # sums of the first register's in the low half and the second's in the high
+    # one.  Three of them add each eight bytes of a register together.
+    A64InstDesc("addp.16b", (_v(128), _v(128), _v(128)), template=0x4E20BC00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    # umov Wd, Vn.H[0] -- the low sixteen bits into an ordinary register, the
+    # rest of it cleared.
+    A64InstDesc("umov.h0", (_r(32), _v(128)), template=0x0E023C00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
     # umaxv Bd, Vn.8B -- the same over the low eight bytes only.
     A64InstDesc("umaxv.8b", (_v(128), _v(128)), template=0x2E30A800,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN)),

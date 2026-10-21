@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4261
+※ pl4g-test: expect-diag 4261 LANG_MASK_SHAPE_NOT_ONE_RUN
+
+※ A table has more than one dimension, and which of them would be the low bits
+※ is a question with no one answer.  A row of it is one run: `⎕mask(t⟦0⟧)`.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let t: bool⟦2,2⟧ = ⟦⟦true, false⟧, ⟦false, true⟧⟧ in ⎕static
+    if ⎕mask(t) = 9u8: 0u6 else: 1u6

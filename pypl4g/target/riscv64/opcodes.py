@@ -18,7 +18,7 @@ from typing import Final
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import INSTRUCTION_SIZE, Field, FieldKind, RVInstDesc
 from .fixups import BRANCH, JAL, PCREL_HI20, PCREL_LO12_I, PCREL_PAIR_DISTANCE
-from .regs import FPR, GPR, RA
+from .regs import FPR, GPR, RA, V0, VEC
 
 #: The word the architecture leaves undefined, which is what padding is filled
 #: with so that falling into it traps.
@@ -46,6 +46,29 @@ def _f() -> OperandSpec:
     """A floating-point register.  There is one width of them, the wider of the
     two formats; a single-precision value sits in the low half."""
     return OperandSpec(OperandKind.REG, rclass=FPR, bits=64)
+
+
+def _v() -> OperandSpec:
+    """A register of the vector extension.  How wide one is, is the
+    implementation's to say; the narrowest the extension allows is what the
+    code generator counts on."""
+    return OperandSpec(OperandKind.REG, rclass=VEC, bits=128)
+
+
+def _simm5() -> OperandSpec:
+    """The signed five-bit immediate of the vector instructions that carry one."""
+    return OperandSpec(OperandKind.IMM, imm_min=-16, imm_max=15)
+
+
+def _uimm5() -> OperandSpec:
+    """How many elements `vsetivli` asks for, which is five bits unsigned."""
+    return OperandSpec(OperandKind.IMM, imm_min=0, imm_max=31)
+
+
+def _vtype() -> OperandSpec:
+    """The element width, the grouping and the two policies, as the ten bits of
+    `vtype` they are written in."""
+    return OperandSpec(OperandKind.IMM, imm_min=0, imm_max=0x3FF)
 
 
 def _imm12() -> OperandSpec:
@@ -120,6 +143,23 @@ def _store_fields() -> tuple[Field, ...]:
 #: them: nothing it names is written, only the place they point at.
 _READS_ALL_THREE: Final[tuple[OperandRole, ...]] = (
     OperandRole.USE, OperandRole.USE, OperandRole.USE)
+
+#: A vector store names the value and where it goes and reads both.
+_READS_BOTH: Final[tuple[OperandRole, ...]] = (OperandRole.USE, OperandRole.USE)
+
+#: Where each operand of a vector instruction sits.  The two sources are
+#: written destination, `vs2`, `vs1` -- the second named source is the one in
+#: the lower field, so a comparison `vmslt.vv vd, a, b` asks whether `a < b`.
+_VS2 = 20
+_VS1 = 15
+
+
+def _vv(name: str, template: int) -> RVInstDesc:
+    """A vector instruction of two vector sources, unmasked."""
+    return RVInstDesc(name, (_v(), _v(), _v()), template=template,
+                      fields=(_reg(0, _RD), _reg(1, _VS2), _reg(2, _VS1)),
+                      est_size=INSTRUCTION_SIZE)
+
 
 #: A branch compares two registers and names a place to go; it writes none
 #: of them, having no condition codes to write.
@@ -204,6 +244,13 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     RVInstDesc("slli", (_r(), _r(), _shamt()), template=0x00001013,
                fields=(_reg(0, _RD), _reg(1, _RS1),
                        Field(FieldKind.IMMEDIATE, 2, 20, 6)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("srli", (_r(), _r(), _shamt()), template=0x00005013,
+               fields=(_reg(0, _RD), _reg(1, _RS1),
+                       Field(FieldKind.IMMEDIATE, 2, 20, 6)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("andi", (_r(), _r(), _imm12()), template=0x00007013,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
                est_size=INSTRUCTION_SIZE),
     # The multiply instructions of the M extension.  `mul` is the low half of
     # the product and `mulh`/`mulhu` the high half, which is the only way to
@@ -524,4 +571,81 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
                est_size=INSTRUCTION_SIZE),
     # nop                is  addi zero, zero, 0
     RVInstDesc("nop", (), template=0x00000013, est_size=INSTRUCTION_SIZE),
+    # -- the vector extension ------------------------------------------------
+    # What every one of them works on is said beforehand, by `vsetivli`: how
+    # wide an element is and how many there are.  Nothing below carries either,
+    # which is why each is preceded by one.  Every row is the unmasked form; the
+    # one that reads a mask reads it from v0, which is the architecture's choice
+    # and why that register is never given out.
+    #
+    # vsetivli rd, count, vtype
+    RVInstDesc("vsetivli", (_r(), _uimm5(), _vtype()), template=0xC0007057,
+               fields=(_reg(0, _RD),
+                       Field(FieldKind.IMMEDIATE, 1, 15, 5, signed=False),
+                       Field(FieldKind.IMMEDIATE, 2, 20, 10, signed=False)),
+               est_size=INSTRUCTION_SIZE),
+    # vle8.v vd, (rs1) and vse8.v vs3, (rs1) -- bytes, as many as were asked
+    # for, which is how a run of any element is read and written: its bytes.
+    RVInstDesc("vle8.v", (_v(), _r()), template=0x02000007,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
+    RVInstDesc("vse8.v", (_v(), _r()), template=0x02000027,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE,
+               roles=_READS_BOTH),
+    # vl1re8.v vd, (rs1) and vs1r.v vs3, (rs1) -- a whole register, whatever
+    # `vtype` says, which is what a value set aside in the frame wants.
+    RVInstDesc("vl1re8.v", (_v(), _r()), template=0x02800007,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
+    RVInstDesc("vs1r.v", (_v(), _r()), template=0x02800027,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE,
+               roles=_READS_BOTH),
+    # vmv1r.v vd, vs2 -- one whole register into another.
+    RVInstDesc("vmv1r.v", (_v(), _v()), template=0x9E003057,
+               fields=(_reg(0, _RD), _reg(1, _VS2)),
+               est_size=INSTRUCTION_SIZE, flags=InstFlags.MOVE),
+    # vmv.v.x vd, rs1 and vmv.v.i vd, simm5 -- one value in every element.
+    RVInstDesc("vmv.v.x", (_v(), _r()), template=0x5E004057,
+               fields=(_reg(0, _RD), _reg(1, _RS1)), est_size=INSTRUCTION_SIZE),
+    RVInstDesc("vmv.v.i", (_v(), _simm5()), template=0x5E003057,
+               fields=(_reg(0, _RD), _imm(1, 15, 5)), est_size=INSTRUCTION_SIZE),
+    # The bitwise three, and the complement, which is an exclusive or with
+    # every bit set.
+    _vv("vand.vv", 0x26000057),
+    _vv("vor.vv", 0x2A000057),
+    _vv("vxor.vv", 0x2E000057),
+    RVInstDesc("vnot.v", (_v(), _v()), template=0x2E0FB057,
+               fields=(_reg(0, _RD), _reg(1, _VS2)), est_size=INSTRUCTION_SIZE),
+    # The comparisons, each answering one bit per element in a mask register.
+    # The "greater" ones exist only against a scalar, so they are these with the
+    # two registers the other way round.
+    _vv("vmseq.vv", 0x62000057),
+    _vv("vmsne.vv", 0x66000057),
+    _vv("vmsltu.vv", 0x6A000057),
+    _vv("vmslt.vv", 0x6E000057),
+    _vv("vmsleu.vv", 0x72000057),
+    _vv("vmsle.vv", 0x76000057),
+    # vmsne.vi vd, vs2, simm5 -- which elements are not nought, which is how a
+    # run of truth values held as bytes becomes one held as a mask.
+    RVInstDesc("vmsne.vi", (_v(), _v(), _simm5()), template=0x66003057,
+               fields=(_reg(0, _RD), _reg(1, _VS2), _imm(2, 15, 5)),
+               est_size=INSTRUCTION_SIZE),
+    # vmerge.vim vd, vs2, simm5, v0 -- the immediate where the mask in v0 is
+    # set and the element of vs2 where it is not: a mask made bytes again.
+    RVInstDesc("vmerge.vim", (_v(), _v(), _simm5()), template=0x5C003057,
+               fields=(_reg(0, _RD), _reg(1, _VS2), _imm(2, 15, 5)),
+               implicit_uses=(V0,), est_size=INSTRUCTION_SIZE),
+    # The logical operations on masks themselves.  `vmnand.mm vd, vs, vs` is how
+    # one is turned round.
+    _vv("vmand.mm", 0x66002057),
+    _vv("vmor.mm", 0x6A002057),
+    _vv("vmxor.mm", 0x6E002057),
+    _vv("vmnand.mm", 0x76002057),
+    _vv("vmxnor.mm", 0x7E002057),
+    # vmv.x.s rd, vs2 -- the first element into an ordinary register, which at
+    # an element width of sixty-four is the first sixty-four bits of a mask.
+    RVInstDesc("vmv.x.s", (_r(), _v()), template=0x42002057,
+               fields=(_reg(0, _RD), _reg(1, _VS2)), est_size=INSTRUCTION_SIZE),
 )

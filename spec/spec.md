@@ -3871,6 +3871,49 @@ which threads over an axis chosen by the operator rather than by the mask's rank
 Fortran's `PACK` and `WHERE`, which separate the two halves into a function and a statement where this has one spelling doing
 both, on the grounds that what is written on the left of `←` and what is read on the right should not need different names.
 
+##### A run of truth values as a number
+
+**`⎕mask(b)` is the truth values of `b` as the bits of a whole number**, the first of them the lowest: bit *i* is set exactly
+where `b⟦i⟧` is true.
+
+```
+let c: u8⟦32⟧ = input⟦at…at + 32⟧
+
+⎕mask(c = 34u8)                          ※ u32: one bit for each quote among the thirty-two bytes
+⎕mask((c = 34u8) ∨ (c = 92u8))           ※ the quotes and the backslashes
+⎕mask(c ≤ 32u8)                          ※ a space and everything below it
+⎕mask(⟦true, false, true⟧)                ※ 5u8
+```
+
+What makes it worth having is what comes after.  A comparison asked of thirty-two bytes answers thirty-two truth values, and a
+number of thirty-two bits is a thing ordinary arithmetic walks a bit at a time -- the lowest set bit and then the next, how many
+there are (`⎕ones`), the bits of one mask that are not in another.  A scanner looking for the few characters that matter in a
+block of input asks once per block rather than once per byte, which is the whole of how the fastest parsers of text read it.
+
+**The answer is the narrowest of `u8`, `u16`, `u32` and `u64` with a bit for every truth value**, and the bits above the last of
+them are clear: five truth values are a `u8` whose top three bits are nought, sixteen a `u16`, thirty-two a `u32`.  A machine
+width and not a width of exactly as many bits, because the masks of several runs are put together -- the high half of a block
+shifted up past the low half, the mask of one class anded with another's turned round -- and that is arithmetic between numbers
+of one type; a `u19` would be a number no other mask is.  **At most sixty-four** (4262), which is the widest whole number there
+is: a longer run is several masks.  **Of an array of truth values** and of nothing else (4260): an array of numbers has no one
+bit per element to give, and what is meant is the comparison that makes truth values of it, written inside the call.  **Of one
+dimension whose length the type states** (4261): how wide the answer is, is how many there are, and the width of a number is
+part of its type -- so a view whose type does not state its length has no width to answer with, and a table has no one order its
+dimensions would be bits in.  A row of one is a run, `⎕mask(t⟦i⟧)`.
+
+**Nothing is built where it is handed an operator.**  `⎕mask(c = 34u8)` does not make an array of thirty-two truth values in room
+of its own and read it back: the comparison is asked of the run, and what it answered is gathered where it stands -- and so is
+every operator walked over arrays inside the call, so that the quotes and the backslashes above are two comparisons, an `or` and
+one gathering.  A comparison of bytes is one of the operators a machine asks of a whole register at once, which is sixteen bytes
+on the first two x86-64 levels and on AArch64, thirty-two from the third level up, and sixteen on RISC-V where the build has the
+vector extension; elsewhere, and for elements wider than a byte, it is asked an element at a time, and the answer is the same.
+
+Compare: **Zig**, where a vector of `bool` is `@bitCast` to an integer of exactly as many bits -- a `u5` for five, where this
+answers a `u8`; **Rust**'s `std::simd`, whose `Mask::to_bitmask` answers a `u64` whatever the length, and **C++26**'s
+`std::simd_mask`, whose `to_ullong` does the same; **C** with a machine's intrinsics, `_mm_movemask_epi8`, which is one
+architecture's instruction under its own name; **APL** and **BQN**, where the same number is `2⊥⌽b`, a base decoded -- asked as
+arithmetic and not as a question about bits; **Go**, which has neither vectors nor this in the language.
+
 ##### Each element: `¨`
 
 **`¨` written after a value says that what follows is done to each of its elements** rather than to the array.  It is APL's each,
@@ -4004,6 +4047,18 @@ while running, the two are compared before anything is copied and a difference s
 does.  **An array is copied only where its elements are all of their value** (4710): text, a list, a lambda point into room
 something else keeps, and a reference is a way to a place, and a second holder of either is a question the allocator and the
 lifetime rules answer for one value at a time and do not yet answer for a run of them.
+
+**A definition gives an array too.**  `let chunk: u8⟦32⟧ = input⟦at…at + 32⟧` copies thirty-two elements of a view whose length is
+known only while running into room of the name's own, the two counts compared first, which is how a scanner reads its input a
+block at a time.  A name whose type states its shape owns elements that are one run, so this is a copy even where neither side
+may be written.  Where the view turns out to be one run itself -- a slice of a buffer always is -- the copy is one read and one
+write of the whole block, as it is between two arrays that state their shapes; where it is not, every other element say, it is
+copied an element at a time, and comes to the same.
+
+**Nothing is read past the end.**  The slice is checked as every slice is, so a block that would run off the end of the input
+stops the program.  A scanner that wants its last block whole copies what is left into an array of its own and pads it with
+something it skips -- which simdjson asks of its caller, requiring the input to be followed by padding, and which a language that
+checks every read asks of the program instead.
 
 Compare: **Go**, **Rust**'s `[T; N]`, **C++**'s `std::array` and **Fortran**'s `a = b`, which copy as this does, Fortran and Go
 holding the two to one shape; **Rust**'s `copy_from_slice`, which stops the program on a difference as this does where the

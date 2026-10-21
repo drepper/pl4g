@@ -1,0 +1,149 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=0
+※ pl4g-test: diag=none
+
+※ `⎕mask(b)` is a run of truth values as the bits of a whole number, the
+※ first of them the lowest bit, in the narrowest of `u8`, `u16`, `u32` and `u64`
+※ that has a bit for each.  What it is handed is nearly always a comparison
+※ walked over a run of bytes, which a machine with registers of them asks of
+※ sixteen or thirty-two bytes at once and gathers into one ordinary register --
+※ and a machine without asks a byte at a time.  Every answer here is held to the
+※ same answer worked out one element at a time, by a loop that asks each
+※ element on its own and so cannot share a mistake with what it checks.
+※
+※ Here, each bit position of every width; lengths that are no width at all,
+※ whose answer has bits above the run that have to be clear; the logical
+※ operators over runs of truth values, held in a register and in room of their
+※ own; and runs of elements wider than a byte.  The orders are in `mask-orders`.
+
+let std := ⎕import("std")
+
+※ The bits a run of truth values is, worked out an element at a time.
+fn by_hand(b: bool⟦⟧) → u64:
+    let found: mut u64 = 0u64
+    foreach i, x := ⎕enumerate(b):
+        if x:
+            found ← found | (1u64 « i)
+    found
+
+※ Whether *x* and *v* stand in the order numbered *op*, asked of one pair.
+fn holds(x: u8, v: u8, op: u8) → bool:
+    if op = 0u8:
+        x = v
+    elif op = 1u8:
+        x ≠ v
+    elif op = 2u8:
+        x < v
+    elif op = 3u8:
+        x ≤ v
+    elif op = 4u8:
+        x > v
+    else:
+        x ≥ v
+
+※ The mask of the order numbered *op* between each element of *d* and *v*,
+※ worked out an element at a time.
+fn ordered(d: u8⟦⟧, v: u8, op: u8) → u64:
+    let found: mut u64 = 0u64
+    foreach i, x := ⎕enumerate(d):
+        if holds(x, v, op):
+            found ← found | (1u64 « i)
+    found
+
+※ Every bit position of the four widths: a run counting up from nought is equal
+※ to *k* in lane *k* and in no other.
+fn positions() → u6:
+    let c: u8⟦64⟧ = ⟦0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8, 11u8, 12u8, 13u8, 14u8, 15u8, 16u8, 17u8, 18u8, 19u8, 20u8, 21u8, 22u8, 23u8, 24u8, 25u8, 26u8, 27u8, 28u8, 29u8, 30u8, 31u8, 32u8, 33u8, 34u8, 35u8, 36u8, 37u8, 38u8, 39u8, 40u8, 41u8, 42u8, 43u8, 44u8, 45u8, 46u8, 47u8, 48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 58u8, 59u8, 60u8, 61u8, 62u8, 63u8⟧ in ⎕static
+    let c32: u8⟦32⟧ = c⟦0…32⟧
+    let c16: u8⟦16⟧ = c⟦0…16⟧
+    let c8: u8⟦8⟧ = c⟦0…8⟧
+    let wrong: mut u6 = 0u6
+    foreach k := 0u8…64u8:
+        let bit: u64 = 1u64 « ⎕widen(k, ⌜u64⌝)
+        if ⎕mask(c = k) ≠ bit:
+            wrong ← 1u6
+        if k < 32u8 ∧ ⎕widen(⎕mask(c32 = k), ⌜u64⌝) ≠ bit:
+            wrong ← 2u6
+        if k < 16u8 ∧ ⎕widen(⎕mask(c16 = k), ⌜u64⌝) ≠ bit:
+            wrong ← 3u6
+        if k < 8u8 ∧ ⎕widen(⎕mask(c8 = k), ⌜u64⌝) ≠ bit:
+            wrong ← 4u6
+        ※ And everything but that lane, which is every other bit of the width.
+        if ⎕mask(c ≠ k) ≠ ~bit:
+            wrong ← 5u6
+    wrong
+
+※ Lengths that are no width, whose answer has room above the run: what a
+※ comparison says about the bytes beyond it -- nought is equal to nought -- is
+※ not the run's, and the bits above it are clear.
+fn odd_lengths() → u6:
+    let c: u8⟦64⟧ = 64 ⍴ 0u8
+    let one: u8⟦1⟧ = c⟦0…1⟧
+    let five: u8⟦5⟧ = c⟦0…5⟧
+    let nineteen: u8⟦19⟧ = c⟦0…19⟧
+    let thirty_three: u8⟦33⟧ = c⟦0…33⟧
+    let sixty_three: u8⟦63⟧ = c⟦1…64⟧
+    let wrong: mut u6 = 0u6
+    if ⎕mask(one = 0u8) ≠ 1u8:
+        wrong ← 6u6
+    if ⎕mask(five = 0u8) ≠ 31u8:
+        wrong ← 7u6
+    if ⎕mask(nineteen = 0u8) ≠ 524287u32:
+        wrong ← 8u6
+    if ⎕mask(thirty_three = 0u8) ≠ 8589934591u64:
+        wrong ← 9u6
+    if ⎕mask(sixty_three = 0u8) ≠ 9223372036854775807u64:
+        wrong ← 10u6
+    if ⎕mask(five ≠ 0u8) ≠ 0u8 ∨ ⎕mask(nineteen ≠ 0u8) ≠ 0u32:
+        wrong ← 11u6
+    wrong
+
+※ The logical operators over runs of truth values: several characters
+※ classified at once, which is what a scanner asks.  Once held in a register
+※ from the comparisons that made them, and once read back out of room of their
+※ own, where a truth value is a byte of one or nought.
+fn classified() → u6:
+    let d: u8⟦64⟧ = ⟦0u8, 255u8, 200u8, 129u8, 13u8, 127u8, 32u8, 1u8, 34u8, 7u8, 254u8, 9u8, 128u8, 10u8, 126u8, 92u8, 0u8, 255u8, 200u8, 129u8, 13u8, 127u8, 32u8, 1u8, 34u8, 7u8, 254u8, 9u8, 128u8, 10u8, 126u8, 92u8, 0u8, 255u8, 200u8, 129u8, 13u8, 127u8, 32u8, 1u8, 34u8, 7u8, 254u8, 9u8, 128u8, 10u8, 126u8, 92u8, 0u8, 255u8, 200u8, 129u8, 13u8, 127u8, 32u8, 1u8, 34u8, 7u8, 254u8, 9u8, 128u8, 10u8, 126u8, 92u8⟧ in ⎕static
+    let quotes: u64 = ordered(d, 34u8, 0u8)
+    let escapes: u64 = ordered(d, 92u8, 0u8)
+    let low: u64 = ordered(d, 32u8, 3u8)
+    let wrong: mut u6 = 0u6
+    if ⎕mask((d = 34u8) ∨ (d = 92u8)) ≠ quotes | escapes:
+        wrong ← 36u6
+    if ⎕mask((d ≤ 32u8) ∧ ¬(d = 10u8)) ≠ low & ~ordered(d, 10u8, 0u8):
+        wrong ← 37u6
+    if ⎕mask((d = 34u8) ⊕ (d ≤ 32u8)) ≠ quotes ^ low:
+        wrong ← 38u6
+    if ⎕mask((d = 34u8) = (d = 92u8)) ≠ ~(quotes ^ escapes):
+        wrong ← 39u6
+    let held: bool⟦64⟧ = (d = 34u8) ∨ (d = 92u8)
+    if ⎕mask(held) ≠ quotes | escapes:
+        wrong ← 40u6
+    if ⎕mask(¬held) ≠ ~(quotes | escapes):
+        wrong ← 41u6
+    if by_hand(held) ≠ quotes | escapes:
+        wrong ← 42u6
+    let rows: bool⟦2,8⟧ = ⟦⟦true, false, false, false, false, false, false, true⟧, ⟦false, true, true, false, false, false, false, false⟧⟧ in ⎕static
+    if ⎕mask(rows⟦0⟧) ≠ 129u8 ∨ ⎕mask(rows⟦1⟧) ≠ 6u8:
+        wrong ← 43u6
+    wrong
+
+※ A run of wider elements is compared an element at a time on every machine
+※ here, and what comes of it is the same mask.
+fn wider() → u6:
+    let w: u16⟦8⟧ = ⟦3u16, 5u16, 300u16, 3u16, 7u16, 5u16, 65535u16, 0u16⟧ in ⎕static
+    if ⎕mask((w = 3u16) ∨ (w = 5u16)) ≠ 43u8:
+        44u6
+    elif ⎕mask(w > 255u16) ≠ 68u8:
+        45u6
+    else:
+        0u6
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let found: u6⟦5⟧ = ⟦positions(), odd_lengths(), classified(), wider(), 0u6⟧
+    let wrong: mut u6 = 0u6
+    foreach _, one := ⎕enumerate(found):
+        if wrong = 0u6:
+            wrong ← one
+    wrong

@@ -336,6 +336,15 @@ namespace pl4g::ir {
               fail(where, "'" + inst.opcode() + "' counting something that is not a whole number");
             else if (! is<IntType>(inst.ty))
               fail(where, "'" + inst.opcode() + "' answering with something that is not a whole number");
+          } else if (inst.un == UnOp::mask) {
+            // A run of truth values read as the bits of a number: one lane per
+            // bit, so the number has to have a bit for every lane.
+            auto asked = as<VecType>(ops[0]->ty);
+            auto answer = as<IntType>(inst.ty);
+            if (asked == nullptr || asked->element != bool_type())
+              fail(where, "a mask of " + ops[0]->ty->render() + ", which holds no truth values");
+            else if (answer == nullptr || answer->is_signed || answer->bits < asked->lanes)
+              fail(where, "a mask of " + ops[0]->ty->render() + " read as " + inst.ty->render());
           } else if (! same(inst.ty, ops[0]->ty))
             fail(where, "'" + inst.opcode() + "' result type differs from its operand");
           break;

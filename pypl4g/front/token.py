@@ -358,6 +358,11 @@ CHR_NAME: Final[str] = "".join((BUILTIN_GLYPH, "chr"))
 ONES_NAME: Final[str] = "".join((BUILTIN_GLYPH, "ones"))
 LEAD_NAME: Final[str] = "".join((BUILTIN_GLYPH, "lead"))
 
+#: A run of truth values as the bits of a whole number, the first being the
+#: lowest: what a comparison asked of thirty-two bytes at once comes to, in the
+#: form a program walks a bit at a time.
+MASK_NAME: Final[str] = "".join((BUILTIN_GLYPH, "mask"))
+
 #: The tolerance the approximate comparisons read, and what it holds until a
 #: program sets it.  APL's own tolerance defaults to the same number.
 TOLERANCE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "tolerance"))
