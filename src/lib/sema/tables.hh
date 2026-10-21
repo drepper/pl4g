@@ -93,6 +93,7 @@ namespace pl4g::sema::tables {
   inline constexpr std::string_view select_symbol = "__pl4g_table_select";
   inline constexpr std::string_view give_up_symbol = "__pl4g_table_give_up";
   inline constexpr std::string_view next_symbol = "__pl4g_table_next";
+  inline constexpr std::string_view same_symbol = "__pl4g_table_same";
 
   // What the runtime hashes a key with, and gives a table its seed with.
   inline constexpr std::string_view hash_symbol = "pl4g_hash";
@@ -174,6 +175,12 @@ namespace pl4g::sema::tables {
   ir::Function* ensure_operators(ir::Module& module, const Shape& shape);
   // Build what a collection of this shape needs.
   void ensure_runtime(ir::Module& module, const Shape& shape);
+  // What stops two tables holding values of `ty` from being compared: nothing,
+  // or the type itself where `=` is not defined on it.
+  const ir::Type* not_compared(const ir::Type* ty);
+  // `__pl4g_table_same(one, other)`: whether two tables of this shape hold the
+  // same thing, whatever the order.
+  ir::Function* ensure_same(ir::Module& module, const Shape& shape);
   // Build what taking a key out of a table is made of.
   ir::Function* ensure_take(ir::Module& module, const Shape& shape);
   // What the function of `shape` is called.

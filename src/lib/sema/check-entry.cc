@@ -1030,6 +1030,13 @@ namespace pl4g::sema {
     auto member = ast::as<ast::Member>(expr);
     if (member == nullptr)
       return nullptr;
+    if (through_a_list(member)) {
+      // Asked before anything is lowered: the element on the way is made
+      // writable where it is reached, which is once.
+      auto said = ir::as<ir::ArrayType>(said_to_be(member));
+      if (said == nullptr || ! said->fixed())
+        return nullptr;
+    }
     std::vector<std::string> below{ std::string(member->name) };
     auto somewhere = record_at(builder, member->base, writing, below);
     if (! somewhere)
@@ -1103,9 +1110,21 @@ namespace pl4g::sema {
       return std::nullopt;
     }
     case ast::NodeKind::Element: {
+      auto element = static_cast<const ast::Element*>(expr);
+      if (writing && ir::is<ir::ListType>(said_to_be(element->base))) {
+        // A list's element written in part: in the list's own room, made so
+        // first, as `l⟦i⟧ ← v` makes it.
+        auto written = list_element_written(builder, element);
+        if (! written)
+          return std::nullopt;
+        auto record = ir::as<ir::ProductType>(std::get<1>(*written));
+        if (record == nullptr)
+          return std::nullopt;
+        return std::tuple{ std::get<0>(*written), record };
+      }
       // An array's elements are where the array is, and so are a list's, for
       // a field only read.
-      auto place = place_of_an_element(builder, static_cast<const ast::Element*>(expr), ! writing);
+      auto place = place_of_an_element(builder, element, ! writing);
       if (! place)
         return std::nullopt;
       auto record = ir::as<ir::ProductType>(place->held);

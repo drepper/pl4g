@@ -10979,6 +10979,82 @@ Compare: C's casts and `memcpy`, undefined out of range; C++20's `std::bit_cast`
 `truncate` with no answer out of range; APL's and BQN's numbers, which are one kind and need no crossing; Wolfram's
 `IntegerPart`.  None of them says which way a number did not fit.
 
+## 2026-10-22T18:00+02:00 — language and compiler
+
+### Four gaps the JSON module would hit: room reused, tables compared, a field of a list's element written, containers written
+
+The three features merged before this left four things the JSON module needs undone, and the user's approval of the list covers
+closing them.  Each is in pypl4g and the C++ port, held to each other.
+
+**A table clears what it reads before writing it.**  `⎕heap` hands out again what was given back, as it was -- its first word the
+free list's link -- and a table read two things of its room unwritten: the words of the index, nought where nothing hashed, and the
+state of the entry after the last written, which a lookup of a missing key answers.  A probe over an index of ones never met a
+nought and never ended.  Of the two remedies the brief offered, the cheaper is to write those two things where the table takes its
+room: the index cleared as runs of eight zero words -- one run in `new`, a loop of them in `grow`, which the back ends store as
+wide as their registers -- and the state of the entry after the last marked empty by `new`, `grow` and `put`.  That costs one store
+per insertion and an index's worth of stores per rebuild.  A zeroing allocation, calloc's trick of clearing only what came off a
+free list, would have cleared the entries as well, which are most of a table's room and all written before they are read, and it
+would have been a second runtime entry with a single caller.  Nothing else the compiler generates reads room before writing it: a
+list's elements past its count are never read, and a record, a closure's environment and a generator's frame are written whole
+where they are made; arenas take their chunks fresh from the system and never reuse them.  Compare **C**'s `calloc`, which skips
+clearing pages fresh from `mmap`; **Python**'s dictionaries, which `memset` the index of every new table with `-1` and write each
+entry as it is added; **Rust**'s `hashbrown`, which writes the control bytes `EMPTY` with one `memset` on every allocation.
+
+**`=` on two tables compares what they hold.**  The specification already said so; the compiler compared handles.  Two tables are
+equal where they hold as many keys and every key of one is in the other standing for an equal value, compared by the value's own
+`=` -- one walk of the first table's entries and a probe of the second for each, stopping at the first difference.  Taken without
+asking: a dictionary whose values have no `=` (a record, a sum, a list) cannot be compared (4280) rather than compared by some
+notion the rest of the language lacks; a table that may be written and one that may only be read compare, the right side being
+lowered as the read-only kind -- the type of the handle says who may change the table, not what it is; and a table is equal to
+itself without a walk, the one answer that differs from a walk for a dictionary holding a not-a-number, as Python's identity check
+before `==` does.  A table's value is never a table (4445), so the comparison never nests.  Compare **Python** and **C++**'s
+`unordered_map::operator==`, which are this; **Rust**'s `PartialEq` for `HashMap`; **Go**, which has no `==` on maps and has
+`maps.Equal`; **Java**'s `Map.equals`.
+
+**`l⟦i⟧.name ← v` writes one field of an element of a list**, held to what `l⟦i⟧ ← v` is held to: the list in a place that may
+change, no view of it out, the list copied out of the image first, the index checked, and what points somewhere copied into the
+list's allocator, the old value given back.  A path of fields follows from the record being somewhere, and a list held in a field
+of an element is then a place like any other: `l⟦i⟧.items⟦j⟧ ← v`, `l⟦i⟧.items ⧺← more` and `†l⟦i⟧.items⟦j⟧` change it there, the
+outer list made ready before the inner one's place is read.  Taken without asking: writing a part of an element of a list this
+call holds is no effect, as writing the element is not -- a list's elements are its own, a list shared being copied before it is
+written.  Compare **Rust**'s `v[i].name = x`, **Go**'s `s[i].name = x` and **C++**'s `v[i].name = x`, the same place; **Python**'s
+`l[i].name = x` writes the object the list refers to.
+
+**`⍕` writes a list, a set, a dictionary and a sum**: `[1, 2]`, `⸨1, 2⸩`, `⸨a: 1⸩` in the order walked, and a sum as it is made,
+`Json(.number ← 1)` and `Json(.null ← true)` -- the specification's own notations, recursively.  `std.text` is generic code, so it
+needed two questions it could not ask:
+
+- **`⎕kindof(⌜T⌝)`**, what kind a type is, as text compared with a literal in a `comptime if`.  The specification had left exactly
+  this open when `⎕isrecord` was added: "a second kind would want an answer naming which, rather than a predicate each", waiting
+  for a use; this is the use.  The kinds are the specification's words, and a literal naming none is refused (4282), a misspelt
+  kind being an arm never checked.  Compare **Zig**'s `@typeInfo`, whose tag this is; **Go**'s `reflect.Kind`, at run time;
+  **C++26**'s predicates, one per kind.
+- **`⎕alternatives(v)`**, a sum taken apart as `⎕fields` takes a record: a tuple of pairs, a part's name and a view of what it
+  carries, one element long where the sum holds that part and none long where it holds another.  A view rather than the value,
+  because only one part is there: a view of none says so without reading anything, where a value of every part would read bytes
+  that are not that part's.  A part carrying nothing is a view of a `true`, what it is made with.  Compare **Zig**, whose tagged
+  union's fields are walked with `inline for` and asked which is active with `activeTag`; **Rust**, which derives `Debug` with a
+  macro instead.
+
+`std` writes every type, so the walks are generic helpers -- `list_text(l: [E'])`, `set_text(s: ⸨K'⸩)`, `dictionary_text(d:
+⸨K': V'⸩)` -- which wanted **a generic function taking a table of a type parameter**: a type parameter now stands as a key where the
+function is written, settled where a call says by an argument whose key was held to being one, and a writable table is handed to
+such a parameter as to any read-only one.  A `comptime foreach` over `⎕alternatives` goes untyped, as one over `⎕fields` does, its
+name being of a different type each turn.
+
+**Text is itself wherever it stands**, `⍕["a"]` being `[a]`, as a string field of a record already was.  This is the one choice
+the specification did not settle and that a reader might expect the other way: Python's `str` of a list and Rust's `Debug` quote
+the strings inside.  Quoting inside a container and not outside it would be a second notation for text used in one place, and
+changing what a record's text field writes is a change for every program that prints one; a program that wants quotes writes
+them.  Asked again, if the JSON module's tests want `⍕` to read back as a program.
+
+**Also looked at: walking a list without copying its elements.**  `foreach &e: Json = l` already exists (2026-09, "A name is a copy
+of what the turn gives, unless it is marked `&`"), and binds a reference to each element where it is.  But a `match e⌖` reads the
+sum, and reading a sum anywhere copies its bytes into the frame, so the copy is moved from the binding to the match rather than
+avoided: a 32-byte `Json` is copied once per element either way.  Avoiding it wants `match` to take apart a sum that is a place --
+the tag read where it is, the part bound as a place -- with the place lent for the arms' duration; that is a change to `match`,
+not small, and is left in the to-do list.
+
 Open questions
 --------------
 

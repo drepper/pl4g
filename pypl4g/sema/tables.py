@@ -59,8 +59,8 @@ from ..ir.inst import BinOp, CastKind, CmpPred
 from ..ir.layout import DataLayout, size_of
 from ..ir.module import Module
 from ..ir.layout import parts_of
-from ..ir.types import (ARENA, I64, MEM, PtrType, STR, Type, U8, U64,
-                         VOID)
+from ..ir.types import (ARENA, BOOL, CHAR, I64, MEM, EnumType, FloatType,
+                         IntType, PtrType, STR, Type, U8, U64, VOID)
 from ..ir.value import Value
 
 #: What the allocator is called, and what it takes.  Declared here rather than
@@ -224,8 +224,8 @@ def room_for(capacity: int) -> int:
 
     As many as the index may name before the table is rebuilt, and one more: the
     one past the last written is where a key not in the table would go, and a
-    lookup of such a key reads that entry -- empty, every word of it nought --
-    rather than asking a second question of its answer.
+    lookup of such a key reads that entry -- its state written empty -- rather
+    than asking a second question of its answer.
     """
     return capacity * LOAD_NUMERATOR // LOAD_DENOMINATOR + 1
 
@@ -687,9 +687,16 @@ def _build_new(module: Module) -> Function:
 
     Two allocations: the block, which never moves, and the index with the dense
     array of entries straight after it, which are replaced when the table is
-    rebuilt.  Neither is zeroed here -- what the arena hands out has never been
-    handed out before, and what the system gave the arena was zeroed when it
-    gave it.
+    rebuilt.
+
+    **The index is cleared here, and the first entry's state**, which is all of
+    the run a table reads before it writes: `⎕heap` hands out again what was
+    given back, holding whatever it held, and a word of the index that is not
+    nought names an entry nobody wrote.  The rest of the entries are written
+    before they are read -- each `put` marks the entry after the one it fills
+    as empty (`_build_put`) -- so clearing them would be stores nothing reads.
+    The eight words of a first index are one run of zeroes, which each machine
+    stores as wide as its registers are.
     """
     table_ptr = table_type(module)
     arena_ptr = module.types.ptr_type(ARENA, mutable=True)
@@ -720,8 +727,63 @@ def _build_new(module: Module) -> Function:
                                   builder.int_const(U64, FIRST_CAPACITY * WORD)))
     _write(builder, block, SEED_FIELD,
            builder.call(seed_function(module), (), U64))
+    _clear_words(builder, _as(builder, run, U64), FIRST_CAPACITY)
+    _write(builder, _as(builder, builder.binary(
+        BinOp.ADD, run, builder.int_const(U64, FIRST_CAPACITY * WORD)), U64),
+           STATE_AT, builder.int_const(U64, EMPTY))
     builder.ret(block)
     return func
+
+
+#: How many words of an index are cleared at a time: as many as the smallest
+#: index has, which every index is a multiple of, being a larger power of two.
+CLEARED_AT_ONCE: Final[int] = FIRST_CAPACITY
+
+
+def _clear_words(builder: IRBuilder, at: Value, words: int) -> None:
+    """Store nought over *words* words from *at*, as one run.
+
+    A run of one value stored is what the back ends make as wide as a machine's
+    registers are -- four stores of sixteen bytes for eight words where the
+    machine has them, and eight of one word where it has not.
+    """
+    module = builder.module
+    run = module.types.vec_type(U64, words)
+    builder.store(builder.cast(CastKind.BITCAST, at,
+                               module.types.ptr_type(run, mutable=True)),
+                  builder.splat(builder.int_const(U64, 0), run))
+
+
+def _clear_index(func: Function, builder: IRBuilder, index: Value,
+                 words: Value) -> None:
+    """Store nought over the *words* words of an index at *index*.
+
+    A loop of runs of `CLEARED_AT_ONCE` words: an index is a power of two of
+    words and never fewer than that many, so the runs cover it exactly.
+    """
+    loop = func.add_block("clear")
+    body = func.add_block("clearing")
+    done = func.add_block("cleared")
+    end = builder.binary(BinOp.ADD, index,
+                         builder.binary(BinOp.WRAP_MUL, words,
+                                        builder.int_const(U64, WORD)))
+    builder.br(loop, (index, builder.memory()))
+    builder.position_at(loop)
+    at = loop.add_param(index.ty, "at")
+    builder.set_memory(loop.add_param(MEM, "mem"))
+    builder.condbr(builder.compare(CmpPred.ULT,
+                                   builder.cast(CastKind.BITCAST, at, U64),
+                                   builder.cast(CastKind.BITCAST, end, U64)),
+                   body, done, true_args=(builder.memory(),),
+                   false_args=(builder.memory(),))
+    builder.position_at(body)
+    builder.set_memory(body.add_param(MEM, "mem"))
+    _clear_words(builder, at, CLEARED_AT_ONCE)
+    builder.br(loop, (builder.binary(BinOp.ADD, at,
+                                     builder.int_const(U64, CLEARED_AT_ONCE * WORD)),
+                      builder.memory()))
+    builder.position_at(done)
+    builder.set_memory(done.add_param(MEM, "mem"))
 
 
 # -- finding where a key is ------------------------------------------------------
@@ -812,8 +874,11 @@ def _build_slot(module: Module, shape: Shape) -> Function:
     the entry either way.  Where the key is not there, the entry answered is the
     one after the last written -- where a key put in next would go, and empty:
     its first word says nothing is there, and its value, which a lookup reads
-    unasked, is nought.  That entry is always there to be read, the dense array
-    having room for one more than the index may name (`room_for`).
+    unasked, is whatever the room held, which the truth value beside the answer
+    says nobody may read.  That entry is always there to be read, the dense
+    array having room for one more than the index may name (`room_for`), and
+    its first word is written empty whenever it becomes the one after the last
+    (`_build_new`).
     """
     table_ptr = table_type(module)
     held = key_ir_type(shape)
@@ -931,6 +996,9 @@ def _build_grow(module: Module, shape: Shape) -> Function:
     _write_address(builder, table, ENTRIES_FIELD, entries)
     _write(builder, table, MASK_FIELD, mask)
     _write(builder, table, SEED_FIELD, seed)
+    # The room may be the heap's given back and taken again, holding anything:
+    # what the walk below reads of it before writing is the index.
+    _clear_index(func, builder, index, words)
     builder.br(walk, (builder.int_const(U64, 0), builder.int_const(U64, 0),
                       builder.memory()))
 
@@ -993,12 +1061,15 @@ def _build_grow(module: Module, shape: Shape) -> Function:
     builder.br(walk, (builder.binary(BinOp.WRAP_ADD, at, builder.int_const(U64, 1)),
                       kept, builder.memory()))
 
-    # No holes in the new array: as many entries written as there are keys.
+    # No holes in the new array: as many entries written as there are keys,
+    # and the one after them, which a missing key's lookup reads, empty.
     builder.position_at(done)
     total = done.add_param(U64, "total")
     builder.set_memory(done.add_param(MEM, "mem"))
     _write(builder, table, COUNT_FIELD, total)
     _write(builder, table, USED_FIELD, total)
+    _write(builder, _entry(builder, entries, total, stride), STATE_AT,
+           builder.int_const(U64, EMPTY))
     builder.ret()
     return func
 
@@ -1117,6 +1188,14 @@ def _build_put(module: Module, shape: Shape) -> Function:
                   _index_word(builder, hashed, offset))
     _write(builder, made, STATE_AT, builder.int_const(U64, LIVE))
     _store_key(builder, shape, made, key)
+    # The entry after it is where the next key goes and what a lookup of a
+    # missing key reads: empty, whatever the room held before the table had it.
+    # It is there to be written -- the dense array has room for one entry more
+    # than the index may name, and the table was rebuilt above if this one
+    # would have been the last.
+    _write(builder, builder.binary(BinOp.ADD, made,
+                                   builder.int_const(U64, shape.stride)),
+           STATE_AT, builder.int_const(U64, EMPTY))
     _write(builder, table, USED_FIELD,
            builder.binary(BinOp.WRAP_ADD, used, builder.int_const(U64, 1)))
     _write(builder, table, COUNT_FIELD,
@@ -1253,6 +1332,142 @@ def _build_select(module: Module, shape: Shape) -> Function:
     builder.position_at(done)
     done.add_param(MEM, "mem")
     builder.ret()
+    return func
+
+
+# -- comparing two ---------------------------------------------------------------
+
+SAME_SYMBOL: Final[str] = "__pl4g_table_same"
+
+
+def not_compared(ty: Type) -> Type | None:
+    """What stops two tables holding values of *ty* from being compared:
+    nothing, or the type itself where `=` is not defined on it.
+
+    The types `=` answers on are numbers, truth values, characters, the values
+    of an enumeration and text.  A table is not what a key stands for (4445),
+    so a table's values are never tables.
+    """
+    if isinstance(ty, (IntType, FloatType, EnumType)) or ty is BOOL \
+            or ty is CHAR or ty is STR:
+        return None
+    return ty
+
+
+def _same_value(builder: IRBuilder, ty: Type, one: Value, other: Value) -> Value:
+    """Whether two values held in tables are equal, as `=` says of them."""
+    from .strings import compare_function
+
+    if ty is not STR:
+        return builder.compare(CmpPred.EQ, one, other)
+    return builder.compare(
+        CmpPred.EQ,
+        builder.call(compare_function(builder.module),
+                     (*_taken_apart(builder, one), *_taken_apart(builder, other)),
+                     I64),
+        builder.int_const(I64, 0))
+
+
+def ensure_same(module: Module, shape: Shape) -> Function:
+    """``__pl4g_table_same(one, other)``: whether two tables hold the same thing.
+
+    **The same count, and every key of one in the other with an equal value.**
+    One walk of the first table's dense array and a probe of the second for each
+    key it holds: the counts being equal, every key of the first found in the
+    second means there is no key of the second that is not in the first.  The
+    order is not asked about -- two tables that were filled differently and
+    hold the same are equal, as Python's dictionaries are -- and the walk stops
+    at the first key that differs.
+
+    **A table is equal to itself without a walk.**  That is the one place where
+    it can differ from comparing what it holds key by key: a value that is not
+    equal to itself, a floating-point not-a-number, makes a table holding it
+    unequal to a copy of itself and equal to itself, as Python's identity check
+    before `==` does.
+
+    Generated per shape, as the probe is, a value compared by the `=` of its
+    own type.
+    """
+    table_ptr = table_type(module)
+    func, fresh = generated(module, named(SAME_SYMBOL, shape),
+                            (table_ptr, table_ptr), BOOL)
+    if not fresh:
+        return func
+    ensure_runtime(module, shape)
+    slot_of = module.functions[named(SLOT_SYMBOL, shape)]
+    entry = func.add_block()
+    counted = func.add_block("counted")
+    walk = func.add_block("walk")
+    look = func.add_block("look")
+    live = func.add_block("live")
+    held = func.add_block("held") if shape.value is not None else None
+    onward = func.add_block("onward")
+    same = func.add_block("same")
+    differs = func.add_block("differs")
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    one = entry.add_param(table_ptr, "one")
+    other = entry.add_param(table_ptr, "other")
+    builder.condbr(_same_address(builder, one, other), same, counted,
+                   true_args=(builder.memory(),), false_args=(builder.memory(),))
+
+    builder.position_at(counted)
+    builder.set_memory(counted.add_param(MEM, "mem"))
+    used = _read(builder, one, USED_FIELD)
+    stride = builder.int_const(U64, shape.stride)
+    entries = _read_address(builder, one, ENTRIES_FIELD, U64)
+    builder.condbr(builder.compare(CmpPred.EQ, _read(builder, one, COUNT_FIELD),
+                                   _read(builder, other, COUNT_FIELD)),
+                   walk, differs,
+                   true_args=(builder.int_const(U64, 0), builder.memory()),
+                   false_args=(builder.memory(),))
+
+    builder.position_at(walk)
+    at = walk.add_param(U64, "at")
+    builder.set_memory(walk.add_param(MEM, "mem"))
+    builder.condbr(builder.compare(CmpPred.UGE, at, used), same, look,
+                   true_args=(builder.memory(),), false_args=(builder.memory(),))
+
+    builder.position_at(look)
+    builder.set_memory(look.add_param(MEM, "mem"))
+    place = _entry(builder, entries, at, stride)
+    builder.condbr(builder.compare(CmpPred.EQ, builder.load(place),
+                                   builder.int_const(U64, LIVE)),
+                   live, onward,
+                   true_args=(builder.memory(),), false_args=(builder.memory(),))
+
+    builder.position_at(live)
+    builder.set_memory(live.add_param(MEM, "mem"))
+    there = builder.call(slot_of, (other, _load_key(builder, shape, place)),
+                         table_ptr)
+    found = builder.compare(CmpPred.EQ, builder.load(there),
+                            builder.int_const(U64, LIVE))
+    if held is None:
+        builder.condbr(found, onward, differs, true_args=(builder.memory(),),
+                       false_args=(builder.memory(),))
+    else:
+        builder.condbr(found, held, differs, true_args=(builder.memory(),),
+                       false_args=(builder.memory(),))
+        builder.position_at(held)
+        builder.set_memory(held.add_param(MEM, "mem"))
+        assert shape.value is not None
+        alike = _same_value(builder, shape.value, _load_value(builder, shape, place),
+                            _load_value(builder, shape, there))
+        builder.condbr(alike, onward, differs, true_args=(builder.memory(),),
+                       false_args=(builder.memory(),))
+
+    builder.position_at(onward)
+    builder.set_memory(onward.add_param(MEM, "mem"))
+    builder.br(walk, (builder.binary(BinOp.WRAP_ADD, at, builder.int_const(U64, 1)),
+                      builder.memory()))
+
+    builder.position_at(same)
+    builder.set_memory(same.add_param(MEM, "mem"))
+    builder.ret(builder.bool_const(True))
+
+    builder.position_at(differs)
+    builder.set_memory(differs.add_param(MEM, "mem"))
+    builder.ret(builder.bool_const(False))
     return func
 
 

@@ -449,6 +449,14 @@ fn Io.println(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
 ※※ pairs, which `comptime foreach` walks.  It recurses, so a field that is a
 ※※ record is written the same way.
 ※※
+※※ A list, a set and a dictionary are written as each is written down --
+※※ `[1, 2]`, `⸨1, 2⸩`, `⸨"a": 1⸩` -- in the order they are walked, and a sum as
+※※ it is made, the one part it holds named: `Json(.text ← hi)`, and
+※※ `Json(.null ← true)` for a part that carries nothing.  `⎕kindof` picks the
+※※ arm and `⎕alternatives` takes a sum apart.  What they hold is written by this
+※※ same definition, so a type that reaches itself through a list is written all
+※※ the way down.
+※※
 ※※ A number is written in *base*, ten unless said otherwise and anything from two
 ※※ to thirty-six, the digits past nine being letters -- small ones, or capitals
 ※※ where *upper* says so: `std.text(x, .base ← 16u8)`.  Either is ignored for a
@@ -482,6 +490,21 @@ fn text(v: T', a: &mut arena, base: u8 ← 10u8, upper: bool ← false) → str 
             let said: str = text(f⟦1⟧, a)
             out ← out ⧺ "." ⧺ f⟦0⟧ ⧺ " ← " ⧺ said in a
         out ⧺ ")" in a
+    comptime elif ⎕kindof(⌜T'⌝) = "list":
+        list_text(v, a)
+    comptime elif ⎕kindof(⌜T'⌝) = "set":
+        set_text(v, a)
+    comptime elif ⎕kindof(⌜T'⌝) = "dictionary":
+        dictionary_text(v, a)
+    comptime elif ⎕kindof(⌜T'⌝) = "sum":
+        ※ The one part it holds, as the value is made: every other part's view
+        ※ is empty, and nothing of it is read.
+        let out: mut str = ""
+        comptime foreach p := ⎕alternatives(v):
+            if #p⟦1⟧ ≠ 0:
+                let said: str = text(p⟦1⟧⟦0⟧, a)
+                out ← ⎕typename(⌜T'⌝) ⧺ "(." ⧺ p⟦0⟧ ⧺ " ← " ⧺ said ⧺ ")" in a
+        out
     else:
         ※ A number, one place at a time and least significant first, so nothing
         ※ has to know how many places there are.
@@ -511,6 +534,52 @@ fn text(v: T', a: &mut arena, base: u8 ← 10u8, upper: bool ← false) → str 
         ※ The raised minus the language writes a negative literal with, so that what
         ※ comes out reads back as what went in.
         if below: "⁻" ⧺ out in a else: out
+
+※※ The text of a list: its elements', between brackets and apart by commas, as a
+※※ list is written down.
+※※
+※※ \param l the list
+※※ \param a the arena the text is made in
+※※ \return `[` and the elements' text and `]`
+fn list_text(l: [E'], a: &mut arena) → str in a, ⎕static:
+    let out: mut str = "["
+    foreach e: E' = l:
+        if out ≠ "[":
+            out ← out ⧺ ", " in a
+        let said: str = text(e, a)
+        out ← out ⧺ said in a
+    out ⧺ "]" in a
+
+※※ The text of a set: its keys, in the order they were put in, as a set is
+※※ written down.
+※※
+※※ \param s the set
+※※ \param a the arena the text is made in
+※※ \return `⸨`, the keys' text and `⸩`
+fn set_text(s: ⸨K'⸩, a: &mut arena) → str in a, ⎕static:
+    let out: mut str = "⸨"
+    foreach k: K' = s:
+        if out ≠ "⸨":
+            out ← out ⧺ ", " in a
+        let said: str = text(k, a)
+        out ← out ⧺ said in a
+    out ⧺ "⸩" in a
+
+※※ The text of a dictionary: each key and what it stands for, in the order the
+※※ keys were put in, as a dictionary is written down.
+※※
+※※ \param d the dictionary
+※※ \param a the arena the text is made in
+※※ \return `⸨`, each key's text and its value's apart by a colon, and `⸩`
+fn dictionary_text(d: ⸨K': V'⸩, a: &mut arena) → str in a, ⎕static:
+    let out: mut str = "⸨"
+    foreach k, w: 〈K', V'〉 = d:
+        if out ≠ "⸨":
+            out ← out ⧺ ", " in a
+        let key: str = text(k, a)
+        let said: str = text(w, a)
+        out ← out ⧺ key ⧺ ": " ⧺ said in a
+    out ⧺ "⸩" in a
 
 ※※ Where a value's text stands in a field wider than it.
 ※※
@@ -559,6 +628,8 @@ fn padded(v: T', a: &mut arena, width: u64 ← 0u64, fill: char ← ' ',
         comptime elif ⎕typeof(⌜v⌝) = ⌜char⌝:
             way ← Align.left
         comptime elif ⎕isrecord(⌜T'⌝):
+            way ← Align.left
+        comptime elif ⎕kindof(⌜T'⌝) ≠ "integer":
             way ← Align.left
         else:
             way ← Align.right

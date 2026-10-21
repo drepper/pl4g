@@ -1479,7 +1479,11 @@ namespace pl4g::sema {
       left = lower_expr(builder, expr->left, context);
       ty = comparable(expr->left->span, expr->op, scalar_of(value_type_of(left)));
       const ir::Type* other;
-      if (ty != error_ty())
+      if (ir::is<ir::SetType>(ty) || ir::is<ir::DictType>(ty))
+        // Either side may be the writable kind: what is compared is what the
+        // two hold, and the right is asked for the kind both stand as.
+        other = table_read_only_of(ty);
+      else if (ty != error_ty())
         other = ty;
       else if (value_type_of(left) == error_ty())
         // Whatever is wrong with the left has been reported, and the right
@@ -1505,10 +1509,18 @@ namespace pl4g::sema {
     auto found = comparable(expr->right->span, expr->op, scalar_of(value_type_of(right)));
     if (ty == error_ty() || found == error_ty())
       return fresh_undef(error_ty());
-    if (found != ty) [[unlikely]] {
+    auto tabled = [](const ir::Type* one) { return ir::is<ir::SetType>(one) || ir::is<ir::DictType>(one); };
+    if (found != ty && ! (tabled(ty) && tabled(found) && table_read_only_of(found) == table_read_only_of(ty))) [[unlikely]] {
       diags.emit(D::LANG_TYPE_OPERAND_MISMATCH, expr->right->span,
                  { { "operator", glyph }, { "expected", ty->written() }, { "found", found->written() } });
       return fresh_undef(error_ty());
+    }
+    if (tabled(ty)) {
+      if (! accepts(expected, bool_ty())) [[unlikely]] {
+        report_mismatch(expr->span, bool_ty(), expected);
+        return fresh_undef(error_ty());
+      }
+      return compared_tables(builder, expr, left, right, ty);
     }
     if (ir::is<ir::FloatType>(ty) && exact_on_floats().contains(expr->op))
       // Two floating-point values computed different ways are rarely the one
@@ -1532,6 +1544,34 @@ namespace pl4g::sema {
       return fresh_undef(error_ty());
     }
     return builder.compare(signed_reading ? is_signed : is_unsigned, left, right, expr->span);
+  }
+
+  const ir::Type* Checker::table_read_only_of(const ir::Type* ty)
+  {
+    if (auto set = ir::as<ir::SetType>(ty); set != nullptr)
+      return ir::set_type(set->element, false);
+    auto dict = ir::as<ir::DictType>(ty);
+    return ir::dict_type(dict->key, dict->value, false);
+  }
+
+  ir::Value* Checker::compared_tables(ir::Builder& builder, const ast::Binary* expr, ir::Value* left, ir::Value* right,
+                                      const ir::Type* ty)
+  {
+    if (auto dict = ir::as<ir::DictType>(ty); dict != nullptr)
+      if (auto missing = tables::not_compared(dict->value); missing != nullptr) [[unlikely]] {
+        diags.emit(D::LANG_TABLE_VALUES_NOT_COMPARABLE, expr->span,
+                   { { "operator", std::string(describe(expr->op)) }, { "found", missing->written() } });
+        return fresh_undef(error_ty());
+      }
+    auto table_ptr = tables::table_type(module);
+    auto callee = tables::ensure_same(module, table_shape(ty));
+    std::vector<ir::Value*> args;
+    args.push_back(builder.cast(ir::CastKind::bitcast, left, table_ptr, expr->span));
+    args.push_back(builder.cast(ir::CastKind::bitcast, right, table_ptr, expr->span));
+    auto same = builder.call(callee, args, bool_ty(), expr->span);
+    if (expr->op == ast::BinaryOp::equal)
+      return same;
+    return builder.binary(ir::BinOp::xor_, same, builder.bool_const(true), expr->span);
   }
 
   ir::Value* Checker::compared_text(ir::Builder& builder, const ast::Binary* expr, ir::Value* left, ir::Value* right)

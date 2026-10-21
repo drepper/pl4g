@@ -3092,6 +3092,97 @@
       "option": null
     },
     {
+      "number": 4280,
+      "name": "LANG_TABLE_VALUES_NOT_COMPARABLE",
+      "severity": "error",
+      "message": "'{operator}' compares two dictionaries by what their keys stand for, and '=' is not defined on '{found}'",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "the operator as written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the dictionaries' values"
+        }
+      ],
+      "cause": "Two dictionaries are equal where they hold the same keys and each key stands for an equal value in both, so comparing them compares their values, and a value whose type has no '=' cannot be compared.  A record, a sum, a tuple, a list and an array have no equality yet; compare what is wanted of them in a walk of the keys.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Sets and dictionaries",
+        "requirement": "'=' and '≠' compare two sets, or two dictionaries, for holding the same thing."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4281,
+      "name": "LANG_KIND_ASKED_OUTSIDE_COMPTIME",
+      "severity": "error",
+      "message": "'⎕kindof' where a value is wanted",
+      "cause": "What kind a type is, is a question the compiler answers while it compiles, as '⎕isrecord' is: it is compared with a literal in a condition 'comptime' was written on and stands nowhere else, there being nothing for it to be while the program runs.  A program that wants the answer where a value goes has already been told it by the arm it stands in.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Settled while compiling / Asking what a type is",
+        "requirement": "'⎕kindof(⌜T⌝)' is text the compiler settles, compared with a literal in a 'comptime if' and standing nowhere else."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4282,
+      "name": "LANG_KIND_UNKNOWN",
+      "severity": "error",
+      "message": "'{found}' is not a kind of type; '⎕kindof' answers one of {kinds}",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the literal compared with"
+        },
+        {
+          "name": "kinds",
+          "type": "string",
+          "description": "every kind there is"
+        }
+      ],
+      "cause": "A kind compared with one '⎕kindof' never answers is a condition that never holds, so its arm would never be checked and never run, and the misspelling would go unnoticed.  The kinds are the specification's own words for them.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Settled while compiling / Asking what a type is",
+        "requirement": "'⎕kindof(⌜T⌝)' answers one of the kinds of type the language has, named as the specification names them."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4283,
+      "name": "LANG_ALTERNATIVES_NOT_A_SUM",
+      "severity": "error",
+      "message": "'⎕alternatives' takes a sum apart, and this is '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was handed over"
+        }
+      ],
+      "cause": "A sum holds one of its parts, and '⎕alternatives' answers every part with a view of what it carries where the sum holds it.  A record holds all of its fields at once, which '⎕fields' answers; anything else has no parts to name.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Settled while compiling / Asking what a type is",
+        "requirement": "'⎕alternatives(v)' answers the parts of a sum as a tuple of pairs, each a name and a view of what that part carries."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4401,
       "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
       "severity": "error",

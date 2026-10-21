@@ -28,6 +28,7 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            AT_NAME, SPAN_NAME,
                            ADDRESS_NAME, BYTES_NAME,
                            IS_RECORD_NAME, FIELDS_NAME, TYPENAME_NAME,
+                           KIND_OF_NAME, ALTERNATIVES_NAME,
                            STR_OF_NAME, TEXT_NAME, EMPTY_NAME, ONE_RUN_NAME,
                            WIDEN_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH, EACH_GLYPH, ITER_GLYPH,
@@ -416,6 +417,16 @@ def _collect_assigned(block: ast.Block, into: list[str]) -> None:
                 pass
 
 
+def _named_through_an_element(expr: object) -> str | None:
+    """The name a path through an element starts from -- `l` of `l⟦i⟧.name` and
+    of `l⟦i⟧.items` -- and nothing for any other path."""
+    through = False
+    while isinstance(expr, (ast.Member, ast.Element)):
+        through = through or isinstance(expr, ast.Element)
+        expr = expr.base
+    return expr.name if through and isinstance(expr, ast.NameRef) else None
+
+
 def _addressed_in(node: object, into: set[str]) -> None:
     """Add to *into* every name `&` is written in front of, anywhere below *node*.
 
@@ -451,6 +462,21 @@ def _addressed_in(node: object, into: set[str]) -> None:
             and isinstance(node.args[0], ast.NameRef):
         # As does making room in one.
         into.add(node.args[0].name)
+    # And changing a part of an element of one in place -- a field written, a
+    # list in a field joined onto -- which makes the list ready first as
+    # writing the element whole does.
+    changed: object = None
+    match node:
+        case ast.MemberAssign() | ast.ElementAssign() | ast.TakeAt():
+            changed = node.base
+        case ast.JoinAssign():
+            changed = node.target
+        case ast.Call() if isinstance(node.callee, ast.NameRef) \
+                and node.callee.name in (RESERVE_NAME, ITER_NAME) and node.args:
+            changed = node.args[0]
+    through = _named_through_an_element(changed)
+    if through is not None:
+        into.add(through)
     if isinstance(node, ast.Call) and isinstance(node.callee, ast.NameRef) \
             and node.callee.name == ITER_NAME and len(node.args) == 1 \
             and isinstance(node.args[0], ast.NameRef):
@@ -1730,6 +1756,62 @@ def _a_place_again(expr: ast.Expr) -> bool:
 def _is_a_table(ty: Type) -> bool:
     """Whether a value of *ty* is a collection, and so is built and not written."""
     return isinstance(ty, (SetType, DictType))
+
+
+#: What `⎕kindof` answers, for each kind of type there is, in the words the
+#: specification uses for them; `"other"` is everything a program cannot hold
+#: as a value of its own -- a walk, a piece of syntax.
+_KINDS: Final[tuple[str, ...]] = (
+    "integer", "float", "bool", "char", "str", "enumeration", "record", "sum",
+    "tuple", "array", "list", "set", "dictionary", "result", "reference",
+    "function", "other")
+
+
+def _kind_of(ty: Type) -> str:
+    """The kind `⎕kindof` names for *ty*."""
+    from ..ir.types import BoolType, CharType, StrType
+
+    match ty:
+        case IntType():
+            return "integer"
+        case FloatType():
+            return "float"
+        case BoolType():
+            return "bool"
+        case CharType():
+            return "char"
+        case StrType():
+            return "str"
+        case EnumType():
+            return "enumeration"
+        case ProductType():
+            return "record"
+        case SumType():
+            return "sum"
+        case TupleType():
+            return "tuple"
+        case ArrayType():
+            return "array"
+        case ListType():
+            return "list"
+        case SetType():
+            return "set"
+        case DictType():
+            return "dictionary"
+        case ResultType():
+            return "result"
+        case PtrType():
+            return "reference"
+        case FuncType():
+            return "function"
+    return "other"
+
+
+def _read_only(module: Module, ty: SetType | DictType) -> SetType | DictType:
+    """The kind of table *ty* is that may only be read, which every table stands as."""
+    if isinstance(ty, SetType):
+        return module.types.set_type(ty.element, mutable=False)
+    return module.types.dict_type(ty.key, ty.value, mutable=False)
 
 
 def _read_only_table(ty: Type) -> bool:
@@ -4311,6 +4393,9 @@ class Checker:
         #: The name a reference is being taken of, while one is: working the
         #: place out reads the name, and that read is the reference itself.
         self._taking_a_reference: str | None = None
+        # The allocator of the list whose element `_list_element_written` last
+        # made ready, which what is written into a part of it is kept in.
+        self._written_allocator: Value | None = None
         #: The parameters each call handed the arena it stands in, having named
         #: none for them, by the call's identity.
         self._arena_in_force: dict[int, set[int]] = {}
@@ -5273,6 +5358,12 @@ class Checker:
         """
         if not isinstance(expr, ast.Member):
             return None
+        if self._through_a_list(expr):
+            # Asked before anything is lowered: the element on the way is made
+            # writable where it is reached, which is once.
+            said = self._said_to_be(expr)
+            if not isinstance(said, ArrayType) or not said.fixed:
+                return None
         somewhere = self._record_at(builder, expr.base, writing=writing,
                                     below=(expr.name,))
         if somewhere is None:
@@ -5358,6 +5449,13 @@ class Checker:
                     return (value, ty.pointee)
                 return None
             case ast.Element():
+                if writing and isinstance(self._said_to_be(expr.base), ListType):
+                    # A list's element written in part: in the list's own room,
+                    # made so first, as `l⟦i⟧ ← v` makes it.
+                    written = self._list_element_written(builder, expr)
+                    if written is None or not isinstance(written[1], ProductType):
+                        return None
+                    return (written[0], written[1])
                 # An array's elements are where the array is, so one of them is
                 # a place whatever it holds.  The index is checked here as it is
                 # anywhere else: what this answers is one element and not a run.
@@ -8847,7 +8945,11 @@ class Checker:
     def _collection_type(self, ref: ast.CollectionTypeRef) -> Type:
         """Resolve `⸨T⸩` or `⸨K: V⸩`, checking that the key can be one."""
         element = self._resolve_type(ref.element)
-        if element is not ERROR and not _can_be_a_key(element):
+        # A type parameter stands as a key where a generic function is written:
+        # what it is, is settled where a call says, by an argument that is a
+        # table already and whose key was held to this there.
+        if element is not ERROR and not _can_be_a_key(element) \
+                and not isinstance(element, OpaqueType):
             self._diags.emit(D.LANG_COLLECTION_KEY_NOT_HASHABLE, ref.element.span,
                              found=element.written())
             element = ERROR
@@ -13002,6 +13104,9 @@ class Checker:
             self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, stmt.span,
                              name=_path_text(whole))
             return
+        if self._through_a_list(stmt.base):
+            self._list_field_assign(builder, stmt)
+            return
         found = self._record_at(builder, stmt.base, writing=True)
         if found is None:
             self._diags.emit(D.LANG_ASSIGN_NOT_A_RECORD, stmt.base.span)
@@ -13054,6 +13159,81 @@ class Checker:
             self._record_into(builder, place, value, held, stmt.span)
             return
         builder.store(place, value, stmt.span)
+
+    def _list_field_assign(self, builder: IRBuilder, stmt: ast.MemberAssign) -> None:
+        """`l⟦i⟧.name ← v`: one field of an element of a list written, where the
+        element is.
+
+        Held to what writing the element whole is held to (`_lower_list_element_assign`):
+        the list in the place `l` made its own room first -- copied out of the
+        image, which is read-only -- the index checked against how many there
+        are, and what points somewhere copied into the list's allocator, the
+        value it replaces given back.  The rest of the element is not read and
+        not written.  A path of fields, `l⟦i⟧.a.b ← v`, is one offset further in
+        for each.
+        """
+        self._written_allocator = None
+        found = self._record_at(builder, stmt.base, writing=True)
+        if found is None:
+            self._diags.emit(D.LANG_ASSIGN_NOT_A_RECORD, stmt.base.span)
+            return
+        where, ty = found
+        at = _field_index(ty, stmt.name)
+        if at is None:
+            self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, stmt.name_span,
+                             type=ty.written(), name=stmt.name)
+            return
+        held = ty.fields[at][1]
+        if _read_only_table(held):
+            self._diags.emit(D.LANG_PLACE_NOT_WRITABLE, stmt.name_span,
+                             name=stmt.name, found=held.written())
+            return
+        if not self._made_here(where):
+            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
+        allocator = self._written_allocator
+        place = self._field_place(builder, where, ty, at, stmt.span)
+        value = self._lower_into(builder, stmt.value, held, stmt.span)
+        if self._value_type_of(value) is ERROR:
+            return
+        if owned.points(held) and owned.can_own(held) and allocator is not None:
+            replaced = builder.load(place, stmt.span)
+            value = builder.call(owned.own_function(self._module, held),
+                                 (allocator, value), held, stmt.span)
+            builder.store(place, value, stmt.span)
+            owned.give_back(builder, replaced, held, None)
+            return
+        if isinstance(held, ProductType):
+            self._record_into(builder, place, value, held, stmt.span)
+            return
+        builder.store(place, value, stmt.span)
+
+    def _list_element_written(self, builder: IRBuilder, expr: ast.Element
+                              ) -> tuple[Value, Type] | None:
+        """Where one element of a list is, for part of it to be written there:
+        the list in its place given room of its own first, as `l⟦i⟧ ← v` gives
+        it, and the index checked against how many there are.  The list's
+        allocator, which what goes in is kept in, is left in
+        `_written_allocator`."""
+        if len(expr.indices) != 1 or isinstance(expr.indices[0], ast.Range):
+            self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, expr.base.span,
+                             found="a list")
+            return None
+        found = self._list_place(builder, expr.base, expr.base.span,
+                                 "a field written")
+        if found is None:
+            return None
+        place, ty = found
+        at = self._index_into(builder, expr.indices[0], expr.span)
+        if at is None:
+            return None
+        self._made_writable(builder, place, ty, expr.span, expr.base)
+        elements, count, held = self._list_at(builder, place, ty, expr.span)
+        builder.check(builder.compare(CmpPred.ULT, at, count, expr.span),
+                      "an index outside its list", statuses.OUT_OF_RANGE, expr.span)
+        self._written_allocator = builder.extract(held, 2, parts_of(ty)[2],
+                                                  expr.span)
+        return (self._element_place(builder, elements, ty.element, at, expr.span),
+                ty.element)
 
     def _kept_by_the_place(self, where: Value, base: ast.Expr, ty: Type) -> bool:
         """Whether what goes into a place is asked how long it lasts
@@ -13833,6 +14013,14 @@ class Checker:
                                          param.name)
                 if not read:
                     return UndefConst(ERROR)
+                with self._in_scope_of(written):
+                    settled = self._worked_out(param.type, bound)
+                if isinstance(settled, (SetType, DictType)) \
+                        and settled is not found and isinstance(found, (SetType, DictType)) \
+                        and _read_only(self._module, found) is settled:
+                    # A table that may be written handed where one that may only be
+                    # read is wanted: the same handle, nothing generated for it.
+                    value = builder.cast(CastKind.BITCAST, value, settled, one.span)
             args.append(value)
         # The requirements come between the arguments and the instance: they are
         # what the types must satisfy, and an arrow in one of them may settle a
@@ -15383,7 +15571,8 @@ class Checker:
             self._report_mismatch(expr.span, answer.ty, expected)
         return answer
 
-    def _place_written(self, builder: IRBuilder, expr: ast.Expr
+    def _place_written(self, builder: IRBuilder, expr: ast.Expr,
+                       writing: bool = False
                        ) -> tuple[Value, Type, bool, str, bool] | None:
         """Where what *expr* names is, what it holds, whether it may be written,
         and what to call it in a message.
@@ -15400,7 +15589,7 @@ class Checker:
             case ast.Element():
                 return self._place_of_an_element(builder, expr)
             case ast.Member():
-                return self._place_of_a_field(builder, expr)
+                return self._place_of_a_field(builder, expr, writing)
             case ast.Deref():
                 # `&r\N{POSITION INDICATOR}` is the place `r` already names, so it is `r` -- with
                 # whatever this asks for about writing, which the reference in
@@ -16030,9 +16219,12 @@ class Checker:
         found = held.exports.get(expr.name)
         return found if isinstance(found, GlobalVar) else None
 
-    def _place_of_a_field(self, builder: IRBuilder, expr: ast.Member
+    def _place_of_a_field(self, builder: IRBuilder, expr: ast.Member,
+                          writing: bool = False
                           ) -> tuple[Value, Type, bool, str, bool] | None:
-        """Where one field of a record is, for a reference being taken of it."""
+        """Where one field of a record is, for a reference being taken of it --
+        or, where *writing* says so, for the field to be changed in place, which
+        an element of a list on the way is made ready for."""
         shared = self._exported_variable(expr)
         if shared is not None:
             # The variable itself and not a field of one: a path whose first part is
@@ -16040,7 +16232,7 @@ class Checker:
             # that place.  It lasts as long as the program does.
             return (builder.address(shared, expr.span), shared.value_type,
                     shared.mutable, expr.name, True)
-        found = self._record_at(builder, expr.base)
+        found = self._record_at(builder, expr.base, writing=writing)
         if found is None:
             self._diags.emit(D.LANG_REF_NOT_A_PLACE, expr.span)
             return None
@@ -16595,8 +16787,8 @@ class Checker:
         if isinstance(ty, SetType):
             return self._is_live(builder, place, expr.span)
         # The value is read whether the entry holds a key or not: an entry of
-        # the table is a place either way, and what a table that has not been
-        # written holds is zero.  Reading it unasked is what keeps this to one
+        # the table is a place either way, the one after the last written being
+        # there to be read in every table.  Reading it unasked is what keeps this to one
         # branch fewer than it looks like it needs -- the truth value beside the
         # answer is what says whether the answer means anything, and that is
         # asked of the entry's own first word rather than worked out from the
@@ -16695,7 +16887,7 @@ class Checker:
                 self._diags.emit(D.LANG_LIST_CHANGED_NOT_A_LIST, span,
                                  what=changing, found=said.written())
             return None
-        found = self._place_written(builder, expr)
+        found = self._place_written(builder, expr, self._through_a_list(expr))
         if found is None:
             return None
         address, held, may_change, what, _ = found
@@ -17311,7 +17503,8 @@ class Checker:
         if not _names_a_place(expr.args[0]):
             self._diags.emit(D.LANG_TAKE_NOT_A_PLACE, expr.args[0].span)
             return UndefConst(ERROR)
-        found = self._place_written(builder, expr.args[0])
+        found = self._place_written(builder, expr.args[0],
+                                    self._through_a_list(expr.args[0]))
         if found is None:
             return UndefConst(ERROR)
         address, held, may_change, what, _ = found
@@ -17474,6 +17667,10 @@ class Checker:
                                                   ast.BinaryOp.SHORT_OR):
                 return self._both_settled(condition, any)
             case ast.Binary() if condition.op in (ast.BinaryOp.EQUAL,
+                                                  ast.BinaryOp.NOT_EQUAL) \
+                    and (kind := self._settled_kind(condition)) is not None:
+                return kind if condition.op is ast.BinaryOp.EQUAL else not kind
+            case ast.Binary() if condition.op in (ast.BinaryOp.EQUAL,
                                                   ast.BinaryOp.NOT_EQUAL):
                 left = self._type_stood_for(condition.left)
                 right = self._type_stood_for(condition.right)
@@ -17486,6 +17683,34 @@ class Checker:
                 return self._settled_is_record(condition)
             case _:
                 return None
+
+    def _settled_kind(self, condition: ast.Binary) -> bool | None:
+        """Whether `⎕kindof(⌜T⌝) = "KIND"` holds, where one side of *condition*
+        asks it and the other is the literal; nothing where it is not that.
+
+        The kind is the type's own, read off what the type is, and the literal is
+        held to the kinds there are (4282): a misspelt kind would otherwise be a
+        condition that is never true, and its arm never checked.
+        """
+        asked, said = condition.left, condition.right
+        if isinstance(asked, ast.StringLit):
+            asked, said = said, asked
+        if not (isinstance(asked, ast.Call) and isinstance(asked.callee, ast.NameRef)
+                and asked.callee.name == KIND_OF_NAME
+                and isinstance(said, ast.StringLit)):
+            return None
+        if len(asked.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, asked.span,
+                             name=KIND_OF_NAME, expected=1, found=len(asked.args))
+            return False
+        if said.value not in _KINDS:
+            self._diags.emit(D.LANG_KIND_UNKNOWN, said.span, found=said.value,
+                             kinds=", ".join(_KINDS))
+            return False
+        found = self._type_stood_for(asked.args[0])
+        if found is None:
+            return None
+        return _kind_of(found) == said.value
 
     def _settled_is_record(self, call: ast.Call) -> bool | None:
         """Whether `⎕isrecord` was asked of a record.
@@ -19180,7 +19405,19 @@ class Checker:
                 held = self._said_to_be(expr.base)
                 if isinstance(held, ArrayType) and len(expr.indices) == held.rank:
                     return held.element
+                if isinstance(held, ListType) and len(expr.indices) == 1:
+                    return held.element
         return None
+
+    def _through_a_list(self, expr: ast.Expr) -> bool:
+        """Whether the path *expr* goes through an element of a list: a field
+        of `l⟦i⟧`, or of a field of it, however deep."""
+        while isinstance(expr, (ast.Member, ast.Element)):
+            if isinstance(expr, ast.Element) \
+                    and isinstance(self._said_to_be(expr.base), ListType):
+                return True
+            expr = expr.base
+        return False
 
     def _each_call(self, builder: IRBuilder, base: ast.Expr, ty: Type | None,
                    span: Span) -> "ast.Call | object | None":
@@ -22624,8 +22861,12 @@ class Checker:
             left = self._lower_expr(builder, expr.left, context)
             ty = self._comparable(expr.left.span, expr.op,
                                   self._scalar_of(self._value_type_of(left)))
-            if ty is not ERROR:
-                other: Type | None = ty
+            if isinstance(ty, (SetType, DictType)):
+                # Either side may be the writable kind: what is compared is what
+                # the two hold, and the right is asked for the kind both stand as.
+                other: Type | None = _read_only(self._module, ty)
+            elif ty is not ERROR:
+                other = ty
             elif self._value_type_of(left) is ERROR:
                 # Whatever is wrong with the left has been reported, and the
                 # right takes its type from it: handing the error down is what
@@ -22648,11 +22889,19 @@ class Checker:
                                  self._scalar_of(self._value_type_of(right)))
         if ty is ERROR or found is ERROR:
             return UndefConst(ERROR)
-        if found is not ty:
+        if found is not ty and not (
+                isinstance(ty, (SetType, DictType))
+                and isinstance(found, (SetType, DictType))
+                and _read_only(self._module, found) is _read_only(self._module, ty)):
             self._diags.emit(D.LANG_TYPE_OPERAND_MISMATCH, expr.right.span,
                              operator=expr.op.value, expected=ty.written(),
                              found=found.written())
             return UndefConst(ERROR)
+        if isinstance(ty, (SetType, DictType)):
+            if not self._accepts(expected, BOOL):
+                self._report_mismatch(expr.span, BOOL, expected)
+                return UndefConst(ERROR)
+            return self._compared_tables(builder, expr, left, right, ty)
         if isinstance(ty, FloatType) and expr.op in _EXACT_ON_FLOATS:
             # Two floating-point values computed different ways are rarely the
             # one value, so asking whether they are is nearly always the wrong
@@ -22678,6 +22927,32 @@ class Checker:
             return UndefConst(ERROR)
         return builder.compare(signed if signed_reading else unsigned,
                                left, right, expr.span)
+
+    def _compared_tables(self, builder: IRBuilder, expr: ast.Binary, left: Value,
+                         right: Value, ty: SetType | DictType) -> Value:
+        """Lower `=` or `≠` between two sets or two dictionaries.
+
+        **What they hold is compared, and not in which order**: the same count,
+        and every key of one in the other standing for an equal value.  The
+        walk is `__pl4g_table_same`, generated per shape.  A dictionary's
+        values are compared by their own `=`, so one whose values have none is
+        refused (4280) -- a record, a sum, a list.
+        """
+        if isinstance(ty, DictType):
+            missing = tables.not_compared(ty.value)
+            if missing is not None:
+                self._diags.emit(D.LANG_TABLE_VALUES_NOT_COMPARABLE, expr.span,
+                                 operator=expr.op.value, found=missing.written())
+                return UndefConst(ERROR)
+        table_ptr = tables.table_type(self._module)
+        same = builder.call(
+            tables.ensure_same(self._module, self._table_shape(ty)),
+            (builder.cast(CastKind.BITCAST, left, table_ptr, expr.span),
+             builder.cast(CastKind.BITCAST, right, table_ptr, expr.span)),
+            BOOL, expr.span)
+        if expr.op is ast.BinaryOp.EQUAL:
+            return same
+        return builder.binary(BinOp.XOR, same, builder.bool_const(True), expr.span)
 
     def _compared_text(self, builder: IRBuilder, expr: ast.Binary, left: Value,
                        right: Value) -> Value:
@@ -25826,6 +26101,11 @@ class Checker:
                 # condition the compiler settles never lowering what is in it.
                 self._diags.emit(D.LANG_ISRECORD_OUTSIDE_COMPTIME, expr.span)
                 return UndefConst(ERROR)
+            if given == KIND_OF_NAME:
+                self._diags.emit(D.LANG_KIND_ASKED_OUTSIDE_COMPTIME, expr.span)
+                return UndefConst(ERROR)
+            if given == ALTERNATIVES_NAME:
+                return self._lower_alternatives(builder, expr, expected)
             if given in _ASKS_ABOUT_A_PIECE:
                 return self._lower_asked(builder, expr, given, expected)
             if given == TYPEOF_NAME:
@@ -27166,6 +27446,62 @@ class Checker:
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
         return builder.make_tuple(tuple(leaves), answer, expr.span)
+
+    def _lower_alternatives(self, builder: IRBuilder, expr: ast.Call,
+                            expected: Type | None) -> Value:
+        """Lower `⎕alternatives(v)`: a sum's parts as a tuple of name and view.
+
+        **One pair for every part, in the order the type declares them**, the
+        view of a part's type: where the sum is, one element long where its tag
+        names that part, and none long where it names another.  Nothing is read
+        but the tag; what a part carries is read only through the view, and a
+        view of none has nothing in it to read -- which is what keeps a part the
+        sum does not hold from being read at all.  A part that carries nothing is
+        a view of a `true` in the frame, the value it is written with.
+
+        It is `⎕fields` for a sum: what lets a generic definition write one it
+        was never told about, walking it with `comptime foreach`.
+        """
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=ALTERNATIVES_NAME, expected=1,
+                             found=len(expr.args))
+            return UndefConst(ERROR)
+        given = self._lower_expr(builder, expr.args[0], None)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(found, SumType):
+            self._diags.emit(D.LANG_ALTERNATIVES_NOT_A_SUM, expr.args[0].span,
+                             found=found.written())
+            return UndefConst(ERROR)
+        span = expr.span
+        place = builder.cast(CastKind.BITCAST, given,
+                             self._module.types.ptr_type(found, mutable=True), span)
+        tag = builder.load(self._tag_place(builder, place, found, span), span)
+        truth: Value | None = None
+        pairs: list[Value] = []
+        for at, (name, held) in enumerate(found.variants):
+            shown = BOOL if held is VOID else held
+            view = self._module.types.array_type(shown, (None,))
+            if held is VOID and truth is None:
+                truth = builder.frame(BOOL, span)
+                builder.store(truth, builder.bool_const(True), span)
+            where = truth if held is VOID else place
+            assert where is not None
+            start = builder.cast(CastKind.BITCAST, where, parts_of(view)[0], span)
+            count = builder.cast(CastKind.ZEXT, builder.compare(
+                CmpPred.EQ, tag, builder.int_const(U8, at), span), U64, span)
+            pairs.append(self._made_tuple(
+                builder, (self._written_text(builder, name, span),
+                          self._view(builder, start, [count],
+                                     [builder.int_const(U64, 1)], view, span)),
+                self._module.types.tuple_type((STR, view)), span))
+        whole = self._module.types.tuple_type(tuple(one.ty for one in pairs))
+        if not self._accepts(expected, whole):
+            self._report_mismatch(span, whole, expected)
+            return UndefConst(ERROR)
+        return self._made_tuple(builder, pairs, whole, span)
 
     def _fields_of_a_type(self, expr: ast.Expr) -> Type | None:
         """The type `⎕fields(⌜T⌝)` asks about, where it asks about a type rather
@@ -29731,6 +30067,13 @@ class Checker:
                 continue
             if isinstance(seen, ExtractInst):
                 made = seen.operands[0]
+                if seen.index == 0 and isinstance(made, LoadInst) \
+                        and isinstance(made.ty, ListType):
+                    # The elements of a list are that list's alone -- a list is
+                    # a value, and one shared is copied before it is written --
+                    # so those of a list in a place this call made are too.
+                    seen = made.operands[1]
+                    continue
                 # A part of a view made here is what was put in it.
                 seen = made.operands[seen.index] \
                     if isinstance(made, TupleInst) and seen.index < len(made.operands) \

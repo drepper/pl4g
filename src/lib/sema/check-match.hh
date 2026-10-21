@@ -85,6 +85,11 @@
     // Lower a comparison, whose answer is a truth value.
     ir::Value* lower_comparison(ir::Builder& builder, const ast::Binary* expr, const ir::Type* expected);  // check.py:22096
     // Lower a comparison of two strings.
+    // `=` or `≠` between two sets or two dictionaries: what they hold, not in which order.
+    ir::Value* compared_tables(ir::Builder& builder, const ast::Binary* expr, ir::Value* left, ir::Value* right,
+                               const ir::Type* ty);
+    // The kind of table `ty` is that may only be read, which every table stands as.
+    const ir::Type* table_read_only_of(const ir::Type* ty);
     ir::Value* compared_text(ir::Builder& builder, const ast::Binary* expr, ir::Value* left, ir::Value* right);  // check.py:22186
     // Lower a comparison that allows for the errors floating point makes.
     ir::Value* lower_approximate(ir::Builder& builder, const ast::Binary* expr, const ir::Type* expected);  // check.py:22215

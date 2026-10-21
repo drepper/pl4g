@@ -4202,6 +4202,28 @@ is the polarity `unless` wants, and `unless` is `ast.While` with `until` set: on
 flag, one negation where the condition is lowered, and every other thing a loop
 has -- labels, `break`, `continue`, an `else` arm -- unchanged.
 
+A field of an element of a list, written
+----------------------------------------
+
+`l⟦i⟧.name ← v` is `_list_field_assign`, which `_lower_member_assign` sends a statement to where `_through_a_list` finds an element
+of a list on the path -- an `ast.Element` whose base `_said_to_be` a `ListType`, which it now answers for a list's element as it
+does for an array's.  The place is `_record_at(…, writing=True)`, whose element case for a list is `_list_element_written`: the
+list's place (`_list_place`, which asks `mut` and that no view of the list is out), the index (`_index_into`), `_made_writable`, the
+bounds `check` and `_element_place` -- what `_lower_list_element_assign` does before it writes, in the same order -- and the list's
+allocator left in `_written_allocator`.  The field is then `_field_place` from there, and what is written goes as an element does:
+where the field's type points somewhere and `owned.can_own` it, the old value is loaded, the new one copied with
+`owned.own_function` into that allocator, stored, and the old given back; a record without anything to own is `_record_into`;
+anything else is a store.  A path through records is `_record_at`'s member case unchanged, and a path through a list held in a
+field of an element (`l⟦i⟧.sub⟦j⟧.x`) is the same walk again, `_list_place` asking `_place_written(…, writing=True)`, whose
+`_place_of_a_field` asks `_record_at` for writing -- so the outer list is made writable before the inner one's place is read.
+
+Three things changed under it.  `_made_here` steps through an `extract` of the elements of a `load` of a list to the place the list
+was loaded from, a list's elements being its own, so writing an element's field of a local list is no effect, as writing the
+element is not.  `_addressed_in` gives a place to the name at the root of a path through an element that a statement changes in
+place (`_named_through_an_element`), since writing it may copy the list out of the image.  And `_array_in_a_field` answers nothing
+straight away for a path through a list whose field is not an array whose type says its shape, so that the element is made ready
+once and not twice.
+
 A dense array, an index, and what a table is rebuilt for
 --------------------------------------------------------
 
@@ -4219,9 +4241,23 @@ its entry (`(word ^ hash) < 2^40` is one exclusive or and one comparison); only 
 given up, and its key compared.
 
 **The answer for a key that is not there is the entry after the last written**, `entries + used × stride`, which is where `put`
-would write it, and which is empty -- never written, so nought, the room the arena hands out having been nought.  So
-`__pl4g_table_slot` answers an entry either way, as it did, and a lookup reads the entry's first word for whether and the value
-unasked: nothing that calls it changed.  The extra entry is what makes that entry exist when the index is as full as it gets.
+would write it, and whose state word says it is empty.  So `__pl4g_table_slot` answers an entry either way, as it did, and a
+lookup reads the entry's first word for whether and the value unasked -- which is then whatever the room held, and the truth value
+beside it says nobody may read it: nothing that calls it changed.  The extra entry is what makes that entry exist when the index is
+as full as it gets.
+
+**Nothing in a table's room is read before the table has written it.**  The room the arena hands out is the system's, nought; the
+heap's is what was given back, as it was, its first word the free list's link.  So the two things a table reads before writing
+them are written when the room is taken: **the index is cleared** -- in `__pl4g_table_new` one store of a run of eight zero words
+(`_clear_words`), in `__pl4g_table_grow` a loop of such runs over the new index (`_clear_index`), every index being a power of two
+of words no smaller than eight -- and **the state of the entry after the last written is marked empty**: by `new` for the first
+entry, by `grow` for the one after the moved keys, and by `put` for the one after the key it writes, which the load the table is
+rebuilt at leaves inside the room.  A run of a constant stored is what the back ends make wide: two 32-byte stores on x86-64 at
+`v3` and `v4`, four of sixteen at `v1` and on AArch64, eight words on RISC-V.  This costs a store per insertion and an index's worth of
+stores per rebuild, where clearing whole runs would store every entry's bytes again; a zeroing allocation, which cleared only what
+came off a free list, would have cleared the entries as well, and been a second entry into the runtime for one caller.  Nothing
+else the compiler generates reads room before writing it: a list's elements past its count are never read, and a record, a
+closure's environment and a generator's frame are written whole when they are made.
 
 **`put` writes a new key last**: the probe stops at a word of nought, which becomes the new entry's word, and the entry at `used`
 is written with the state and the key; `used` and `count` go up by one.  A key that is there is answered where it is, and its
@@ -4229,6 +4265,15 @@ value replaced by the caller -- so it keeps its place.  Taking a key out (`__pl4
 leaves the word of the index naming it, so a probe walking past it to what was put in after it still walks past; a key put back
 later is a new key and goes last, its old entry a hole.  `__pl4g_table_next` and `__pl4g_table_select` walk the dense array from
 nought to `used`, stepping past the holes, which is what makes a walk, and the set operators' answers, in order.
+
+**`=` on two tables is `__pl4g_table_same.<shape>(one, other)`** (`tables.ensure_same`), a truth value: the same address answers
+at once; counts that differ answer at once; otherwise the dense array of `one` is walked from nought to `used`, each live key
+looked up in `other` with `__pl4g_table_slot`, and the walk stops at the first key `other` does not hold or -- for a dictionary --
+holds standing for a value that differs, compared with `=` of the value's type (`_same_value`: text through
+`__pl4g_str_compare`, everything else one comparison).  `≠` is the answer with its bit turned round.  `_lower_comparison` lowers
+the right operand as the read-only kind of the left's table type and holds the two to it, so `mut ⸨K⸩` and `⸨K⸩` compare;
+`tables.not_compared` names a value type `=` is not defined on, which `_compared_tables` refuses with 4280.  A value is never a
+table (4445), so the function never calls another of its kind.
 
 **The table carries two counts.**  `count` is how many keys it holds, which is what `#` answers; `used` is how many entries are
 written, the keys and the holes, which is also how many words of the index are taken.  The load is measured on `used`: `put` calls
@@ -5246,6 +5291,18 @@ not, and an element written is checked with its path in the same way.
 (`_written_out_per_field`): each turn binds the name to a one-member tuple holding the field's name and records the field's type in
 `_field_types`, by the local's identity.  `_type_stood_for` answers `f⟦1⟧` from there, which is what `⎕typename` and `comptime if`
 ask; `_lower_expr` refuses it as a value (4691).  Anywhere else `⎕fields(⌜T⌝)` of a record type is 4692.
+
+**`⎕kindof` and `⎕alternatives`.**  `_settled` asks `_settled_kind` of an `=` or `≠` before it compares two types: one side a
+call of `⎕kindof` with one argument, the other a string literal, the literal held to `_KINDS` (4282) and the type `_type_stood_for`
+answers named by `_kind_of` -- a `match` over the IR's type classes.  A `⎕kindof` lowered as a value is 4281, as `⎕isrecord` is
+4605.  `_lower_alternatives` reads the tag once (`_tag_place`) and builds, for each variant in order, the pair of the name's text
+and a one-dimensional view: the start the sum's own place bitcast to the part's pointer -- or, for a `void` part, a `frame` of a
+`bool` holding `true`, made once per call -- the count the tag compared with the variant's index and zero-extended, the stride one;
+the pairs and the whole go through `_made_tuple`.  `std.text` uses them for the four new arms; `list_text`, `set_text` and
+`dictionary_text` are generic over `[E']`, `⸨K'⸩` and `⸨K': V'⸩`, which `_collection_type` now accepts with an `OpaqueType` as the
+key, and a call reading the types out of a writable table hands it on bitcast to the read-only parameter type it settled
+(`_lower_generic_call`, after `_reading`).  `tests/compiler/test_std_whole.py` lets a `comptime foreach` over `⎕alternatives` go
+untyped, as one over `⎕fields` does.
 
 **An empty table at the top level** (`_empty_in_the_heap`, `_empty_table_constant`): the block and a run of `FIRST_CAPACITY` empty
 entries are image variables made writable (`_image_variable(…, mutable=True)`), the block's arena word the address of

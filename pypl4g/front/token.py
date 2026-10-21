@@ -285,6 +285,21 @@ BYTES_NAME: Final[str] = "".join((BUILTIN_GLYPH, "bytes"))
 #: is what this language has in place of overloading.
 IS_RECORD_NAME: Final[str] = "".join((BUILTIN_GLYPH, "isrecord"))
 
+#: `⎕kindof(⌜T⌝)` names what kind of type `T` is -- `"list"`, `"sum"`,
+#: `"record"` -- as text the compiler settles, compared with a literal in a
+#: `comptime if` and standing nowhere else: one question answering which, rather
+#: than a predicate for each kind.
+KIND_OF_NAME: Final[str] = "".join((BUILTIN_GLYPH, "kindof"))
+
+#: `⎕alternatives(v)` answers a sum's parts as a tuple of pairs, each the part's
+#: name and a view of what it carries -- one element where the sum holds that
+#: part, none where it does not -- in the order the type declares them.  A view
+#: and not the value, because only one part is there to be read, and a view of
+#: none is what says that without reading anything; a part that carries nothing
+#: is a view of the `true` it is written with.  It is what lets a generic
+#: definition take a sum apart it does not know, as `⎕fields` takes a record.
+ALTERNATIVES_NAME: Final[str] = "".join((BUILTIN_GLYPH, "alternatives"))
+
 #: `⎕fields(v)` answers a record's fields as a tuple of pairs, each pair the
 #: field's name and its value, **in the order the type declares them**.  A tuple
 #: because `comptime foreach` walks one and because the fields are of different

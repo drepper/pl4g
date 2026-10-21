@@ -104,7 +104,7 @@
     // The variable another module exports under this path, or nothing.
     ir::GlobalVar* exported_variable(const ast::Member* expr);  // check.py:15722
     // Where one field of a record is, for a reference being taken of it.
-    std::optional<PlaceTaken> place_of_a_field(ir::Builder& builder, const ast::Member* expr);  // check.py:15740
+    std::optional<PlaceTaken> place_of_a_field(ir::Builder& builder, const ast::Member* expr, bool writing = false);  // check.py:15740
     // Where one element of an array is, for a reference being taken of it.
     // Where one element of an array is, for a reference being taken of it --
     // or of a list, where `of_a_list` says the place is only read, there and
@@ -256,6 +256,8 @@
     // compiler can settle.
     std::optional<bool> settled(const ast::Expr* condition);  // check.py:17024
     // Whether `⎕isrecord` was asked of a record.
+    // Whether `⎕kindof(⌜T⌝) = "KIND"` holds, where `condition` asks it.
+    std::optional<bool> settled_kind(const ast::Binary* condition);
     std::optional<bool> settled_is_record(const ast::Call* call);  // check.py:17060
     // Both sides of a logical operator, where both are settled.
     std::optional<bool> both_settled(const ast::Binary* condition, const std::function<bool(std::span<const bool>)>& joined);  // check.py:17079

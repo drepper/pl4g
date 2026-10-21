@@ -1,0 +1,57 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **`=` asks whether two tables hold the same thing, and not in which order.**  Two
+※ sets are equal where they hold the same keys; two dictionaries where they hold
+※ the same keys and each stands for an equal value in both, compared by that
+※ value's own `=` -- text by its bytes.  The counts
+※ are compared first, and then every key of one is looked up in the other.  A
+※ table that may be written and one that may only be read compare as tables do;
+※ what is compared is what they hold.
+※
+※ Compare **Python**, whose `==` on two `dict`s or two `set`s is this, order and
+※ all; **Rust**'s `PartialEq` for `HashMap` and `HashSet`, the same; **Go**, which
+※ has no `==` on maps and leaves it to `maps.Equal`; **Java**'s `Map.equals`.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let a: ⸨u8⸩ = ⸨1u8, 2u8, 3u8⸩ in ⎕static
+    let b: mut ⸨u8⸩ = ⸨3u8, 1u8⸩
+    b ← b | ⸨2u8⸩
+    if a ≠ b ∨ ¬(a = b) ∨ a = ⸨1u8, 2u8⸩ ∨ a = ⸨1u8, 2u8, 4u8⸩:
+        return 1u6
+    if a ≠ a ∨ b ≠ b:
+        return 2u6
+
+    ※ filled in two different orders, and through rebuilds
+    let one: mut ⸨u64: str⸩ = ⸨⸩
+    let two: mut ⸨u64: str⸩ = ⸨⸩
+    let i: mut u64 = 3u64
+    foreach k := 0u64…1000u64:
+        one⸨k⸩ ← ⍕k
+        two⸨i⸩ ← ⍕i
+        i ← (i + 7u64) % 1000u64 ?? 0u64
+    if #one ≠ 1000 ∨ one ≠ two:
+        return 3u6
+    two⸨5u64⸩ ← "five"
+    if one = two:
+        return 4u6
+    two⸨5u64⸩ ← "5"
+    if one ≠ two:
+        return 5u6
+    †two⸨5u64⸩
+    if one = two:
+        return 6u6
+    two⸨5u64⸩ ← "5"
+    if one ≠ two:
+        return 7u6
+
+    ※ a key the other has not, with the counts the same
+    let c: ⸨str: u64⸩ = ⸨"x": 1u64, "y": 2u64⸩ in ⎕static
+    let d: mut ⸨str: u64⸩ = ⸨"x": 1u64, "z": 2u64⸩
+    if c = d:
+        return 8u6
+    †d⸨"z"⸩
+    d⸨"y"⸩ ← 2u64
+    if c ≠ d: 9u6 else: 0u6

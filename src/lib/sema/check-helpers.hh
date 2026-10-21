@@ -54,6 +54,9 @@ namespace pl4g::sema {
   // Add to `into` every name `block` assigns, looking through nested bodies.
   void collect_assigned(const ast::Block* block, std::vector<std::string>& into);  // check.py:391
   // Add to `into` every name `&` is written in front of, anywhere below `node`.
+  // The name a path through an element starts from -- `l` of `l⟦i⟧.name` --
+  // and nothing for any other path.
+  std::optional<std::string> named_through_an_element(const ast::Expr* expr);
   void addressed_in(const ast::Node* node, NameSet& into);  // check.py:412
   // Add to `into` every name read through with `⌖` below `node`: `r⌖`, and the target of `r⌖ ← v`. Such
   // a read is a use of the place the reference names, not a copy of the reference -- which every other

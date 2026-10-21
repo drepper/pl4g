@@ -74,7 +74,8 @@ def _untyped(node: object, found: list[str], path: str) -> None:
         case ast.ForEach() if node.type is None and node.name != "_" and not (
                 node.comptime and isinstance(node.iterable, ast.Call)
                 and isinstance(node.iterable.callee, ast.NameRef)
-                and node.iterable.callee.name == "\N{APL FUNCTIONAL SYMBOL QUAD}fields"):
+                and node.iterable.callee.name in ("\N{APL FUNCTIONAL SYMBOL QUAD}fields",
+                                                  "\N{APL FUNCTIONAL SYMBOL QUAD}alternatives")):
             found.append("".join((path, ": foreach ", node.name)))
     if is_dataclass(node):
         for one in fields(node):
@@ -88,9 +89,9 @@ def test_std_writes_every_type() -> None:
     """The modules the installation provides say every type they use: nothing in
     them is left for the compiler to work out.
 
-    The one exception is a `comptime foreach` over `⎕fields`, whose name is of a
-    different type on every turn and so of none that could be written; the
-    modules are system modules, so it is not logged either."""
+    The one exception is a `comptime foreach` over `⎕fields` or `⎕alternatives`,
+    whose name is of a different type on every turn and so of none that could be
+    written; the modules are system modules, so it is not logged either."""
     found: list[str] = []
     for where in system_modules():
         for path in sorted(where.glob("*.pl4g")):

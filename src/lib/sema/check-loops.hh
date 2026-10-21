@@ -42,7 +42,9 @@
     const ast::Expr* walking_each(const ir::Type* ty, Span span);  // check.py:18717
     // What `expr` is, as far as can be said before it is lowered: what `_hint_of` says, and besides a
     // field of a record and an element of an array, which is what a walk is most often written over.
-    const ir::Type* said_to_be(const ast::Expr* expr);  // check.py:18733
+    const ir::Type* said_to_be(const ast::Expr* expr);
+    // Whether the path `expr` goes through an element of a list.
+    bool through_a_list(const ast::Expr* expr);  // check.py:18733
     // `T.each(base)`, the call `base.each()` stands for, where `ty` -- what `base` is -- has an `each`;
     // nothing where it has none, and `_REFUSED` where it has one the value cannot be handed to.
     Held each_call(ir::Builder& builder, const ast::Expr* base, const ir::Type* ty, Span span);  // check.py:18755

@@ -526,7 +526,10 @@ namespace pl4g::sema {
     std::optional<std::tuple<KeySet, std::string>> answer_made_in;  // check.py:4187
     // The name a reference is being taken of, while one is: working the
     // place out reads the name, and that read is the reference itself.
-    std::optional<std::string> taking_a_reference;  // check.py:4190
+    std::optional<std::string> taking_a_reference;
+    // The allocator of the list whose element `list_element_written` last made
+    // ready, which what is written into a part of it is kept in.
+    ir::Value* written_allocator = nullptr;  // check.py:4190
     // The parameters each call handed the arena it stands in, having named
     // none for them, by the call's identity.
     Dict<std::int64_t, KeySet> arena_in_force;  // check.py:4193

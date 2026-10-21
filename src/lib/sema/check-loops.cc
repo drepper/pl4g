@@ -836,12 +836,28 @@ namespace pl4g::sema {
       }
     } else if (auto element = ast::as<ast::Element>(expr)) {
       if (std::ranges::none_of(element->indices, [](const ast::Expr* one) { return ast::is<ast::Range>(one); })) {
-        auto held = ir::as<ir::ArrayType>(said_to_be(element->base));
+        auto base = said_to_be(element->base);
+        auto held = ir::as<ir::ArrayType>(base);
         if (held != nullptr && element->indices.size() == held->rank())
           return held->element;
+        if (auto list = ir::as<ir::ListType>(base); list != nullptr && element->indices.size() == 1)
+          return list->element;
       }
     }
     return nullptr;
+  }
+
+  bool Checker::through_a_list(const ast::Expr* expr)
+  {
+    while (ast::is<ast::Member>(expr) || ast::is<ast::Element>(expr)) {
+      if (auto element = ast::as<ast::Element>(expr)) {
+        if (ir::is<ir::ListType>(said_to_be(element->base)))
+          return true;
+        expr = element->base;
+      } else
+        expr = ast::as<ast::Member>(expr)->base;
+    }
+    return false;
   }
 
   Held Checker::each_call(ir::Builder& builder, const ast::Expr* base, const ir::Type* ty, Span span)

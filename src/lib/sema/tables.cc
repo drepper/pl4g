@@ -224,9 +224,61 @@ namespace pl4g::sema::tables {
     }
 
 
+    // How many words of an index are cleared at a time: as many as the
+    // smallest index has, which every index is a multiple of.
+    constexpr std::int64_t cleared_at_once = first_capacity;
+
+
+    // Store nought over `words` words from `at`, as one run, which the back
+    // ends store as wide as a machine's registers are.
+    void clear_words(ir::Builder& builder, ir::Value* at, std::int64_t words)
+    {
+      auto run = ir::vec_type(ir::u64(), static_cast<unsigned>(words));
+      auto place = builder.cast(CastKind::bitcast, at, mut_ptr(run));
+      auto zeroes = builder.splat(number(builder, 0), run);
+      builder.store(place, zeroes);
+    }
+
+
+    // Store nought over the `words` words of an index at `index`: a loop of
+    // runs of `cleared_at_once` words, an index being a power of two of words
+    // and never fewer than that.
+    void clear_index(ir::Function& func, ir::Builder& builder, ir::Value* index, ir::Value* words)
+    {
+      auto loop = func.add_block("clear");
+      auto body = func.add_block("clearing");
+      auto done = func.add_block("cleared");
+      ir::Value* end;
+      {
+        auto size = builder.binary(BinOp::wrap_mul, words, number(builder, word));
+        end = builder.binary(BinOp::add, index, size);
+      }
+      builder.br(loop, Args{ index, builder.memory() });
+      builder.position_at(loop);
+      auto at = loop->add_param(index->ty, "at");
+      take_memory(builder, loop);
+      {
+        auto here = builder.cast(CastKind::bitcast, at, ir::u64());
+        auto there = builder.cast(CastKind::bitcast, end, ir::u64());
+        branch_with_memory(builder, builder.compare(CmpPred::ult, here, there), body, done);
+      }
+      builder.position_at(body);
+      take_memory(builder, body);
+      clear_words(builder, at, cleared_at_once);
+      {
+        auto next = builder.binary(BinOp::add, at, number(builder, cleared_at_once * word));
+        builder.br(loop, Args{ next, builder.memory() });
+      }
+      builder.position_at(done);
+      take_memory(builder, done);
+    }
+
+
     // `__pl4g_table_new(arena, stride)`: a table with room for a few entries,
     // the block and, in a second allocation, the index with the dense array of
-    // entries straight after it.
+    // entries straight after it.  The index is cleared, and the first entry's
+    // state: the heap hands out again what was given back, as it was, and
+    // those are all of the room a table reads before it writes.
     ir::Function* build_new(ir::Module& module)
     {
       auto table_ptr = table_type(module);
@@ -254,6 +306,11 @@ namespace pl4g::sema::tables {
       write_address(builder, block, entries_field,
                     builder.binary(BinOp::add, run, number(builder, first_capacity * word)));
       write(builder, block, seed_field, builder.call(seed_function(module), {}, ir::u64()));
+      clear_words(builder, as(builder, run, ir::u64()), first_capacity);
+      {
+        auto past = builder.binary(BinOp::add, run, number(builder, first_capacity * word));
+        write(builder, as(builder, past, ir::u64()), state_at, number(builder, empty));
+      }
       builder.ret(block);
       return func;
     }
@@ -454,6 +511,8 @@ namespace pl4g::sema::tables {
       write_address(builder, table, entries_field, entries);
       write(builder, table, mask_field, mask);
       write(builder, table, seed_field, seed);
+      // The room may be the heap's given back and taken again, holding anything.
+      clear_index(*func, builder, index, words);
       builder.br(walk, Args{ number(builder, 0), number(builder, 0), builder.memory() });
 
       // Every entry of the old dense array, in order.
@@ -522,12 +581,14 @@ namespace pl4g::sema::tables {
         builder.br(walk, Args{ next, kept, builder.memory() });
       }
 
-      // No holes in the new array: as many entries written as there are keys.
+      // No holes in the new array: as many entries written as there are keys,
+      // and the one after them, which a missing key's lookup reads, empty.
       builder.position_at(done);
       auto total = done->add_param(ir::u64(), "total");
       take_memory(builder, done);
       write(builder, table, count_field, total);
       write(builder, table, used_field, total);
+      write(builder, entry_of(builder, entries, total, stride), state_at, number(builder, empty));
       builder.ret();
       return func;
     }
@@ -605,6 +666,10 @@ namespace pl4g::sema::tables {
       }
       write(builder, made, state_at, number(builder, live));
       store_key(builder, shape, made, key);
+      // The entry after it, where the next key goes and what a missing key's
+      // lookup reads, empty: the dense array has room for it.
+      write(builder, builder.binary(BinOp::add, made, number(builder, shape.stride())), state_at,
+            number(builder, empty));
       write(builder, table, used_field, builder.binary(BinOp::wrap_add, used, number(builder, 1)));
       write(builder, table, count_field,
             builder.binary(BinOp::wrap_add, read(builder, table, count_field), number(builder, 1)));
@@ -693,6 +758,108 @@ namespace pl4g::sema::tables {
       builder.position_at(done);
       done->add_param(ir::mem_type(), "mem");
       builder.ret();
+      return func;
+    }
+
+
+    // Whether two values held in tables are equal, as `=` says of them: text
+    // by its bytes, everything else `=` is defined on by one comparison.
+    ir::Value* same_value(ir::Builder& builder, const ir::Type* ty, ir::Value* one, ir::Value* other)
+    {
+      if (ty != ir::str_type())
+        return builder.compare(CmpPred::eq, one, other);
+      auto callee = strings::compare_function(builder.module());
+      auto [one_bytes, one_count] = taken_apart(builder, one);
+      auto [other_bytes, other_count] = taken_apart(builder, other);
+      auto order = builder.call(callee, Args{ one_bytes, one_count, other_bytes, other_count }, ir::i64());
+      return builder.compare(CmpPred::eq, order, builder.int_const(ir::i64(), 0));
+    }
+
+
+    // `__pl4g_table_same(one, other)`: whether two tables hold the same thing
+    // -- the same count, and every key of the first found in the second with
+    // an equal value -- answered at once where the two are one table.
+    ir::Function* build_same(ir::Module& module, const Shape& shape)
+    {
+      auto table_ptr = table_type(module);
+      auto [func, fresh] = generated(module, named(same_symbol, shape), Types{ table_ptr, table_ptr }, ir::bool_type());
+      if (! fresh)
+        return func;
+      ensure_runtime(module, shape);
+      auto slot_of = build_slot(module, shape);
+      auto entry = func->add_block();
+      auto counted = func->add_block("counted");
+      auto walk = func->add_block("walk");
+      auto look = func->add_block("look");
+      auto live_block = func->add_block("live");
+      ir::BasicBlock* held = shape.value != nullptr ? func->add_block("held") : nullptr;
+      auto onward = func->add_block("onward");
+      auto same = func->add_block("same");
+      auto differs = func->add_block("differs");
+      ir::Builder builder(module, *func);
+      builder.position_at(entry);
+      auto one = entry->add_param(table_ptr, "one");
+      auto other = entry->add_param(table_ptr, "other");
+      branch_with_memory(builder, same_address(builder, one, other), same, counted);
+
+      builder.position_at(counted);
+      take_memory(builder, counted);
+      auto used = read(builder, one, used_field);
+      auto stride = number(builder, shape.stride());
+      auto entries = read_address(builder, one, entries_field, ir::u64());
+      {
+        auto mine = read(builder, one, count_field);
+        auto theirs = read(builder, other, count_field);
+        auto cond = builder.compare(CmpPred::eq, mine, theirs);
+        auto start = number(builder, 0);
+        auto mem = builder.memory();
+        builder.condbr(cond, walk, differs, Args{ start, mem }, Args{ mem });
+      }
+
+      builder.position_at(walk);
+      auto at = walk->add_param(ir::u64(), "at");
+      take_memory(builder, walk);
+      branch_with_memory(builder, builder.compare(CmpPred::uge, at, used), same, look);
+
+      builder.position_at(look);
+      take_memory(builder, look);
+      auto place = entry_of(builder, entries, at, stride);
+      branch_with_memory(builder, builder.compare(CmpPred::eq, builder.load(place), number(builder, live)), live_block,
+                         onward);
+
+      builder.position_at(live_block);
+      take_memory(builder, live_block);
+      ir::Value* there;
+      {
+        auto key = load_key(builder, shape, place);
+        there = builder.call(slot_of, Args{ other, key }, table_ptr);
+      }
+      auto found = builder.compare(CmpPred::eq, builder.load(there), number(builder, live));
+      if (held == nullptr)
+        branch_with_memory(builder, found, onward, differs);
+      else {
+        branch_with_memory(builder, found, held, differs);
+        builder.position_at(held);
+        take_memory(builder, held);
+        auto mine = load_value(builder, shape, place);
+        auto theirs = load_value(builder, shape, there);
+        branch_with_memory(builder, same_value(builder, shape.value, mine, theirs), onward, differs);
+      }
+
+      builder.position_at(onward);
+      take_memory(builder, onward);
+      {
+        auto next = builder.binary(BinOp::wrap_add, at, number(builder, 1));
+        builder.br(walk, Args{ next, builder.memory() });
+      }
+
+      builder.position_at(same);
+      take_memory(builder, same);
+      builder.ret(builder.bool_const(true));
+
+      builder.position_at(differs);
+      take_memory(builder, differs);
+      builder.ret(builder.bool_const(false));
       return func;
     }
 
@@ -1003,6 +1170,21 @@ namespace pl4g::sema::tables {
     build_next(module);
     build_slot(module, shape);
     build_put(module, shape);
+  }
+
+
+  const ir::Type* not_compared(const ir::Type* ty)
+  {
+    if (ir::is<ir::IntType>(ty) || ir::is<ir::FloatType>(ty) || ir::is<ir::EnumType>(ty) || ty == ir::bool_type()
+        || ty == ir::char_type() || ty == ir::str_type())
+      return nullptr;
+    return ty;
+  }
+
+
+  ir::Function* ensure_same(ir::Module& module, const Shape& shape)
+  {
+    return build_same(module, shape);
   }
 
 

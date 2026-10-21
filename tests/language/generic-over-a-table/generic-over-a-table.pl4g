@@ -1,0 +1,31 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A generic function may take a set or a dictionary of a type parameter**, `⸨K'⸩` and
+※ `⸨K': V'⸩`, and read what the table holds out of the argument it is handed.  A type
+※ parameter stands as a key where the function is written: what it is, is settled
+※ where a call says, by an argument that is a table already, whose key was held to
+※ being one there.  A table that may be written is handed where one that may only be
+※ read is wanted, as anywhere else -- the same handle, nothing generated for it.
+
+let std := ⎕import("std")
+
+fn keys(d: ⸨K': V'⸩) → u64:
+    let n: mut u64 = 0u64
+    foreach _, _: 〈K', V'〉 = d:
+        n ← n + 1u64
+    n
+
+fn largest(s: ⸨K'⸩, least: K') → K' pre(K' < K' → bool):
+    let best: mut K' = least
+    foreach k: K' = s:
+        if best < k:
+            best ← k
+    best
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let d: mut ⸨str: u8⸩ = ⸨⸩
+    d⸨"a"⸩ ← 1u8
+    d⸨"b"⸩ ← 2u8
+    let s: ⸨u16⸩ = ⸨3u16, 9u16, 4u16⸩ in ⎕static
+    if keys(d) ≠ 2u64 ∨ largest(s, 0u16) ≠ 9u16: 1u6 else: 0u6

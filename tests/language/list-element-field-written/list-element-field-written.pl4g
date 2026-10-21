@@ -1,0 +1,68 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **`l⟦i⟧.name ← v` writes one field of an element of a list, where the element
+※ is.**  It is held to what writing the element whole is: the index is checked
+※ against how many there are, a list in the image is copied out into room of its
+※ own before anything is written, and what points somewhere -- text, a list -- is
+※ copied into the list's allocator, the value it replaces given back.  The rest of
+※ the element is not read and not written.  A path of fields goes one offset
+※ further in for each, `l⟦i⟧.at.x ← v`, and a list held in a field is changed in
+※ place as any list is, `l⟦i⟧.items⟦j⟧ ← v` and `l⟦i⟧.items ⧺← more`.
+※
+※ Compare **Rust**'s `v[i].name = x`, which borrows the element mutably for the
+※ write; **Go**'s `s[i].name = x` on a slice of structs, the same place; **C++**'s
+※ `v[i].name = x`; **Python**'s `l[i].name = x`, which writes the object the list
+※ refers to rather than a part of the list.
+
+let std := ⎕import("std")
+
+type Point = x : u32 ; y : u32
+type Member = key : str ; at : Point
+type Bag = n : u64 ; items : [u64]
+type Shelf = bags : [Bag]
+
+let fixed: [Point] = [Point(.x ← 1u32, .y ← 2u32)] in ⎕static
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: mut [Member] = []
+    let b: mut [Bag] = []
+    foreach i := 0u64…10u64:
+        l ⧺← [Member(.key ← ⍕i, .at ← Point(.x ← 0u32, .y ← 0u32))]
+        b ⧺← [Bag(.n ← i, .items ← [i])]
+    ※ text replaced, over and over: each one replaced is given back
+    foreach turn := 0u64…1000u64:
+        l⟦3⟧.key ← "key " ⧺ ⍕turn
+    l⟦3⟧.at.y ← 9u32
+    l⟦4⟧.at ← Point(.x ← 5u32, .y ← 6u32)
+    b⟦5⟧.items⟦0⟧ ← 50u64
+    b⟦5⟧.items ⧺← [51u64, 52u64]
+    b⟦6⟧.items ← [60u64, 61u64]
+    if l⟦3⟧.key ≠ "key 999" ∨ l⟦3⟧.at.y ≠ 9u32 ∨ l⟦3⟧.at.x ≠ 0u32 ∨ l⟦2⟧.key ≠ "2":
+        return 1u6
+    if l⟦4⟧.at.x ≠ 5u32 ∨ l⟦4⟧.at.y ≠ 6u32 ∨ l⟦4⟧.key ≠ "4":
+        return 2u6
+    if #b⟦5⟧.items ≠ 3 ∨ b⟦5⟧.items⟦0⟧ ≠ 50u64 ∨ b⟦5⟧.items⟦2⟧ ≠ 52u64:
+        return 3u6
+    let gone: u64 = †b⟦5⟧.items⟦1⟧
+    if #b⟦6⟧.items ≠ 2 ∨ b⟦6⟧.items⟦1⟧ ≠ 61u64 ∨ #l ≠ 10 ∨ b⟦6⟧.n ≠ 6u64:
+        return 4u6
+    if gone ≠ 51u64 ∨ #b⟦5⟧.items ≠ 2 ∨ b⟦5⟧.items⟦1⟧ ≠ 52u64:
+        return 6u6
+
+    ※ a list of records holding lists of records, written two lists deep
+    let shelves: mut [Shelf] = []
+    shelves ⧺← [Shelf(.bags ← [Bag(.n ← 1u64, .items ← [])])]
+    shelves⟦0⟧.bags⟦0⟧.n ← 2u64
+    shelves⟦0⟧.bags⟦0⟧.items ⧺← [3u64]
+    if shelves⟦0⟧.bags⟦0⟧.n ≠ 2u64 ∨ shelves⟦0⟧.bags⟦0⟧.items⟦0⟧ ≠ 3u64:
+        return 7u6
+
+    ※ in a pool, kept there; and a list of the image copied out first
+    let pool: mut arena = ⎕arena
+    let p: mut [Member] = [] in pool
+    p ⧺← [Member(.key ← "a", .at ← Point(.x ← 1u32, .y ← 1u32))]
+    p⟦0⟧.key ← "b" ⧺ "c"
+    let f: mut [Point] = fixed
+    f⟦0⟧.x ← 7u32
+    if p⟦0⟧.key ≠ "bc" ∨ f⟦0⟧.x ≠ 7u32 ∨ f⟦0⟧.y ≠ 2u32 ∨ fixed⟦0⟧.x ≠ 1u32: 5u6 else: 0u6

@@ -515,6 +515,23 @@ namespace pl4g::sema {
     }
   }
 
+  std::optional<std::string> named_through_an_element(const ast::Expr* expr)
+  {
+    bool through = false;
+    while (ast::is<ast::Member>(expr) || ast::is<ast::Element>(expr)) {
+      if (auto element = ast::as<ast::Element>(expr)) {
+        through = true;
+        expr = element->base;
+      } else
+        expr = ast::as<ast::Member>(expr)->base;
+    }
+    auto name = ast::as<ast::NameRef>(expr);
+    if (! through || name == nullptr)
+      return std::nullopt;
+    return std::string(name->name);
+  }
+
+
   void addressed_in(const ast::Node* node, NameSet& into)
   {
     if (node == nullptr)
@@ -540,6 +557,25 @@ namespace pl4g::sema {
         if (auto name = ast::as<ast::NameRef>(call->args[0]))
           into.emplace(name->name);
     }
+    // And changing a part of an element of one in place, which makes the list
+    // ready first as writing the element whole does.
+    const ast::Expr* changed = nullptr;
+    if (auto assigned = ast::as<ast::MemberAssign>(node))
+      changed = assigned->base;
+    else if (auto element = ast::as<ast::ElementAssign>(node))
+      changed = element->base;
+    else if (auto taken = ast::as<ast::TakeAt>(node))
+      changed = taken->base;
+    else if (auto joined = ast::as<ast::JoinAssign>(node))
+      changed = joined->target;
+    else if (auto call = ast::as<ast::Call>(node)) {
+      auto callee = callee_name(call);
+      if (callee != nullptr && (callee->name == names::reserve_name || callee->name == names::iter_name)
+          && ! call->args.empty())
+        changed = call->args[0];
+    }
+    if (auto through = named_through_an_element(changed))
+      into.emplace(*through);
     if (auto capture = ast::as<ast::Capture>(node); capture != nullptr && capture->by_reference)
       into.emplace(capture->name);
     if (auto lambda = ast::as<ast::Lambda>(node);

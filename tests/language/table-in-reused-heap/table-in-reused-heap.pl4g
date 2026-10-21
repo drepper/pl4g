@@ -1,0 +1,72 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A table works in room the heap hands out again.**  `⎕heap` keeps what is given
+※ back and gives it out again as it was, holding whatever it held -- here every bit
+※ set, the elements of lists of every size up to the largest class given back one
+※ after another.  A table reads two things of its room before it writes them: the
+※ words of its index, nought where nothing hashed, and the state of the entry after
+※ the last written, which a missing key's lookup answers.  Both are written when the
+※ room is taken -- the index cleared, a run of zeroes at a time, and the entry after
+※ the last marked empty whenever one is written -- so that what the room held
+※ before is never read.  Tables of words, of text and a set are built in it, grown
+※ through several rebuilds, keys taken out and put back, and asked for keys they do
+※ not hold.
+
+let std := ⎕import("std")
+
+※ Lists of every length up to 300 and then every fiftieth to 9000, all ones, given
+※ back: every class a table's room comes from up to 64 KiB holds some.  Answers
+※ how many elements there were, which is what keeps the work from being nothing.
+fn dirty() → u64:
+    let held: mut [[u64]] = []
+    let n: mut u64 = 0u64
+    while n < 9000u64:
+        let one: mut [u64] = []
+        ⎕reserve(one, ⎕unit(n, ⌜idx⌝))
+        foreach _ := 0u64…n:
+            one ⧺← [18446744073709551615u64]
+        held ⧺← [one]
+        n ← n + (if n < 300u64: 1u64 else: 50u64)
+    let i: mut u64 ¤idx = 0
+    let seen: mut u64 = 0u64
+    while i < 474:
+        seen ← seen + ⎕drop(#held⟦i⟧)
+        held⟦i⟧ ← []
+        i ← i + 1
+    seen
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if dirty() ≠ 849600u64:
+        return 1u6
+    let d: mut ⸨u64: u64⸩ = ⸨⸩
+    foreach i := 0u64…3000u64:
+        d⸨i × 7u64⸩ ← i
+    foreach i := 0u64…3000u64:
+        if (d⸨i × 7u64⸩ ?? 9999u64) ≠ i ∨ (d⸨i × 7u64 + 1u64⸩ ?? 9999u64) ≠ 9999u64:
+            return 2u6
+    foreach i := 0u64…1000u64:
+        †d⸨i × 21u64⸩
+    d⸨0u64⸩ ← 5u64
+    if #d ≠ 2001 ∨ (d⸨0u64⸩ ?? 0u64) ≠ 5u64 ∨ (d⸨21u64⸩ ?? 9999u64) ≠ 9999u64:
+        return 3u6
+
+    let t: mut ⸨str: u64⸩ = ⸨⸩
+    foreach i := 0u64…500u64:
+        t⸨⍕i⸩ ← i
+    let walked: mut u64 = 0u64
+    foreach k, v := t:
+        if k ≠ ⍕walked ∨ v ≠ walked:
+            return 4u6
+        walked ← walked + 1u64
+    if walked ≠ 500u64 ∨ (t⸨"500"⸩ ?? 9999u64) ≠ 9999u64 ∨ (t⸨"77"⸩ ?? 0u64) ≠ 77u64:
+        return 5u6
+
+    let s: mut ⸨u64⸩ = ⸨⸩
+    foreach i := 0u64…200u64:
+        s ← s | ⸨i × 3u64⸩
+    let inside: mut u64 = 0u64
+    foreach i := 0u64…600u64:
+        if s⸨i⸩:
+            inside ← inside + 1u64
+    if inside ≠ 200u64 ∨ #s ≠ 200: 6u6 else: 0u6

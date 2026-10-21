@@ -1,0 +1,15 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4004 LANG_VARDEF_NOT_MUTABLE
+
+※ A field of an element is written where the list may be: the list in a name not
+※ written `mut` is not changed in part any more than whole.
+
+let std := ⎕import("std")
+
+type Point = x : u32 ; y : u32
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: [Point] = [Point(.x ← 1u32, .y ← 2u32)]
+    l⟦0⟧.y ← 3u32
+    if l⟦0⟧.y = 3u32: 0u6 else: 1u6

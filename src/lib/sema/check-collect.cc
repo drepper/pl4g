@@ -2315,7 +2315,9 @@ namespace pl4g::sema {
   const ir::Type* Checker::collection_type(const ast::CollectionTypeRef* ref)
   {
     const ir::Type* element = resolve_type(ref->element);
-    if (element != ir::error_type() && ! can_be_a_key(element)) {
+    // A type parameter stands as a key where a generic function is written:
+    // what it is, is settled where a call says.
+    if (element != ir::error_type() && ! can_be_a_key(element) && ! ir::is<ir::OpaqueType>(element)) {
       diags.emit(D::LANG_COLLECTION_KEY_NOT_HASHABLE, ref->element->span, { { "found", element->written() } });
       element = ir::error_type();
     }

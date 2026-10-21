@@ -1322,11 +1322,12 @@ Runtime
     Done 2026-10-20: the operands are asked for the set, not for one that may be written, and what the operator answers is of
     the writable type, being new.
 
-[ ] write a field of an element of a list in place, `l⟦i⟧.name ← v`.  Reading one works since a type could reach itself through a
+[x] write a field of an element of a list in place, `l⟦i⟧.name ← v`.  Reading one works since a type could reach itself through a
     list (2026-10-22); writing is still refused (4449), the element being perhaps shared with another name until it is written,
     which `l⟦i⟧ ← v` settles by copying and a field write would have to settle the same way.
+    Done 2026-10-22: held to what `l⟦i⟧ ← v` is held to; paths of fields and a list in a field of an element follow.
 
-[ ] `⍕` of a list, so that a record or a sum reaching itself through one can be written as text.  `std.text` walks a record's
+[x] `⍕` of a list, so that a record or a sum reaching itself through one can be written as text.  `std.text` walks a record's
     fields and stops at a list, which has no notation of its own there yet.
 [ ] look bytes up in a table a register at a time.  simdjson classifies a block of input with two lookups of a nibble each in a
     table of sixteen bytes, which is one instruction on all three machines -- `pshufb` from the second x86-64 level, `tbl` on
@@ -1335,3 +1336,11 @@ Runtime
     index against the length of the table, which is one comparison of the whole run and a gathering of its answer, or a type
     whose numbers are known to be in range (`idx & 15u8` over a table of sixteen).  Left out of the masks on purpose: it is a new
     kind of indexing and not a cheaper way to write an old one.
+    Done 2026-10-22: lists, sets, dictionaries and sums, through `⎕kindof` and `⎕alternatives`.
+
+[ ] `match` over a sum that is a place, without copying it.  `foreach &e: Json = l` binds a reference to each element, but `match
+    e⌖` reads the sum, and reading a sum copies its bytes into the frame -- 32 bytes a `Json`, per element, either way.  Taking
+    apart a sum where it is wants the tag read there and the part bound as a place, the place lent for the arms.
+
+[ ] whether text inside a container is quoted by `⍕`.  It is not, as a string field of a record is not (2026-10-22); Python's
+    `str` of a list and Rust's `Debug` quote it, and a JSON module's tests may want `⍕` to read back as a program.

@@ -61,6 +61,9 @@ namespace pl4g::names {
   inline constexpr std::string_view span_name = "\N{APL FUNCTIONAL SYMBOL QUAD}span";
   inline constexpr std::string_view bytes_name = "\N{APL FUNCTIONAL SYMBOL QUAD}bytes";
   inline constexpr std::string_view is_record_name = "\N{APL FUNCTIONAL SYMBOL QUAD}isrecord";
+  // What kind of type a type is, as text the compiler settles; and a sum's parts.
+  inline constexpr std::string_view kind_of_name = "\N{APL FUNCTIONAL SYMBOL QUAD}kindof";
+  inline constexpr std::string_view alternatives_name = "\N{APL FUNCTIONAL SYMBOL QUAD}alternatives";
   inline constexpr std::string_view fields_name = "\N{APL FUNCTIONAL SYMBOL QUAD}fields";
   inline constexpr std::string_view typename_name = "\N{APL FUNCTIONAL SYMBOL QUAD}typename";
   inline constexpr std::string_view str_of_name = "\N{APL FUNCTIONAL SYMBOL QUAD}str";
