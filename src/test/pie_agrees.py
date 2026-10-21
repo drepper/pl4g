@@ -167,7 +167,9 @@ def main() -> int:
         if picked and path.parent.name not in picked:
             continue
         compiles, levels, extra = directives(path)
-        if compiles:
+        # A shared object is position-independent by being one and is not an
+        # executable that relocates itself, which is what this checks.
+        if compiles and "-shared" not in extra:
             jobs.extend((path, level, extra) for level in levels)
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
         found = list(pool.map(lambda job: (job, one(run, job[0], work, triple, job[1], job[2])), jobs))
