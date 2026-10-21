@@ -104,7 +104,17 @@ namespace pl4g::target::aarch64 {
     mc::Insts select_set(mc::Condition cond, mc::Reg dst, const mc::MCOperand& lhs, const mc::MCOperand& rhs,
                          Span span) override;
     bool counts_leading() const override { return true; }
+    // And trailing zeroes, as the leading ones of the bits turned round.
+    bool counts_trailing() const override { return true; }
+    // Both conversions take and answer an unsigned number as well.
+    bool converts_unsigned() const override { return true; }
     mc::Insts select_count_leading(mc::Reg dst, const mc::MCOperand& src, Span span) override;
+    mc::Insts select_count_trailing(mc::Reg dst, const mc::MCOperand& src, Span span) override;
+    mc::Insts select_int_to_float(mc::Reg dst, const mc::MCOperand& src, int bits, Span span) override;
+    mc::Insts select_unsigned_to_float(mc::Reg dst, const mc::MCOperand& src, int bits, Span span) override;
+    mc::Insts select_truncate_to_int(mc::Reg dst, const mc::MCOperand& src, int bits, bool is_signed,
+                                     Span span) override;
+    mc::Insts select_move_bits(mc::Reg dst, const mc::MCOperand& src, int bits, Span span) override;
     mc::Insts select_spill(std::int64_t slot, mc::Reg source, Span span) override;
     mc::Insts select_reload(mc::Reg destination, std::int64_t slot, Span span) override;
 

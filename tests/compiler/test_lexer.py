@@ -216,6 +216,23 @@ def test_what_fuzzing_found_is_reported(text: str, wanted: list[int]) -> None:
     assert diags == wanted
 
 
+@pytest.mark.parametrize(("text", "wanted"), [
+    ("let c := '\\uD800'\n", [D.LANG_SYNTAX_BAD_ESCAPE]),
+    ("let c := '\\uDFFF'\n", [D.LANG_SYNTAX_BAD_ESCAPE]),
+    ("let s := \"pair: \\U0000DC00\"\n", [D.LANG_SYNTAX_BAD_ESCAPE]),
+    ("let c := '\\uD7FF'\n", []),
+    ("let c := '\\uE000'\n", []),
+])
+def test_an_escape_naming_a_surrogate_names_nothing(text: str,
+                                                    wanted: list[int]) -> None:
+    """A surrogate is a number UTF-16 keeps for itself and no code point, so an
+    escape naming one is refused as one beyond U+10FFFF is: a string holding it
+    would be no UTF-8.  The code points either side of the surrogates are
+    code points like any other."""
+    _, diags = lex(text)
+    assert diags == wanted
+
+
 def test_a_float_too_large_is_an_infinity() -> None:
     """As a decimal literal too large for a double is."""
     sources = SourceManager()

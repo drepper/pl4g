@@ -73,6 +73,15 @@ class BinOp(Enum):
     WRAP_ROTL = "wrap.rotl"
     WRAP_ROTR = "wrap.rotr"
 
+    #: The whole of a product of two 64-bit numbers, which is twice as wide as
+    #: either: its upper half and its lower half, in that order, as a tuple.
+    #: The one operation whose answer is not of its operands' type, there being
+    #: no type wide enough to hold it -- which is the whole reason it is asked.
+    #: Every one of the three architectures has the upper half as an
+    #: instruction, so it is one operation and not a sequence a pass would have
+    #: to recognise.
+    WIDE_MUL = "wide.mul"
+
 
 class UnOp(Enum):
     """The unary operations."""
@@ -91,6 +100,9 @@ class UnOp(Enum):
     #: that is not one, which is what lets a question asked of every lane at
     #: once be walked a bit at a time by ordinary arithmetic.
     MASK = "mask"
+    #: And how many zeroes stand below the lowest set bit, which for nought is
+    #: the width of the type for the reason the count from above is.
+    COUNT_TRAILING = "trail"
     #: The magnitude of a floating-point number, which is the number with its
     #: sign cleared.  There is no integer form: the magnitude of the smallest
     #: signed number is not a number of its type.
@@ -130,6 +142,19 @@ class CastKind(Enum):
     #: format holds every value of a narrower one exactly, so nothing is lost
     #: and there is nothing to check.
     FEXT = "fext"
+    #: A whole number as the floating-point number nearest it, a tie going to
+    #: the one whose last bit is nought.  Whether the number is read with a
+    #: sign is what its type says, as it is for every other instruction.
+    ITOF = "itof"
+    #: A floating-point number as a whole number, toward zero.  What it answers
+    #: for a value the integer type has no room for is not said: the checker
+    #: asks whether there is room before anything reads the answer, and the
+    #: three architectures answer such a value three different ways.
+    FTOI = "ftoi"
+    #: The bits of a floating-point number as a whole number of the same width,
+    #: or the other way round.  Nothing is converted; the bits move between the
+    #: two kinds of register, which is why it is not a `BITCAST`.
+    FBITS = "fbits"
 
 
 class Instruction(Value):

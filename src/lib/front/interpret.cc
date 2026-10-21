@@ -360,6 +360,20 @@ namespace pl4g::macro {
     const ir::Type* ty = inst->ty;
     auto refused = [&] { return Refused(std::format("the operation {}", describe(inst->bin)), inst); };
     bool known = true;
+    if (inst->bin == BinOp::wide_mul) {
+      // The whole product, which 128 bits have room for, cut into the two
+      // halves the tuple holds: the upper read as the operands' type reads it
+      // and the lower as the unsigned bits it is.
+      auto tuple = ir::as<ir::TupleType>(ty);
+      auto upper = tuple != nullptr ? ir::as<ir::IntType>(tuple->members[0]) : nullptr;
+      if (upper == nullptr) [[unlikely]]
+        throw InternalError("a wide product answering what is no pair of numbers");
+      // Multiplied without a sign, which is the same bits for two signed
+      // factors and keeps the product of two large unsigned ones defined.
+      auto whole = (unsigned __int128)left * (unsigned __int128)right;
+      return MValue(std::vector<MValue>{ in_range(__int128(whole >> 64), upper),
+                                         __int128(whole & mask_of(64)) });
+    }
     if (ty == ir::bool_type()) {
       auto found = arithmetic(inst->bin, left, right, known);
       if (! known) [[unlikely]]
@@ -435,6 +449,13 @@ namespace pl4g::macro {
       return __int128(std::popcount((unsigned __int128)raw >> 64) + std::popcount((std::uint64_t)raw));
     if (inst->un == ir::UnOp::count_leading)
       return __int128(ty->held()) - __int128(bit_length(raw));
+    if (inst->un == ir::UnOp::count_trailing) {
+      // The lowest set bit is the only one a value shares with its negation;
+      // nought has none, and its count is the width.
+      if (raw == 0)
+        return __int128(ty->held());
+      return __int128(bit_length(raw & -raw)) - 1;
+    }
     throw Refused(std::format("the operation {}", describe(inst->un)), inst);
   }
 

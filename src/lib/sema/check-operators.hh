@@ -58,8 +58,8 @@
     const ir::FloatType* float_literal_type(const ast::FloatLit* expr, const ir::Type* expected);  // check.py:24446
     // The type an integer literal has, from its suffix or from the context.
     const ir::IntType* literal_type(const ast::IntLit* expr, const ir::Type* expected);  // check.py:24473
-    // Lower `⎕ones(N)` and `⎕lead(N)`: how many of a value's bits are set, and how many zeroes stand above
-    // the highest one that is.
+    // Lower `⎕ones(N)`, `⎕lead(N)` and `⎕trail(N)`: how many of a value's bits are set, and how many zeroes
+    // stand above the highest one that is or below the lowest.
     ir::Value* lower_bit_count(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:24505
     // Lower `⎕mask(B)`: a run of truth values as the bits of a whole number, the first of them the lowest
     // bit, in the narrowest of the four machine widths that has a bit for every one.
@@ -78,6 +78,22 @@
     ir::GlobalVar* text_variable(std::string_view text);  // check.py:24708
     // The code point `value`, or a report where there is no such code point.
     ir::Value* code_point(ir::Builder& builder, std::int64_t value, Span span);  // check.py:24725
+    // Whether the `u32` `given` is the number of a code point: no further than the last, and no surrogate.
+    ir::Value* is_code_point(ir::Builder& builder, ir::Value* given, Span span);  // check.py:24950
+    // Lower `⎕wide_mul(A, B)`: the whole product of two 64-bit numbers, as a tuple of its upper half and
+    // its lower half.
+    ir::Value* lower_wide_mul(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:24971
+    // The type the last argument of one of the crossings between whole and floating-point numbers lifts,
+    // or a report that it lifts none.
+    const ir::Type* numeric_target(const ast::Expr* written, std::string_view name);  // check.py:25047
+    // Lower `⎕float(N, ⌜F⌝)`: a whole number as the floating-point number nearest it.
+    ir::Value* lower_to_float(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:25056
+    // Lower `⎕trunc(F, ⌜T⌝)`: a floating-point number as a whole number, toward zero -- or why it is none.
+    ir::Value* lower_trunc(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:25106
+    // Lower `⎕bits(F)`: the bits of a floating-point number, as the unsigned whole number of its width.
+    ir::Value* lower_bits(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:25200
+    // Lower `⎕from_bits(U, ⌜F⌝)`: the floating-point number whose bits are `U`.
+    ir::Value* lower_from_bits(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:25237
     // Lower `⎕wrap(EXPR)`: the expression, with its operators wrapping.
     ir::Value* lower_wrap(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:24739
     // The operation to emit for `op` where it stands, wrapping or not.

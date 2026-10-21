@@ -31,6 +31,9 @@ namespace pl4g::sema {
       return undef(module, ir::error_type());
     }
 
+    // The last code point there is.
+    constexpr __int128 max_code_point = 0x10FFFF;
+
     // `value` as an instruction of shape `kind`, or nothing.
     ir::Instruction* inst_of(ir::Value* value, ir::InstKind kind) noexcept
     {
@@ -231,6 +234,8 @@ namespace pl4g::sema {
     }
     if (auto e = ir::as<ir::EnumType>(wanted))
       return narrowed_to_enum(builder, expr, e, expected);
+    if (wanted == ir::char_type())
+      return narrowed_to_char(builder, expr, expected);
     if (! ir::is<ir::IntType>(wanted)) [[unlikely]] {
       diags.emit(D::LANG_NARROW_NOT_AN_INTEGER, written->span, { { "found", wanted->written() } });
       return failed_value(module);
@@ -342,6 +347,63 @@ namespace pl4g::sema {
   }
 
 
+  ir::Value* Checker::narrowed_to_char(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected)
+  {
+    auto given = lower_expr(builder, expr->args[0], nullptr);
+    auto found_ty = value_type_of(given);
+    if (found_ty == ir::error_type())
+      return failed_value(module);
+    auto found = ir::as<ir::IntType>(found_ty);
+    if (found == nullptr) [[unlikely]] {
+      diags.emit(D::LANG_NARROW_NOT_AN_INTEGER, expr->args[0]->span, { { "found", found_ty->written() } });
+      return failed_value(module);
+    }
+    auto span = expr->span;
+    auto answer = ir::result_type(ir::char_type(), ir::narrowing_type());
+    if (! accepts(expected, answer)) [[unlikely]] {
+      report_mismatch(span, answer, expected);
+      return failed_value(module);
+    }
+    if (given->vkind == ir::ValueKind::int_const) {
+      auto number = static_cast<const ir::IntConst*>(given)->value;
+      std::optional<std::size_t> why;
+      if (number < 0)
+        why = 2;
+      else if (number > max_code_point)
+        why = 0;
+      else if (is_surrogate(number))
+        why = 3;
+      auto character = const_cast<ir::CharConst*>(module.char_const(why ? 0 : std::uint32_t(number)));
+      auto reason_value = const_cast<ir::EnumConst*>(module.enum_const(ir::narrowing_type(), why.value_or(0)));
+      return builder.wrap(character, builder.bool_const(why.has_value()), answer, span, reason_value);
+    }
+    auto no = builder.bool_const(false);
+    auto over = no;
+    if (found->high() > max_code_point)
+      over = builder.compare(found->is_signed ? ir::CmpPred::sgt : ir::CmpPred::ugt, given,
+                             builder.int_const(found, max_code_point), span);
+    auto wrong_sign = no;
+    if (found->is_signed)
+      wrong_sign = builder.compare(ir::CmpPred::slt, given, builder.int_const(found, 0), span);
+    auto absent = no;
+    if (found->high() >= first_surrogate) {
+      // One run of numbers, so one subtraction that wraps and one comparison.
+      auto moved = builder.binary(ir::BinOp::wrap_sub, given, builder.int_const(found, first_surrogate), span);
+      absent = builder.compare(ir::CmpPred::ult, moved, builder.int_const(found, surrogates), span);
+    }
+    auto failed = either(builder, either(builder, over, wrong_sign, span), absent, span);
+    auto why_not = reason(builder, no, wrong_sign, span, absent);
+    ir::Value* value;
+    if (found->bare() == ir::u32())
+      value = builder.cast(ir::CastKind::bitcast, given, ir::char_type(), span);
+    else if (found->held() < ir::char_type()->holder()->held())
+      value = builder.cast(ir::CastKind::zext, given, ir::char_type(), span);
+    else
+      value = builder.cast(ir::CastKind::trunc, given, ir::char_type(), span);
+    return builder.wrap(value, failed, answer, span, why_not);
+  }
+
+
   ir::Value* Checker::as_enum(ir::Builder& builder, ir::Value* given, const ir::IntType* found,
                               const ir::EnumType* wanted, Span span)
   {
@@ -390,11 +452,15 @@ namespace pl4g::sema {
   }
 
 
-  ir::Value* Checker::reason(ir::Builder& builder, ir::Value* under, ir::Value* wrong_sign, Span span)
+  ir::Value* Checker::reason(ir::Builder& builder, ir::Value* under, ir::Value* wrong_sign, Span span,
+                             ir::Value* absent)
   {
     auto holder = ir::narrowing_type()->holder;
     ir::Value* made = nullptr;
-    for (auto [at, held] : { std::pair{ 1, under }, std::pair{ 2, wrong_sign } }) {
+    // `absent` among them where the type has numbers that are none of its
+    // values.
+    auto missing = absent != nullptr ? absent : builder.bool_const(false);
+    for (auto [at, held] : { std::pair{ 1, under }, std::pair{ 2, wrong_sign }, std::pair{ 3, missing } }) {
       if (is_false(held))
         continue;
       auto one = builder.cast(ir::CastKind::zext, held, holder, span);

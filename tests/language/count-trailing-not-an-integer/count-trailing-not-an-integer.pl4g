@@ -1,0 +1,15 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4803 LANG_BITS_NOT_AN_INTEGER
+
+※ `⎕trail` counts the bits of a whole number at the width of its own type, as
+※ `⎕ones` and `⎕lead` do, and of nothing else.  The bits of a floating-point
+※ number are `⎕bits` of it, which is a whole number and can be counted.
+
+let std := ⎕import("std")
+
+let x: f64 = 2.5f64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let n: u8 = ⎕trail(x)
+    0u6

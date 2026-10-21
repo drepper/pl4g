@@ -168,6 +168,34 @@ class InstructionSelector(Protocol):
         floating-point value of *bits*."""
         ...
 
+    def select_unsigned_to_float(self, dst: Reg, src: MCOperand, bits: int,
+                                 span: Span) -> Sequence[MCInst]:
+        """Instructions that put the unsigned 64-bit number *src* into *dst* as
+        the floating-point value of *bits* nearest it.
+
+        Not every architecture has one: where there is only the signed
+        conversion, the caller emits the sequence that stands in for it.
+        """
+        ...
+
+    def select_truncate_to_int(self, dst: Reg, src: MCOperand, bits: int,
+                               signed: bool, span: Span) -> Sequence[MCInst]:
+        """Instructions that put the floating-point value *src* of *bits* into
+        the 64-bit register *dst* as a whole number, toward zero, read as a
+        signed or an unsigned one.
+
+        What a value with no such whole number answers is the architecture's
+        affair: the program asks whether there is one before it reads this.
+        """
+        ...
+
+    def select_move_bits(self, dst: Reg, src: MCOperand, bits: int,
+                         span: Span) -> Sequence[MCInst]:
+        """Instructions that put the *bits* bits of *src* into *dst*, the one in
+        an ordinary register and the other in a floating-point one, with
+        nothing converted."""
+        ...
+
     def select_float_copysign(self, dst: Reg, magnitude: MCOperand,
                               sign: MCOperand, bits: int,
                               span: Span) -> Sequence[MCInst]:
@@ -952,6 +980,24 @@ class Assembler:
         """Put the whole number *src* into *dst* as a floating-point value."""
         self._emit(self._selector.select_int_to_float(dst, src, bits, span))
 
+    def unsigned_to_float(self, dst: Reg, src: MCOperand, bits: int,
+                          span: Span = INVALID_SPAN) -> None:
+        """Put the unsigned 64-bit number *src* into *dst* as a floating-point
+        value."""
+        self._emit(self._selector.select_unsigned_to_float(dst, src, bits, span))
+
+    def truncate_to_int(self, dst: Reg, src: MCOperand, bits: int, signed: bool,
+                        span: Span = INVALID_SPAN) -> None:
+        """Put the floating-point value *src* into the 64-bit *dst* as a whole
+        number, toward zero."""
+        self._emit(self._selector.select_truncate_to_int(dst, src, bits, signed,
+                                                         span))
+
+    def move_bits(self, dst: Reg, src: MCOperand, bits: int,
+                  span: Span = INVALID_SPAN) -> None:
+        """Put the bits of *src* into *dst*, across the two kinds of register."""
+        self._emit(self._selector.select_move_bits(dst, src, bits, span))
+
     def float_copysign(self, dst: Reg, magnitude: MCOperand, sign: MCOperand,
                        bits: int, span: Span = INVALID_SPAN) -> None:
         """Put *magnitude* into *dst* with *sign*'s sign."""
@@ -987,6 +1033,19 @@ class Assembler:
         bit, which is a different level's promise on that same target."""
         return bool(getattr(self._selector, "counts_leading", False))
 
+    @property
+    def counts_trailing(self) -> bool:
+        """And whether it has one that counts the zeroes below the lowest set
+        bit, nought included."""
+        return bool(getattr(self._selector, "counts_trailing", False))
+
+    @property
+    def converts_unsigned(self) -> bool:
+        """Whether the target converts an unsigned 64-bit number to and from a
+        floating-point one in one instruction, which one of the three does
+        not."""
+        return bool(getattr(self._selector, "converts_unsigned", False))
+
     def count_ones(self, dst: Reg, src: MCOperand,
                    span: Span = INVALID_SPAN) -> None:
         """Put the number of bits set in *src* into *dst*."""
@@ -996,6 +1055,12 @@ class Assembler:
                       span: Span = INVALID_SPAN) -> None:
         """Put the number of zeroes above the highest set bit into *dst*."""
         self._emit(self._selector.select_count_leading(dst, src, span))
+
+    def count_trailing(self, dst: Reg, src: MCOperand,
+                       span: Span = INVALID_SPAN) -> None:
+        """Put the number of zeroes below the lowest set bit into *dst*, which is
+        the width of the register for nought."""
+        self._emit(self._selector.select_count_trailing(dst, src, span))
 
     @property
     def flagged_widths(self) -> frozenset[int]:

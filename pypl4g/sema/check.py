@@ -8,6 +8,7 @@ compilation be parallelized and what makes a forward reference legal.
 from __future__ import annotations
 
 import math
+import struct
 from dataclasses import dataclass, field, fields as fields_of, replace
 from fractions import Fraction
 from contextlib import contextmanager
@@ -36,6 +37,8 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            ARRAY_OPEN_GLYPH, ARRAY_CLOSE_GLYPH,
                            SET_OPEN_GLYPH, SET_CLOSE_GLYPH,
                            DROP_NAME, LEAD_NAME, MASK_NAME, NARROW_NAME, ONES_NAME,
+                           TRAIL_NAME, WIDE_MUL_NAME, FLOAT_NAME, TRUNC_NAME,
+                           BITS_NAME, FROM_BITS_NAME,
                            UNIT_NAME,
                           ENUMERATE_NAME, TYPEOF_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
@@ -3364,7 +3367,81 @@ def _counted(op: UnOp, value: int, ty: IntType) -> int:
     bits = value & ((1 << ty.bits) - 1)
     if op is UnOp.COUNT_ONES:
         return bits.bit_count()
+    if op is UnOp.COUNT_TRAILING:
+        # The lowest set bit is the one a number shares with its negation.
+        return (bits & -bits).bit_length() - 1 if bits else ty.bits
     return ty.bits - bits.bit_length()
+
+
+def _truncated(value: float, into: IntType) -> int | None:
+    """Which way *value* toward zero is no value of *into*, as the number of
+    the condition, or nothing where it is one."""
+    if value != value:
+        return 3
+    if math.isinf(value):
+        return 0 if value > 0 else 1 if into.signed else 2
+    whole = math.trunc(value)
+    if whole > into.high:
+        return 0
+    if whole < into.low:
+        return 1 if into.signed else 2
+    return None
+
+
+def _float_bits(value: float, bits: int) -> int:
+    """The bits *value* is kept in, in the format of *bits*."""
+    if bits == 64:
+        return int.from_bytes(struct.pack("<d", value), "little")
+    return int.from_bytes(struct.pack("<f", value), "little")
+
+
+def _from_bits(value: int, bits: int) -> float:
+    """The number of the format of *bits* that is kept in the bits *value*."""
+    if bits == 64:
+        return struct.unpack("<d", value.to_bytes(8, "little"))[0]
+    return struct.unpack("<f", value.to_bytes(4, "little"))[0]
+
+
+#: The three counts of a value's bits, by the name that asks for each.
+_COUNTS: Final[dict[str, UnOp]] = {ONES_NAME: UnOp.COUNT_ONES,
+                                   LEAD_NAME: UnOp.COUNT_LEADING,
+                                   TRAIL_NAME: UnOp.COUNT_TRAILING}
+
+
+#: The first of the surrogates and how many there are.  They are the numbers
+#: UTF-16 spends on saying that a code point takes two of its units, and are
+#: therefore no code point of their own -- a string holding one is a string no
+#: encoding can write.
+FIRST_SURROGATE: Final[int] = 0xD800
+SURROGATES: Final[int] = 0x800
+
+
+def _is_surrogate(value: int) -> bool:
+    """Whether *value* is one of the numbers UTF-16 keeps for itself."""
+    return FIRST_SURROGATE <= value < FIRST_SURROGATE + SURROGATES
+
+
+def _nearest_float(value: int, bits: int) -> float:
+    """The floating-point number of *bits* nearest the whole number *value*,
+    a tie going to the one whose last bit is nought.
+
+    Python's own conversion is that rounding for the wider format.  For the
+    narrower one it is done here and not as the wider conversion followed by a
+    narrowing: rounding twice is not rounding once, and a number between two of
+    the narrower format's that the first rounding lands on the half-way point
+    of would go the wrong way at the second.
+    """
+    if bits == 64:
+        return float(value)
+    magnitude = abs(value)
+    extra = magnitude.bit_length() - 24
+    if extra > 0:
+        kept, lost = magnitude >> extra, magnitude & ((1 << extra) - 1)
+        half = 1 << (extra - 1)
+        if lost > half or (lost == half and kept & 1):
+            kept += 1
+        magnitude = kept << extra
+    return float(-magnitude if value < 0 else magnitude)
 
 
 def _tolerance(module: Module) -> GlobalVar:
@@ -5509,6 +5586,11 @@ class Checker:
                         D.LANG_CHAR_OUTSIDE_UNICODE, node.value.span,
                         value=str(node.value.value),
                         last=format(MAX_CODE_POINT, "X"))
+                    return None
+                if _is_surrogate(node.value.value):
+                    self._diags.emit(
+                        D.LANG_CHAR_IS_A_SURROGATE, node.value.span,
+                        value=format(node.value.value, "04X"))
                     return None
                 return self._module.char_const(node.value.value)
             case ast.CharLit():
@@ -25025,7 +25107,7 @@ class Checker:
         if not self._accepts(expected, U8):
             self._report_mismatch(expr.span, U8, expected)
             return UndefConst(ERROR)
-        op = UnOp.COUNT_ONES if name == ONES_NAME else UnOp.COUNT_LEADING
+        op = _COUNTS[name]
         if isinstance(given, IntConst):
             # A number the program wrote down is counted here, where counting it
             # is one line, rather than in the instructions of three backends.
@@ -25153,11 +25235,9 @@ class Checker:
             # that need not be built.
             if isinstance(given, IntConst):
                 return self._code_point(builder, given.value, expr.args[0].span)
-            builder.check(
-                builder.compare(CmpPred.ULE, given,
-                                builder.int_const(U32, MAX_CODE_POINT), expr.span),
-                "a number that is not a code point",
-                statuses.NOT_A_CODE_POINT, expr.span)
+            builder.check(self._is_code_point(builder, given, expr.span),
+                          "a number that is not a code point",
+                          statuses.NOT_A_CODE_POINT, expr.span)
         return builder.cast(CastKind.BITCAST, given, answer, expr.span)
 
     def _lower_list(self, builder: IRBuilder, expr: ast.ListLit,
@@ -25301,7 +25381,344 @@ class Checker:
             self._diags.emit(D.LANG_CHAR_OUTSIDE_UNICODE, span,
                              value=str(value), last=format(MAX_CODE_POINT, "X"))
             return builder.module.char_const(0)
+        if _is_surrogate(value):
+            self._diags.emit(D.LANG_CHAR_IS_A_SURROGATE, span,
+                             value=format(value, "04X"))
+            return builder.module.char_const(0)
         return builder.module.char_const(value)
+
+    def _is_code_point(self, builder: IRBuilder, given: Value,
+                       span: Span) -> Value:
+        """Whether the `u32` *given* is the number of a code point.
+
+        Two questions and not one.  It is no further than the last code point,
+        and it is not a surrogate -- a number UTF-16 keeps for saying that a code
+        point takes two of its units, which is therefore no code point itself,
+        and which a string could not hold and still be UTF-8.  The surrogates
+        are one run of numbers, so the second question is one subtraction that
+        wraps and one comparison: what lies below the first of them comes out
+        of the subtraction as a very large number, and that is not below the
+        count either.
+        """
+        below_the_last = builder.compare(
+            CmpPred.ULE, given, builder.int_const(U32, MAX_CODE_POINT), span)
+        moved = builder.binary(BinOp.WRAP_SUB, given,
+                               builder.int_const(U32, FIRST_SURROGATE), span)
+        not_a_surrogate = builder.compare(
+            CmpPred.UGE, moved, builder.int_const(U32, SURROGATES), span)
+        return builder.binary(BinOp.AND, below_the_last, not_a_surrogate, span)
+
+    def _lower_wide_mul(self, builder: IRBuilder, expr: ast.Call,
+                        expected: Type | None) -> Value:
+        """Lower `⎕wide_mul(A, B)`: the whole product of two 64-bit numbers, as
+        a tuple of its upper half and its lower half.
+
+        **No type is wide enough to hold it**, which is why it answers two
+        numbers: the product of two 64-bit numbers takes 128 bits, and the
+        widest type there is has sixty-four.  The upper half comes first because
+        that is the order a number is written in, and it is the half that says
+        whether the product would have fitted -- nought for an unsigned one.
+
+        **Both operands are sixty-four bits wide.**  A narrower product fits in a
+        wider type, so a program wanting one widens its operands and multiplies,
+        and that is one ordinary multiplication; what is asked here is what
+        nothing else answers.  Signed or unsigned, as the operands are: the
+        upper half of a signed product is signed and the lower half is the bits
+        below it, which have no sign of their own and are a `u64` either way.
+
+        **It is one instruction where the machine has one**, and every one of
+        the three does: x86-64's one-operand `mul` answers both halves, and the
+        other two have an instruction for the upper half beside the ordinary
+        multiplication.  Nothing it answers is a fault, the product always
+        having the room it needs.
+
+        What it answers counts nothing: the halves of a product are bits, and a
+        unit on either would be half of a unit.
+        """
+        if len(expr.args) != 2:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=WIDE_MUL_NAME, expected=2,
+                             found=len(expr.args))
+            return UndefConst(ERROR)
+        # The two are operands of one multiplication, so they take their type
+        # from each other as an operator's do, and a mismatch between them is
+        # reported as one between an operator's.
+        context = self._hint_of(expr.args[0]) or self._hint_of(expr.args[1])
+        outer, self._operand_of = self._operand_of, WIDE_MUL_NAME
+        try:
+            left = self._lower_expr(builder, expr.args[0], context)
+            found = self._value_type_of(left)
+            if found is ERROR:
+                return UndefConst(ERROR)
+            if not isinstance(found, IntType) or found.bits != 64:
+                self._diags.emit(D.LANG_WIDE_MUL_NOT_A_WORD, expr.args[0].span,
+                                 found=found.written())
+                return UndefConst(ERROR)
+            told = self._diags.error_count
+            right = self._lower_expr(builder, expr.args[1], found)
+            other = self._value_type_of(right)
+            if other is not found and other is not ERROR \
+                    and self._diags.error_count == told:
+                # Not every expression says so itself when it is not of the
+                # type it was asked for, and one that did has been heard.
+                self._report_mismatch(expr.args[1].span, other, found)
+        finally:
+            self._operand_of = outer
+        if other is not found:
+            return UndefConst(ERROR)
+        upper = found.bare
+        answer = self._module.types.tuple_type((upper, U64))
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        if isinstance(left, IntConst) and isinstance(right, IntConst):
+            # Two numbers written down are multiplied here, where a number has
+            # all the room the product needs.
+            whole = left.value * right.value
+            high = (whole >> 64) & ((1 << 64) - 1)
+            if upper.signed and high > upper.high:
+                high -= 1 << 64
+            return builder.make_tuple(
+                (builder.int_const(upper, high),
+                 builder.int_const(U64, whole & ((1 << 64) - 1))),
+                answer, expr.span)
+        return builder.binary(BinOp.WIDE_MUL, left, right, expr.span, answer)
+
+    def _numeric_target(self, written: ast.Expr, name: str) -> Type | None:
+        """The type the last argument of one of the crossings between whole and
+        floating-point numbers lifts, or a report that it lifts none."""
+        wanted = (self._lifted_type(written) if isinstance(written, ast.Lifted)
+                  else None)
+        if wanted is None:
+            self._diags.emit(D.LANG_NUMBER_NOT_A_TYPE, written.span, name=name)
+        return wanted
+
+    def _lower_to_float(self, builder: IRBuilder, expr: ast.Call,
+                        expected: Type | None) -> Value:
+        """Lower `⎕float(N, ⌜F⌝)`: a whole number as the floating-point number
+        nearest it.
+
+        **It cannot fail, so it answers the number and not a result.**  Every
+        whole number there is lies between two floating-point numbers of either
+        format, the largest `u64` being far below where `f32` runs out, so there
+        is always a nearest one -- and a tie between two goes to the one whose
+        last bit is nought, which is the rounding every machine does unless told
+        otherwise and the one that has no bias.  It is exact below 2⁵³ for `f64`
+        and below 2²⁴ for `f32`, and rounded above.
+
+        **The type is written** for the reason `⎕widen`'s is: there are two it
+        could be, and which one is the question being asked.  What the number
+        counts travels with it, as it does through a widening.
+
+        One instruction on every one of the three architectures, with a short
+        sequence for a `u64` on x86-64, which has a conversion of a signed number
+        only.
+        """
+        if len(expr.args) != 2:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=FLOAT_NAME, expected=2, found=len(expr.args))
+            return UndefConst(ERROR)
+        wanted = self._numeric_target(expr.args[1], FLOAT_NAME)
+        if wanted is None:
+            return UndefConst(ERROR)
+        if not isinstance(wanted, FloatType):
+            self._diags.emit(D.LANG_NUMBER_NOT_A_FLOAT, expr.args[1].span,
+                             name=FLOAT_NAME, found=wanted.written())
+            return UndefConst(ERROR)
+        given = self._lower_expr(builder, expr.args[0], None)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(found, IntType):
+            self._diags.emit(D.LANG_NUMBER_NOT_AN_INTEGER, expr.args[0].span,
+                             name=FLOAT_NAME, found=found.written())
+            return UndefConst(ERROR)
+        into = _carrying(wanted, found.unit)
+        assert isinstance(into, FloatType)
+        if not self._accepts(expected, into):
+            self._report_mismatch(expr.span, into, expected)
+            return UndefConst(ERROR)
+        if isinstance(given, IntConst):
+            return builder.float_const(into, _nearest_float(given.value,
+                                                            into.bits))
+        return builder.cast(CastKind.ITOF, given, into, expr.span)
+
+    def _lower_trunc(self, builder: IRBuilder, expr: ast.Call,
+                     expected: Type | None) -> Value:
+        """Lower `⎕trunc(F, ⌜T⌝)`: a floating-point number as a whole number,
+        toward zero -- or why it is none.
+
+        **What is after the point goes**, which is what the name says and what
+        every machine's conversion does.  The other three roundings are the
+        operators on the floating-point number that come before it: `⎕trunc(↓x,
+        ⌜i64⌝)` is the floor, `↑` the ceiling and `↕` the nearest, each of them
+        a whole number already by the time it is converted, so no fourth name
+        is wanted for any of them.
+
+        **It answers a result, the way a narrowing does**, because most
+        floating-point numbers are no value of any whole-number type: a number
+        beyond the top of the type is `overflow`, one below the bottom
+        `underflow` -- or `sign`, where the type has no negative numbers and the
+        number is negative by at least one -- and a not-a-number is `absent`,
+        the type having no value that is not a number.  An infinity is beyond
+        one end or the other.  What fits is decided by the number after the
+        truncation, so `⁻0.5` is nought in an unsigned type and not a mistake.
+
+        **Each bound is a power of two**, which every floating-point format holds
+        exactly, so each condition is one comparison with a number written in
+        the image -- except where the bottom of a signed type less one is a
+        number the format does not have, which happens for the widest types;
+        there the next number up is the bottom itself, and the comparison is
+        made with that.
+        """
+        if len(expr.args) != 2:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=TRUNC_NAME, expected=2, found=len(expr.args))
+            return UndefConst(ERROR)
+        wanted = self._numeric_target(expr.args[1], TRUNC_NAME)
+        if wanted is None:
+            return UndefConst(ERROR)
+        if not isinstance(wanted, IntType):
+            self._diags.emit(D.LANG_NUMBER_NOT_AN_INTEGER, expr.args[1].span,
+                             name=TRUNC_NAME, found=wanted.written())
+            return UndefConst(ERROR)
+        given = self._lower_expr(builder, expr.args[0], None)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(found, FloatType):
+            self._diags.emit(D.LANG_NUMBER_NOT_A_FLOAT, expr.args[0].span,
+                             name=TRUNC_NAME, found=found.written())
+            return UndefConst(ERROR)
+        into = _carrying(wanted, found.unit)
+        assert isinstance(into, IntType)
+        answer = self._module.types.result_type(into, NARROWING)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        span = expr.span
+        if isinstance(given, FloatConst):
+            # A number written down is converted here, and what it comes to --
+            # the number, or which way it did not fit -- is the result.
+            why = _truncated(given.value, into)
+            return builder.wrap(
+                builder.int_const(into, 0 if why is not None
+                                  else math.trunc(given.value)),
+                builder.bool_const(why is not None), answer, span,
+                self._module.enum_const(NARROWING, why or 0))
+        no = builder.bool_const(False)
+        top = builder.float_const(found, float(1 << (into.bits - 1
+                                                     if into.signed
+                                                     else into.bits)))
+        over = builder.compare(CmpPred.SGE, given, top, span)
+        under, wrong_sign = no, no
+        if into.signed:
+            # Below the bottom where it is no further up than the bottom less
+            # one, the truncation of anything above that being in range.
+            edge = into.low - 1
+            if _nearest_float(edge, found.bits) == edge:
+                under = builder.compare(
+                    CmpPred.SLE, given, builder.float_const(found, float(edge)),
+                    span)
+            else:
+                under = builder.compare(
+                    CmpPred.SLT, given,
+                    builder.float_const(found, float(into.low)), span)
+        else:
+            wrong_sign = builder.compare(CmpPred.SLE, given,
+                                         builder.float_const(found, -1.0), span)
+        # A not-a-number is the one value that is not equal to itself, and the
+        # one every ordered comparison above is false for.
+        absent = builder.compare(CmpPred.NE, given, given, span)
+        failed = self._either(builder, self._either(
+            builder, self._either(builder, over, under, span), wrong_sign, span),
+            absent, span)
+        why_not = self._reason(builder, under, wrong_sign, span, absent)
+        value = builder.cast(CastKind.FTOI, given, into, span)
+        return builder.wrap(value, failed, answer, span, why_not)
+
+    def _lower_bits(self, builder: IRBuilder, expr: ast.Call,
+                    expected: Type | None) -> Value:
+        """Lower `⎕bits(F)`: the bits of a floating-point number, as the
+        unsigned whole number of its width.
+
+        **Nothing is converted.**  The bits are the ones the number is kept in,
+        sign and exponent and fraction, read as a number -- `⎕bits(1.0f64)` is
+        `0x3FF0000000000000` and `⎕bits(⁻0.0f64)` has only its top bit set --
+        which is what a program asks when it wants to know which of two zeroes
+        it has, or to take a number apart the way the format puts it together.
+        The width says which type the answer is, so no type is written.
+
+        **It costs nothing**, or as near as makes no difference: the bits move
+        from one kind of register to the other, one instruction on each of the
+        three architectures.  What a unit said of the number it says nothing of
+        the bits, which are no quantity, so the answer counts nothing.
+        """
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=BITS_NAME, expected=1, found=len(expr.args))
+            return UndefConst(ERROR)
+        given = self._lower_expr(builder, expr.args[0], None)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(found, FloatType):
+            self._diags.emit(D.LANG_NUMBER_NOT_A_FLOAT, expr.args[0].span,
+                             name=BITS_NAME, found=found.written())
+            return UndefConst(ERROR)
+        into = U64 if found.bits == 64 else U32
+        if not self._accepts(expected, into):
+            self._report_mismatch(expr.span, into, expected)
+            return UndefConst(ERROR)
+        if isinstance(given, FloatConst):
+            return builder.int_const(into, _float_bits(given.value, found.bits))
+        return builder.cast(CastKind.FBITS, given, into, expr.span)
+
+    def _lower_from_bits(self, builder: IRBuilder, expr: ast.Call,
+                         expected: Type | None) -> Value:
+        """Lower `⎕from_bits(U, ⌜F⌝)`: the floating-point number whose bits are
+        *U*, which is `⎕bits` the other way.
+
+        The type is written because a number of the right width does not say
+        that it is meant as bits at all, and the width it must have is the
+        type's: a `u64` for `f64` and a `u32` for `f32`, so that a number written
+        down without a suffix takes its type from the one asked for.  Every
+        pattern of bits is some number of the format, a not-a-number among them,
+        so it cannot fail.
+        """
+        if len(expr.args) != 2:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=FROM_BITS_NAME, expected=2,
+                             found=len(expr.args))
+            return UndefConst(ERROR)
+        wanted = self._numeric_target(expr.args[1], FROM_BITS_NAME)
+        if wanted is None:
+            return UndefConst(ERROR)
+        if not isinstance(wanted, FloatType):
+            self._diags.emit(D.LANG_NUMBER_NOT_A_FLOAT, expr.args[1].span,
+                             name=FROM_BITS_NAME, found=wanted.written())
+            return UndefConst(ERROR)
+        holder = U64 if wanted.bits == 64 else U32
+        told = self._diags.error_count
+        given = self._lower_expr(builder, expr.args[0], holder)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if found is not holder:
+            if self._diags.error_count == told:
+                self._report_mismatch(expr.args[0].span, found, holder)
+            return UndefConst(ERROR)
+        if not self._accepts(expected, wanted):
+            self._report_mismatch(expr.span, wanted, expected)
+            return UndefConst(ERROR)
+        if isinstance(given, IntConst):
+            number = _from_bits(given.value, wanted.bits)
+            if number == number:
+                # A number written down is that number, unless it is a
+                # not-a-number: what one of those carries in its fraction is
+                # not something a constant of the representation keeps.
+                return builder.float_const(wanted, number)
+        return builder.cast(CastKind.FBITS, given, wanted, expr.span)
 
     def _lower_wrap(self, builder: IRBuilder, expr: ast.Call,
                     expected: Type | None) -> Value:
@@ -25352,10 +25769,20 @@ class Checker:
                 return self._lower_wrap(builder, expr, expected)
             if given in (ORD_NAME, CHR_NAME):
                 return self._lower_code_point(builder, expr, expected)
-            if given in (ONES_NAME, LEAD_NAME):
+            if given in _COUNTS:
                 return self._lower_bit_count(builder, expr, expected)
             if given == MASK_NAME:
                 return self._lower_mask(builder, expr, expected)
+            if given == WIDE_MUL_NAME:
+                return self._lower_wide_mul(builder, expr, expected)
+            if given == FLOAT_NAME:
+                return self._lower_to_float(builder, expr, expected)
+            if given == TRUNC_NAME:
+                return self._lower_trunc(builder, expr, expected)
+            if given == BITS_NAME:
+                return self._lower_bits(builder, expr, expected)
+            if given == FROM_BITS_NAME:
+                return self._lower_from_bits(builder, expr, expected)
             if given in (DROP_NAME, UNIT_NAME):
                 return self._lower_unit_call(builder, expr, expected)
             if given == ENTRY_NAME:
@@ -27389,6 +27816,8 @@ class Checker:
             return UndefConst(ERROR)
         if isinstance(wanted, EnumType):
             return self._narrowed_to_enum(builder, expr, wanted, expected)
+        if wanted is CHAR:
+            return self._narrowed_to_char(builder, expr, expected)
         if not isinstance(wanted, IntType):
             self._diags.emit(D.LANG_NARROW_NOT_AN_INTEGER, written.span,
                              found=wanted.written())
@@ -27510,6 +27939,74 @@ class Checker:
             return UndefConst(ERROR)
         return made
 
+    def _narrowed_to_char(self, builder: IRBuilder, expr: ast.Call,
+                          expected: Type | None) -> Value:
+        """Lower `⎕narrow(EXPR, ⌜char⌝)`: a number read as the code point it is
+        the number of, or why it is none.
+
+        **A code point is a narrower type than the number it is held as**, with
+        a top and a gap: nothing is above U+10FFFF, and the surrogates in the
+        middle are numbers UTF-16 keeps for itself and no code point.  So this
+        is the question every narrowing asks -- does the number fit the type --
+        asked of a type whose values are not one run, which is the question an
+        enumeration's narrowing asks too, and the answer is the same shape: the
+        character where it is one, `overflow` above the top, `sign` for a
+        negative number, `absent` for a surrogate.
+
+        `⎕chr` is the same question with the program stopping where the answer
+        is no; this is the form for a number that came from outside, where no
+        is an answer the program has to be ready for -- a decoder handed bytes
+        that say a surrogate is one.  Each condition is asked only where the
+        number's own type can reach it, as a narrowing's are.
+        """
+        given = self._lower_expr(builder, expr.args[0], None)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(found, IntType):
+            self._diags.emit(D.LANG_NARROW_NOT_AN_INTEGER, expr.args[0].span,
+                             found=found.written())
+            return UndefConst(ERROR)
+        span = expr.span
+        answer = self._module.types.result_type(CHAR, NARROWING)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(span, answer, expected)
+            return UndefConst(ERROR)
+        if isinstance(given, IntConst):
+            number = given.value
+            why = (2 if number < 0 else 0 if number > MAX_CODE_POINT
+                   else 3 if _is_surrogate(number) else None)
+            return builder.wrap(
+                self._module.char_const(0 if why is not None else number),
+                builder.bool_const(why is not None), answer, span,
+                self._module.enum_const(NARROWING, why or 0))
+        no = builder.bool_const(False)
+        over = (builder.compare(CmpPred.SGT if found.signed else CmpPred.UGT,
+                                given, builder.int_const(found, MAX_CODE_POINT),
+                                span)
+                if found.high > MAX_CODE_POINT else no)
+        wrong_sign = (builder.compare(CmpPred.SLT, given,
+                                      builder.int_const(found, 0), span)
+                      if found.signed else no)
+        absent = no
+        if found.high >= FIRST_SURROGATE:
+            # One run of numbers, so one subtraction that wraps and one
+            # comparison: below the first of them comes out very large.
+            moved = builder.binary(BinOp.WRAP_SUB, given,
+                                   builder.int_const(found, FIRST_SURROGATE), span)
+            absent = builder.compare(CmpPred.ULT, moved,
+                                     builder.int_const(found, SURROGATES), span)
+        failed = self._either(builder, self._either(builder, over, wrong_sign,
+                                                    span), absent, span)
+        why_not = self._reason(builder, no, wrong_sign, span, absent)
+        if found.bare is U32:
+            value = builder.cast(CastKind.BITCAST, given, CHAR, span)
+        elif found.held < CHAR.holder.held:
+            value = builder.cast(CastKind.ZEXT, given, CHAR, span)
+        else:
+            value = builder.cast(CastKind.TRUNC, given, CHAR, span)
+        return builder.wrap(value, failed, answer, span, why_not)
+
     def _as_enum(self, builder: IRBuilder, given: Value, found: IntType,
                  wanted: EnumType, span: Span) -> Value:
         """The number as a value of the enumeration, cut to its width.
@@ -27573,15 +28070,19 @@ class Checker:
         return builder.binary(BinOp.OR, one, other, span)
 
     def _reason(self, builder: IRBuilder, under: Value, wrong_sign: Value,
-                span: Span) -> Value:
+                span: Span, absent: Value | None = None) -> Value:
         """Which condition it was, as a value of the enumeration.
 
         Overflow is nought, so it needs no term: where neither of the other two
         holds the sum is nought and that is what it was.  Each of the others is
-        its own number times whether it holds, and at most one of them can.
+        its own number times whether it holds, and at most one of them can --
+        `absent` among them, where the type has numbers that are none of its
+        values.
         """
         made: Value | None = None
-        for at, held in ((1, under), (2, wrong_sign)):
+        for at, held in ((1, under), (2, wrong_sign),
+                         (3, absent if absent is not None
+                          else builder.bool_const(False))):
             if isinstance(held, BoolConst) and not held.value:
                 continue
             one = builder.cast(CastKind.ZEXT, held, NARROWING.holder, span)

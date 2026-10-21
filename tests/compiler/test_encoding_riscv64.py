@@ -35,12 +35,13 @@ OBJDUMP = ARCH_TOOLS["riscv64"]["objdump"]
 ASSEMBLER = "/usr/bin/riscv64-linux-gnu-as"
 
 #: What the compiler emits for.  The base integer set, the multiply and divide
-#: extension, single and double precision floating point, and the rounding
-#: instructions of Zfa -- which is what the application profile this compiler
-#: builds for by default has, and what the rows below need to assemble.  The
-#: compressed encoding is deliberately not included: nothing emits it, and the
-#: header flag that would announce it stays clear.
-MARCH = "rv64imfdv_zfa"
+#: extension, single and double precision floating point, the vector
+#: extension, the rounding instructions of Zfa and the bit counts of Zbb --
+#: which is what the application profile this compiler builds for by default
+#: has, and what the rows below need to assemble.  The compressed encoding is
+#: deliberately not included: nothing emits it, and the header flag that would
+#: announce it stays clear.
+MARCH = "rv64imfdv_zfa_zbb"
 
 
 def assemble(mnemonic: str, *operands: object) -> bytes:
@@ -95,6 +96,9 @@ SAMPLES = [
     ("mul a0, a1, a2", "mul", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
     ("mulh a0, a1, a2", "mulh", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
     ("mulhu a0, a1, a2", "mulhu", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
+    ("clz a0, a1", "clz", MCReg(reg("a0")), MCReg(reg("a1"))),
+    ("ctz a0, a1", "ctz", MCReg(reg("a0")), MCReg(reg("a1"))),
+    ("cpop a0, a1", "cpop", MCReg(reg("a0")), MCReg(reg("a1"))),
     ("div a0, a1, a2", "div", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
     ("divu a0, a1, a2", "divu", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
     ("rem a0, a1, a2", "rem", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
@@ -129,6 +133,17 @@ SAMPLES = [
      MCImm(0b010, 3, signed=False)),
     ("fcvt.d.l f0, a1", "fcvt.d.l", MCReg(reg("f0")), MCReg(reg("a1"))),
     ("fcvt.s.w f0, a1", "fcvt.s.w", MCReg(reg("f0")), MCReg(reg("a1"))),
+    ("fcvt.s.l f0, a1", "fcvt.s.l", MCReg(reg("f0")), MCReg(reg("a1"))),
+    ("fcvt.s.lu f0, a1", "fcvt.s.lu", MCReg(reg("f0")), MCReg(reg("a1"))),
+    ("fcvt.d.lu f0, a1", "fcvt.d.lu", MCReg(reg("f0")), MCReg(reg("a1"))),
+    ("fcvt.l.s a0, f1, rtz", "fcvt.l.s", MCReg(reg("a0")), MCReg(reg("f1")),
+     MCImm(0b001, 3, signed=False)),
+    ("fcvt.lu.s a0, f1, rtz", "fcvt.lu.s", MCReg(reg("a0")), MCReg(reg("f1")),
+     MCImm(0b001, 3, signed=False)),
+    ("fcvt.lu.d a0, f1, rtz", "fcvt.lu.d", MCReg(reg("a0")), MCReg(reg("f1")),
+     MCImm(0b001, 3, signed=False)),
+    ("fcvt.l.d a0, f1, rtz", "fcvt.l.d", MCReg(reg("a0")), MCReg(reg("f1")),
+     MCImm(0b001, 3, signed=False)),
     ("fmax.s f0, f1, f2", "fmax.s", MCReg(reg("f0")), MCReg(reg("f1")),
      MCReg(reg("f2"))),
     ("fmax.d f0, f1, f2", "fmax.d", MCReg(reg("f0")), MCReg(reg("f1")),

@@ -442,6 +442,43 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     A64InstDesc("fmov", (_r(32), _v(32)), template=0x1E260000,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
                 est_size=INSTRUCTION_SIZE),
+    # fmov Dd, Xn and fmov Sd, Wn -- the other way, which is the bits of a
+    # whole number read as a floating-point one with nothing converted.
+    A64InstDesc("fmov", (_v(64), _r(64)), template=0x9E670000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fmov", (_v(32), _r(32)), template=0x1E270000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
+    # scvtf and ucvtf Dd/Sd, Xn: a signed or an unsigned 64-bit number as the
+    # floating-point number nearest it, rounded as FPCR says -- to nearest, a
+    # tie to even, which nothing in the language changes.
+    A64InstDesc("scvtf", (_v(64), _r(64)), template=0x9E620000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("scvtf", (_v(32), _r(64)), template=0x9E220000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("ucvtf", (_v(64), _r(64)), template=0x9E630000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("ucvtf", (_v(32), _r(64)), template=0x9E230000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
+    # fcvtzs and fcvtzu Xd, Dn/Sn: and back, toward zero, a number beyond the
+    # integer's ends answering the end it is beyond.
+    A64InstDesc("fcvtzs", (_r(64), _v(64)), template=0x9E780000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fcvtzs", (_r(64), _v(32)), template=0x9E380000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fcvtzu", (_r(64), _v(64)), template=0x9E790000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fcvtzu", (_r(64), _v(32)), template=0x9E390000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
     # sub Wd, Wn, Wm
     A64InstDesc("sub", (_r(32), _r(32), _r(32)), template=0x4B000000,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
@@ -724,6 +761,12 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     # This architecture has it at every level, where x86-64 has it only from the
     # third: counting bits is not a feature here, it is the instruction set.
     A64InstDesc("clz", (_r(64), _r(64)), template=0xDAC01000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
+    # rbit Xd, Xn   the bits in the other order, which turns the zeroes below
+    # the lowest set bit into the zeroes above the highest -- so that the count
+    # of the one is `clz` of this, there being no count from the bottom.
+    A64InstDesc("rbit", (_r(64), _r(64)), template=0xDAC00000,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
                 est_size=INSTRUCTION_SIZE),
     # mul Xd, Xn, Xm

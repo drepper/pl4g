@@ -1,7 +1,7 @@
 """Counting the bits of a value, with the instruction where there is one.
 
-Two questions: how many bits are set, and how many zeroes stand above the
-highest one that is.  Written once for all three targets, because what differs
+Three questions: how many bits are set, how many zeroes stand above the
+highest one that is, and how many below the lowest.  Written once for all three targets, because what differs
 between them is only whether the machine answers a question outright -- and
 where it does not, what is emitted instead is the same everywhere.
 
@@ -26,7 +26,13 @@ zeroes above it is the width less the count of ones.  That also answers for
 nought, which is the width -- the one case the instructions themselves leave
 undefined and the language does not.
 
-**Both count over the value's own type.**  A value narrower than the register it
+**Trailing zeroes without an instruction** are the ones of a mask: a value
+less one has every zero below its lowest set bit turned to one and that bit
+turned to nought, so what the value less one has that the value has not is
+exactly those zeroes -- and counting them is counting ones.  For nought that is
+every bit, which is the width.
+
+**Every count is over the value's own type.**  A value narrower than the register it
 is held in is made to fill one first, without a sign, so that what is counted is
 the type's bits and nothing above them; and a count of leading zeroes then has
 the register's extra width taken off it.
@@ -57,7 +63,8 @@ WIDTH: Final[int] = 64
 #: The two operations this answers for, which is what a backend asks to know
 #: whether an instruction of the representation belongs here.
 COUNTING: Final[frozenset[UnOp]] = frozenset((UnOp.COUNT_ONES,
-                                              UnOp.COUNT_LEADING))
+                                              UnOp.COUNT_LEADING,
+                                              UnOp.COUNT_TRAILING))
 
 
 class Scratch:
@@ -79,6 +86,12 @@ def lower_count(asm: Assembler, op: UnOp, value: MCOperand, bits: int,
     itself.
     """
     held = scratch.scratch()
+    if op is UnOp.COUNT_TRAILING:
+        answer = scratch.scratch()
+        _trailing(asm, held, value, bits, answer, scratch, span)
+        asm.loadreg(destination,
+                    MCReg(answer, bits=getattr(destination, "bits", WIDTH)), span)
+        return
     # The type's own bits and nothing above them, which for a value narrower
     # than its register is what filling one without a sign gives.
     if bits < WIDTH:
@@ -177,3 +190,37 @@ def _leading(asm: Assembler, held: Reg, bits: int, destination: Reg,
     asm.loadreg(width, MCImm(bits, 32, signed=False), span)
     asm.op(ops.MINUS, width, MCReg(width), MCReg(destination), span=span)
     asm.loadreg(destination, MCReg(width), span)
+
+
+def _trailing(asm: Assembler, held: Reg, value: MCOperand, bits: int,
+              destination: Reg, scratch: Scratch, span: Span) -> None:
+    """How many zeroes stand below the lowest set bit of *value*, counted over
+    *bits*.
+
+    A value narrower than the register has the bit just above its own set
+    first.  Nothing below that changes, so a value with a set bit of its own
+    counts what it did; one with none counts up to that bit and stops, which is
+    the width of the type -- and what was above the value in the register, its
+    sign or anything else, is above the bit that stops the count and is never
+    reached.  So a signed value is not masked to its own bits first, as it is
+    for the other two counts, and nought of any width needs nothing said about
+    it.
+    """
+    if bits < WIDTH:
+        asm.widen(held, value, bits, False, span)
+        stop = scratch.scratch()
+        asm.loadreg(stop, MCImm(1 << bits, WIDTH, signed=False), span)
+        asm.op(ops.OR, held, MCReg(held), MCReg(stop), span=span)
+    else:
+        asm.loadreg(held, value, span)
+    if asm.counts_trailing:
+        asm.count_trailing(destination, MCReg(held), span)
+        return
+    # The zeroes below the lowest set bit, made ones and nothing else: the
+    # value less one, with what the value itself has cleared from it.
+    below, one = scratch.scratch(), scratch.scratch()
+    asm.loadreg(one, MCImm(1, WIDTH, signed=False), span)
+    asm.op(ops.MINUS, below, MCReg(held), MCReg(one), span=span)
+    asm.op(ops.NOT, held, MCReg(held), span=span)
+    asm.op(ops.AND, held, MCReg(held), MCReg(below), span=span)
+    _ones(asm, held, destination, scratch, span)

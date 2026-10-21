@@ -200,6 +200,11 @@ namespace pl4g::target::riscv64 {
         add("andi", { r(), r(), i12() }, 0x00007013, { reg(0, rd), reg(1, rs1), simm(2, imm12, 12) });
         rrr("mul", 0x02000033);
         rrr("mulh", 0x02001033);
+        // clz, ctz and cpop: the three counts of a doubleword's bits, Zbb's and
+        // not the base's.
+        add("clz", { r(), r() }, 0x60001013, { reg(0, rd), reg(1, rs1) });
+        add("ctz", { r(), r() }, 0x60101013, { reg(0, rd), reg(1, rs1) });
+        add("cpop", { r(), r() }, 0x60201013, { reg(0, rd), reg(1, rs1) });
         rrr("mulhu", 0x02003033);
         rrr("div", 0x02004033);
         rrr("divu", 0x02005033);
@@ -223,10 +228,19 @@ namespace pl4g::target::riscv64 {
         add("fcvt.d.s", { f(), f() }, 0x42000053, { reg(0, rd), reg(1, rs1) });
         add("fcvt.l.d", { r(), f(), rm() }, 0xC2200053, { reg(0, rd), reg(1, rs1), mode(2) });
         add("fcvt.w.s", { r(), f(), rm() }, 0xC0000053, { reg(0, rd), reg(1, rs1), mode(2) });
+        // Into a whole doubleword from either format, signed and not.
+        add("fcvt.l.s", { r(), f(), rm() }, 0xC0200053, { reg(0, rd), reg(1, rs1), mode(2) });
+        add("fcvt.lu.s", { r(), f(), rm() }, 0xC0300053, { reg(0, rd), reg(1, rs1), mode(2) });
+        add("fcvt.lu.d", { r(), f(), rm() }, 0xC2300053, { reg(0, rd), reg(1, rs1), mode(2) });
         add("fround.s", { f(), f(), rm() }, 0x40400053, { reg(0, rd), reg(1, rs1), mode(2) });
         add("fround.d", { f(), f(), rm() }, 0x42400053, { reg(0, rd), reg(1, rs1), mode(2) });
         add("fcvt.d.l", { f(), r() }, 0xD2207053, { reg(0, rd), reg(1, rs1) });
         add("fcvt.s.w", { f(), r() }, 0xD0007053, { reg(0, rd), reg(1, rs1) });
+        // A whole doubleword, signed or not, as the floating-point number
+        // nearest it, rounded as `frm` says.
+        add("fcvt.s.l", { f(), r() }, 0xD0207053, { reg(0, rd), reg(1, rs1) });
+        add("fcvt.s.lu", { f(), r() }, 0xD0307053, { reg(0, rd), reg(1, rs1) });
+        add("fcvt.d.lu", { f(), r() }, 0xD2307053, { reg(0, rd), reg(1, rs1) });
         add("fmv.x.w", { r(), f() }, 0xE0000053, { reg(0, rd), reg(1, rs1) });
         add("fmv.w.x", { f(), r() }, 0xF0000053, { reg(0, rd), reg(1, rs1) });
         add("fmv.x.d", { r(), f() }, 0xE2000053, { reg(0, rd), reg(1, rs1) });

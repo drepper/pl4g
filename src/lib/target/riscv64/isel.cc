@@ -604,7 +604,55 @@ namespace pl4g::target::riscv64 {
 
   Insts RVSelector::select_int_to_float(Reg dst, const MCOperand& src, int bits, Span span)
   {
-    return { inst(bits == 32 ? "fcvt.s.w" : "fcvt.d.l", { mcreg(dst), src }, span) };
+    // A signed doubleword, for both formats: a word handed over is in one
+    // already, extended by its sign.
+    return { inst(bits == 32 ? "fcvt.s.l" : "fcvt.d.l", { mcreg(dst), src }, span) };
+  }
+
+
+  Insts RVSelector::select_unsigned_to_float(Reg dst, const MCOperand& src, int bits, Span span)
+  {
+    return { inst(bits == 32 ? "fcvt.s.lu" : "fcvt.d.lu", { mcreg(dst), src }, span) };
+  }
+
+
+  Insts RVSelector::select_truncate_to_int(Reg dst, const MCOperand& src, int bits, bool is_signed, Span span)
+  {
+    // The rounding field that says toward zero, whatever `frm` holds.
+    constexpr int toward_zero = 0b001;
+    std::string_view mnemonic = bits == 32 ? (is_signed ? "fcvt.l.s" : "fcvt.lu.s")
+                                           : (is_signed ? "fcvt.l.d" : "fcvt.lu.d");
+    return { inst(mnemonic, { mcreg(dst), src, imm(toward_zero, 3, false) }, span) };
+  }
+
+
+  Insts RVSelector::select_move_bits(Reg dst, const MCOperand& src, int bits, Span span)
+  {
+    auto reg = std::get_if<MCReg>(&src);
+    if (reg == nullptr) [[unlikely]]
+      throw UnsupportedOperation("moving the bits of what is not in a register", span);
+    bool into_float = dst.cls() == registers().fpr;
+    std::string_view mnemonic = bits == 32 ? (into_float ? "fmv.w.x" : "fmv.x.w")
+                                           : (into_float ? "fmv.d.x" : "fmv.x.d");
+    return { inst(mnemonic, { mcreg(dst), mcreg(reg->reg) }, span) };
+  }
+
+
+  Insts RVSelector::select_count_ones(Reg dst, const MCOperand& src, Span span)
+  {
+    return { inst("cpop", { mcreg(dst), src }, span) };
+  }
+
+
+  Insts RVSelector::select_count_leading(Reg dst, const MCOperand& src, Span span)
+  {
+    return { inst("clz", { mcreg(dst), src }, span) };
+  }
+
+
+  Insts RVSelector::select_count_trailing(Reg dst, const MCOperand& src, Span span)
+  {
+    return { inst("ctz", { mcreg(dst), src }, span) };
   }
 
 
@@ -1634,6 +1682,17 @@ namespace pl4g::target::riscv64 {
         lower_return(inst, span);
         return;
       case InstKind::BinaryInst:
+        if (inst->bin == ir::BinOp::wide_mul) {
+          // Both halves, the upper one first as the tuple has them.
+          Reg high = info.new_virtual(registers().gpr, 64);
+          Reg low = info.new_virtual(registers().gpr, 64);
+          held[inst] = high;
+          extra[inst] = { low };
+          auto left = value(inst->operands[0], inst->span);
+          auto right = value(inst->operands[1], inst->span);
+          asm_.wide_product(low, high, left, right, is_signed(inst->operands[0]->ty), inst->span);
+          return;
+        }
         if (is_floating(inst->ty))
           lower_float_binary(inst, span);
         else
@@ -1765,6 +1824,46 @@ namespace pl4g::target::riscv64 {
           auto destination = destination_for(inst, inst->ty);
           auto operand = in_register(inst->operands[0], inst->span);
           asm_.float_extend(destination, operand, bits_of(inst->operands[0]->ty), bits_of(inst->ty), inst->span);
+          return;
+        }
+        case ir::CastKind::itof: {
+          // Every whole number widened to a word by its own sign and converted
+          // from there, a `u64` by the conversion that reads a word without one.
+          auto destination = destination_for(inst, inst->ty);
+          auto counted = ir::as<ir::IntType>(inst->operands[0]->ty);
+          auto given = in_register(inst->operands[0], inst->span);
+          int width = width_of(counted);
+          MCReg number{ std::get<MCReg>(given).reg, 64 };
+          if (width < 64) {
+            number = MCReg{ info.new_virtual(registers().gpr, 64), 64 };
+            asm_.widen(number.reg, given, width, counted->is_signed, inst->span);
+          }
+          if (counted->is_signed || width < 64)
+            asm_.int_to_float(destination, number, bits_of(inst->ty), inst->span);
+          else
+            asm_.unsigned_to_float(destination, number, bits_of(inst->ty), inst->span);
+          return;
+        }
+        case ir::CastKind::ftoi: {
+          // Toward zero into a whole word, whose low bits are the number.
+          auto destination = destination_for(inst, inst->ty);
+          auto into = ir::as<ir::IntType>(inst->ty);
+          auto answer = info.new_virtual(registers().gpr, 64);
+          auto given = in_register(inst->operands[0], inst->span);
+          asm_.truncate_to_int(answer, given, bits_of(inst->operands[0]->ty), into->is_signed || width_of(into) < 64,
+                               inst->span);
+          asm_.loadreg(destination, MCReg{ answer, destination.bits() }, inst->span);
+          return;
+        }
+        case ir::CastKind::fbits: {
+          // The same bits in the other kind of register.
+          auto destination = destination_for(inst, inst->ty);
+          auto given = in_register(inst->operands[0], inst->span);
+          int bits = ir::is<ir::FloatType>(inst->ty) ? bits_of(inst->ty) : int(ir::as<ir::IntType>(inst->ty)->bits);
+          asm_.move_bits(destination, given, bits, inst->span);
+          // The narrower move fills the doubleword with copies of the top bit,
+          // and a `u32` is held with zeroes there.
+          normalize(asm_, inst->ty, destination, 64, inst->span);
           return;
         }
         }

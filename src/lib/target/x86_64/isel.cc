@@ -1004,6 +1004,51 @@ namespace pl4g::target::x86_64 {
   }
 
 
+  Insts X86Selector::select_count_trailing(Reg dst, const MCOperand& src, Span span)
+  {
+    // BMI1 comes at the level that adds the count from the top.  Below it,
+    // `bsf` leaves its destination undefined for nought and says so in the
+    // zero flag, and a conditional move puts the width there.
+    if (counting_leading)
+      return { inst("tzcnt", { MCReg{ dst, 64 }, src }, span) };
+    auto width = new_gpr(64);
+    auto made = select_move(width, MCImm{ 64, 32, false }, span);
+    made.push_back(inst("bsf", { MCReg{ dst, 64 }, src }, span));
+    made.push_back(inst("cmove", { MCReg{ dst, 64 }, MCReg{ width } }, span));
+    return made;
+  }
+
+
+  Insts X86Selector::select_int_to_float(Reg dst, const MCOperand& src, int bits, Span span)
+  {
+    return { inst(bits == 64 ? "cvtsi2sd" : "cvtsi2ss", { MCReg{ dst, 128 }, src }, span) };
+  }
+
+
+  Insts X86Selector::select_truncate_to_int(Reg dst, const MCOperand& src, int bits, bool is_signed, Span span)
+  {
+    if (! is_signed) [[unlikely]]
+      throw UnsupportedOperation("an unsigned conversion of a floating-point number", span);
+    MCOperand operand = src;
+    if (auto reg = std::get_if<MCReg>(&src))
+      operand = MCReg{ reg->reg, 128 };
+    return { inst(bits == 64 ? "cvttsd2si" : "cvttss2si", { MCReg{ dst, 64 }, operand }, span) };
+  }
+
+
+  Insts X86Selector::select_move_bits(Reg dst, const MCOperand& src, int bits, Span span)
+  {
+    // `movq` for the wider format and `movd` for the narrower, either way.
+    auto reg = std::get_if<MCReg>(&src);
+    if (reg == nullptr) [[unlikely]]
+      throw UnsupportedOperation("moving the bits of what is not in a register", span);
+    std::string_view mnemonic = bits == 64 ? "movq" : "movd";
+    if (is_float(dst))
+      return { inst(mnemonic, { MCReg{ dst, 128 }, MCReg{ reg->reg, bits } }, span) };
+    return { inst(mnemonic, { MCReg{ dst, bits }, MCReg{ reg->reg, 128 } }, span) };
+  }
+
+
   Insts X86Selector::select_divide(Reg dst, const MCOperand& left, const MCOperand& right, bool is_signed,
                                    bool remainder, int bits, Span span)
   {

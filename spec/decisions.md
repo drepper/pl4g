@@ -10932,6 +10932,52 @@ at once** -- moving it, the bitwise three, comparing bytes and gathering masks -
 to set a vector register aside through and to reach a frame larger than an offset does, which a run done a lane at a time makes
 -- a sixty-four-lane mask at `-O0` on `rv64gc` is a frame of several kilobytes; a function that does not is as it was.  **Ordering
 two runs of truth values** is asked a lane at a time; whether two are equal is the question worth asking of them at once.
+## 2026-10-22T10:00+02:00 — language
+
+### Whole numbers and floating-point ones, the whole of a product, the zeroes from the bottom, and no surrogate is a `char`
+
+Part of what the user approved for a JSON module ("go ahead with all points"), whose decoder has to turn digits into a number
+the way a hand-written parser would and whose strings have to stay UTF-8:
+
+- **`⎕float(n, ⌜F⌝)`**, any whole number as the floating-point number nearest it, a tie to even; it cannot fail.
+- **`⎕trunc(x, ⌜T⌝)`**, a floating-point number toward zero as any whole-number type, answering `T ? ⎕narrowing`: `overflow`,
+  `underflow`, `sign` as for `⎕narrow`, and `absent` for a not-a-number.  No `⎕round`: the roundings are `↓ ↑ ↕` on the
+  floating-point number before it.
+- **`⎕bits(x)`** and **`⎕from_bits(u, ⌜F⌝)`**, the bits of an `f64` as a `u64` and of an `f32` as a `u32`, and back -- a move between
+  the two kinds of register.
+- **`⎕wide_mul(a, b)`**, the whole product of two 64-bit numbers as `〈upper, lower〉`.
+- **`⎕trail(x)`**, the zeroes below the lowest set bit, the width for nought, a `u8` as `⎕ones` and `⎕lead` are.
+- **`⎕chr` stops for a surrogate** as it does above U+10FFFF, with the same status 83 -- a bug fix, `⎕str(⎕chr(0xD800))` having
+  made a `str` that is not UTF-8 -- and a checked form answers a result instead of stopping.
+
+Settled without asking, as the forms most consistent with the rest of the language:
+
+- **The order of the arguments is `⎕widen`'s and `⎕narrow`'s**, the value and then the lifted type, and the type is written
+  wherever there is a choice: not for `⎕bits`, whose answer the width settles, and for `⎕from_bits`, so that a number written
+  without a suffix takes the width the format wants.  What a number counts travels through `⎕float` and `⎕trunc`, as through a
+  widening; the bits and the halves of a product count nothing.
+- **The checked character is `⎕narrow(n, ⌜char⌝)`, not a new name.**  It is the question `⎕narrow` asks of an enumeration -- does
+  this number fit a type whose values have gaps -- and it answers the same shape, with `absent` for a surrogate and `sign` for a
+  negative number.  `⎕char` was the other candidate; it would have been a second spelling of a narrowing.
+- **`⎕wide_mul` is for 64-bit operands, signed or unsigned**, answering `〈u64, u64〉` or `〈i64, u64〉`: the lower half of a signed
+  product has no sign of its own.  A narrower product fits a wider type, which is a widening and an ordinary multiplication, so it
+  is refused (4243).  The upper half first, as Go's `bits.Mul64` has it and Rust's `widening_mul` does not.
+- **A surrogate is refused wherever a `char` is written down**: a number where one is wanted and `⎕chr` of a constant (4244), and
+  an escape naming one in a character or a string (2004, as an escape beyond U+10FFFF already was) -- the lexer had been
+  handing Python a surrogate that its UTF-8 encoder then refused.
+- **`⎕from_bits` does not check**, and is therefore the one way a program comes to hold an infinity or a not-a-number.  A parser
+  or a serializer has to be able to put back what it took apart; what is done with such a value is what is done with any, and
+  arithmetic answering one still stops.
+- **RISC-V counts with Zbb where the program is built for it** -- all three counts, `⎕ones` and `⎕lead` as well as `⎕trail`, which
+  had used the sequences on every RISC-V target.
+
+Compare: C's casts and `memcpy`, undefined out of range; C++20's `std::bit_cast`; Rust's saturating `as`, `to_bits`/`from_bits`,
+`trailing_zeros`, `widening_mul`, and `char::from_u32` answering an `Option`; Go's `math.Float64bits`, `bits.TrailingZeros64` and
+`bits.Mul64`; Zig's `@intFromFloat` (illegal out of range), `@bitCast`, `@ctz` and `std.math.mulWide`; D's `cast` and
+`core.bitop.bsf`; Odin's `transmute` and `intrinsics.count_trailing_zeros`; Java's saturating casts and
+`Double.doubleToRawLongBits`; Python's `int()` raising for a not-a-number and `chr` letting a surrogate through; Haskell's
+`truncate` with no answer out of range; APL's and BQN's numbers, which are one kind and need no crossing; Wolfram's
+`IntegerPart`.  None of them says which way a number did not fit.
 
 Open questions
 --------------

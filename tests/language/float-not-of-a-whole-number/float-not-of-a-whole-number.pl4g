@@ -1,0 +1,21 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4240 LANG_NUMBER_NOT_AN_INTEGER
+※ pl4g-test: expect-diag 4240 LANG_NUMBER_NOT_AN_INTEGER
+※ pl4g-test: expect-diag 4241 LANG_NUMBER_NOT_A_FLOAT
+
+※ `⎕float` makes a floating-point number out of a whole one.  A floating-point
+※ number becomes another by widening, which needs no name, and a truth value is
+※ no number at all.  The type it makes is a floating-point type, and nothing
+※ else: a whole number made out of a whole number is a widening or a narrowing.
+
+let std := ⎕import("std")
+
+let x: f32 = 1.5f32
+let yes: bool = true
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let a: f64 = ⎕float(x, ⌜f64⌝)
+    let b: f64 = ⎕float(yes, ⌜f64⌝)
+    let c: u64 = ⎕float(7u8, ⌜u64⌝)
+    0u6

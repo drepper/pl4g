@@ -2847,6 +2847,126 @@
       "option": "always-fails"
     },
     {
+      "number": 4240,
+      "name": "LANG_NUMBER_NOT_AN_INTEGER",
+      "severity": "error",
+      "message": "'{name}' takes a whole number here, and '{found}' is not one",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "which of the compiler's names was written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type written or given"
+        }
+      ],
+      "cause": "`⎕float` makes a floating-point number out of a whole one, and `⎕trunc` a whole number out of a floating-point one: each has a whole number at one end, and a value of any other type there -- a truth value, a code point, a floating-point number where the whole one belongs -- is not the crossing being asked for.  A floating-point number becomes another floating-point number by widening, which needs no name.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Whole numbers and floating-point numbers",
+        "requirement": "`⎕float` takes a whole number and `⎕trunc` makes one."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4241,
+      "name": "LANG_NUMBER_NOT_A_FLOAT",
+      "severity": "error",
+      "message": "'{name}' takes a floating-point number here, and '{found}' is not one",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "which of the compiler's names was written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type written or given"
+        }
+      ],
+      "cause": "`⎕float` and `⎕from_bits` make a floating-point number, and `⎕trunc` and `⎕bits` take one.  The bits of a whole number are already a whole number, and a whole number truncated toward zero is itself, so neither has anything to do with a value that is not a floating-point number.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Whole numbers and floating-point numbers",
+        "requirement": "The floating-point end of each crossing is `f32` or `f64`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4242,
+      "name": "LANG_NUMBER_NOT_A_TYPE",
+      "severity": "error",
+      "message": "the type '{name}' makes a value of is written between '⌜' and '⌝'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "which of the compiler's names was written"
+        }
+      ],
+      "cause": "A type is not a value, so it is lifted out of the program the way it is for `⎕narrow` and `⎕widen`.  Without the marks the name would be read as a value's, a type's name and a value's name being both identifiers.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Whole numbers and floating-point numbers",
+        "requirement": "The type a crossing makes is written between the lifting marks."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4243,
+      "name": "LANG_WIDE_MUL_NOT_A_WORD",
+      "severity": "error",
+      "message": "'⎕wide_mul' multiplies two 64-bit whole numbers, and '{found}' is not one",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what it was given"
+        }
+      ],
+      "cause": "The whole product of two narrower numbers fits in a wider type, so it is a widening and one ordinary multiplication; what `⎕wide_mul` answers is the product nothing else has room for, which is the one of two 64-bit numbers.  `u64` or `i64`, and both of the same type.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / The whole of a product",
+        "requirement": "`⎕wide_mul` takes two `u64` or two `i64`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4244,
+      "name": "LANG_CHAR_IS_A_SURROGATE",
+      "severity": "error",
+      "message": "U+{value} is a surrogate, which is no code point",
+      "args": [
+        {
+          "name": "value",
+          "type": "string",
+          "description": "the number that was written, in hexadecimal"
+        }
+      ],
+      "cause": "The numbers from D800 to DFFF are what UTF-16 spends on saying that a code point takes two of its units, and Unicode gives none of them to a character.  A string holding one would be a string no UTF-8 encoder can write, and every `str` is well-formed UTF-8 -- so a `char` is never one, and one written down is reported rather than left to stop the program.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Characters",
+        "requirement": "A value of 'char' is no surrogate."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4260,
       "name": "LANG_MASK_NOT_TRUTH_VALUES",
       "severity": "error",

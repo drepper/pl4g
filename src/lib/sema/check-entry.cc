@@ -1371,6 +1371,11 @@ namespace pl4g::sema {
                      { { "value", ir::decimal(lit->value.value) }, { "last", "10FFFF" } });
           return nullptr;
         }
+        if (is_surrogate(lit->value.value)) [[unlikely]] {
+          diags.emit(D::LANG_CHAR_IS_A_SURROGATE, value->span,
+                     { { "value", std::format("{:04X}", std::uint32_t(lit->value.value)) } });
+          return nullptr;
+        }
         return mut(module.char_const(std::uint32_t(lit->value.value)));
       }
       auto integer = ir::as<ir::IntType>(ty);

@@ -411,6 +411,32 @@ namespace pl4g::target::aarch64 {
       // fmov Wd, Sn -- and out of the register it ended up in.
       add("fmov", { r(32), v(32) }, 0x1E260000,
           { reg_field(0, rd), reg_field(1, rn) });
+      // fmov Dd, Xn and fmov Sd, Wn -- the other way, the bits of a whole number
+      // read as a floating-point one with nothing converted.
+      add("fmov", { v(64), r(64) }, 0x9E670000,
+          { reg_field(0, rd), reg_field(1, rn) });
+      add("fmov", { v(32), r(32) }, 0x1E270000,
+          { reg_field(0, rd), reg_field(1, rn) });
+      // scvtf and ucvtf Dd/Sd, Xn: a signed or an unsigned 64-bit number as the
+      // floating-point number nearest it, rounded as FPCR says.
+      add("scvtf", { v(64), r(64) }, 0x9E620000,
+          { reg_field(0, rd), reg_field(1, rn) });
+      add("scvtf", { v(32), r(64) }, 0x9E220000,
+          { reg_field(0, rd), reg_field(1, rn) });
+      add("ucvtf", { v(64), r(64) }, 0x9E630000,
+          { reg_field(0, rd), reg_field(1, rn) });
+      add("ucvtf", { v(32), r(64) }, 0x9E230000,
+          { reg_field(0, rd), reg_field(1, rn) });
+      // fcvtzs and fcvtzu Xd, Dn/Sn: and back, toward zero, a number beyond the
+      // integer's ends answering the end it is beyond.
+      add("fcvtzs", { r(64), v(64) }, 0x9E780000,
+          { reg_field(0, rd), reg_field(1, rn) });
+      add("fcvtzs", { r(64), v(32) }, 0x9E380000,
+          { reg_field(0, rd), reg_field(1, rn) });
+      add("fcvtzu", { r(64), v(64) }, 0x9E790000,
+          { reg_field(0, rd), reg_field(1, rn) });
+      add("fcvtzu", { r(64), v(32) }, 0x9E390000,
+          { reg_field(0, rd), reg_field(1, rn) });
       // sub Wd, Wn, Wm
       add("sub", { r(32), r(32), r(32) }, 0x4B000000,
           { reg_field(0, rd), reg_field(1, rn), reg_field(2, rm) })
@@ -664,6 +690,10 @@ namespace pl4g::target::aarch64 {
       // This architecture has it at every level, where x86-64 has it only from the
       // third: counting bits is not a feature here, it is the instruction set.
       add("clz", { r(64), r(64) }, 0xDAC01000,
+          { reg_field(0, rd), reg_field(1, rn) });
+      // rbit Xd, Xn   the bits in the other order, so that the count of the
+      // zeroes below the lowest set bit is `clz` of this.
+      add("rbit", { r(64), r(64) }, 0xDAC00000,
           { reg_field(0, rd), reg_field(1, rn) });
       // mul Xd, Xn, Xm
       add("mul", { r(64), r(64), r(64) }, 0x9B007C00,

@@ -1,0 +1,23 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4241 LANG_NUMBER_NOT_A_FLOAT
+※ pl4g-test: expect-diag 4241 LANG_NUMBER_NOT_A_FLOAT
+※ pl4g-test: expect-diag 4241 LANG_NUMBER_NOT_A_FLOAT
+※ pl4g-test: expect-diag 4240 LANG_NUMBER_NOT_AN_INTEGER
+
+※ `⎕trunc` and `⎕bits` take a floating-point number, and `⎕from_bits` makes one.
+※ A whole number truncated toward zero is itself and its bits are already a
+※ whole number, so neither has anything to do with one; and what `⎕trunc`
+※ makes is a whole number, which a floating-point type is not.
+
+let std := ⎕import("std")
+
+let n: u32 = 7u32
+let x: f64 = 2.5f64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let a: u8 = ⎕trunc(n, ⌜u8⌝) ?? 0u8
+    let b: u32 = ⎕bits(n)
+    let c: u32 = ⎕from_bits(n, ⌜u32⌝)
+    let d: f32 = ⎕trunc(x, ⌜f32⌝) ?? 0.0f32
+    0u6

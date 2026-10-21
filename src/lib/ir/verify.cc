@@ -234,6 +234,21 @@ namespace pl4g::ir {
               fail(where, "moving an address by " + render(ops[1]));
             break;
           }
+          if (inst.bin == BinOp::wide_mul) {
+            // Two 64-bit numbers of one type, and the two halves of their
+            // product: the upper one of the operands' type and the lower one
+            // unsigned, the bits below the top half having no sign.
+            auto integer = as<IntType>(ops[0]->ty);
+            auto tuple = as<TupleType>(inst.ty);
+            if (integer == nullptr || integer->bits != 64
+                || ! same(without_units(ops[0]->ty), without_units(ops[1]->ty)))
+              fail(where, "'" + inst.opcode() + "' of " + render(ops[0]) + " and " + render(ops[1]));
+            else if (tuple == nullptr || tuple->members.size() != 2
+                     || ! same(without_units(tuple->members[0]), without_units(ops[0]->ty))
+                     || ! same(tuple->members[1], u64()))
+              fail(where, "'" + inst.opcode() + "' answering with " + inst.ty->render());
+            break;
+          }
           // Up to units, which the bits know nothing about.
           if (! same(without_units(ops[0]->ty), without_units(ops[1]->ty)))
             fail(where, "'" + inst.opcode() + "' applied to operands of different types");
@@ -254,6 +269,23 @@ namespace pl4g::ir {
                 && without_units(inst.ty) != without_units(ops[0]->ty))
               fail(where, "reading " + render(ops[0]) + " as " + inst.ty->render()
                    + ", which is not the same kind of thing");
+          } else if (inst.cast == CastKind::itof || inst.cast == CastKind::ftoi) {
+            // Between a whole number and a floating-point one, in the
+            // direction the kind says.
+            auto number = inst.cast == CastKind::itof ? ops[0]->ty : inst.ty;
+            auto floating = inst.cast == CastKind::itof ? inst.ty : ops[0]->ty;
+            if (! (is<IntType>(number) && is<FloatType>(floating)))
+              fail(where, "'" + inst.opcode() + "' between " + render(ops[0]) + " and " + inst.ty->render());
+          } else if (inst.cast == CastKind::fbits) {
+            // The same bits in the other kind of register.
+            auto one = ops[0]->ty;
+            auto other = inst.ty;
+            if (is<FloatType>(one))
+              std::swap(one, other);
+            auto integer = as<IntType>(one);
+            auto floating = as<FloatType>(other);
+            if (integer == nullptr || floating == nullptr || integer->bits != floating->bits)
+              fail(where, "the bits of " + render(ops[0]) + " read as " + inst.ty->render());
           }
           break;
         case InstKind::FrameInst:
@@ -330,7 +362,7 @@ namespace pl4g::ir {
           break;
         }
         case InstKind::UnaryInst:
-          if (inst.un == UnOp::count_ones || inst.un == UnOp::count_leading) {
+          if (inst.un == UnOp::count_ones || inst.un == UnOp::count_leading || inst.un == UnOp::count_trailing) {
             // A count of bits is a count, whatever was counted.
             if (! is<IntType>(ops[0]->ty))
               fail(where, "'" + inst.opcode() + "' counting something that is not a whole number");

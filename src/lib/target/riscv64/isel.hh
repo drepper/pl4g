@@ -71,6 +71,20 @@ namespace pl4g::target::riscv64 {
     mc::Insts select_float_to_int(mc::Rounding how, mc::Reg dst, const mc::MCOperand& src, int bits,
                                   Span span) override;
     mc::Insts select_int_to_float(mc::Reg dst, const mc::MCOperand& src, int bits, Span span) override;
+    mc::Insts select_unsigned_to_float(mc::Reg dst, const mc::MCOperand& src, int bits, Span span) override;
+    mc::Insts select_truncate_to_int(mc::Reg dst, const mc::MCOperand& src, int bits, bool is_signed,
+                                     Span span) override;
+    mc::Insts select_move_bits(mc::Reg dst, const mc::MCOperand& src, int bits, Span span) override;
+    // Both conversions read and answer an unsigned doubleword as well.
+    bool converts_unsigned() const override { return true; }
+    // The three counts are instructions where the program is built for Zbb, as
+    // the application profiles are, and not in the base.
+    bool counts_ones() const override { return isa.has("zbb"); }
+    bool counts_leading() const override { return isa.has("zbb"); }
+    bool counts_trailing() const override { return isa.has("zbb"); }
+    mc::Insts select_count_ones(mc::Reg dst, const mc::MCOperand& src, Span span) override;
+    mc::Insts select_count_leading(mc::Reg dst, const mc::MCOperand& src, Span span) override;
+    mc::Insts select_count_trailing(mc::Reg dst, const mc::MCOperand& src, Span span) override;
     mc::Insts select_float_copysign(mc::Reg dst, const mc::MCOperand& magnitude, const mc::MCOperand& sign,
                                     int bits, Span span) override;
     mc::Insts select_float_op(const mc::Op* op, mc::Reg dst, const mc::MCOperand& left, const mc::MCOperand& right,

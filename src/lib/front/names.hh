@@ -77,6 +77,12 @@ namespace pl4g::names {
   inline constexpr std::string_view chr_name = "\N{APL FUNCTIONAL SYMBOL QUAD}chr";
   inline constexpr std::string_view ones_name = "\N{APL FUNCTIONAL SYMBOL QUAD}ones";
   inline constexpr std::string_view lead_name = "\N{APL FUNCTIONAL SYMBOL QUAD}lead";
+  inline constexpr std::string_view trail_name = "\N{APL FUNCTIONAL SYMBOL QUAD}trail";
+  inline constexpr std::string_view wide_mul_name = "\N{APL FUNCTIONAL SYMBOL QUAD}wide_mul";
+  inline constexpr std::string_view float_name = "\N{APL FUNCTIONAL SYMBOL QUAD}float";
+  inline constexpr std::string_view trunc_name = "\N{APL FUNCTIONAL SYMBOL QUAD}trunc";
+  inline constexpr std::string_view bits_name = "\N{APL FUNCTIONAL SYMBOL QUAD}bits";
+  inline constexpr std::string_view from_bits_name = "\N{APL FUNCTIONAL SYMBOL QUAD}from_bits";
   inline constexpr std::string_view tolerance_name = "\N{APL FUNCTIONAL SYMBOL QUAD}tolerance";
   inline constexpr double tolerance_default = 1e-13;
   inline constexpr std::string_view environ_name = "\N{APL FUNCTIONAL SYMBOL QUAD}environ";

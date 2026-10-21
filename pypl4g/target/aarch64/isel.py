@@ -1110,6 +1110,55 @@ class A64Selector(InstructionSelector):
         return (*before,
                 self._inst("clz", (MCReg(dst, bits=64), held), span))
 
+    #: And trailing zeroes at every level too, as the leading ones of the bits
+    #: turned round.
+    counts_trailing = True
+
+    #: Both conversions take and answer an unsigned number as well as a signed
+    #: one, each in one instruction.
+    converts_unsigned = True
+
+    def select_count_trailing(self, dst: Reg, src: MCOperand,
+                              span: Span) -> Sequence[MCInst]:
+        """The number of zeroes below the lowest set bit of *src*: the bits put
+        in the other order, and the zeroes above the highest of those counted,
+        nought answering sixty-four as `clz` of nought does."""
+        held, before = self._in_register(src, 64, span)
+        return (*before,
+                self._inst("rbit", (MCReg(dst, bits=64), held), span),
+                self._inst("clz", (MCReg(dst, bits=64), MCReg(dst, bits=64)),
+                           span))
+
+    def select_int_to_float(self, dst: Reg, src: MCOperand, bits: int,
+                            span: Span) -> Sequence[MCInst]:
+        """The signed 64-bit number *src* as the floating-point value nearest
+        it, of *bits*."""
+        held, before = self._in_register(src, 64, span)
+        return (*before,
+                self._inst("scvtf", (MCReg(dst, bits=bits), held), span))
+
+    def select_unsigned_to_float(self, dst: Reg, src: MCOperand, bits: int,
+                                 span: Span) -> Sequence[MCInst]:
+        """And the unsigned one."""
+        held, before = self._in_register(src, 64, span)
+        return (*before,
+                self._inst("ucvtf", (MCReg(dst, bits=bits), held), span))
+
+    def select_truncate_to_int(self, dst: Reg, src: MCOperand, bits: int,
+                               signed: bool, span: Span) -> Sequence[MCInst]:
+        """The floating-point value *src* toward zero, as a signed or an
+        unsigned 64-bit number."""
+        return (self._inst("fcvtzs" if signed else "fcvtzu",
+                           (MCReg(dst, bits=64), _at(src, bits)), span),)
+
+    def select_move_bits(self, dst: Reg, src: MCOperand, bits: int,
+                         span: Span) -> Sequence[MCInst]:
+        """The bits of a floating-point value in an ordinary register, or the
+        other way: one `fmov` either way, at the width of the value."""
+        assert isinstance(src, MCReg)
+        return (self._inst("fmov", (MCReg(dst, bits=bits),
+                                    MCReg(src.reg, bits=bits)), span),)
+
     def select_divide(self, dst: Reg, left: MCOperand, right: MCOperand,
                       signed: bool, remainder: bool, bits: int,
                       span: Span) -> Sequence[MCInst]:
@@ -1797,6 +1846,16 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                         asm.loadreg(result, MCReg(_value_of(value, held, span)),
                                     inst.span)
                     asm.ret(inst.span, (result,))
+                case BinaryInst() if inst.op is BinOp.WIDE_MUL:
+                    # Both halves, the upper one first as the tuple has them.
+                    high = registers.new_virtual(GPR, 64)
+                    low = registers.new_virtual(GPR, 64)
+                    held[id(inst)] = high
+                    extra[id(inst)] = [low]
+                    asm.wide_product(low, high,
+                                     operands.value(inst.operands[0], inst.span),
+                                     operands.value(inst.operands[1], inst.span),
+                                     _is_signed(inst.operands[0].ty), inst.span)
                 case BinaryInst() if _is_floating(inst.ty):
                     answer = inst.ty.ok if isinstance(inst.ty, ResultType) \
                         else inst.ty
@@ -2168,6 +2227,60 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                                                           inst.span),
                                      _bits_of(inst.operands[0].ty),
                                      _bits_of(inst.ty), inst.span)
+                case CastInst() if inst.kind is CastKind.ITOF:
+                    # Every whole number is widened to a word by its own sign
+                    # and converted from there, a `u64` by the conversion that
+                    # reads a word without one.
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    counted = inst.operands[0].ty
+                    assert isinstance(counted, IntType)
+                    given = operands.in_register(inst.operands[0], inst.span)
+                    assert isinstance(given, MCReg)
+                    width = _width_of(counted)
+                    number = MCReg(given.reg, bits=64)
+                    if width < 64:
+                        number = MCReg(registers.new_virtual(GPR, 64), bits=64)
+                        asm.widen(number.reg, given, width, counted.signed,
+                                  inst.span)
+                    if counted.signed or width < 64:
+                        asm.int_to_float(destination, number, _bits_of(inst.ty),
+                                         inst.span)
+                    else:
+                        asm.unsigned_to_float(destination, number,
+                                              _bits_of(inst.ty), inst.span)
+                case CastInst() if inst.kind is CastKind.FTOI:
+                    # Toward zero into a whole word, whose low bits are the
+                    # number: it is read only where the checker found room.
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    into = inst.ty
+                    assert isinstance(into, IntType)
+                    answer = registers.new_virtual(GPR, 64)
+                    asm.truncate_to_int(
+                        answer, operands.in_register(inst.operands[0], inst.span),
+                        _bits_of(inst.operands[0].ty),
+                        into.signed or _width_of(into) < 64, inst.span)
+                    asm.loadreg(destination,
+                                MCReg(answer, bits=getattr(destination, "bits", 64)),
+                                inst.span)
+                case CastInst() if inst.kind is CastKind.FBITS:
+                    # The same bits in the other kind of register.
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.move_bits(destination,
+                                  operands.in_register(inst.operands[0],
+                                                       inst.span),
+                                  inst.ty.bits, inst.span)
                 case SelectInst():
                     # One of two values, which a truth value chooses, with no
                     # branch: how this machine does it is the selector's.

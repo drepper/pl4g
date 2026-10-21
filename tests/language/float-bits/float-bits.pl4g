@@ -1,0 +1,67 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕bits(F)` is the bits a floating-point number is kept in, read as the
+※ unsigned whole number of its width -- a `u64` for an `f64` and a `u32` for an
+※ `f32` -- and `⎕from_bits(U, ⌜F⌝)` is the number kept in those bits.  Nothing
+※ is converted: the bits move from one kind of register to the other.
+※
+※ So the two zeroes are two numbers here, which every comparison says are
+※ equal; a not-a-number keeps whatever its fraction carries, there and back;
+※ and the one way a program comes to hold an infinity or a not-a-number is to
+※ make one out of its bits, since arithmetic that would answer one stops.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ one, and the zero with its sign set
+    if ⎕bits(given(1.0f64)) ≠ 0x3FF0000000000000u64:
+        1u6
+    elif ⎕bits(given(⁻0.0f64)) ≠ 0x8000000000000000u64:
+        2u6
+    elif ⎕bits(given(0.0f64)) ≠ 0u64:
+        3u6
+    ※ the narrower format, whose bits are a u32
+    elif ⎕bits(single(1.0f32)) ≠ 0x3F800000u32:
+        4u6
+    elif ⎕bits(single(⁻0.0f32)) ≠ 0x80000000u32:
+        5u6
+    ※ and back: the largest finite f64, and the smallest number above nought
+    elif ⎕bits(⎕from_bits(word(0x7FEFFFFFFFFFFFFFu64), ⌜f64⌝)) ≠ 0x7FEFFFFFFFFFFFFFu64:
+        6u6
+    elif ⎕from_bits(word(1u64), ⌜f64⌝) ≤ 0.0f64:
+        7u6
+    ※ a not-a-number keeps its fraction, there and back
+    elif ⎕bits(⎕from_bits(word(0x7FF8000000000123u64), ⌜f64⌝)) ≠ 0x7FF8000000000123u64:
+        8u6
+    elif ⎕bits(⎕from_bits(half(0x7FC00042u32), ⌜f32⌝)) ≠ 0x7FC00042u32:
+        9u6
+    ※ the bits of a number are a number of its own, which the program may do
+    ※ arithmetic on: one more than the bits of one is the next number up
+    elif ⎕from_bits(⎕bits(given(1.0f64)) + 1u64, ⌜f64⌝) ≤ 1.0f64:
+        10u6
+    ※ written down, which the compiler reads itself -- a number without a
+    ※ suffix taking the width the type asks for
+    elif ⎕bits(⁻0.0f64) ≠ 0x8000000000000000u64 ∨ ⎕bits(1.0f32) ≠ 0x3F800000u32:
+        11u6
+    elif ⎕bits(⎕from_bits(0x4000000000000000, ⌜f64⌝)) ≠ 0x4000000000000000u64:
+        12u6
+    else:
+        0u6
+
+※ Values the compiler cannot see, so that the bits are the machine's.
+@[opaque]
+fn given(x: f64) → f64:
+    x
+
+@[opaque]
+fn single(x: f32) → f32:
+    x
+
+@[opaque]
+fn word(n: u64) → u64:
+    n
+
+@[opaque]
+fn half(n: u32) → u32:
+    n

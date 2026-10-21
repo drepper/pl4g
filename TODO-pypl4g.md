@@ -409,6 +409,8 @@ removed or decided otherwise, which its last paragraph says.
     `max`, `minu` and `maxu` are one instruction where `⌈` and `⌊` are a comparison and a conditional move, and whose
     `rol` and `ror` are the rotations; `v` brings the vector extension, which is what `Vectors` is empty for on this target.
     Both are mandatory in the profile that is now the default, so the strings are already saying they are there.
+    **Partly done (2026-10-22):** Zbb's `cpop`, `clz` and `ctz` are what `⎕ones`, `⎕lead` and `⎕trail` are where the program is
+    built for it; the extremes and the rotations are still the base's.
 
 [ ] know the older RISC-V profiles.  `rva20u64` and `rva22u64` are published sets like `rva23u64` and are each one row in the
     profile table; they are left out because what this compiler would learn from them is what `rv64gc` already says, and a row

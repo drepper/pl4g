@@ -219,6 +219,30 @@ class Verifier:
                     self._fail(where, "".join((
                         "reading ", inst.operands[0].ty.render(), " as ",
                         inst.ty.render(), ", which is not the same kind of thing")))
+            case CastInst() if inst.kind in (CastKind.ITOF, CastKind.FTOI):
+                # Between a whole number and a floating-point one, in the
+                # direction the kind says.  Any width of the one and either
+                # width of the other: what is lost on the way is the checker's
+                # to have asked about.
+                number, floating = ((inst.operands[0].ty, inst.ty)
+                                    if inst.kind is CastKind.ITOF
+                                    else (inst.ty, inst.operands[0].ty))
+                if not (isinstance(number, IntType)
+                        and isinstance(floating, FloatType)):
+                    self._fail(where, "".join((
+                        "'", inst.opcode, "' between ",
+                        inst.operands[0].ty.render(), " and ", inst.ty.render())))
+            case CastInst() if inst.kind is CastKind.FBITS:
+                # The same bits in the other kind of register, so the same
+                # number of them on both sides and one side of each kind.
+                one, other = inst.operands[0].ty, inst.ty
+                if isinstance(one, FloatType):
+                    one, other = other, one
+                if not (isinstance(one, IntType) and isinstance(other, FloatType)
+                        and one.bits == other.bits):
+                    self._fail(where, "".join((
+                        "the bits of ", inst.operands[0].ty.render(), " read as ",
+                        inst.ty.render())))
             case FrameInst():
                 if inst.ty != PtrType(inst.held, mutable=True):
                     self._fail(where, "".join((
@@ -250,6 +274,23 @@ class Verifier:
                     self._fail(where, "".join((
                         "the address of a ", inst.operands[0].ty.render(),
                         " read as ", inst.ty.render())))
+            case BinaryInst() if inst.op is BinOp.WIDE_MUL:
+                # Two 64-bit numbers of one type, and the two halves of their
+                # product: the upper one of the operands' type and the lower
+                # one unsigned, the bits below the top half having no sign.
+                ty = inst.operands[0].ty
+                if not (isinstance(ty, IntType) and ty.bits == 64) \
+                        or without_units(ty) != without_units(inst.operands[1].ty):
+                    self._fail(where, "".join((
+                        "'", inst.opcode, "' of ", ty.render(), " and ",
+                        inst.operands[1].ty.render())))
+                elif not (isinstance(inst.ty, TupleType)
+                          and len(inst.ty.members) == 2
+                          and without_units(inst.ty.members[0])
+                          == without_units(ty)
+                          and inst.ty.members[1] == U64):
+                    self._fail(where, "".join((
+                        "'", inst.opcode, "' answering with ", inst.ty.render())))
             case BinaryInst():
                 # Up to units, which the bits know nothing about: multiplying a
                 # length by a time answers an area-per-time and is one
@@ -335,7 +376,8 @@ class Verifier:
                     self._fail(where, "".join((
                         "reading the error of ", inner.render(), " as ",
                         inst.ty.render())))
-            case UnaryInst() if inst.op in (UnOp.COUNT_ONES, UnOp.COUNT_LEADING):
+            case UnaryInst() if inst.op in (UnOp.COUNT_ONES, UnOp.COUNT_LEADING,
+                                            UnOp.COUNT_TRAILING):
                 # A count of bits is a count and not a number of the counted
                 # thing's type, so these two are the one shape whose answer is
                 # not its operand's: a whole number over a whole number.
