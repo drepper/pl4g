@@ -5,9 +5,11 @@
 // by assumption: whoever embeds this may have put something else there.
 #pragma once
 
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "diag/style.hh"
@@ -19,8 +21,13 @@ namespace pl4g::repl {
 
   // What a run or a session is given.
   struct Settings {
-    // How the program is compiled.
+    // How the program is compiled.  What it is made into is the interpreter's
+    // to say: a program it runs has a host, the program it was embedded in.
     driver::Options compile;
+    // Files whose text is given here rather than read from the disk, each
+    // with the path it is known by: a program held in memory by whatever
+    // embeds the interpreter, named among the inputs by that path.
+    std::vector<std::pair<std::filesystem::path, std::string>> held;
     // What the program is started with, beside its own name.
     std::vector<std::string> args;
     std::vector<std::string> environment;

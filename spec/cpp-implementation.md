@@ -77,6 +77,8 @@ src/lib/                    the library, libpl4g.a
     rt/                     the runtime the language's `std` reaches: io_uring, the heap
     driver/                 the stages up to the IR: read, parse, expand, check
     repl/                   running a program from its source, and the interactive session
+    embed/                  pl4g::embed::Interpreter, for a C++ program embedding the interpreter, whose functions
+                            the programs it runs call (dlsym and libffi; details.md)
     ts/                     the tree-sitter service: highlighting and folds from the grammar
     lsp/                    the LSP service
 src/repl/main.cc            pl4g-repl: the stand-alone interpreter and session
@@ -98,7 +100,9 @@ which is the host's own.  Each function is prepared once into a list of operatio
 calls are activations on a stack of its own, so a program's recursion is measured against the stack size it was built with and
 not the interpreter's.  `runtime/io.c` is compiled into the library and called as it is, so a program's input and output go
 through the same ring; the arena allocator the back ends emit as machine code is the same few lines of C++.  The record the
-startup function is handed carries the descriptors the embedder chose (`interp::Devices`).
+startup function is handed carries the descriptors the embedder chose (`interp::Devices`).  A function the host defines is found
+with `dlsym` at its first call and called through libffi, each value crossing as the x86-64 back end holds it in a register
+(details.md, "The Embedded Interpreter, and Its Calls into the Host"); `src/test/embed_host.cc`, ctest's `embed-host`, embeds it.
 
 The checker
 -----------

@@ -1171,6 +1171,39 @@ process exits with the status, through the system call and not through the C lib
 yet written is lost with it.  Whether a stop there should leave through `exit`, so that the host's own handlers run, is open
 (TODO-pypl4g.md).
 
+The Embedded Interpreter, and Its Calls into the Host
+-----------------------------------------------------
+
+The C++ interpreter can be embedded in a C++ program, through `pl4g::embed::Interpreter` (`src/lib/embed/embed.hh`): what a
+program it runs is started with -- arguments, environment, the descriptors of its three devices -- the warnings, the colour of
+the diagnostics, where modules are looked for, and a run of a program given as a file or as text in memory.  A run is
+`repl::run_file`'s: the program is compiled from its source and interpreted, and how it ended is answered as a process would
+answer it, with status 1 where it did not compile and the diagnostics on the error descriptor.  Text in memory is handed to the
+source manager under the path the caller names, which is read as if it were that file.
+
+**A program the interpreter runs has a host**: the program the interpreter is in.  The compilation says it makes something
+interpreted (`ir::Output::interpreted`), wherever the interpreter is what runs it -- a file, the interactive session, an embedding
+program -- and so a function the host defines is declared there without 5300, as in a shared object, while the compiler still
+refuses one in an executable.
+
+**A function the host defines is found the first time it is called**, with `dlsym(RTLD_DEFAULT, SYMBOL)`, and called through
+libffi.  The embedding program has to export its symbols for `dlsym` to see them (`-rdynamic`, CMake's `ENABLE_EXPORTS`) and to
+define them `extern "C"`.  What is kept is kept for the run: where each symbol was found, asked once however many declarations
+name it, and for each declaration the call's description (`ffi_cif`), prepared from its IR signature.  Nothing is kept from one
+run to the next, as nothing is from one process to the next.
+
+**A value crosses as the x86-64 back end leaves it in a register.**  The checker has let only C's types through and made each
+`str` an address of a nul-terminated copy, so every argument is one cell: an integer at the width it is held at (`u6` as a byte,
+`i24` as four), signed or not as its type is; a truth value as a byte; a character as its `u32`; an `f32` or `f64` as its bits; a
+reference as the address of the place it names, which for an `@[abi]` record is the record C expects.  C reads the low bytes of
+the cell its type has.  An answer comes back widened to a word by libffi and is made a cell as a load from memory makes one: its
+held width extended as its type's signedness says, whatever C left above that width not looked at.
+
+**A symbol nobody defines stops the run** as a shared object's stub stops it: `pl4g: the host defines no 'SYMBOL' in 'NAME'`, at
+the declaration, on the error device, and status 92.  `NAME` is the function the program wrote, not the `NAME.host` the checker made
+of one taking a `str`.  The embedding program is not ended with it: the stop unwinds the interpreter, as every stop of a run does,
+and `run_source` or `run_file` answers 92.
+
 Diagnostics
 -----------
 

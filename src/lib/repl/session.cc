@@ -185,6 +185,9 @@ namespace pl4g::repl {
     explicit State(Settings given) : settings(std::move(given))
     {
       renderer.recolour(settings.colour, settings.devices.output);
+      // A module the session imports may be one held in memory.
+      for (const auto& [path, text] : settings.held)
+        sources.hold(path, text);
     }
 
     // -- making the program ---------------------------------------------------
@@ -292,6 +295,9 @@ namespace pl4g::repl {
       renderer.use(diags);
       driver::Options options = settings.compile;
       options.inputs.clear();
+      // What the session runs is run by the interpreter, in a program that
+      // may define what a function the host defines names.
+      options.output_kind = ir::Output::interpreted;
       made.compilation = std::make_unique<driver::Compilation>(options, diags, sources);
       auto& compilation = *made.compilation;
       auto tokens = tokenize(file, diags, false);
