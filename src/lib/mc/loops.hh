@@ -28,4 +28,13 @@ namespace pl4g::mc {
   // How many loops hold each block of `function`, in layout order.
   std::vector<int> loop_depths(const MachineFunction& function);
 
+  // How many times a loop is taken to turn for each time it is entered.
+  inline constexpr int turns = 10;
+
+  // How often each block of `function` is taken to run for each call of it,
+  // in layout order: ten turns of every loop and either way of each branch
+  // alike, a way out of a loop taken once whichever turn takes it.  pypl4g's
+  // `block_frequencies`.
+  std::vector<double> block_frequencies(const MachineFunction& function);
+
 } // namespace pl4g::mc

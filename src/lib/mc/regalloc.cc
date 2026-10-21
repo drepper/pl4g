@@ -216,11 +216,39 @@ namespace pl4g::mc {
   }
 
 
+  namespace {
+
+    // For each virtual register, the virtual registers it is moved to or from,
+    // by identity and in the order the moves stand in.
+    std::unordered_map<int, std::vector<int>> move_partners(const MachineFunction& function)
+    {
+      std::unordered_map<int, std::vector<int>> found;
+      for (const auto& block : function.blocks)
+        for (const auto& inst : block->insts) {
+          if (! has(inst->desc->flags, InstFlags::move) || inst->operands.size() != 2)
+            continue;
+          auto first = std::get_if<MCReg>(&inst->operands[0]);
+          auto second = std::get_if<MCReg>(&inst->operands[1]);
+          if (first == nullptr || second == nullptr || ! first->reg.is_virtual() || ! second->reg.is_virtual()
+              || first->reg == second->reg)
+            continue;
+          found[first->reg.virt()->ident].push_back(second->reg.virt()->ident);
+          found[second->reg.virt()->ident].push_back(first->reg.virt()->ident);
+        }
+      return found;
+    }
+
+  } // anonymous namespace
+
+
   Assignment LinearScan::run(MachineFunction& function)
   {
     Assignment assignment;
-    for (std::size_t round = 0; round < widest_order() + 1; ++round) {
+    // Twice as many rounds as there are registers: a value may be put in the
+    // frame across its calls in one and everywhere in the next.
+    for (std::size_t round = 0; round < 2 * widest_order() + 2; ++round) {
       auto [ranges, blocked] = live_ranges(function);
+      partners = move_partners(function);
       assignment.ranges = ranges;
       auto crowded = assign(ranges, blocked, assignment);
       if (crowded.empty()) {
@@ -367,9 +395,12 @@ namespace pl4g::mc {
     auto [flows, seen] = flow(function);
     propagate(flows);
     auto weight_of = weights(function, flows);
+    auto runs_of = frequencies(function, flows);
     std::unordered_map<Key, std::int64_t> first;
     std::unordered_map<Key, std::int64_t> last;
     std::unordered_map<Key, std::int64_t> cost;
+    often.clear();
+    calls.clear();
 
     auto touch = [&](Key k, std::int64_t point) {
       if (auto it = first.find(k); it == first.end() || point < it->second)
@@ -383,15 +414,22 @@ namespace pl4g::mc {
       for (const auto& inst : block->insts) {
         auto [defs, uses] = defs_and_uses(*inst);
         auto weight = weight_of[std::size_t(position)];
+        auto runs = runs_of[std::size_t(position)];
+        // A call that destroys nothing -- the one to the fault path, which
+        // does not come back -- is no reason to move a value anywhere.
+        if (has(inst->desc->flags, InstFlags::call) && ! inst->clobbers.empty())
+          calls.emplace_back(position, runs);
         for (auto reg : uses) {
           auto k = key(reg);
           touch(k, position * 2);
           cost[k] += weight;
+          often[k] += runs;
         }
         for (auto reg : defs) {
           auto k = key(reg);
           touch(k, position * 2 + 1);
           cost[k] += weight;
+          often[k] += runs;
         }
         ++position;
       }
@@ -446,6 +484,19 @@ namespace pl4g::mc {
       if (flows[i].empty())
         continue;
       found.insert(found.end(), std::size_t(flows[i].last - flows[i].first + 1), power_of_ten(depths[i]));
+    }
+    return found;
+  }
+
+
+  std::vector<double> LinearScan::frequencies(const MachineFunction& function, std::span<const BlockFlow> flows)
+  {
+    auto frequency = block_frequencies(function);
+    std::vector<double> found;
+    for (std::size_t i = 0; i < flows.size() && i < frequency.size(); ++i) {
+      if (flows[i].empty())
+        continue;
+      found.insert(found.end(), std::size_t(flows[i].last - flows[i].first + 1), frequency[i]);
     }
     return found;
   }
@@ -531,7 +582,7 @@ namespace pl4g::mc {
       std::set<const RegUnit*> taken = fixed;
       for (const auto& [_, unit] : meeting)
         taken.insert(unit);
-      auto unit = choose(found, taken);
+      auto unit = choose(found, taken, assignment);
       auto reg = found.reg.virt();
       if (unit != nullptr) {
         assignment.units[reg->ident] = unit;
@@ -580,7 +631,8 @@ namespace pl4g::mc {
   }
 
 
-  const RegUnit* LinearScan::choose(const LiveRange& found, const std::set<const RegUnit*>& taken) const
+  const RegUnit* LinearScan::choose(const LiveRange& found, const std::set<const RegUnit*>& taken,
+                                    const Assignment& assignment) const
   {
     const auto& order = order_for(found.reg);
     if (found.reg.is_virtual() && found.reg.virt()->hint != nullptr) {
@@ -588,6 +640,14 @@ namespace pl4g::mc {
       if (! taken.contains(hinted) && std::ranges::find(order, hinted) != order.end())
         return hinted;
     }
+    // Then a unit a value it is moved to or from already holds, where it is
+    // free here: the two never live at once, and the move between them goes.
+    if (found.reg.is_virtual())
+      if (auto it = partners.find(found.reg.virt()->ident); it != partners.end())
+        for (auto partner : it->second)
+          if (auto unit = assignment.units.get(partner))
+            if (! taken.contains(*unit) && std::ranges::find(order, *unit) != order.end())
+              return *unit;
     for (auto unit : order)
       if (! taken.contains(unit))
         return unit;
@@ -600,22 +660,114 @@ namespace pl4g::mc {
   void LinearScan::spill(MachineFunction& function, std::span<const VirtReg* const> victims, Assignment& assignment)
   {
     OrderedMap<int, std::int64_t> slots;
+    std::unordered_map<int, const LiveRange*> ranges;
+    for (const auto& found : assignment.ranges)
+      if (found.reg.is_virtual())
+        ranges[found.reg.virt()->ident] = &found;
+    OrderedMap<int, std::pair<const VirtReg*, std::set<std::int64_t>>> split;
     for (auto victim : victims) {
       if (! victim->spillable) [[unlikely]]
         throw RegisterPressureError(function.name, std::int64_t(victims.size()),
                                     std::int64_t(order_for(Reg(victim)).size()));
       if (assignment.spilled.contains(victim->ident))
         continue;
+      if (auto kept = assignment.split.get(victim->ident)) {
+        // Put in the frame across its calls already and still in the way:
+        // everywhere, then, in the slot it has, and what put it there across
+        // the calls goes.
+        slots[victim->ident] = *kept;
+        std::set<const MCInst*> gone;
+        if (auto it = assignment.split_code.find(victim->ident); it != assignment.split_code.end()) {
+          gone = std::move(it->second);
+          assignment.split_code.erase(it);
+        }
+        for (auto& block : function.blocks)
+          std::erase_if(block->insts, [&](const InstRef& one) { return gone.contains(one.get()); });
+        continue;
+      }
+      auto it = ranges.find(victim->ident);
+      auto across = calls_across(it == ranges.end() ? nullptr : it->second);
+      double made = 0;
+      for (const auto& [_, runs] : across)
+        made += runs;
+      auto wanted_often = often.find(static_cast<Key>(victim));
+      if (! across.empty() && 2 * made < (wanted_often == often.end() ? 0.0 : wanted_often->second)) {
+        auto slot = function.frame.allocate(victim->bits / 8);
+        assignment.split[victim->ident] = slot;
+        std::set<std::int64_t> at;
+        for (const auto& [position, _] : across)
+          at.insert(position);
+        split[victim->ident] = { victim, std::move(at) };
+        continue;
+      }
       slots[victim->ident] = function.frame.allocate(victim->bits / 8);
     }
+    if (! split.empty())
+      split_at_calls(function, split, assignment);
     for (const auto& [ident, slot] : slots)
       assignment.spilled[ident] = slot;
     OrderedMap<int, const VirtReg*> wanted;
     for (auto victim : victims)
-      if (assignment.spilled.contains(victim->ident))
+      if (slots.contains(victim->ident))
         wanted[victim->ident] = victim;
+    if (wanted.empty())
+      return;
     for (auto& block : function.blocks)
       block->insts = with_spill_code(block->insts, wanted, assignment);
+  }
+
+
+  std::vector<std::pair<std::int64_t, double>> LinearScan::calls_across(const LiveRange* found) const
+  {
+    std::vector<std::pair<std::int64_t, double>> across;
+    if (found == nullptr)
+      return across;
+    std::vector<std::pair<std::int64_t, std::int64_t>> parts = found->stretches;
+    if (parts.empty())
+      parts.emplace_back(found->start, found->end);
+    for (const auto& [at, runs] : calls)
+      if (std::ranges::any_of(parts, [&](const auto& part) { return part.first <= at * 2 && part.second >= at * 2 + 1; }))
+        across.emplace_back(at, runs);
+    return across;
+  }
+
+
+  void LinearScan::split_at_calls(MachineFunction& function,
+                                  const OrderedMap<int, std::pair<const VirtReg*, std::set<std::int64_t>>>& split,
+                                  Assignment& assignment)
+  {
+    // Each value is put in its slot just before every call it lives across,
+    // and back in its register just after, so that one a call destroys will do.
+    std::int64_t position = 0;
+    for (auto& block : function.blocks) {
+      Insts out;
+      for (const auto& inst : block->insts) {
+        Insts before;
+        Insts after;
+        for (const auto& [ident, entry] : split) {
+          const auto& [victim, at] = entry;
+          if (! at.contains(position))
+            continue;
+          auto slot = *assignment.split.get(ident);
+          auto stored = selector.select_spill(slot, Reg(victim), inst->span);
+          auto loaded = selector.select_reload(Reg(victim), slot, inst->span);
+          auto& code = assignment.split_code[ident];
+          for (const auto& one : stored)
+            code.insert(one.get());
+          for (const auto& one : loaded)
+            code.insert(one.get());
+          assignment.kept.insert(assignment.kept.end(), stored.begin(), stored.end());
+          assignment.kept.insert(assignment.kept.end(), loaded.begin(), loaded.end());
+          before.insert(before.end(), stored.begin(), stored.end());
+          after.insert(after.end(), loaded.begin(), loaded.end());
+        }
+        out.insert(out.end(), before.begin(), before.end());
+        out.push_back(inst);
+        out.insert(out.end(), after.begin(), after.end());
+        ++position;
+      }
+      block->insts = std::move(out);
+    }
   }
 
 
