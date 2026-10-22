@@ -5,7 +5,11 @@
 // dlsym.  This one exports nothing: the functions are of internal linkage and
 // the program is linked as any other.  It hands them over instead, with
 // pl4g::embed::LoadedInterpreter::define, a name for each, and the
-// interpreter asks what it was handed before it asks dlsym.  That is also how
+// interpreter asks what it was handed before it asks dlsym.  A function may be
+// handed over with a context, a `void*` it is handed first, before what the
+// program's declaration says it takes: one function, `add_to`, is the
+// program's `evens` and its `odds`, each with a tally of its own, and
+// `record` is handed the list it records into.  Handing over is also how
 // a host puts a function of its own where the system has one of that name:
 // the program's `abs` is this one's, which counts its calls, and not the C
 // library's -- and a name the host does not hand over, `labs`, is still found
@@ -29,16 +33,25 @@
 
 namespace {
 
+  // A running total, of which the program keeps two through one function.
+  struct Tally {
+    std::int64_t total = 0;
+    int calls = 0;
+  };
+
   // What the program's calls left behind here.
-  std::int64_t total = 0;
+  Tally evens, odds;
   int abs_calls = 0;
   std::vector<std::string> recorded;
 
-  // Add `n` to the running total, and answer the total.
-  std::int64_t tally(std::int64_t n)
+  // Add `n` to the tally `context` is, and answer its total: the context is
+  // the first argument, and `n` is the one the program's declaration names.
+  std::int64_t add_to(void* context, std::int64_t n)
   {
-    total += n;
-    return total;
+    auto& tally = *static_cast<Tally*>(context);
+    ++tally.calls;
+    tally.total += n;
+    return tally.total;
   }
 
   // The magnitude of `n`, as the C library's `abs` answers it, counted.
@@ -53,8 +66,11 @@ namespace {
   constexpr std::string_view program =
     "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
     "\n"
-    "@[host(\"tally\")]\n"
-    "fn tally(n: i64) \N{RIGHTWARDS ARROW} i64\n"
+    "@[host(\"evens\")]\n"
+    "fn evens(n: i64) \N{RIGHTWARDS ARROW} i64\n"
+    "\n"
+    "@[host(\"odds\")]\n"
+    "fn odds(n: i64) \N{RIGHTWARDS ARROW} i64\n"
     "\n"
     "@[host(\"abs\")]\n"
     "fn abs(n: i32) \N{RIGHTWARDS ARROW} i32\n"
@@ -67,14 +83,19 @@ namespace {
     "\n"
     "@[startup, impure]\n"
     "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
-    "    let sum: mut i64 = 0i64\n"
+    "    let even: mut i64 = 0i64\n"
+    "    let odd: mut i64 = 0i64\n"
     "    foreach n := 1i64\N{HORIZONTAL ELLIPSIS}11i64:\n"
-    "        sum \N{LEFTWARDS ARROW} tally(n)\n"
+    "        if (n & 1i64) = 0i64:\n"
+    "            even \N{LEFTWARDS ARROW} evens(n)\n"
+    "        else:\n"
+    "            odd \N{LEFTWARDS ARROW} odds(n)\n"
     "    record(\"counted to ten\")\n"
     "    let a: i32 = abs(\N{SUPERSCRIPT MINUS}42i32)\n"
     "    let b: i64 = labs(\N{SUPERSCRIPT MINUS}7i64)\n"
     "    record(\"asked for two magnitudes\")\n"
-    "    if sum = 55i64 \N{LOGICAL AND} a = 42i32 \N{LOGICAL AND} b = 7i64: 0u6 else: 1u6\n";
+    "    if even = 30i64 \N{LOGICAL AND} odd = 25i64 \N{LOGICAL AND} a = 42i32 \N{LOGICAL AND} b = 7i64: 0u6 "
+    "else: 1u6\n";
 
   // A program naming a symbol neither the host nor the system defines.
   constexpr std::string_view lost =
@@ -95,11 +116,15 @@ int main(int argc, char* argv[])
   const char* library = argc > 1 ? argv[1] : pl4g::embed::LoadedInterpreter::default_library;
   try {
     pl4g::embed::LoadedInterpreter interpreter(library);
-    // Two functions only this table knows, and one put where the C library
-    // has one of the same name.  A function without captures is a function
-    // pointer, which is all the table holds.
-    if (! interpreter.define("tally", tally) || ! interpreter.define("abs", counted_abs)
-        || ! interpreter.define("record", +[](const char* line) { recorded.emplace_back(line); })) [[unlikely]] {
+    // One function as two, each handed a tally of its own; one put where the
+    // C library has one of the same name; and one handed the list it fills.
+    // A function without captures is a function pointer, which is all the
+    // table holds -- what a capture would have held is the context.
+    if (! interpreter.define("evens", add_to, &evens) || ! interpreter.define("odds", add_to, &odds)
+        || ! interpreter.define("abs", counted_abs)
+        || ! interpreter.define("record", +[](void* context, const char* line) {
+             static_cast<std::vector<std::string>*>(context)->emplace_back(line);
+           }, &recorded)) [[unlikely]] {
       std::print(stderr, "the interpreter did not keep what it was handed\n");
       return 3;
     }
@@ -107,8 +132,9 @@ int main(int argc, char* argv[])
       std::print(stderr, "the program ended with status {}\n", status);
       return 4;
     }
-    if (total != 55 || abs_calls != 1) [[unlikely]] {
-      std::print(stderr, "the total is {} and abs was called here {} times; 55 and once were due\n", total,
+    if (evens.total != 30 || evens.calls != 5 || odds.total != 25 || odds.calls != 5 || abs_calls != 1) [[unlikely]] {
+      std::print(stderr, "the tallies are {} in {} calls and {} in {} calls, abs was called here {} times; "
+                 "30 and 25 in five calls each, and once, were due\n", evens.total, evens.calls, odds.total, odds.calls,
                  abs_calls);
       return 5;
     }
@@ -126,7 +152,7 @@ int main(int argc, char* argv[])
     std::print(stderr, "{}\n", error.what());
     return 2;
   }
-  std::print("tally {}, abs called here once, labs found in the C library, {} lines recorded\n", total,
-             recorded.size());
+  std::print("evens {} and odds {} through one function, abs called here once, labs found in the C library, "
+             "{} lines recorded\n", evens.total, odds.total, recorded.size());
   return 0;
 }

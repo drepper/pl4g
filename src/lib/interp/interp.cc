@@ -269,6 +269,11 @@ namespace pl4g::interp {
       std::vector<Crossing> params;
       Crossing answer;
       void* address = nullptr;
+      // What a function the host handed over with a context is handed first,
+      // and whether `cif` is ready: it says how many arguments there are,
+      // which the context is one of, so it is made once the function is found.
+      void* context = nullptr;
+      bool prepared = false;
     };
 
     // Where in a cell are the `bytes` bytes a C value of that many bytes
@@ -371,7 +376,7 @@ namespace pl4g::interp {
       // What the host defines: each function's call, prepared the first time
       // it is called, and where each symbol was found, asked once.
       std::unordered_map<const Function*, std::unique_ptr<HostCall>> host_calls;
-      std::unordered_map<std::string, void*> host_symbols;
+      std::unordered_map<std::string, HostFunction> host_symbols;
     };
 
 
@@ -1439,10 +1444,6 @@ namespace pl4g::interp {
         made->types.push_back(made->params.back().type);
       }
       made->answer = crossing_of(callee->fty->ret);
-      if (::ffi_prep_cif(&made->cif, FFI_DEFAULT_ABI, unsigned(made->types.size()), made->answer.type,
-                         made->types.data())
-          != FFI_OK) [[unlikely]]
-        throw InternalError(std::format("libffi cannot describe a call of '{}'", callee->name));
       found = std::move(made);
       return *found;
     }
@@ -1456,15 +1457,15 @@ namespace pl4g::interp {
         // the program loaded globally, as the compiled stub asks: once a
         // symbol, however many declarations name it.
         const std::string& symbol = *callee->attrs.host;
-        auto [at, fresh] = host_symbols.try_emplace(symbol, nullptr);
+        auto [at, fresh] = host_symbols.try_emplace(symbol);
         if (fresh) {
           if (options.defined != nullptr)
             if (auto given = options.defined->find(symbol); given != options.defined->end())
               at->second = given->second;
-          if (at->second == nullptr)
-            at->second = ::dlsym(RTLD_DEFAULT, symbol.c_str());
+          if (at->second.function == nullptr)
+            at->second = { ::dlsym(RTLD_DEFAULT, symbol.c_str()), nullptr };
         }
-        if (at->second == nullptr) [[unlikely]] {
+        if (at->second.function == nullptr) [[unlikely]] {
           // The program stops, as a shared object's stub stops it, and the
           // message is about the function the program wrote rather than the
           // one the checker made of it to hand C its text.
@@ -1474,14 +1475,28 @@ namespace pl4g::interp {
           fault(describe(std::format("the host defines no '{}'", symbol), name, callee->span),
                 target::statuses::HOST_SYMBOL_MISSING);
         }
-        host.address = at->second;
+        host.address = at->second.function;
+        host.context = at->second.context;
+      }
+      if (! host.prepared) {
+        // A context goes first, as a pointer, before what the declaration
+        // says the function takes.
+        if (host.context != nullptr)
+          host.types.insert(host.types.begin(), &::ffi_type_pointer);
+        if (::ffi_prep_cif(&host.cif, FFI_DEFAULT_ABI, unsigned(host.types.size()), host.answer.type,
+                           host.types.data())
+            != FFI_OK) [[unlikely]]
+          throw InternalError(std::format("libffi cannot describe a call of '{}'", callee->name));
+        host.prepared = true;
       }
       // Each argument is a cell of its own, of which C reads the low bytes
       // its type has.  What comes back is at least a word: libffi widens a
       // narrow integer to one, as its type says.
       std::vector<Cell> words(given, given + host.params.size());
       std::vector<void*> values;
-      values.reserve(words.size());
+      values.reserve(words.size() + 1);
+      if (host.context != nullptr)
+        values.push_back(&host.context);
       for (std::size_t i = 0; i < words.size(); ++i)
         values.push_back(low_bytes(words[i], host.params[i].bytes));
       union {

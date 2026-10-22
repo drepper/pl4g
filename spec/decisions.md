@@ -11758,6 +11758,20 @@ call.  Compare Lua's `lua_register`, Python's `PyModule_AddFunctions`, Tcl's `Tc
 `scm_c_define_gsubr`, each a table of the host's functions by name, which is the usual way an embedded language is given its
 host; and `dlsym`, which needs the host to export, as LuaJIT's FFI does.
 
+## 2026-10-22T15:30+02:00 — implementation
+
+### A context handed over with a host function
+
+The user asked that **a function handed to the interpreter by name may be handed a `void*` with it**, an argument defaulting to
+null, stored beside the function pointer; where a symbol registered so is called, the function is called with that pointer
+first and the arguments the program's declaration says after it.  So `define(symbol, function, context = nullptr)` in the C++
+interface and in `LoadedInterpreter`, and a fourth parameter of `pl4g_embed_define`, which C has no defaults for.  **A null
+context is no context**: the default has to mean "none", and a pointer the host wants handed over is one that points at
+something.  The declaration in the program does not change -- the context is the host's business, and a program cannot name it
+or see that it is there -- and libffi's description of the call is made at the first call, when whether there is one is known.
+Compare the `void* user_data` of GLib's callbacks and of `pthread_create`, `qsort_r`'s `arg`, and Lua's upvalues of a C closure
+(`lua_pushcclosure`), each the way one C function serves several objects.
+
 Open questions
 --------------
 

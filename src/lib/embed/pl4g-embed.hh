@@ -112,16 +112,18 @@ namespace pl4g::embed {
     // Hand over `function` as what a program's `@[host("SYMBOL")]` names with
     // `symbol`, asked before dlsym is: a function this program does not
     // export, or one put where an exported symbol of that name is.  It has to
-    // take and answer, with the system's convention, what the declaration
-    // says.  Answers whether it was kept.
+    // answer, with the system's convention, what the declaration says, and
+    // to take it -- after `context`, as a `void*`, where `context` is not
+    // null, which is how one function serves several objects of this
+    // program's.  Answers whether it was kept.
     template<typename R, typename... A>
-    bool define(const std::string& symbol, R (*function)(A...))
+    bool define(const std::string& symbol, R (*function)(A...), void* context = nullptr)
       PL4G_PRE(valid())
       PL4G_PRE(function != nullptr)
     {
       if (state == nullptr) [[unlikely]]
         return false;
-      return define_one(state, symbol.c_str(), reinterpret_cast<void (*)()>(function)) == 0;
+      return define_one(state, symbol.c_str(), reinterpret_cast<void (*)()>(function), context) == 0;
     }
 
     // Compile the PL4G program `text` and run it in this interpreter's

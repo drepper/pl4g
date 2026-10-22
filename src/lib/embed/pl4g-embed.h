@@ -34,7 +34,8 @@ typedef pl4g_embed_state *(*pl4g_embed_state_new_t)(void);
 typedef void (*pl4g_embed_state_free_t)(pl4g_embed_state *state);
 typedef int (*pl4g_embed_run_source_t)(pl4g_embed_state *state, const char *text, size_t length,
                                        const char *name);
-typedef int (*pl4g_embed_define_t)(pl4g_embed_state *state, const char *symbol, void (*function)(void));
+typedef int (*pl4g_embed_define_t)(pl4g_embed_state *state, const char *symbol, void (*function)(void),
+                                   void *context);
 
 /** A new state, as fresh as the first: nothing allocated, nothing seeded.
     Answers NULL where there is no memory for one.  */
@@ -49,11 +50,15 @@ void pl4g_embed_state_free(pl4g_embed_state *state);
     give a program a function it does not export -- one of internal linkage,
     or any function of a program not linked with -rdynamic -- or put one of
     its own where an exported symbol of that name is.  FUNCTION is cast to
-    void (*)(void) for the call and has to take and answer, with the system's
-    convention, what the declaration says.  A later one for the same SYMBOL
-    takes the place of the earlier.  Answers 0, and -1 where STATE, SYMBOL or
-    FUNCTION is NULL or there is no memory to keep it.  */
-int pl4g_embed_define(pl4g_embed_state *state, const char *symbol, void (*function)(void));
+    void (*)(void) for the call and has to answer, with the system's
+    convention, what the declaration says, and to take it: where CONTEXT is
+    not NULL, FUNCTION takes CONTEXT first, as a void *, and what the
+    declaration says after it -- which is how one function serves several
+    objects of the host's; where it is NULL, only what the declaration says.
+    A later one for the same SYMBOL takes the place of the earlier.  Answers
+    0, and -1 where STATE, SYMBOL or FUNCTION is NULL or there is no memory
+    to keep it.  */
+int pl4g_embed_define(pl4g_embed_state *state, const char *symbol, void (*function)(void), void *context);
 
 /** Compile the PL4G program in the LENGTH bytes at TEXT and run it in STATE.
 

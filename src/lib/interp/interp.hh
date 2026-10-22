@@ -35,9 +35,18 @@ namespace pl4g::interp {
     int error = 2;
   };
 
-  // Functions a host hands the interpreter by name, each the address of a
-  // function of the system's convention.
-  using HostFunctions = std::map<std::string, void*, std::less<>>;
+  // A function a host hands the interpreter by name: the address of a
+  // function of the system's convention, and what it is handed first, before
+  // the arguments a program's declaration gives it -- where that is not
+  // null.  A null context is no context: the function takes what the
+  // declaration says and nothing more.
+  struct HostFunction {
+    void* function = nullptr;
+    void* context = nullptr;
+  };
+
+  // The functions a host hands over, by the symbol a program names each with.
+  using HostFunctions = std::map<std::string, HostFunction, std::less<>>;
 
   struct Options {
     // What the program was started with, its own name first.

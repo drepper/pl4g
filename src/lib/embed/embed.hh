@@ -88,15 +88,18 @@ namespace pl4g::embed {
     // so a host can give a program what it does not export -- a function of
     // internal linkage, one in a program not linked with -rdynamic -- or put
     // a function of its own where an exported symbol of that name is.  It
-    // has to be a function of the system's convention taking and answering
-    // what the declaration says; a later one for the same symbol takes the
-    // place of the earlier, and the table holds for every run after.
-    Interpreter& define(std::string_view symbol, void* function);
+    // has to be a function of the system's convention answering what the
+    // declaration says, and taking it: where `context` is not null, it takes
+    // `context` first, as a `void*`, and what the declaration says after it
+    // -- which is how one function serves several objects of the host's.  A
+    // later one for the same symbol takes the place of the earlier, and the
+    // table holds for every run after.
+    Interpreter& define(std::string_view symbol, void* function, void* context = nullptr);
     // The same for a function pointer of any type, which is what a host has.
     template<typename R, typename... A>
-    Interpreter& define(std::string_view symbol, R (*function)(A...))
+    Interpreter& define(std::string_view symbol, R (*function)(A...), void* context = nullptr)
     {
-      return define(symbol, reinterpret_cast<void*>(function));
+      return define(symbol, reinterpret_cast<void*>(function), context);
     }
 
     // Compile the program in the file `path` and run it.

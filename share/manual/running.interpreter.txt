@@ -39,10 +39,11 @@ program would have exited with, and a stop of the program -- an overflow, a
 failed condition, `exit` asked of the system -- ends the run and not the
 embedding program.  **A host function is found in two places**: what the
 host handed over by name -- `define(symbol, function)`, or
-`pl4g_embed_define(state, symbol, function)` -- is asked first, and `dlsym`
-after, for which the host exports with `-rdynamic`.  So a host can hand over
-what it does not export, or its own function where the system has one of
-that name.  `src/examples/embed/` has a program for each way.
+`pl4g_embed_define(state, symbol, function, context)` -- is asked first,
+and `dlsym` after, for which the host exports with `-rdynamic`.  So a host can
+hand over what it does not export, or its own function where the system has
+one of that name.  A function handed over with a context, a `void*` that is
+null unless given, takes it first and the declaration's arguments after.  `src/examples/embed/` has a program for each way.
 
 **This manual is a library too**: `libpl4g-manual.so`, whose
 `pl4g::manual::lookup(name)` answers a node's text (`src/manual/manual.hh`),

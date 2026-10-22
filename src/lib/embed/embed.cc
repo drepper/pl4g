@@ -106,9 +106,9 @@ namespace pl4g::embed {
   }
 
 
-  Interpreter& Interpreter::define(std::string_view symbol, void* function)
+  Interpreter& Interpreter::define(std::string_view symbol, void* function, void* context)
   {
-    state->settings.defined.insert_or_assign(std::string(symbol), function);
+    state->settings.defined.insert_or_assign(std::string(symbol), interp::HostFunction{ function, context });
     return *this;
   }
 

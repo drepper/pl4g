@@ -33,12 +33,12 @@ extern "C" [[gnu::visibility("default")]] void pl4g_embed_state_free(pl4g_embed_
 
 
 extern "C" [[gnu::visibility("default")]] int pl4g_embed_define(pl4g_embed_state* state, const char* symbol,
-                                                               void (*function)())
+                                                               void (*function)(), void* context)
 {
   if (state == nullptr || symbol == nullptr || function == nullptr) [[unlikely]]
     return -1;
   try {
-    state->interpreter.define(symbol, reinterpret_cast<void*>(function));
+    state->interpreter.define(symbol, reinterpret_cast<void*>(function), context);
     return 0;
   } catch (...) {
     return -1;

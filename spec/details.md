@@ -1239,10 +1239,13 @@ the same C entry and the same C++ interface for a program that carries the inter
 passes on what it is linked with to what links it, and `embed-host` is linked with it.  **Every object of the build is
 `-fPIC`**, a program's own included, set once with `add_compile_options`: CMake's `POSITION_INDEPENDENT_CODE` says `-fPIE` of a
 program's objects after it, which would win.  **What the host hands over by name is asked first.**  `interp::Options::defined`, a map from a symbol to the address of a
-function, is consulted when a host function is first called, and `dlsym(RTLD_DEFAULT, ...)` only where it holds nothing of
+function and a context, is consulted when a host function is first called, and `dlsym(RTLD_DEFAULT, ...)` only where it holds nothing of
 that name; what was found is kept for the run as before.  `embed::Interpreter::define(symbol, function)` fills it -- a template
 takes a function pointer of any type, the table holding addresses -- and so do `pl4g_embed_define` of the C entry and
-`LoadedInterpreter::define`.  The table is the interpreter's state, so it holds for every run after, and the interactive session
+`LoadedInterpreter::define`.  Each takes a context, a `void*` that is null unless given: a function handed over with one is
+called with it first, as a pointer, and then with what the program's declaration says, so that one function of the host serves
+several of its objects; the call's description for libffi is made at the first call, once the function and its context are
+known, with a pointer put in front where there is a context.  A null context is no context.  The table is the interpreter's state, so it holds for every run after, and the interactive session
 reads it too.  `src/examples/embed/defined.cc` is a host linked without `-rdynamic` handing over functions of internal linkage,
 one of them under the name of a C library function, which its program reaches in place of the library's; ctest's
 `embed-defined` runs it, and `embed-host` holds the C++ interface.  **No way a program ends ends the program embedding it.**  Returning from the startup function, a
