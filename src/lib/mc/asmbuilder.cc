@@ -400,12 +400,16 @@ namespace pl4g::mc {
       opening.insert(opening.end(), saved.begin(), saved.end());
     }
     for (std::size_t index = 0; index < keep.size(); ++index) {
-      auto spilled = selector_.select_spill(size + link + 8 * std::int64_t(index), keep[index], invalid_span);
+      // Saved as the convention keeps it, which for a floating-point register
+      // may be less than all of it: eight bytes a register.
+      auto spilled = selector_.select_keep(size + link + 8 * std::int64_t(index), keep[index], invalid_span);
       opening.insert(opening.end(), spilled.begin(), spilled.end());
     }
+    // What a caller this compilation knows may count on is what was saved
+    // whole: a run of lanes in a register saved by half would lose the rest.
     function.preserved.clear();
     for (auto reg : keep)
-      if (reg.is_physical())
+      if (reg.is_physical() && selector_.keeps_all_of(reg))
         function.preserved.insert(reg.phys()->unit);
     auto& entry = *function.blocks[0];
     opening.insert(opening.end(), entry.insts.begin(), entry.insts.end());
@@ -415,7 +419,7 @@ namespace pl4g::mc {
       for (const auto& inst : block->insts) {
         if (has(inst->desc->flags, InstFlags::return_)) {
           for (std::size_t index = 0; index < keep.size(); ++index) {
-            auto reloaded = selector_.select_reload(keep[index], size + link + 8 * std::int64_t(index), inst->span);
+            auto reloaded = selector_.select_unkeep(keep[index], size + link + 8 * std::int64_t(index), inst->span);
             out.insert(out.end(), reloaded.begin(), reloaded.end());
           }
           if (link != 0) {

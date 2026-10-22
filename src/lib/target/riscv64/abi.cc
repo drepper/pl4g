@@ -82,6 +82,13 @@ namespace pl4g::target::riscv64 {
     static const CallConvDesc made = [] {
       auto one = shaped("lp64");
       const auto& regs = registers();
+      // A callee hands back fs0 to fs11 -- f8, f9 and f18 to f27 -- as it found
+      // them, and may destroy the other floating-point registers.
+      for (int n = 0; n < 32; ++n)
+        if (n == 8 || n == 9 || (n >= 18 && n < 28))
+          one.callee_saved.insert(regs.reg(std::format("f{}", n))->unit);
+        else
+          one.caller_saved.insert(regs.reg(std::format("f{}", n))->unit);
       one.int_ret_regs = { regs.reg("a0"), regs.reg("a1") };
       // What the system answers a pair of `double`s in, fa0 and fa1.
       one.float_ret_regs = { regs.reg("f10"), regs.reg("f11") };

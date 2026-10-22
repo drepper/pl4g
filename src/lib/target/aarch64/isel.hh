@@ -118,6 +118,11 @@ namespace pl4g::target::aarch64 {
     mc::Insts select_move_bits(mc::Reg dst, const mc::MCOperand& src, int bits, Span span) override;
     mc::Insts select_spill(std::int64_t slot, mc::Reg source, Span span) override;
     mc::Insts select_reload(mc::Reg destination, std::int64_t slot, Span span) override;
+    // A register kept for the caller: of a floating-point one the low half,
+    // which is all the system's convention keeps.
+    mc::Insts select_keep(std::int64_t slot, mc::Reg source, Span span) override;
+    mc::Insts select_unkeep(mc::Reg destination, std::int64_t slot, Span span) override;
+    bool keeps_all_of(mc::Reg reg) const override;
     // x16, set aside in a function whose frame no offset reaches.
     const mc::PhysReg* frame_spare() const override;
     const mc::PhysReg* held_spare() const override { return spare; }

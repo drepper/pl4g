@@ -43,6 +43,19 @@ namespace pl4g::mc {
     // The register set aside for the function being built, and setting it.
     virtual const PhysReg* held_spare() const { return nullptr; }
     virtual void hold_spare(const PhysReg* spare) { (void) spare; }
+    // Save a register the convention keeps for the caller in the eight bytes
+    // at `slot`, and put it back; and whether the whole of it is saved.  A
+    // spill and a reload, and all of it, unless a back end says otherwise.
+    virtual Insts select_keep(std::int64_t slot, Reg source, Span span) { return select_spill(slot, source, span); }
+    virtual Insts select_unkeep(Reg destination, std::int64_t slot, Span span)
+    {
+      return select_reload(destination, slot, span);
+    }
+    virtual bool keeps_all_of(Reg reg) const
+    {
+      (void) reg;
+      return true;
+    }
     // Instructions that place `src` into `dst`.
     Insts select_move(Reg dst, const MCOperand& src, Span span) override;
     bool moves() const noexcept override { return true; }

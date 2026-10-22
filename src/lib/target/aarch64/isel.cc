@@ -1253,6 +1253,32 @@ namespace pl4g::target::aarch64 {
   }
 
 
+  Insts A64Selector::select_keep(std::int64_t slot, Reg source, Span span)
+  {
+    if (! is_float(source))
+      return select_spill(slot, source, span);
+    auto [before, base, at] = frame_place(slot, 8, span);
+    before.push_back(inst("str", { named(source, 64), base, offset_of(at) }, span));
+    return before;
+  }
+
+
+  Insts A64Selector::select_unkeep(Reg destination, std::int64_t slot, Span span)
+  {
+    if (! is_float(destination))
+      return select_reload(destination, slot, span);
+    auto [before, base, at] = frame_place(slot, 8, span);
+    before.push_back(inst("ldr", { named(destination, 64), base, offset_of(at) }, span));
+    return before;
+  }
+
+
+  bool A64Selector::keeps_all_of(Reg reg) const
+  {
+    return ! is_float(reg);
+  }
+
+
   Insts A64Selector::select_frame(std::int64_t size, Span span)
   {
     // One `sub` where twelve bits hold it, the pages and the rest where
