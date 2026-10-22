@@ -411,18 +411,37 @@ namespace pl4g::macro {
     case BinOp::lshr:
       return in_range(shifted_right(left, right), ty);
     case BinOp::rotl:
-    case BinOp::rotr: {
-      unsigned bits = it->held();
-      // Python's `%` answers a remainder of the divisor's sign.
-      __int128 turn = right % bits;
-      if (turn < 0)
-        turn += bits;
-      if (inst->bin == BinOp::rotr)
-        turn = (bits - turn) % bits;
-      auto raw = (unsigned __int128)as_written(left, ty);
-      auto t = unsigned(turn);
-      unsigned __int128 turned = (raw << t) | (raw >> (bits - t));
-      return in_range(__int128(turned & mask_of(bits)), ty);
+    case BinOp::rotr:
+    case BinOp::wrap_shl:
+    case BinOp::wrap_lshr:
+    case BinOp::wrap_ashr:
+    case BinOp::wrap_rotl:
+    case BinOp::wrap_rotr: {
+      // Over the type's own bits, the distance read as the bits of its type
+      // without a sign: inside a wrap modulo the width, every width, and
+      // outside one a rotation as far as the width or further stops.
+      unsigned bits = it->bits;
+      auto mask = mask_of(bits);
+      auto distance = (unsigned __int128)right & mask;
+      bool wrapped = inst->bin != BinOp::rotl && inst->bin != BinOp::rotr;
+      if (wrapped)
+        distance %= bits;
+      else if (distance >= bits) [[unlikely]]
+        throw Stopped("a rotation as far as the width or further");
+      auto raw = (unsigned __int128)left & mask;
+      auto d = unsigned(distance);
+      unsigned __int128 answer;
+      switch (inst->bin) {
+      case BinOp::wrap_shl: answer = raw << d; break;
+      case BinOp::wrap_lshr: answer = raw >> d; break;
+      case BinOp::wrap_ashr: answer = (unsigned __int128)(left >> d); break;
+      case BinOp::rotl: case BinOp::wrap_rotl: answer = (raw << d) | (raw >> (bits - d)); break;
+      default: answer = (raw >> d) | (raw << (bits - d)); break;
+      }
+      answer &= mask;
+      if (it->is_signed && ((answer >> (bits - 1)) & 1))
+        return __int128(answer) - (__int128(1) << bits);
+      return __int128(answer);
     }
     default:
       break;
@@ -444,16 +463,18 @@ namespace pl4g::macro {
     auto ty = ir::as<ir::IntType>(inst->operands[0]->ty);
     if (ty == nullptr) [[unlikely]]
       throw InternalError("a macro counted the bits of what is no integer");
-    __int128 raw = as_written(held, ty);
+    // Counted over the type's own bits, which for a type narrower than what
+    // holds it are fewer than the holder's.
+    __int128 raw = held & ((__int128(1) << ty->bits) - 1);
     if (inst->un == ir::UnOp::count_ones)
       return __int128(std::popcount((unsigned __int128)raw >> 64) + std::popcount((std::uint64_t)raw));
     if (inst->un == ir::UnOp::count_leading)
-      return __int128(ty->held()) - __int128(bit_length(raw));
+      return __int128(ty->bits) - __int128(bit_length(raw));
     if (inst->un == ir::UnOp::count_trailing) {
       // The lowest set bit is the only one a value shares with its negation;
       // nought has none, and its count is the width.
       if (raw == 0)
-        return __int128(ty->held());
+        return __int128(ty->bits);
       return __int128(bit_length(raw & -raw)) - 1;
     }
     throw Refused(std::format("the operation {}", describe(inst->un)), inst);

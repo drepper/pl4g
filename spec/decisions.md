@@ -11525,6 +11525,110 @@ a linked tree, `double` numbers; **C++**'s nlohmann `json`, `int64_t`, `uint64_t
 libraries, nested arrays for both.  What is unusual is that the whole of it, the bit arithmetic included, is in the language the
 program is, with no intrinsic a C library would not have.
 
+## 2026-10-22T23:30+02:00 — language and compiler
+
+### What the agents of the JSON round found and filed: room shared through a name, shifts of odd widths, the image's own names, counts of odd widths, a result in a field, an error through a module, a one-line arm continued, and the floating-point registers C keeps
+
+The agents adding the JSON module's features found these and filed them in the to-do lists without fixing them; the user
+approved fixing them with the rest of the list ("go ahead with all points").  Each is fixed in pypl4g and the C++ port alike, with
+a test that failed before.  Where the fix needed a decision the language had not made, the decision is here.
+
+**A name done with hands its room on only where the room is its own.**  `let y: [u8] = x; let out: mut [u8] = y; out⟦0⟧ ← 9u8`
+wrote the caller's list: `y` shares the parameter's room, neither changing, and `out` was handed it as a local's that is done with.
+The rule the specification states -- a list read into a place that may change it gets elements of its own -- had an exception for
+the source being done with, and the exception asked only that it be a local and not a parameter.  It now asks that its room be its
+own, which a local knows of itself (`owns_room`): made where it was bound, copied for it, or handed over by a name whose room was.
+- **Asked as each name is bound, not read off the body.**  A `mut` variable is given room of its own by every binding -- a copy or a
+  list made there or the room of a name whose room was -- so it owns its room whatever path reached it; a name without `mut` is
+  bound once, before anything reads it.  So the flag set at the binding is right at every later use, a loop's included, and nothing
+  has to be worked out over the body beforehand.  A name bound any other way -- a loop's element, a part a `match` binds, what a
+  lambda brought in -- is taken to share.
+- **A place that may change asks it of whatever it is given**, not only of a name, a field, an element or what a reference names:
+  an `if` choosing a parameter, a record written out around a shared list, a call of the language's own (some answer their
+  argument) are copied, and a list made where it is given -- written out, joined, what a function of the program answers, and a
+  record, a tuple or a list of nothing else -- is room of its own already.  A record written out field by field into its place is
+  copied a field at a time.
+- **A table's entry is a place like a field.**  `d⸨k⸩ ← x` kept the caller's list in the table, which the caller could change
+  afterwards through the list it handed over; it is copied as a field's value is.  A table itself is a handle and stays one: two
+  names for one table are two names for one table, which is what its type says.
+- **What was rightly free stays free**: a list made here and done with is handed over, a `mut` variable hands its room on, and
+  the moves of 2026-10-23 into a parameter taken as the callee's own and out of a body as its answer are as they were, the move
+  into a call now also asking that the variable's room be its own.  `examples/numbers` makes the same code.
+- Compare: **C++**, where a copy is elided or a local moved only where the compiler can see it owns the object -- never through a
+  reference, which is what `y` is here; **Rust**, which refuses to move out of a borrow and makes the program write `clone()`;
+  **Swift**, whose copy-on-write asks the same question while running, of a reference count, and copies a buffer anyone else
+  holds; **Go** and **Python**, where two names for one slice or list share it and that is the program's business.
+
+**`⎕wrap` of a shift takes its distance modulo the width of the type, every width.**  It took it with an `and` of the width less
+one, which is the modulo only for a power of two: `⎕wrap(1u3 « 4u3)` shifted by nought.  The specification said "every width is a
+power of two", which since `u1` to `u32` exist is not so.
+- **The distance is read as the bits of its type without a sign** and taken modulo the width: `⁻1i5` is thirty-one, and a shift by
+  it is a shift by one.  That is what the checked shift's comparison already reads, and what the `and` gives a width that is a
+  power of two, so nothing changes for one.  The other reading, the number modulo the width (⁻1 being four), would make the two
+  kinds of width disagree.
+- **A remainder by a constant where the width is not a power of two**, worked out by the code generator where the distance is
+  written down.  A run-time one is the machine's division -- dear, but only for a width no machine has, inside a wrap.  So the
+  range analysis, which makes a checked shift the wrapping one where the distance is known below the width, now does it at every
+  width where that costs nothing more: a power of two, or a distance written down.  A checked rotation of such a width no longer
+  masks its other distance either, which turned `↺` by nought into a shift by the width less one.  The macro interpreter asks
+  the same over the type's own bits.
+- Compare: **C**, where a shift by the width or more is undefined; **Java** and **C#**, which mask with 31 or 63 -- this rule, at
+  the two widths they have; **Rust**'s `wrapping_shl`, the same mask; **Zig**, whose shift takes a distance of the type
+  `Log2Int(T)`, so that `u3` takes a `u2` and a distance of three is a fault; the machines, which mask with the *register's* width,
+  which is why none of this is left to them.
+
+**A definition named as the image's own code is refused where it is written** (4341): `_start`, and any name beginning `__pl4g`
+or `pl4g_`.  A visible `_start` under C's convention was a second entry point, the writer deciding which the kernel started, and a
+variable named as a runtime function was written over the runtime's code.  Refused whatever the convention, though under the
+language's own the symbol is the signature and would not collide: a function should not become wrong by being given another
+convention, and no program needs these names.  The interactive session's own definitions, which it writes as source under the
+compiler's prefix, are the one exception.  Compare **C**, which reserves names beginning with two underscores and does not
+diagnose them, the linker finding the duplicate; **Rust** and **Zig**, whose linkers report a duplicate `_start`.
+
+**`⎕lead` and `⎕trail` of an odd width count over the type's width**, as the specification already said and a number written down
+already folded to: the machine and both interpreters counted over the byte holding a `u5`, so `⎕lead(0u5)` was eight running and
+five folded.  Compare **C23**'s `stdc_leading_zeros` of an `unsigned _BitInt(5)` and **Zig**'s `@clz` of a `u5`, both five.
+
+**A result where a plain number is wanted is refused wherever it stands, and a field's mismatch is the field's** (4340).  A
+division answers a result and what was measured against the place it stood in was its operands, so `Point(.x ← (a + b) ÷ 2f64)`,
+`let m: u8 = a ÷ b` and `fn f() → u8: a ÷ b` all handed a result on as a number -- the first reaching the x86-64 back end as an
+`f64?` and failing there.  A value given a field is now reported as the field's -- the field, the record, the two types -- and
+not in the words of the `let` or the answer the record stands in, whose type is the record's.  Compare **Rust**, whose
+"expected `f64`, found `Option<f64>`" points at the field; **Swift** and **Zig**, which ask an optional and an error union to be
+unwrapped before they are stored.
+
+**What the error of a result carries may be named through a module**: `u64 ? std.string.ParseError`.  The to-do list asked whether
+a path should follow the mark or a module's error be left to a type of that module; a path, as a type is written anywhere else.
+- **A name alone keeps its lookup** through the answer's module, so `std.string.Parsed(f64) ? ParseError` means what it meant;
+  a path says which module itself.  Kept as the text written in the tree, so that nothing else about a type changes.
+- Compare **Rust**'s `Result<u64, std::num::ParseIntError>`, **Zig**'s `std.fmt.ParseIntError!u64`, **Haskell**'s `Either
+  Text.Read.Error Word64`.
+
+**An `if` whose arm was written on one line goes on with `elif` or `else` on the next.**  The grammar accepted `if a: x` with
+`elif b: y` on the next line and the compiler refused it; the compiler was wrong.  The specification says the end of the line closes
+the *block*, and an arm after an indented block stands on its own line at the indentation of the `if`; one after a one-line block
+is the same arm, and no statement begins with either keyword.  Compare **Python**, which reads it this way; **Go**, which reads the
+end of the line as the end of the statement and so wants `} else {` on one line.
+
+**A function of the system's convention hands back the floating-point registers it must.**  AAPCS64 keeps the low halves of `v8`
+to `v15` for the caller and LP64D keeps `fs0` to `fs11`, and the frame saved only ordinary registers, so a `@[cdecl]` function a C
+program called could destroy the caller's values.  Found by the coordinator of this round and added to the list.
+- **Saved where used, eight bytes each** -- `str d8`, `fsd fs0` -- in the slots beside the ordinary ones, and restored before every
+  return.  AArch64 keeps only the low half, which is all a value is held in, so a selector says how it keeps a register
+  (`select_keep`) and whether that is the whole of it (`keeps_all_of`); a caller here counts on what was kept whole only, since a
+  run of lanes in `v8` would lose its upper half.
+- **A call is taken to destroy what its convention does not keep whole**: every floating-point register on AArch64, all but `fs0`
+  to `fs11` on RISC-V.  The language's own convention keeps none; the change on branch `json` that made every floating-point
+  register a call's to destroy, in every convention (eed0de7), is right for it, and merging the two keeps that for `pl4g` and this
+  for the system's.  x86-64's System V convention keeps no `xmm` register and is unchanged.
+- Compare **GCC** and **Clang**, whose prologues are these saves; the **Windows x64** convention, which keeps `xmm6` to `xmm15`
+  whole and so asks sixteen bytes a register; **Go**, which keeps no floating-point register in its own convention and saves them
+  only where it calls C.
+
+The diagnostic `⎕chr` gave a number of the wrong type was reported twice, once in the words of whatever the conversion stood in
+and once with the two types the other way round; it is now one report, as the conversion's argument (4213).  That is the
+checker's and needed no decision.
+
 Open questions
 --------------
 

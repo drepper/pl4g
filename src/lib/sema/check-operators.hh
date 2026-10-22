@@ -133,6 +133,11 @@
     ir::Value* syscall_number(const ast::NameRef* ref);  // check.py:25378
     // Lower `Point(.x ← 1f64, .y ← 2f64)`: a value of a record.
     ir::Value* lower_record(ir::Builder& builder, const ast::Call* expr, const ir::Type* ty, const ir::Type* expected);  // check.py:25398
+    // Lower `expr`, written for the field `name` of `owner`, as a `held`: a
+    // mismatch is said as the field's, every context around the record set
+    // aside while it is lowered.
+    ir::Value* lower_field_value(ir::Builder& builder, const ast::Expr* expr, const ir::Type* held, Span span,
+                                 const ir::Type* owner, std::string_view name);
     // Lower `Number(.whole ← 5i64)`: a value of a sum.
     ir::Value* lower_sum(ir::Builder& builder, const ast::Call* expr, const ir::Type* ty, const ir::Type* expected);  // check.py:25458
     // Where the tag of a sum is: after its largest part.

@@ -206,12 +206,31 @@ namespace pl4g::sema {
   }
 
 
+  void Checker::not_the_images(std::string_view name, Span span)
+  {
+    // A variable's symbol is its name and so is a function's under another
+    // language's convention, so a definition of one of these names is a second
+    // symbol of a name the image already has.  Refused whatever the
+    // convention, so that a function does not become wrong by being given
+    // another one.
+    // An interactive session writes what it keeps of an input, and the
+    // function each input runs in, as source under the compiler's own prefix:
+    // those are the compiler's definitions, given such names rightly.
+    if (session != nullptr && name.starts_with("__pl4g"))
+      return;
+    if (name == "_start" || name.starts_with("__pl4g") || name.starts_with("pl4g_")) [[unlikely]]
+      diags.emit(D::LANG_NAME_THE_IMAGE_USES, span, { { "name", name } });
+  }
+
+
   Collected* Checker::collect_function(const ast::FuncDef* node, std::string_view path)
   {
     node = kept_in_the_signature(node);
     check_doc(node);
     if (! declare(declared_as(node), node->name_span, path))
       return nullptr;
+    if (! node->held && node->body != nullptr)
+      not_the_images(node->name, node->name_span);
     std::string whole = written_name(node);
     if (node->held && ! a_type_here(node))
       return nullptr;
@@ -457,12 +476,12 @@ namespace pl4g::sema {
                             std::move(answer_kinds), thin_to, answer_arms, yield_answer, std::move(hands_out),
                             hands_out_local, std::move(receiving), unscanned, std::move(borrows), std::move(places),
                             std::move(iterator_loans), pick_in, std::move(pick_walked), demanding,
-                            std::move(writing_in), std::move(block_spans));
+                            std::move(writing_in), std::move(block_spans), std::move(filling));
     Finally restore{ [&] {
       std::tie(scopes, addressed, answering, impure, carried, loops, outside, initializing, assigning, operand_of,
                handing_over, deferred, emptied, answer_made_in, out_of_arena, out_of_arenas, made_from, answer_kinds,
                thin_to, answer_arms, yield_answer, hands_out, hands_out_local, receiving, unscanned, borrows, places,
-               iterator_loans, pick_in, pick_walked, demanding, writing_in, block_spans)
+               iterator_loans, pick_in, pick_walked, demanding, writing_in, block_spans, filling)
         = std::move(saved);
     } };
     scopes.clear();
@@ -481,6 +500,7 @@ namespace pl4g::sema {
     assigning.reset();
     operand_of.reset();
     handing_over.reset();
+    filling.reset();
     pick_in = nullptr;
     pick_walked = {};
     answer_arms = nullptr;
@@ -2072,7 +2092,10 @@ namespace pl4g::sema {
       if (! error)
         return ir::result_type(array);
       auto named = syntax.make<ast::TypeRef>(ref->span);
-      named->name = *error;
+      auto dot = error->rfind('.');
+      named->name = dot == std::string_view::npos ? *error : error->substr(dot + 1);
+      if (dot != std::string_view::npos)
+        named->module = error->substr(0, dot);
       const ir::Type* carried_ = resolve_type(named);
       if (carried_ == ir::error_type())
         return ir::error_type();
@@ -2405,16 +2428,20 @@ namespace pl4g::sema {
     if (! ref->error)
       return ir::result_type(found);
     // What the error carries is a type like any other, named the way the
-    // answer is: through the answer's module, except a type the language has.
+    // answer is: a name alone through the answer's module, except a type the
+    // language has, and a name written through a module through that one.
     auto other = syntax.copy(*ref);
-    other->name = *ref->error;
+    auto dot = ref->error->rfind('.');
+    other->name = dot == std::string_view::npos ? *ref->error : ref->error->substr(dot + 1);
     other->result = false;
     other->error.reset();
     other->unit = nullptr;
     // The answer's type arguments are the answer's: `Parsed(f64) ? Fault`
     // carries a `Fault`, which takes none.
     other->args = {};
-    if (ir::builtin_type(*ref->error) != nullptr)
+    if (dot != std::string_view::npos)
+      other->module = ref->error->substr(0, dot);
+    else if (ir::builtin_type(*ref->error) != nullptr)
       other->module.reset();
     const ir::Type* carried_ = resolve_type(other);
     if (carried_ == ir::error_type())

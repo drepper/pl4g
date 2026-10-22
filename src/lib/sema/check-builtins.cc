@@ -2114,6 +2114,12 @@ namespace pl4g::sema {
                  { { "position", position }, { "name", name }, { "expected", expected->written() }, { "found", found->written() } });
       return;
     }
+    if (filling) {
+      const auto& [owner, name] = *filling;
+      diags.emit(D::LANG_FIELD_VALUE_MISMATCH, span,
+                 { { "name", name }, { "type", owner }, { "expected", expected->written() }, { "found", found->written() } });
+      return;
+    }
     if (assigning) {
       diags.emit(D::LANG_TYPE_ASSIGNMENT_MISMATCH, span,
                  { { "name", *assigning }, { "expected", expected->written() }, { "found", found->written() } });

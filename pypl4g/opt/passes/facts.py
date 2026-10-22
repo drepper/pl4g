@@ -692,19 +692,23 @@ class _Ranges:
         if distance is None:
             return None
         op = inst.op
-        # The wrapping shift takes its distance modulo the width as a mask,
-        # which is the distance itself below the width only where the width is
-        # a power of two: a `u3` shifted by one wrapping is shifted by one
-        # masked with two.
-        exact = ty.bits & (ty.bits - 1) == 0
+        # The wrapping shift takes its distance modulo the width, which below
+        # the width is the distance itself -- so a checked shift that cannot go
+        # as far is the wrapping one.  Made that where the modulo costs no more
+        # than the check: a width that is a power of two, whose modulo is an
+        # `and`, and a distance written down, which the code generator reduces
+        # itself.  Any other distance at any other width is a remainder by the
+        # width, dearer than a comparison that never branches.
+        cheap = ty.bits & (ty.bits - 1) == 0 \
+            or isinstance(inst.operands[1], IntConst)
         if op in _PLAIN:
             # A checked shift as far as the width or further stopped the program.
             if distance[0] >= ty.bits:
                 return whole
-            if distance[1] < ty.bits and exact:
+            if distance[1] < ty.bits and cheap:
                 self.fits.add(id(inst))
             distance = (distance[0], min(distance[1], ty.bits - 1))
-        elif distance[1] >= ty.bits or not exact:
+        elif distance[1] >= ty.bits:
             distance = (0, ty.bits - 1)
         near, far = distance
         if op in (BinOp.SHL, BinOp.WRAP_SHL):

@@ -18,6 +18,12 @@ namespace pl4g::target {
       return mc::MCImm{ value, bits, false };
     }
 
+    // How wide what holds a value of `bits` bits is, as `IntType::held` says.
+    int holder_of(int bits) noexcept
+    {
+      return bits <= 8 ? 8 : bits <= 16 ? 16 : bits <= 32 ? 32 : count_width;
+    }
+
     // Clear everything above `bits` of `held`.
     void mask_to(mc::Assembler& asm_, mc::Reg held, int bits, Scratch& scratch, Span span)
     {
@@ -91,7 +97,7 @@ namespace pl4g::target {
                   Scratch& scratch, Span span)
     {
       if (bits < count_width) {
-        asm_.widen(held, value, bits, false, span);
+        asm_.widen(held, value, holder_of(bits), false, span);
         auto stop = scratch.scratch();
         asm_.loadreg(stop, unsigned_imm(static_cast<__int128>(1) << bits, count_width), span);
         asm_.op(mc::ops::or_, held, { asm_.reg(held), asm_.reg(stop) }, span);
@@ -127,7 +133,8 @@ namespace pl4g::target {
     }
     // The type's own bits and nothing above them.
     if (bits < count_width) {
-      asm_.widen(held, value, bits, false, span);
+      asm_.widen(held, value, holder_of(bits), false, span);
+      // A signed value's sign stands above its own bits, up to the holder's.
       if (is_signed)
         mask_to(asm_, held, bits, scratch, span);
     } else

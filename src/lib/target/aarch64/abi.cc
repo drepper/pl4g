@@ -75,6 +75,14 @@ namespace pl4g::target::aarch64 {
   {
     static const CallConvDesc made = [] {
       CallConvDesc cc = shaped("aapcs64");
+      // A callee hands back the low halves of v8 to v15 as it found them, so a
+      // function of this convention saves eight bytes of each it uses.  A call
+      // is still taken to destroy every floating-point register: the upper
+      // halves are not kept, and a run of lanes is held in the whole.
+      for (int n = 8; n < 16; ++n)
+        cc.callee_saved.insert(reg("d" + std::to_string(n))->unit);
+      for (int n = 0; n < 32; ++n)
+        cc.caller_saved.insert(reg("d" + std::to_string(n))->unit);
       cc.int_ret_regs = { reg("x0"), reg("x1") };
       // What the system answers a pair of `double`s in, the first two of the
       // four a homogeneous aggregate may take.

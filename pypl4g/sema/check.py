@@ -215,6 +215,12 @@ class _Local:
     #: a value: `let q := arr⟦arr > 1⟧` binds `q` to the description of a walk,
     #: and each walk of `q` starts it afresh.
     iterable: "_Iterable | None" = None
+    #: Whether the room a list it holds is in is its own: made where it was
+    #: bound, copied for it, or handed over by a name whose room was its own --
+    #: and so whether, once it is done with, that room may be handed on rather
+    #: than copied.  A parameter's is its caller's, and a name bound to one
+    #: shares it; nothing is known of a name bound any other way.
+    owns_room: bool = False
 
 
 @dataclass(slots=True)
@@ -543,6 +549,14 @@ def _referenced(node: object, name: str) -> bool:
     if isinstance(node, (list, tuple)):
         return any(_referenced(one, name) for one in node)
     return False
+
+
+def _value_of_block(block: ast.Block) -> ast.Expr | None:
+    """What a block written where a value is wanted comes to: its last
+    statement's expression, or nothing where it ends otherwise."""
+    if block.stmts and isinstance(block.stmts[-1], ast.ExprStmt):
+        return block.stmts[-1].value
+    return None
 
 
 def _given_its_own(name: str, body: ast.Block) -> bool:
@@ -3609,6 +3623,18 @@ def _table_block(module: Module) -> ProductType:
                         ("index", module.types.ptr_type(U8, True))), name="table")
 
 
+#: The entry point's symbol, and the prefixes of everything else the image's
+#: own code goes by: what the compiler makes, and the runtime's functions and
+#: variables.
+_ENTRY_SYMBOL: Final[str] = "_start"
+_IMAGE_PREFIXES: Final[tuple[str, ...]] = ("__pl4g", "pl4g_")
+
+
+def _names_the_images(name: str) -> bool:
+    """Whether *name* is one the image's own code goes by, or may."""
+    return name == _ENTRY_SYMBOL or name.startswith(_IMAGE_PREFIXES)
+
+
 def _counted(op: UnOp, value: int, ty: IntType) -> int:
     """How many bits of *value* are set, or how many zeroes stand above the
     highest set one, counted over *ty*'s own width.
@@ -4620,6 +4646,10 @@ class Checker:
         #: Which argument of which function is being lowered, so that a type
         #: that does not match is reported as what it is.
         self._handing_over: tuple[str, int] | None = None
+        #: Which field of which record or sum is being given its value, so that
+        #: a type that does not match is reported as the field's and not as a
+        #: mistake of whatever the record itself stands in.
+        self._filling: tuple[str, str] | None = None
         #: The expressions put inside something -- a record, a tuple, a list, an
         #: array, a field, an element, a variable at the top level -- by what
         #: they are put into, which a value that must be closed may not be.
@@ -5018,6 +5048,7 @@ class Checker:
             return
         if not self._declare(node.name, node.name_span):
             return
+        self._not_the_images(node.name, node.name_span)
         attrs = self._bind_attributes(node.attrs, AttrTarget.VARIABLE)
         linkage = self._linkage_of(attrs)
         pairs = self._expected_numbers(attrs)
@@ -7123,12 +7154,28 @@ class Checker:
                          else "not a type this file defines")
         return False
 
+    def _not_the_images(self, name: str, span: Span) -> None:
+        """Report a definition named as the image's own code is.
+
+        The image is the program and what the compiler puts beside it -- the
+        entry point, what the compiler makes, the runtime -- each known by its
+        symbol.  A variable's symbol is its name and so is a function's under
+        another language's convention, so a definition of one of those names
+        is a second symbol of a name the image has already, and which of the two
+        a call reaches is the writer's doing.  Refused whatever the convention,
+        so that a function does not become wrong by being given another one.
+        """
+        if _names_the_images(name):
+            self._diags.emit(D.LANG_NAME_THE_IMAGE_USES, span, name=name)
+
     def _collect_function(self, node: ast.FuncDef, path: str) -> _Collected | None:
         """Register one function definition without looking at its body."""
         node = _kept_in_the_signature(node)
         self._check_doc(node)
         if not self._declare(_declared_as(node), node.name_span, path):
             return None
+        if node.held is None and node.body is not None:
+            self._not_the_images(node.name, node.name_span)
         whole = _written_name(node)
         if node.held is not None and not self._a_type_here(node):
             return None
@@ -7342,7 +7389,7 @@ class Checker:
         "_thin_to", "_answer_arms", "_yield_answer", "_hands_out",
         "_hands_out_local", "_receiving", "_unscanned", "_borrows", "_places",
         "_iterator_loans", "_pick_in", "_pick_walked", "_demanding",
-        "_writing_in", "_block_spans")
+        "_writing_in", "_block_spans", "_filling")
 
     def _lower_set_aside(self, entry: _Collected) -> None:
         """Lower a body in the middle of another, with that one set aside."""
@@ -7355,6 +7402,7 @@ class Checker:
         self._writing_in = []
         self._initializing = self._assigning = self._operand_of = None
         self._handing_over = self._pick_in = self._pick_walked = None
+        self._filling = None
         self._answer_arms = self._yield_answer = None
         self._hands_out = self._hands_out_local = self._receiving = None
         self._out_of_arena, self._out_of_arenas = None, frozenset({_HEAP})
@@ -8906,7 +8954,9 @@ class Checker:
                 return ERROR
             if ref.error is None:
                 return self._module.types.result_type(array)
-            carried = self._resolve_type(ast.TypeRef(span=ref.span, name=ref.error))
+            module, _, name = ref.error.rpartition(".")
+            carried = self._resolve_type(ast.TypeRef(span=ref.span, name=name,
+                                                     module=module or None))
             if carried is ERROR:
                 return ERROR
             return self._module.types.result_type(array, carried)
@@ -9246,14 +9296,18 @@ class Checker:
             return self._module.types.result_type(found)
         # What the error carries is a type like any other, named the way the
         # answer is: the same lookup, and the same report where the name is not
-        # one.  Through the answer's module, except a type the language has,
-        # which no module defines: `std.fs.Pending ? i32` carries an `i32`.
+        # one.  A name alone is reached through the answer's module, except a
+        # type the language has, which no module defines: `std.fs.Pending ?
+        # i32` carries an `i32`.  A name written through a module is that
+        # module's, whatever the answer's is: `u64 ? std.string.ParseError`.
         # The answer's type arguments are the answer's: `Parsed(f64) ? Fault`
         # carries a `Fault`, which takes none.
+        through, _, name = ref.error.rpartition(".")
         carried = self._resolve_type(
-            replace(ref, name=ref.error, result=False, error=None, unit=None,
+            replace(ref, name=name, result=False, error=None, unit=None,
                     args=(),
-                    module=None if ref.error in BUILTIN_TYPES else ref.module))
+                    module=(through if through
+                            else None if name in BUILTIN_TYPES else ref.module)))
         if carried is ERROR:
             return ERROR
         if carried is VOID:
@@ -11663,8 +11717,9 @@ class Checker:
                 self._report_inferred(((stmt.name, stmt.name_span), *stmt.more),
                                       stmt.type)
             case ast.VarDef():
-                self._copied_where_shared(stmt.value, stmt.mutable)
+                owns = self._copied_where_shared(stmt.value, stmt.mutable)
                 self._lower_local(builder, stmt)
+                self._owning_room(stmt.name, owns and not stmt.more)
                 self._variable_slot(stmt)
                 self._made_in(stmt.name, stmt.value, stmt.span)
                 self._report_inferred(((stmt.name, stmt.name_span), *stmt.more),
@@ -11673,9 +11728,10 @@ class Checker:
                 # An assignment stands for the variable it changed, so it can be
                 # a function's result the way any other last statement can.
                 wants_value = is_last and func.ty.ret is not VOID
-                if not stmt.more:
-                    self._copied_where_shared(stmt.value, True)
+                owns = not stmt.more \
+                    and self._copied_where_shared(stmt.value, True)
                 result = self._lower_assignment(builder, stmt, wants_value)
+                self._owning_room(stmt.name, owns)
                 if not stmt.more:
                     self._made_in(stmt.name, stmt.value, stmt.span,
                                   assigning=True)
@@ -11690,6 +11746,7 @@ class Checker:
                         result, func, stmt.span)
                     self._returning(builder, result, stmt.span)
             case ast.EntryAssign():
+                self._copied_where_shared(stmt.value, True)
                 self._lower_entry_assign(builder, stmt)
                 self._made_in_part(stmt.base, stmt.value, stmt.span)
             case ast.UnitDef():
@@ -12049,15 +12106,15 @@ class Checker:
         it: which type a program counts in is the program's business.
         """
         outer = (self._operand_of, self._initializing, self._assigning,
-                 self._handing_over)
+                 self._handing_over, self._filling)
         (self._operand_of, self._initializing, self._assigning,
-         self._handing_over) = None, None, None, None
+         self._handing_over, self._filling) = None, None, None, None, None
         try:
             bare = isinstance(written, ast.IntLit) and written.type_name is None
             return self._lower_expr(builder, written, U64 if bare else None)
         finally:
             (self._operand_of, self._initializing, self._assigning,
-             self._handing_over) = outer
+             self._handing_over, self._filling) = outer
 
     def _field_place(self, builder: IRBuilder, where: Value, ty: ProductType,
                      at: int, span: Span) -> Value:
@@ -12096,6 +12153,13 @@ class Checker:
         given = self._fields_given(expr, ty)
         if given is None:
             return
+        if id(expr) in self._copying:
+            # The record was to be copied where it was lowered, and it is not
+            # lowered as a value but a field at a time: what is copied is each
+            # field that is not room made here already.
+            self._copying.discard(id(expr))
+            self._copying.update(id(one.value) for one in given.values()
+                                 if not self._made_or_holds_none(one.value))
         for at, (_, held) in enumerate(ty.fields):
             place = self._field_place(builder, where, ty, at, span)
             written = given[ty.fields[at][0]]
@@ -12105,8 +12169,9 @@ class Checker:
                                    written.span)
                 continue
             builder.store(place,
-                          self._lower_into(builder, written.value, held,
-                                           written.span), span)
+                          self._lower_field_value(builder, written.value, held,
+                                                  written.span, ty,
+                                                  ty.fields[at][0]), span)
             self._owning_field(written.value, ty, ty.fields[at][0], held)
 
     def _is_record_literal(self, expr: ast.Expr, ty: ProductType) -> bool:
@@ -14145,7 +14210,7 @@ class Checker:
                  self._out_of_arena, self._out_of_arenas, self._made_from,
                  self._answer_kinds, self._thin_to, self._answer_arms,
                  self._yield_answer, self._hands_out, self._hands_out_local,
-                 self._receiving, self._unscanned)
+                 self._receiving, self._unscanned, self._filling)
         self._scopes, self._addressed = [], set()
         self._answer_arms = self._yield_answer = None
         self._hands_out = self._hands_out_local = self._receiving = None
@@ -14161,7 +14226,7 @@ class Checker:
         self._answering, self._impure = func.ty.ret, func.attrs.impure
         self._carried, self._loops, self._outside = set(), [], []
         self._initializing = self._assigning = self._operand_of = None
-        self._handing_over = None
+        self._handing_over = self._filling = None
         # This body's own conditions, at its entry and at its every `return`, and
         # not those of the body whose call made it.
         outer_demanding, self._demanding = self._demanding, (node, func)
@@ -14221,7 +14286,7 @@ class Checker:
              self._out_of_arena, self._out_of_arenas, self._made_from,
              self._answer_kinds, self._thin_to, self._answer_arms,
              self._yield_answer, self._hands_out, self._hands_out_local,
-             self._receiving, self._unscanned) = outer
+             self._receiving, self._unscanned, self._filling) = outer
             self._demanding, self._at_entry = outer_demanding, outer_entry
             self._marking = outer_marking
             self._unsettled_tables = outer_unsettled
@@ -14795,7 +14860,7 @@ class Checker:
         # What the lambda is being given to, which a mismatch below names: the
         # body's own statements say other things while it is lowered.
         context = (self._operand_of, self._handing_over, self._assigning,
-                   self._initializing)
+                   self._initializing, self._filling)
         try:
             adopting, self._adopting = self._adopting, frozenset(
                 pair for one in (adopted or {}).values() for pair in one.outer)
@@ -14813,7 +14878,7 @@ class Checker:
                     if one.by_reference or isinstance(self._held_by(local), PtrType)]
         finally:
             (self._operand_of, self._handing_over, self._assigning,
-             self._initializing) = context
+             self._initializing, self._filling) = context
         if func is None:
             return UndefConst(ERROR)
         # Made once the body is: whether it changes anything is what lowering it
@@ -17342,37 +17407,102 @@ class Checker:
         made = self._room_made(builder, place, ty, builder.int_const(U64, 0), span)
         self._room_kept(builder, place, ty, made, made[2], span)
 
-    def _copied_where_shared(self, written: ast.Expr, changes: bool) -> None:
+    def _copied_where_shared(self, written: ast.Expr, changes: bool) -> bool:
         """Note *written* as a value to copy where it is lowered, where it is a
         list read out of a place into another -- one that may itself change it
         in place where *changes* says so -- and the two would otherwise share
-        the room the elements are in.
+        the room the elements are in; and say whether the place it goes then
+        has room of its own (`_Local.owns_room`).
 
         A list is a value: changing one in place -- `l ⧺← x`, `l⟦i⟧ ← v`,
         `†l⟦i⟧` -- changes no other name's.  So where either the place it was
         read from or the place it goes may be changed so, the new one gets
-        elements of its own, unless the one it came from is done with: a local
-        of this function, not a parameter -- whose room is its caller's -- and
-        not used again after this statement, whose room is then simply handed
-        over.  Where neither may change, sharing is something nobody can see.
+        elements of its own, unless what it is given is room nobody else has:
+        a list made where it is given (`_room_made_here`), or a local done with
+        whose room was its own -- not a parameter, whose room is its caller's,
+        nor a name bound to one, which shares it -- and not used again after
+        this statement, whose room is then simply handed over.  A place that
+        may change asks this of whatever it is given, an `if` or a call of the
+        language's own as much as a name; where neither may change, sharing is
+        something nobody can see.
         """
         ty = self._said_to_be(written)
-        if ty is None or not _holds_a_list(ty) or not owned.can_own(ty) \
-                or not isinstance(written, (ast.NameRef, ast.Member, ast.Element,
-                                            ast.Deref)):
-            return
+        if ty is not None and (not _holds_a_list(ty) or not owned.can_own(ty)):
+            return False
+        if self._room_made_here(written):
+            return True
+        if isinstance(written, ast.NameRef):
+            local = self._find_local(written.name)
+            if local is not None and not local.is_parameter \
+                    and not self._used_after(local) \
+                    and (local.owns_room or not changes):
+                return local.owns_room
+        if changes:
+            # What the place is given is copied where it is lowered, whatever
+            # it turns out to be: a copy of something that holds no list is the
+            # value itself.
+            self._copying.add(id(written))
+            return True
+        if ty is None or not isinstance(written, (ast.NameRef, ast.Member,
+                                                  ast.Element, ast.Deref)):
+            return False
         root: ast.Expr = written
         through_a_reference = False
         while isinstance(root, (ast.Member, ast.Element, ast.Deref)):
             through_a_reference |= isinstance(root, ast.Deref)
             root = root.operand if isinstance(root, ast.Deref) else root.base
         local = self._find_local(root.name) if isinstance(root, ast.NameRef) else None
-        if local is not None and isinstance(written, ast.NameRef) \
-                and not local.is_parameter and not self._used_after(local):
-            return
         may_change = through_a_reference or local is None or local.mutable
-        if changes or may_change:
+        if may_change:
             self._copying.add(id(written))
+            return True
+        return False
+
+    def _owning_room(self, name: str, owns: bool) -> None:
+        """Say of the local *name*, just given a value, whether its room is its
+        own."""
+        local = self._find_local(name)
+        if local is not None:
+            local.owns_room = owns
+
+    def _room_made_here(self, written: ast.Expr) -> bool:
+        """Whether *written* is a list made where it is written, in room nothing
+        else holds: written out, a join, or what a function of the program
+        answers -- as `_given_its_own` takes them -- and a record, a tuple, a
+        list or an `if` made of nothing but such lists, or of what holds none.
+        Not a name, which may share its room, nor what the language's own
+        functions answer, some of which answer their argument."""
+        while isinstance(written, ast.Allocated):
+            written = written.value
+        match written:
+            case ast.Binary() if written.op is ast.BinaryOp.CONCAT:
+                return True
+            case ast.ListLit():
+                return all(self._made_or_holds_none(one) for one in written.elements)
+            case ast.TupleLit():
+                return all(self._made_or_holds_none(one) for one in written.members)
+            case ast.Call() if self._makes_a_record(written.callee):
+                return all(self._made_or_holds_none(
+                    one.value if isinstance(one, ast.Named) else one)
+                           for one in written.args)
+            case ast.Call():
+                return not (isinstance(written.callee, ast.NameRef)
+                            and (written.callee.name.startswith(BUILTIN_GLYPH)
+                                 or self._find_local(written.callee.name)
+                                 is not None))
+            case ast.If():
+                return all(self._made_or_holds_none(_value_of_block(arm.body))
+                           for arm in written.arms)
+        return False
+
+    def _made_or_holds_none(self, written: ast.Expr | None) -> bool:
+        """Whether *written* is room made here, or something holding no list."""
+        if written is None:
+            return False
+        if self._room_made_here(written):
+            return True
+        ty = self._said_to_be(written)
+        return ty is not None and not _holds_a_list(ty)
 
     def _owned_arguments(self, builder: IRBuilder, expr: ast.Call, func: Function,
                          args: Sequence[Value]) -> list[Value]:
@@ -17412,6 +17542,7 @@ class Checker:
         stmt = self._current_stmt
         if local is None or not local.mutable \
                 or local.named_parameter and not self._owned_parameter(written, current) \
+                or not local.named_parameter and not local.owns_room \
                 or stmt is None or _mentions(stmt, written.name) != 1:
             return False
         if written.name in self._addressed:
@@ -18822,15 +18953,16 @@ class Checker:
         type that does not match as a mistake about the definition.
         """
         outer = (self._operand_of, self._initializing, self._assigning,
-                 self._handing_over, self._leaving)
+                 self._handing_over, self._leaving, self._filling)
         (self._operand_of, self._initializing, self._assigning,
-         self._handing_over, self._leaving) = None, None, None, None, True
+         self._handing_over, self._leaving, self._filling) = (None, None, None,
+                                                              None, True, None)
         return outer
 
     def _as_it_was(self, outer: tuple) -> None:
         """Put back what `_as_the_loops_value` set aside."""
         (self._operand_of, self._initializing, self._assigning,
-         self._handing_over, self._leaving) = outer
+         self._handing_over, self._leaving, self._filling) = outer
 
     def _wanted_of_a_loop(self, stmt: ast.While | ast.ForEach,
                           expected: Type | None, produces: bool
@@ -24912,6 +25044,13 @@ class Checker:
             # operands, so what they answer with is a result: the number where
             # there is one, and the fact that there is none where there is not.
             answer = self._module.types.result_type(ty)
+            if not self._accepts(expected, answer):
+                # A result where a plain number is wanted -- the value of a
+                # field, an argument, a variable's initializer -- is refused as
+                # every other result is: taking it would drop the error.  What
+                # is measured above is the operands, which are the number.
+                self._report_mismatch(expr.span, answer, expected)
+                return UndefConst(ERROR)
             if isinstance(ty, FloatType):
                 # A third question again, and not either of the two below: the
                 # answer is not truncated towards anything, and the only divisor
@@ -25901,12 +26040,29 @@ class Checker:
                              found=len(expr.args))
             return UndefConst(ERROR)
         wanted = CHAR if to_a_number else U32
-        given = self._lower_expr(builder, expr.args[0], wanted)
+        # What is given is the conversion's argument and nothing else's: a
+        # mismatch is reported as one, once, and not as a mistake of whatever
+        # the conversion itself stands in -- the `let` it initializes, the
+        # comparison it is an operand of -- whose types are not the argument's.
+        told = self._diags.error_count
+        outer = (self._handing_over, self._initializing, self._assigning,
+                 self._operand_of, self._leaving, self._filling)
+        self._handing_over = (name, 1)
+        self._initializing = self._assigning = self._operand_of = None
+        self._leaving, self._filling = False, None
+        try:
+            given = self._lower_expr(builder, expr.args[0], wanted)
+        finally:
+            (self._handing_over, self._initializing, self._assigning,
+             self._operand_of, self._leaving, self._filling) = outer
         found = self._value_type_of(given)
         if found is ERROR:
             return UndefConst(ERROR)
         if found is not wanted:
-            self._report_mismatch(expr.args[0].span, wanted, found)
+            if self._diags.error_count == told:
+                self._diags.emit(D.LANG_CALL_ARGUMENT_MISMATCH, expr.args[0].span,
+                                 position=1, name=name, expected=wanted.written(),
+                                 found=found.written())
             return UndefConst(ERROR)
         answer = U32 if to_a_number else CHAR
         if not self._accepts(expected, answer):
@@ -27117,8 +27273,8 @@ class Checker:
                                  name=one.name)
                 spoiled = True
                 continue
-            given[one.name] = self._lower_into(builder, one.value,
-                                               ty.fields[at][1], one.span)
+            given[one.name] = self._lower_field_value(
+                builder, one.value, ty.fields[at][1], one.span, ty, one.name)
             self._owning_field(one.value, ty, one.name, ty.fields[at][1])
         for name, _ in ty.fields:
             if name not in given:
@@ -27146,6 +27302,30 @@ class Checker:
             self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)
         return made
+
+    def _lower_field_value(self, builder: IRBuilder, expr: ast.Expr,
+                           held: Type, span: Span, owner: Type,
+                           name: str) -> Value:
+        """Lower *expr*, written for the field *name* of *owner*, as a *held*.
+
+        A mismatch is the field's and is said as one: what the record itself
+        stands in -- a `let`, a call's argument, a function's answer -- has the
+        record's type and not the field's, and borrowing its wording would name
+        the wrong two types.  So every context around the record is set aside
+        while its field is lowered, and one inside the field (an operator's
+        operands, a call's arguments) is the field's own again.
+        """
+        outer = (self._filling, self._handing_over, self._initializing,
+                 self._assigning, self._operand_of, self._leaving)
+        self._filling = (owner.written(), name)
+        self._handing_over = self._initializing = None
+        self._assigning = self._operand_of = None
+        self._leaving = False
+        try:
+            return self._lower_into(builder, expr, held, span)
+        finally:
+            (self._filling, self._handing_over, self._initializing,
+             self._assigning, self._operand_of, self._leaving) = outer
 
     def _lower_sum(self, builder: IRBuilder, expr: ast.Call, ty: Type,
                    expected: Type | None) -> Value:
@@ -27182,7 +27362,8 @@ class Checker:
             return UndefConst(ERROR)
         place = builder.frame(ty, expr.span)
         if held is not VOID:
-            value = self._lower_into(builder, written.value, held, written.span)
+            value = self._lower_field_value(builder, written.value, held,
+                                            written.span, ty, written.name)
             if self._value_type_of(value) is ERROR:
                 return UndefConst(ERROR)
             self._payload_into(builder, place, value, held, expr.span)
@@ -30659,6 +30840,12 @@ class Checker:
             name, position = self._handing_over
             self._diags.emit(D.LANG_CALL_ARGUMENT_MISMATCH, span, position=position,
                              name=name, expected=expected.written(),
+                             found=found.written())
+            return
+        if self._filling is not None:
+            owner, name = self._filling
+            self._diags.emit(D.LANG_FIELD_VALUE_MISMATCH, span, name=name,
+                             type=owner, expected=expected.written(),
                              found=found.written())
             return
         if self._assigning is not None:

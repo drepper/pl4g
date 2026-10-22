@@ -1120,12 +1120,7 @@ class Parser:
         if isinstance(found, ast.ArrayTypeRef) and self._check(TokKind.QUESTION):
             # A result whose answer is the array: the mark after the brackets,
             # as after a name, and what the error carries after it.
-            mark = self._advance()
-            error: str | None = None
-            last = mark
-            if self._check(TokKind.IDENT):
-                last = self._advance()
-                error = last.text
+            error, last = self._parse_error_type(self._advance())
             found = replace(found, span=found.span.to(last.span), result=True,
                             error=error)
         return found
@@ -1454,6 +1449,21 @@ class Parser:
         return ast.RunningTypeRef(span=start.to(end), element=element,
                                   given=given, kept_in=kept_in)
 
+    def _parse_error_type(self, mark: Token) -> tuple[str | None, Token]:
+        """Parse what the error of a result carries, after the mark *mark*:
+        nothing, a name, or a name reached through modules as a type is
+        anywhere else -- `u64 ? std.string.ParseError` -- kept as the path it
+        was written as.  Answers it and the last token of the type."""
+        if not self._check(TokKind.IDENT):
+            return None, mark
+        last = self._advance()
+        parts = [last.text]
+        while self._check(TokKind.DOT) and self._peek(1).kind is TokKind.IDENT:
+            self._advance()
+            last = self._advance()
+            parts.append(last.text)
+        return ".".join(parts), last
+
     def _parse_list_type(self) -> ast.ListTypeRef:
         """Parse ``'[' TYPE ']'``, which is written the way a value of one is."""
         start = self._expect(TokKind.LBRACKET).span
@@ -1462,12 +1472,7 @@ class Parser:
                            D.LANG_SYNTAX_EXPECTED_CLOSING_LIST).span
         if self._check(TokKind.QUESTION):
             # A result whose answer is the list, written as an array's is.
-            mark = self._advance()
-            error: str | None = None
-            last = mark
-            if self._check(TokKind.IDENT):
-                last = self._advance()
-                error = last.text
+            error, last = self._parse_error_type(self._advance())
             return ast.ListTypeRef(span=start.to(last.span), element=element,
                                    result=True, error=error)
         return ast.ListTypeRef(span=start.to(end), element=element)
@@ -1512,11 +1517,7 @@ class Parser:
             return ast.TypeRef(span=first.span.to(last_name),
                                name=name_token.text, module=module, unit=unit,
                                args=tuple(args))
-        error: str | None = None
-        last = mark
-        if self._check(TokKind.IDENT):
-            last = self._advance()
-            error = last.text
+        error, last = self._parse_error_type(mark)
         return ast.TypeRef(span=first.span.to(last.span), name=name_token.text,
                            module=module, result=True, error=error, unit=unit,
                            args=tuple(args))
@@ -2277,8 +2278,10 @@ class Parser:
         start = self._current.span
         arms: list[ast.IfArm] = [self._parse_if_arm(self._takes_comptime(
             TokKind.KW_IF))]
+        self._chain_goes_on()
         while self._begins_an_arm(TokKind.KW_ELIF):
             arms.append(self._parse_if_arm(self._takes_comptime(TokKind.KW_ELIF)))
+            self._chain_goes_on()
         if self._check(TokKind.KW_ELSE):
             self._advance()
             body = self._parse_body()
@@ -2287,6 +2290,27 @@ class Parser:
                 self._diags.emit(D.LANG_IF_ELSE_IS_LAST, self._current.span)
                 raise _Bail()
         return ast.If(span=start.to(arms[-1].body.span), arms=tuple(arms))
+
+    def _chain_goes_on(self) -> None:
+        """Read past the end of the line an arm written on one line ends with,
+        where the next line goes on with an `elif` or the `else` of the same
+        chain.
+
+        The end of the line closes the arm's block, as it closes any block
+        opened on its line, and not the `if`: the next arm stands on the next
+        line where it would after an indented block, at the indentation of the
+        `if` -- `if a: x` and then `elif b: y` below it, as Python has it.  No
+        statement begins with either keyword, so there is nothing else for that
+        line to be.  One indented further is not of this chain, and is refused
+        as what it is.
+        """
+        if not self._check(TokKind.NEWLINE):
+            return
+        after = self._peek()
+        if after.kind is TokKind.KW_ELIF or after.kind is TokKind.KW_ELSE or (
+                after.kind is TokKind.KW_COMPTIME
+                and self._peek(2).kind is TokKind.KW_ELIF):
+            self._advance()
 
     def _begins_an_arm(self, keyword: TokKind) -> bool:
         """Whether an arm beginning with *keyword* stands here, with or without

@@ -40,6 +40,15 @@ _FLOAT_ORDER = tuple(reg("".join(("f", str(n)))).unit
 #: prologue saves only the ordinary registers -- so a call whose callee has not
 #: said what it destroys destroys every one of them.
 _FLOATS_DESTROYED = frozenset(_FLOAT_ORDER)
+#: What the system's convention says of the floating-point registers: a callee
+#: hands back fs0 to fs11 -- f8, f9 and f18 to f27 -- as it found them, and may
+#: destroy the rest, so a function of that convention saves and restores each
+#: of them it uses.  The language's own convention keeps none of them.
+_FLOATS_KEPT = frozenset(reg("".join(("f", str(n)))).unit
+                         for n in (8, 9, *range(18, 28)))
+_FLOATS_DESTROYED_BY_THE_SYSTEM = frozenset(
+    reg("".join(("f", str(n)))).unit
+    for n in (*range(0, 8), *range(10, 18), *range(28, 32)))
 
 CC_PL4G: Final[CallConvDesc] = CallConvDesc(
     name="pl4g",
@@ -69,8 +78,8 @@ CC_LP64: Final[CallConvDesc] = CallConvDesc(
     # What the system answers a pair of `double`s in, fa0 and fa1.
     float_ret_regs=(reg("f10"), reg("f11")),
     float_allocation_order=_FLOAT_ORDER,
-    callee_saved=_CALLEE_SAVED,
-    caller_saved=_CALLER_SAVED | _FLOATS_DESTROYED,
+    callee_saved=_CALLEE_SAVED | _FLOATS_KEPT,
+    caller_saved=_CALLER_SAVED | _FLOATS_DESTROYED_BY_THE_SYSTEM,
     stack_align=16,
     allocation_order=_ALLOCATION_ORDER,
     red_zone=0,

@@ -906,8 +906,11 @@ namespace pl4g::interp {
       case Arith::shift: {
         Cell distance = b;
         bool wrapped = bin >= BinOp::wrap_shl;
+        // Modulo the width, the distance read as the bits of its type without
+        // a sign: an `and` for a width that is a power of two, and a remainder
+        // for one that is not.
         if (wrapped)
-          distance &= s.bits - 1;
+          distance = extend(distance, s.bits, false) % s.bits;
         else if (distance >= s.bits)
           fault(op.message, status::overflow);
         switch (bin) {
@@ -916,7 +919,7 @@ namespace pl4g::interp {
         case BinOp::ashr: case BinOp::wrap_ashr: return in_type(Cell(std::int64_t(a) >> distance));
         default: {
           // Two shifts and an or, so that a narrow type turns within itself.
-          Cell other = (s.bits - distance) & (s.bits - 1);
+          Cell other = (s.bits - distance) % s.bits;
           bool left = bin == BinOp::rotl || bin == BinOp::wrap_rotl;
           Cell forwards = left ? distance : other;
           Cell backwards = left ? other : distance;
@@ -1072,16 +1075,17 @@ namespace pl4g::interp {
         return s.is_signed || s.kind == Scalar::Kind::boolean ? ~a : extend(~a, s.bits, false);
       case UnOp::neg:
         return extend(Cell(-std::int64_t(a)), s.bits, s.is_signed);
+      // Every count is over the type's own bits, not its holder's.
       case UnOp::count_ones:
-        return Cell(std::popcount(extend(a, s.held, false)));
+        return Cell(std::popcount(extend(a, s.bits, false)));
       case UnOp::count_leading: {
-        Cell v = extend(a, s.held, false);
-        return Cell(std::countl_zero(v) - (64 - int(s.held)));
+        Cell v = extend(a, s.bits, false);
+        return Cell(std::countl_zero(v) - (64 - int(s.bits)));
       }
       case UnOp::count_trailing: {
-        // Nought counts the width of what holds it, as the back ends do.
-        Cell v = extend(a, s.held, false);
-        return v == 0 ? Cell(s.held) : Cell(std::countr_zero(v));
+        // Nought counts the width of the type, as the back ends do.
+        Cell v = extend(a, s.bits, false);
+        return v == 0 ? Cell(s.bits) : Cell(std::countr_zero(v));
       }
       case UnOp::fabs:
         return of_double(std::fabs(as_double(a, s.bits)), s.bits);

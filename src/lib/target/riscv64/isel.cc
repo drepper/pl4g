@@ -1883,7 +1883,7 @@ namespace pl4g::target::riscv64 {
           auto destination = destination_for(inst, inst->ty);
           const ir::Type* counted = inst->operands[0]->ty;
           auto operand = value(inst->operands[0], inst->span);
-          lower_count(asm_, inst->un, operand, width_of(counted), is_signed(counted), destination, *this, inst->span);
+          lower_count(asm_, inst->un, operand, int(ir::as<ir::IntType>(counted)->bits), is_signed(counted), destination, *this, inst->span);
           return;
         }
         if (auto how = rounding_of(inst->un)) {

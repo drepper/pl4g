@@ -1,0 +1,29 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4341 LANG_NAME_THE_IMAGE_USES
+
+※ The image is the program and the code the compiler puts beside it, each known
+※ by its symbol: the entry point `_start`, what the compiler makes under names
+※ beginning `__pl4g`, and the runtime's functions beginning `pl4g_`.  A function
+※ under another language's convention keeps its plain name, so one offered as
+※ `_start` would be a second entry point, and which of the two the kernel
+※ starts would be the writer's doing.  It is refused where it is defined -- and
+※ so is the same name under the language's own convention, whose symbol would
+※ not collide today, so that a function does not become wrong by being given
+※ another convention.
+
+let std := ⎕import("std")
+
+@[visible, cdecl]
+fn _start() → u8:
+    0u8
+
+@[cdecl]
+fn pl4g_args(a: u8) → u8:
+    a
+
+fn __pl4g_own(a: u8) → u8:
+    a
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

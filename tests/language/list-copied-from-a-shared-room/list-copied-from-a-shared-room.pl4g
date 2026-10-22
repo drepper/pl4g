@@ -1,0 +1,157 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=0
+※ pl4g-test: diag=none
+
+※ A list is a value, so a place that may change it in place gets elements of
+※ its own -- unless what it is given is room nobody else has.  **A name done
+※ with hands its room over only where the room is its own**: made where it was
+※ bound, copied for it, or handed to it by a name whose room was.  A parameter's
+※ room is its caller's, and so is the room of a name bound to one: `let y: [u8]
+※ = x` shares `x`'s, nothing changing either, and `let out: mut [u8] = y` with
+※ `y` done with is a copy, or writing `out` would write the caller's list.
+※
+※ The same holds of every way a list reaches a place that may change it: a
+※ name assigned, an `if` choosing a parameter, a record written out around one,
+※ a field given one, a loop's element, what a function answers that answers
+※ its parameter, and an entry of a table, which the caller may still change
+※ through the list it handed over.  Each case below writes the list it was
+※ given and says whether what the caller holds is what it was.
+
+type Box = items : [u8] ; n : u8
+
+fn first(l: [u8]) → u8:
+    let seen: mut u8 = 0u8
+    let done: mut bool = false
+    foreach v := l:
+        if ¬done:
+            seen ← v
+            done ← true
+    seen
+
+fn same(l: [u8]) → [u8]:
+    l
+
+@[opaque]
+fn through_a_name(x: [u8]) → u8:
+    let y: [u8] = x
+    let out: mut [u8] = y
+    out⟦0⟧ ← 9u8
+    first(out)
+
+@[opaque]
+fn through_an_if(x: [u8], c: bool) → u8:
+    let out: mut [u8] = if c: x else: [5u8]
+    out⟦0⟧ ← 9u8
+    first(out)
+
+@[opaque]
+fn through_an_assignment(x: [u8]) → u8:
+    let y: [u8] = x
+    let out: mut [u8] = [1u8]
+    out ← y
+    out⟦0⟧ ← 9u8
+    first(out)
+
+@[opaque]
+fn through_a_record(b: Box) → u8:
+    let c: Box = b
+    let d: mut Box = c
+    d.items⟦0⟧ ← 9u8
+    first(d.items)
+
+@[opaque]
+fn into_a_record(x: [u8]) → u8:
+    let y: [u8] = x
+    let d: mut Box = Box(.items ← y, .n ← 1u8)
+    d.items⟦0⟧ ← 9u8
+    first(d.items)
+
+@[opaque]
+fn into_a_field(x: [u8]) → u8:
+    let y: [u8] = x
+    let d: mut Box = Box(.items ← [1u8], .n ← 1u8)
+    d.items ← y
+    d.items⟦0⟧ ← 9u8
+    first(d.items)
+
+@[opaque]
+fn through_a_loop(ls: [[u8]]) → u8:
+    let total: mut u8 = 0u8
+    foreach v := ls:
+        let w: mut [u8] = v
+        w⟦0⟧ ← 9u8
+        total ← total + first(w)
+    total
+
+@[opaque]
+fn through_a_function(x: [u8]) → u8:
+    let out: mut [u8] = same(x)
+    out⟦0⟧ ← 9u8
+    first(out)
+
+@[opaque]
+fn kept(d: mut ⸨u8: [u8]⸩, x: [u8]):
+    d⸨1u8⸩ ← x
+
+@[opaque]
+fn read_out(d: ⸨u8: [u8]⸩) → u8:
+    let l: mut [u8] = d⸨1u8⸩ ?? [0u8]
+    l⟦0⟧ ← 9u8
+    first(l)
+
+※ And the cases that were rightly free stay free: a list made here and done
+※ with is handed over, and so is a name bound to it.
+@[opaque]
+fn made_here() → u8:
+    let y: [u8] = [1u8, 2u8] in ⎕heap
+    let out: mut [u8] = y
+    out⟦0⟧ ← 9u8
+    first(out)
+
+@[opaque]
+fn fresh() → [u8]:
+    [1u8, 2u8]
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let a1: [u8] = fresh()
+    if through_a_name(a1) ≠ 9u8 ∨ first(a1) ≠ 1u8:
+        return 1u6
+    let a2: [u8] = fresh()
+    if through_an_if(a2, true) ≠ 9u8 ∨ first(a2) ≠ 1u8:
+        return 2u6
+    let a3: [u8] = fresh()
+    if through_an_assignment(a3) ≠ 9u8 ∨ first(a3) ≠ 1u8:
+        return 3u6
+    let b: Box = Box(.items ← fresh(), .n ← 2u8)
+    if through_a_record(b) ≠ 9u8 ∨ first(b.items) ≠ 1u8:
+        return 4u6
+    let a4: [u8] = fresh()
+    if into_a_record(a4) ≠ 9u8 ∨ first(a4) ≠ 1u8:
+        return 5u6
+    let a5: [u8] = fresh()
+    if into_a_field(a5) ≠ 9u8 ∨ first(a5) ≠ 1u8:
+        return 6u6
+    let ls: [[u8]] = [fresh(), fresh()] in ⎕heap
+    let turned: u8 = through_a_loop(ls)
+    let again: mut u8 = 0u8
+    foreach v := ls:
+        again ← again + first(v)
+    if turned ≠ 18u8 ∨ again ≠ 2u8:
+        return 7u6
+    let a6: [u8] = fresh()
+    if through_a_function(a6) ≠ 9u8 ∨ first(a6) ≠ 1u8:
+        return 8u6
+    let d: mut ⸨u8: [u8]⸩ = ⸨⸩
+    let a7: mut [u8] = fresh()
+    kept(d, a7)
+    a7⟦0⟧ ← 7u8
+    if first(d⸨1u8⸩ ?? [0u8]) ≠ 1u8 ∨ first(a7) ≠ 7u8:
+        return 9u6
+    if read_out(d) ≠ 9u8 ∨ first(d⸨1u8⸩ ?? [0u8]) ≠ 1u8:
+        return 10u6
+    if made_here() ≠ 9u8:
+        return 11u6
+    0u6

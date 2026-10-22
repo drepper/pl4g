@@ -184,6 +184,10 @@ namespace pl4g::sema {
     bool handed_out = false;
     // What a loop would walk, where the name stands for that.
     Iterable* iterable = nullptr;
+    // Whether the room a list it holds is in is its own -- made where it was
+    // bound, copied for it, or handed over by a name whose room was -- and so
+    // may be handed on once it is done with.
+    bool owns_room = false;
   };
 
   // A reference nothing has bound yet, which lives to the end of the statement.

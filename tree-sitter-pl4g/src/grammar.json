@@ -1653,7 +1653,7 @@
                     "name": "error",
                     "content": {
                       "type": "SYMBOL",
-                      "name": "identifier"
+                      "name": "_error_type"
                     }
                   },
                   {
@@ -2373,7 +2373,7 @@
                       "members": [
                         {
                           "type": "SYMBOL",
-                          "name": "identifier"
+                          "name": "_error_type"
                         },
                         {
                           "type": "BLANK"
@@ -2554,7 +2554,7 @@
                           "name": "error",
                           "content": {
                             "type": "SYMBOL",
-                            "name": "identifier"
+                            "name": "_error_type"
                           }
                         },
                         {
@@ -2570,6 +2570,31 @@
               ]
             }
           ]
+        }
+      ]
+    },
+    "_error_type": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "identifier"
+              },
+              {
+                "type": "STRING",
+                "value": "."
+              }
+            ]
+          }
+        },
+        {
+          "type": "SYMBOL",
+          "name": "identifier"
         }
       ]
     },

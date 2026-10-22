@@ -1,0 +1,29 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A macro works a shift out the way the program would: inside `⎕wrap` the
+※ distance is taken modulo the width of the type, a width of three as well as
+※ one of eight, and a rotation turns within the type's own bits and not within
+※ the byte that holds them.  What the macro answers is written into the program
+※ and compared there with what the program works out itself -- so the two ways
+※ of running the same function have to agree.
+
+comptime fn moved(a: u3, d: u3, b: u5, e: u5) → i64:
+    let shifted: u3 = ⎕wrap(a « d)
+    let turned: u5 = ⎕wrap(b ↺ e)
+    let back: u5 = b ↻ 1u5
+    ⎕widen(shifted, ⌜i64⌝) × 10000i64 + ⎕widen(turned, ⌜i64⌝) × 100i64 + ⎕widen(back, ⌜i64⌝)
+
+macro worked(e: syntax) → syntax:
+    ⌜$(moved(1u3, 4u3, 17u5, 6u5))⌝
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ 1 shifted by 4 mod 3 is 2; 17 turned by 6 mod 5 is 3; 17 turned back by
+    ※ one is 24
+    if worked⌜0⌝ ≠ 20324i64:
+        return 1u6
+    if moved(1u3, 4u3, 17u5, 6u5) ≠ 20324i64:
+        return 2u6
+    0u6

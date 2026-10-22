@@ -21,6 +21,9 @@ namespace pl4g::target {
 
   // Emit the count `op` asks for over a value of `bits` bits into
   // `destination`, counted in a whole register and moved in at the end.
+  // `bits` is the type's width, which for a type narrower than a machine's is
+  // less than its holder's: the value is read at the holder's width and
+  // counted at the type's.
   void lower_count(mc::Assembler& asm_, ir::UnOp op, const mc::MCOperand& value, int bits, bool is_signed,
                    mc::Reg destination, Scratch& scratch, Span span);
 

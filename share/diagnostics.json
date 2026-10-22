@@ -3183,6 +3183,63 @@
       "option": null
     },
     {
+      "number": 4340,
+      "name": "LANG_FIELD_VALUE_MISMATCH",
+      "severity": "error",
+      "message": "the field '{name}' of '{type}' is '{expected}', not '{found}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the field"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the record or the sum the field is part of"
+        },
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "the type the field has"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written for it"
+        }
+      ],
+      "cause": "A value written for a field has the field's type, and nothing is widened to make two types meet -- the rule every other place a value is written into something follows.  A result is not its answer: a division written for a field of `f64` is an `f64?`, and what takes the number out of it is `?` or `??`.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product Types"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4341,
+      "name": "LANG_NAME_THE_IMAGE_USES",
+      "severity": "error",
+      "message": "'{name}' is a name the image's own code goes by, and nothing a program defines may be given it",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function or variable"
+        }
+      ],
+      "cause": "The image is the program and the code the compiler puts beside it: the entry point `_start`, what the compiler makes under names beginning `__pl4g`, and the runtime's functions and variables beginning `pl4g_`.  A function under another language's convention keeps its plain name, and a variable always does, so a definition of one of those names would be a second symbol of a name the image already has -- and which of the two a call or the kernel reached would be the writer's doing.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Attributes / Exporting and Being Visible"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4401,
       "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
       "severity": "error",

@@ -37,6 +37,7 @@ namespace pl4g::sema {
     std::optional<std::string> assigning;
     std::optional<std::tuple<std::string, std::int64_t>> handing_over;
     bool leaving = false;
+    std::optional<std::tuple<std::string, std::string>> filling;
   };
 
   // A slot a function type stands in (`_slot_flows`): Python's tuple key --
@@ -586,6 +587,9 @@ namespace pl4g::sema {
     // Which argument of which function is being lowered, so that a type
     // that does not match is reported as what it is.
     std::optional<std::tuple<std::string, std::int64_t>> handing_over;  // check.py:4229
+    // Which field of which record or sum is being given its value, so that a
+    // type that does not match is reported as the field's.
+    std::optional<std::tuple<std::string, std::string>> filling;
     // The expressions put inside something -- a record, a tuple, a list, an
     // array, a field, an element, a variable at the top level -- by what
     // they are put into, which a value that must be closed may not be.

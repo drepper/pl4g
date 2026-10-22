@@ -1460,13 +1460,29 @@ namespace pl4g::sema {
   }
 
 
-  void Checker::copied_where_shared(const ast::Expr* written, bool changes)
+  bool Checker::copied_where_shared(const ast::Expr* written, bool changes)
   {
     const ir::Type* ty = said_to_be(written);
-    if (ty == nullptr || ! holds_a_list(ty) || ! owned::can_own(ty)
+    if (ty != nullptr && (! holds_a_list(ty) || ! owned::can_own(ty)))
+      return false;
+    if (room_made_here(written))
+      return true;
+    if (auto name = ast::as<ast::NameRef>(written)) {
+      // A name done with hands its room on only where the room is its own: a
+      // parameter's is its caller's, and a name bound to one shares it.
+      Local* local = find_local(name->name);
+      if (local != nullptr && ! local->is_parameter && ! used_after(local) && (local->owns_room || ! changes))
+        return local->owns_room;
+    }
+    if (changes) {
+      // Copied where it is lowered, whatever it turns out to be.
+      copying.insert(id_of(written));
+      return true;
+    }
+    if (ty == nullptr
         || ! (ast::is<ast::NameRef>(written) || ast::is<ast::Member>(written) || ast::is<ast::Element>(written)
               || ast::is<ast::Deref>(written)))
-      return;
+      return false;
     const ast::Expr* root = written;
     bool through_a_reference = false;
     while (true)
@@ -1481,11 +1497,59 @@ namespace pl4g::sema {
         break;
     auto name = ast::as<ast::NameRef>(root);
     Local* local = name != nullptr ? find_local(name->name) : nullptr;
-    if (local != nullptr && ast::is<ast::NameRef>(written) && ! local->is_parameter && ! used_after(local))
-      return;
     bool may_change = through_a_reference || local == nullptr || local->is_mutable;
-    if (changes || may_change)
+    if (may_change) {
       copying.insert(id_of(written));
+      return true;
+    }
+    return false;
+  }
+
+
+  void Checker::owning_room(std::string_view name, bool owns)
+  {
+    if (Local* local = find_local(name))
+      local->owns_room = owns;
+  }
+
+
+  bool Checker::room_made_here(const ast::Expr* written)
+  {
+    while (auto allocated = ast::as<ast::Allocated>(written))
+      written = allocated->value;
+    if (auto binary = ast::as<ast::Binary>(written))
+      return binary->op == ast::BinaryOp::concat;
+    if (auto list = ast::as<ast::ListLit>(written))
+      return std::ranges::all_of(list->elements, [&](const ast::Expr* one) { return made_or_holds_none(one); });
+    if (auto tuple = ast::as<ast::TupleLit>(written))
+      return std::ranges::all_of(tuple->members, [&](const ast::Expr* one) { return made_or_holds_none(one); });
+    if (auto call = ast::as<ast::Call>(written)) {
+      if (makes_a_record(call->callee))
+        return std::ranges::all_of(call->args, [&](const ast::Expr* one) {
+          auto named = ast::as<ast::Named>(one);
+          return made_or_holds_none(named != nullptr ? named->value : one);
+        });
+      auto callee = ast::as<ast::NameRef>(call->callee);
+      return callee == nullptr || ! (callee->name.starts_with(names::builtin_glyph) || find_local(callee->name) != nullptr);
+    }
+    if (auto choice = ast::as<ast::If>(written))
+      return std::ranges::all_of(choice->arms, [&](const ast::IfArm* arm) {
+        auto stmts = arm->body->stmts();
+        auto last = stmts.empty() ? nullptr : ast::as<ast::ExprStmt>(stmts.back());
+        return made_or_holds_none(last != nullptr ? last->value : nullptr);
+      });
+    return false;
+  }
+
+
+  bool Checker::made_or_holds_none(const ast::Expr* written)
+  {
+    if (written == nullptr)
+      return false;
+    if (room_made_here(written))
+      return true;
+    const ir::Type* ty = said_to_be(written);
+    return ty != nullptr && ! holds_a_list(ty);
   }
 
 
@@ -1521,7 +1585,7 @@ namespace pl4g::sema {
     Local* local = find_local(name->name);
     const ast::Stmt* stmt = current_stmt;
     if (local == nullptr || ! local->is_mutable || (local->named_parameter && ! owned_parameter(written, current))
-        || stmt == nullptr || mentions(stmt, name->name) != 1)
+        || (! local->named_parameter && ! local->owns_room) || stmt == nullptr || mentions(stmt, name->name) != 1)
       return false;
     if (addressed.contains(name->name)) {
       // A place: of its own, for joining onto it in place, or one a second
@@ -2870,11 +2934,12 @@ namespace pl4g::sema {
 
   LoopContext Checker::as_the_loops_value()
   {
-    LoopContext outer{ operand_of, initializing, assigning, handing_over, leaving };
+    LoopContext outer{ operand_of, initializing, assigning, handing_over, leaving, filling };
     operand_of.reset();
     initializing.reset();
     assigning.reset();
     handing_over.reset();
+    filling.reset();
     leaving = true;
     return outer;
   }
@@ -2887,6 +2952,7 @@ namespace pl4g::sema {
     assigning = outer.assigning;
     handing_over = outer.handing_over;
     leaving = outer.leaving;
+    filling = outer.filling;
   }
 
 

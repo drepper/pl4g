@@ -183,3 +183,39 @@ def test_one_bound_to_another_name_is_copied(compile_source) -> None:  # noqa: A
     """`y` is the parameter's room, and so is `out` until it is joined onto."""
     body = function_ir(_ir(compile_source, "-O0"), "kept")
     assert "owned.heaps" not in body, body
+
+
+ODD_WIDTHS = """\
+@[opaque]
+fn by_three(x: u5) \N{RIGHTWARDS ARROW} u5:
+    x \N{LEFT-POINTING DOUBLE ANGLE QUOTATION MARK} 3u5
+
+@[opaque]
+fn by_less(x: u5, by: u5) \N{RIGHTWARDS ARROW} u5:
+    x \N{LEFT-POINTING DOUBLE ANGLE QUOTATION MARK} (by \N{LEFT FLOOR} 4u5)
+
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[startup]
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
+    if by_three(1u5) = 8u5 \N{LOGICAL AND} by_less(1u5, 9u5) = 16u5: 0u6 else: 1u6
+"""
+
+
+def test_a_shift_of_an_odd_width_by_a_number_written_down(compile_source) -> None:  # noqa: ANN001
+    """The wrapping shift takes its distance modulo every width, so a checked
+    shift of a `u5` by three, which cannot go as far as five, is the wrapping
+    one: the code generator works three modulo five out itself."""
+    proc, output = compile_source(ODD_WIDTHS, "--emit=ir", "-O1")
+    assert proc.returncode == 0, describe(proc)
+    body = function_ir(output.read_text(encoding="utf-8"), "by_three")
+    assert _checked(body, "shl") == 0 and "wrap.shl" in body, body
+
+
+def test_a_shift_of_an_odd_width_by_a_register_stays_checked(compile_source) -> None:  # noqa: ANN001
+    """A distance below five but not written down would be a remainder by
+    five inside a wrap, which costs more than the comparison it saves."""
+    proc, output = compile_source(ODD_WIDTHS, "--emit=ir", "-O1")
+    assert proc.returncode == 0, describe(proc)
+    body = function_ir(output.read_text(encoding="utf-8"), "by_less")
+    assert _checked(body, "shl") == 1, body

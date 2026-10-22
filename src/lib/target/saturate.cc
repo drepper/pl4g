@@ -240,6 +240,39 @@ namespace pl4g::target {
     }
 
     // Turn the bits of `value` round by `distance`, with two shifts and an or.
+    // Whether a width of `bits` is a power of two.
+    bool a_power_of_two(unsigned bits) noexcept
+    {
+      return (bits & (bits - 1)) == 0;
+    }
+
+    // The distance `amount` taken modulo the width of `ty`, a width that is not
+    // a power of two, in a register of its own: read as the bits of its type
+    // without a sign, worked out here where it is written down and the
+    // machine's remainder by a constant where it is not.
+    mc::MCReg modulo_the_width(mc::Assembler& asm_, const ir::IntType* ty, const mc::MCOperand& amount,
+                               Scratch& scratch, Span span)
+    {
+      if (auto written = std::get_if<mc::MCImm>(&amount)) {
+        auto turned = ((unsigned __int128)written->value & ((static_cast<unsigned __int128>(1) << ty->bits) - 1))
+                      % ty->bits;
+        auto carried = asm_.reg(scratch.scratch());
+        asm_.loadreg(carried.reg, imm(__int128(turned), 32, false), span);
+        return carried;
+      }
+      auto given = in_a_register(asm_, amount, scratch, span);
+      auto read = asm_.reg(scratch.scratch());
+      asm_.loadreg(read.reg, whole(given), span);
+      if (ty->is_signed)
+        asm_.op(mc::ops::and_, read.reg,
+                { read, imm((static_cast<__int128>(1) << ty->bits) - 1, ty->bits < 32 ? 32 : 64, false) }, span);
+      auto width = asm_.reg(scratch.scratch());
+      asm_.loadreg(width.reg, imm(ty->bits, 32, false), span);
+      auto turned = asm_.reg(scratch.scratch());
+      asm_.divide(turned.reg, read, width, false, true, 64, span);
+      return turned;
+    }
+
     void rotate(mc::Assembler& asm_, BinOp op, const ir::IntType* ty, const mc::MCReg& value,
                 const mc::MCReg& distance, mc::Reg destination, Scratch& scratch, Span span)
     {
@@ -247,7 +280,11 @@ namespace pl4g::target {
       auto right = asm_.reg(scratch.scratch());
       auto other = asm_.reg(scratch.scratch());
       asm_.op(mc::ops::minus, other.reg, { imm(ty->bits, 32, false), whole(distance) }, span);
-      asm_.op(mc::ops::and_, other.reg, { other, imm(ty->bits - 1, 32, false) }, span);
+      // Modulo the width where it is a power of two; a width that is not is
+      // narrower than the register, and a rotation by nothing shifts in only
+      // the noughts above the value.
+      if (a_power_of_two(ty->bits))
+        asm_.op(mc::ops::and_, other.reg, { other, imm(ty->bits - 1, 32, false) }, span);
       auto forwards = op == BinOp::rotl ? whole(distance) : other;
       auto backwards = op == BinOp::rotl ? other : whole(distance);
       asm_.shift(mc::ops::shift_left, left.reg, whole(value), forwards, 64, span);
@@ -448,13 +485,21 @@ namespace pl4g::target {
     if (integer == nullptr) [[unlikely]]
       throw Unsupported("a shift of something that is not an integer");
     auto held = in_a_register(asm_, value, scratch, span);
-    auto distance = in_a_register(asm_, amount, scratch, span);
-    if (auto plain = unchecked(op)) {
-      // Inside a wrap the distance is taken modulo the width of the type.
+    mc::MCReg distance;
+    auto plain = unchecked(op);
+    if (plain && ! a_power_of_two(integer->bits)) {
+      distance = modulo_the_width(asm_, integer, amount, scratch, span);
+      op = *plain;
+    } else if (plain) {
+      // Inside a wrap the distance is taken modulo the width of the type,
+      // which for a power of two is an `and`.
+      distance = in_a_register(asm_, amount, scratch, span);
       asm_.op(mc::ops::and_, distance.reg, { distance, imm(integer->bits - 1, 32, false) }, span);
       op = *plain;
-    } else
+    } else {
+      distance = in_a_register(asm_, amount, scratch, span);
       answer(asm_, Condition::uge, destination, distance, imm(integer->bits, 32, false), zero(), &too_far, span);
+    }
     auto result = scratch.scratch();
     if (op == BinOp::rotl || op == BinOp::rotr)
       rotate(asm_, op, integer, held, distance, result, scratch, span);

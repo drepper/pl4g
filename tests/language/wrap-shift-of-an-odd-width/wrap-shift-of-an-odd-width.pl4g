@@ -1,0 +1,89 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=0
+※ pl4g-test: diag=none
+
+※ Inside `⎕wrap` a shift and a rotation take their distance modulo the width
+※ of the type, and a width need not be a power of two: `⎕wrap(1u3 « 4u3)` is
+※ shifted by one, four being one more than three, and not by nought, which is
+※ what an `and` with the width less one would have made of it.  The distance is
+※ read as the bits of its type without a sign, as the checked shift reads it
+※ when it compares it with the width -- so `⁻1i5`, all five bits set, is
+※ thirty-one, and a shift by it is a shift by one.
+※
+※ A rotation by nothing is the value itself at every width, and one by the
+※ width less one goes all the way round but one, which is what the other
+※ distance a rotation is made of has to come out right for -- checked as well
+※ as wrapping.  And a checked shift whose distance is written down and below
+※ the width is the wrapping one after the range analysis, at every width.
+
+@[opaque]
+fn left3(a: u3, d: u3) → u3:
+    ⎕wrap(a « d)
+
+@[opaque]
+fn right5(a: u5, d: u5) → u5:
+    ⎕wrap(a » d)
+
+@[opaque]
+fn left_signed5(a: i5, d: i5) → i5:
+    ⎕wrap(a « d)
+
+@[opaque]
+fn turn5(a: u5, d: u5) → u5:
+    ⎕wrap(a ↺ d)
+
+@[opaque]
+fn back5(a: u5, d: u5) → u5:
+    ⎕wrap(a ↻ d)
+
+@[opaque]
+fn checked_turn5(a: u5, d: u5) → u5:
+    a ↺ d
+
+@[opaque]
+fn checked_back5(a: u5, d: u5) → u5:
+    a ↻ d
+
+@[opaque]
+fn checked_left5(a: u5) → u5:
+    a « 3u5
+
+@[opaque]
+fn left20(a: u20, d: u20) → u20:
+    ⎕wrap(a « d)
+
+@[opaque]
+fn turn12(a: u12, d: u12) → u12:
+    ⎕wrap(a ↺ d)
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ distances written down, which the code generator works out itself
+    if ⎕wrap(1u3 « 4u3) ≠ 2u3 ∨ ⎕wrap(1u3 « 3u3) ≠ 1u3 ∨ ⎕wrap(16u5 » 6u5) ≠ 8u5:
+        return 1u6
+    ※ and the same distances in registers
+    if left3(1u3, 4u3) ≠ 2u3 ∨ left3(1u3, 3u3) ≠ 1u3 ∨ left3(1u3, 7u3) ≠ 2u3:
+        return 2u6
+    if right5(16u5, 6u5) ≠ 8u5 ∨ right5(16u5, 31u5) ≠ 8u5 ∨ right5(16u5, 29u5) ≠ 1u5 ∨ right5(16u5, 5u5) ≠ 16u5:
+        return 3u6
+    if left_signed5(1i5, ⁻1i5) ≠ 2i5 ∨ left_signed5(1i5, 5i5) ≠ 1i5:
+        return 4u6
+    if turn5(1u5, 0u5) ≠ 1u5 ∨ turn5(1u5, 5u5) ≠ 1u5 ∨ turn5(1u5, 9u5) ≠ 16u5 ∨ turn5(17u5, 6u5) ≠ 3u5:
+        return 5u6
+    if back5(1u5, 1u5) ≠ 16u5 ∨ back5(1u5, 0u5) ≠ 1u5 ∨ back5(3u5, 7u5) ≠ 24u5:
+        return 6u6
+    if checked_turn5(1u5, 0u5) ≠ 1u5 ∨ checked_turn5(1u5, 4u5) ≠ 16u5 ∨ checked_turn5(24u5, 2u5) ≠ 3u5:
+        return 7u6
+    if checked_back5(1u5, 0u5) ≠ 1u5 ∨ checked_back5(1u5, 3u5) ≠ 4u5:
+        return 8u6
+    if left20(1u20, 21u20) ≠ 2u20 ∨ left20(1u20, 19u20) ≠ 524288u20 ∨ left20(3u20, 1048575u20) ≠ 98304u20:
+        return 9u6
+    if turn12(2049u12, 13u12) ≠ 3u12 ∨ turn12(1u12, 0u12) ≠ 1u12:
+        return 10u6
+    ※ a checked shift by a distance written down, which the range analysis
+    ※ makes the wrapping one at the first level
+    if checked_left5(1u5) ≠ 8u5 ∨ checked_left5(7u5) ≠ 24u5:
+        return 11u6
+    0u6

@@ -1,0 +1,15 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4213 LANG_CALL_ARGUMENT_MISMATCH
+
+※ `⎕chr` takes the number Unicode gave a code point, which is a `u32`, and
+※ `⎕ord` the code point.  A value of another type is the conversion's argument
+※ of the wrong type, said once and as that -- not as a mistake of the `let`
+※ the conversion initializes, whose type is a `char` and not the argument's.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let n: u8 = 65u8
+    let c: char = ⎕chr(n)
+    if c = 'A': 0u6 else: 1u6
