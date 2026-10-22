@@ -1386,3 +1386,27 @@ Runtime
     - a view assigned to an array in a loop, `block ← view`, is refused as writing through a reference (4479);
     - a self-call in tail position with an arena parameter ran out of stack -- nothing makes it a jump;
     - there is no carry-less multiplication (`pclmulqdq`, `pmull`, `clmul`), which simdjson's prefix exclusive or is one of.
+
+Found writing the manual (2026-10-22); the manual says what the compiler does today and is silent on these:
+
+[ ] spec examples write `@[startup, impure]` on a startup function that only prints (spec.md around lines 378, 3268, 6424,
+    8468), which 4933 now refuses.  Correct the examples.
+[?] the purity of tasks and files.  spec.md around 7260 says running tasks and opening files "need nothing said", but
+    `std.spawn` and `std.run` are `@[impure]` and opening through `std.fs.cwd()` asks for `@[io]` (tests `tasks-interleave`,
+    `directory-opened`).
+    Question: which is meant -- the spec's rule, or what std and the checker ask today?
+[?] no way from `f32` to `f64`.  spec.md around 1462 says a floating-point number "becomes the other format by widening", but
+    `⎕widen` refuses floats (4590) and nothing else converts.
+    Question: `⎕widen` of floats (exact, f32 → f64 only), or a builtin of its own; and f64 → f32, which rounds?
+[ ] the list of builtin operators written out (spec.md around 8034-8075) has `⊻` for `⊕`, `⪇ ⪈` for `⪉ ⪊` and `⫽` for `⧺`.
+[ ] `⎕name` is listed as not callable (spec.md around 7782) but described as callable around 7655, and `std.format` calls it.
+[?] what `⍕` writes of an instance of a generic record: `Pair(u16)(.first ← 2, …)`, which is not how a value is written,
+    while the spec says what comes out reads back.
+    Question: write the type arguments as a program would (`Pair(.first ← 2u16, …)`), or say in the spec that this form is
+    `⍕`'s own.
+[?] an operator defined for mixed operands on a glyph of the language (`i32 × V`) is refused with 4206 before any definition is
+    looked at, though spec.md around 7920 says a definition is consulted where the operator has no meaning for the operands.
+    Question: is the spec's rule meant to reach mixed operands?
+[?] a macro's `$(number)` is always written as an `i64` literal (front/expand.py `_put_number`), whatever the number's type;
+    the spec says it is written "as a program would have written" it.
+    Question: keep the type's suffix, as the spec says?

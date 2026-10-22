@@ -918,3 +918,18 @@ Optimizations
     padded last block copied a byte at a time into the frame and read back as one, a store-forwarding stall that is 58 % of
     `quoted`; loop values reloaded from the frame; `and` made a truth value; sums written as a tag byte and copied with word loads,
     and every sum a slot of its own (`tree_at` 1 300 bytes of frame); small functions not inlined without `@[inline]`.
+
+Found writing the manual (2026-10-22), in both compilers unless said otherwise:
+
+[ ] a `match` used as a value with one-line arms (`str(_): 0u64`), followed by another statement, does not parse (3001) in
+    pypl4g and the C++ compiler; tree-sitter accepts it.  Make the parsers take it.
+[ ] a file that defines an `@[closed_by(close)]` type and invokes any macro (`std.println⌜…⌝`) is refused with 4686,
+    "Handle.close … not defined in this file": the macros' checker does not see the file's own definitions.
+[ ] `std.text` writes a type narrower than its holder wrongly: `⍕7u3` gives "10" (the radix cannot be narrowed into `u3` and
+    the fallback is `v`).
+[ ] `std.text` does not compile for a number with a unit (so `⍕#s` fails), nor for a tuple, and does not write `f64` or the
+    values of an enumeration; the spec says one definition serves every type.
+[ ] `ps¨.age ← older(ages)` -- an array value written through `¨` without a mark -- reports "returning 'u8⟦3⟧' from a function
+    declared to return 'u8'" (4202), which says nothing of what is wrong.
+[ ] spec/details.md says a failing test exits with 66 and that a run stops at the first test that fails; the spec and the test
+    `tests-that-fail` say 88, every test being run.  Correct details.md.
