@@ -1234,7 +1234,11 @@ held width extended as its type's signedness says, whatever C left above that wi
 **A symbol nobody defines stops the run** as a shared object's stub stops it: `pl4g: the host defines no 'SYMBOL' in 'NAME'`, at
 the declaration, on the error device, and status 92.  `NAME` is the function the program wrote, not the `NAME.host` the checker made
 of one taking a `str`.  The embedding program is not ended with it: the stop unwinds the interpreter, as every stop of a run does,
-and `run_source` or `run_file` answers 92.  **What the host hands over by name is asked first.**  `interp::Options::defined`, a map from a symbol to the address of a
+and `run_source` or `run_file` answers 92.  **The interpreter is an archive too.**  The objects of `libpl4g-embed.so` are compiled once and are also `libpl4g-embed.a`,
+the same C entry and the same C++ interface for a program that carries the interpreter rather than loading it; the archive
+passes on what it is linked with to what links it, and `embed-host` is linked with it.  **Every object of the build is
+`-fPIC`**, a program's own included, set once with `add_compile_options`: CMake's `POSITION_INDEPENDENT_CODE` says `-fPIE` of a
+program's objects after it, which would win.  **What the host hands over by name is asked first.**  `interp::Options::defined`, a map from a symbol to the address of a
 function, is consulted when a host function is first called, and `dlsym(RTLD_DEFAULT, ...)` only where it holds nothing of
 that name; what was found is kept for the run as before.  `embed::Interpreter::define(symbol, function)` fills it -- a template
 takes a function pointer of any type, the table holding addresses -- and so do `pl4g_embed_define` of the C entry and

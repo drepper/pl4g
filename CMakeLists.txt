@@ -14,6 +14,7 @@
 #                     program calling back into it (src/examples/embed)
 #   pl4g-embed-example-cc  the same in C++, through embed/pl4g-embed.hh
 #   pl4g-embed-defined  a host handing PL4G its functions by name, not dlsym
+#   pl4g-embed        the interpreter as libpl4g-embed.so and libpl4g-embed.a
 #   pl4g-manual       the manual, a node at a time (libpl4g-manual.so, and
 #                     libpl4g-manual.a), and pl4g-help, which shows one
 #   pl4g-embed-expressions  expressions as JSON evaluated in PL4G, the replies
@@ -33,6 +34,12 @@ endif()
 
 set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Every object is position-independent code, -fPIC and not -fPIE also where it
+# ends up in a program: what is in an archive may go into a shared object, and
+# one flag for all of it means no object has to be compiled twice for that.
+# CMake's own POSITION_INDEPENDENT_CODE is not used: it says -fPIE of a
+# program's objects, after this, and the last flag is the one that counts.
+add_compile_options(-fPIC)
 set(CMAKE_CXX_EXTENSIONS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(NOT CMAKE_BUILD_TYPE)
@@ -241,6 +248,10 @@ set(PL4G_LIB_SOURCES
   ${PL4G_GENERATED}/diag/catalog_data.cc
 )
 
+# What the library is linked with, wherever it ends up.
+set(PL4G_LIB_LINKS simdjson::simdjson ${UNISTRING_LIBRARY} ${EDIT_LIBRARY} ${TREE_SITTER_LIBRARY} PkgConfig::FFI
+    ${CMAKE_DL_LIBS})
+
 # What every build of the library is compiled with: where its headers are,
 # what #embed reads, and what it links with.
 function(pl4g_library_settings target)
@@ -255,8 +266,7 @@ function(pl4g_library_settings target)
     COMPILE_OPTIONS "--embed-dir=${CMAKE_SOURCE_DIR}/share")
   target_compile_options(${target} PUBLIC ${PL4G_COMMON_FLAGS} ${flags})
   target_link_options(${target} PUBLIC ${flags})
-  target_link_libraries(${target} PUBLIC simdjson::simdjson ${UNISTRING_LIBRARY} ${EDIT_LIBRARY} ${TREE_SITTER_LIBRARY}
-    PkgConfig::FFI ${CMAKE_DL_LIBS})
+  target_link_libraries(${target} PUBLIC ${PL4G_LIB_LINKS})
 endfunction()
 
 # Define the library and the programs linked with it, with `suffix` on every
@@ -409,12 +419,23 @@ add_test(NAME repl-sessions
 # one function with C's linkage (src/lib/embed/pl4g-embed.h) and hiding the
 # rest; and the example of a program doing so, whose functions the program it
 # runs calls, which is why its symbols are exported.
-add_library(pl4g-embed SHARED ${PL4G_LIB_SOURCES} src/lib/embed/c-entry.cc)
-set_target_properties(pl4g-embed PROPERTIES POSITION_INDEPENDENT_CODE ON C_VISIBILITY_PRESET hidden
-  CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
-pl4g_library_settings(pl4g-embed)
+#
+# Its objects are compiled once and are both the shared object and an archive,
+# libpl4g-embed.a, for a program that carries the interpreter rather than
+# loading it: the archive holds the same C entry and the same C++ interface,
+# and passes on what it is linked with to what links it.
+add_library(pl4g-embed-objects OBJECT ${PL4G_LIB_SOURCES} src/lib/embed/c-entry.cc)
+set_target_properties(pl4g-embed-objects PROPERTIES C_VISIBILITY_PRESET hidden CXX_VISIBILITY_PRESET hidden
+  VISIBILITY_INLINES_HIDDEN ON)
+pl4g_library_settings(pl4g-embed-objects)
+add_library(pl4g-embed SHARED $<TARGET_OBJECTS:pl4g-embed-objects>)
+target_link_libraries(pl4g-embed PRIVATE ${PL4G_LIB_LINKS})
 target_link_options(pl4g-embed PRIVATE -Wl,--version-script=${CMAKE_SOURCE_DIR}/src/lib/embed/pl4g-embed.map)
 set_target_properties(pl4g-embed PROPERTIES LINK_DEPENDS ${CMAKE_SOURCE_DIR}/src/lib/embed/pl4g-embed.map)
+add_library(pl4g-embed-static STATIC $<TARGET_OBJECTS:pl4g-embed-objects>)
+set_target_properties(pl4g-embed-static PROPERTIES OUTPUT_NAME pl4g-embed)
+target_include_directories(pl4g-embed-static PUBLIC ${CMAKE_SOURCE_DIR}/src/lib)
+target_link_libraries(pl4g-embed-static PUBLIC ${PL4G_LIB_LINKS})
 add_executable(pl4g-embed-example src/examples/embed/host.c)
 target_include_directories(pl4g-embed-example PRIVATE ${CMAKE_SOURCE_DIR}/src/lib)
 target_link_libraries(pl4g-embed-example PRIVATE ${CMAKE_DL_LIBS})
@@ -478,7 +499,6 @@ add_custom_target(pl4g-manual-text DEPENDS ${PL4G_MANUAL_DIR}/manual.pack)
 # Compiled once, position-independent, and made both a shared object and an
 # archive of the same objects: a program may load the manual or carry it.
 add_library(pl4g-manual-objects OBJECT src/manual/manual.cc)
-set_target_properties(pl4g-manual-objects PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(pl4g-manual-objects PUBLIC ${CMAKE_SOURCE_DIR}/src)
 # The stamp is included, and the pack embedded, from where the script made them.
 target_include_directories(pl4g-manual-objects PRIVATE ${PL4G_MANUAL_DIR})
@@ -503,7 +523,8 @@ target_link_libraries(pl4g-manual-graph PRIVATE pl4g-manual-static)
 add_test(NAME manual-graph COMMAND $<TARGET_FILE:pl4g-manual-graph>)
 
 add_executable(pl4g-embed-host src/test/embed_host.cc)
-target_link_libraries(pl4g-embed-host PRIVATE pl4g)
+# Through the archive, which is how the archive is used.
+target_link_libraries(pl4g-embed-host PRIVATE pl4g-embed-static)
 set_target_properties(pl4g-embed-host PROPERTIES ENABLE_EXPORTS ON)
 add_test(NAME embed-host COMMAND prlimit --data=536870912 --cpu=120 -- $<TARGET_FILE:pl4g-embed-host>)
 # The AArch64 back end generates for every test program, at every level its

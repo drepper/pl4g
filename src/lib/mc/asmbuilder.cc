@@ -23,8 +23,8 @@ namespace pl4g::mc {
     const InstDesc incoming_row = [] {
       InstDesc made;
       made.mnemonic = "incoming";
-      made.operands = { OperandSpec{ OperandKind::reg }, OperandSpec{ OperandKind::imm },
-                        OperandSpec{ OperandKind::imm }, OperandSpec{ OperandKind::imm } };
+      made.operands = { OperandSpec{ .kinds = OperandKind::reg }, OperandSpec{ .kinds = OperandKind::imm },
+                        OperandSpec{ .kinds = OperandKind::imm }, OperandSpec{ .kinds = OperandKind::imm } };
       return made;
     }();
 
