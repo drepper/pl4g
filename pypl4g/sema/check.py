@@ -25729,12 +25729,29 @@ class Checker:
                              found=len(expr.args))
             return UndefConst(ERROR)
         wanted = CHAR if to_a_number else U32
-        given = self._lower_expr(builder, expr.args[0], wanted)
+        # What is given is the conversion's argument and nothing else's: a
+        # mismatch is reported as one, once, and not as a mistake of whatever
+        # the conversion itself stands in -- the `let` it initializes, the
+        # comparison it is an operand of -- whose types are not the argument's.
+        told = self._diags.error_count
+        outer = (self._handing_over, self._initializing, self._assigning,
+                 self._operand_of, self._leaving)
+        self._handing_over = (name, 1)
+        self._initializing = self._assigning = self._operand_of = None
+        self._leaving = False
+        try:
+            given = self._lower_expr(builder, expr.args[0], wanted)
+        finally:
+            (self._handing_over, self._initializing, self._assigning,
+             self._operand_of, self._leaving) = outer
         found = self._value_type_of(given)
         if found is ERROR:
             return UndefConst(ERROR)
         if found is not wanted:
-            self._report_mismatch(expr.args[0].span, wanted, found)
+            if self._diags.error_count == told:
+                self._diags.emit(D.LANG_CALL_ARGUMENT_MISMATCH, expr.args[0].span,
+                                 position=1, name=name, expected=wanted.written(),
+                                 found=found.written())
             return UndefConst(ERROR)
         answer = U32 if to_a_number else CHAR
         if not self._accepts(expected, answer):
