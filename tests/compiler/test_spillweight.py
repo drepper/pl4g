@@ -9,6 +9,8 @@ loop carries, whose reload then runs every turn.
 
 from __future__ import annotations
 
+import random
+
 from conftest import describe, run_compiler
 from pypl4g.mc.loops import back_edges, dominators, loop_depths, natural_loop
 from pypl4g.mc.machine import MachineBasicBlock, MachineFunction
@@ -83,6 +85,23 @@ def test_an_edge_back_to_what_dominates_it_closes_the_loop() -> None:
 def test_a_forward_edge_closes_nothing() -> None:
     """A jump over a block is not a jump back into one."""
     assert back_edges([(1, 2), (2,), ()]) == []
+
+
+def test_the_back_edges_are_those_the_dominators_say() -> None:
+    """`back_edges` asks the dominator tree rather than every block's set of
+    dominators, and has to find what the sets would: over graphs made at random
+    -- loops, blocks nothing reaches, two arms to one block -- every edge to a
+    block in its source's set and no other."""
+    chance = random.Random(4127)
+    for _ in range(3000):
+        count = chance.randint(1, 24)
+        edges = [tuple(chance.choice(range(count))
+                       for _ in range(chance.randint(0, 3)))
+                 for _ in range(count)]
+        doms = dominators(edges)
+        assert back_edges(edges) == [(at, reached)
+                                     for at, going in enumerate(edges)
+                                     for reached in going if reached in doms[at]]
 
 
 def test_the_loop_is_what_reaches_the_latch_without_leaving_it() -> None:
