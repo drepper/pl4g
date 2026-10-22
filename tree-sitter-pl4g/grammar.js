@@ -394,7 +394,7 @@ module.exports = grammar({
       // is after a name, so that `u8\u27e6\u27e7 ? i32` is one result and
       // `u8?\u27e64\u27e7` four.
       prec(1, seq($._plain_type, repeat1($._array_suffix),
-                  '?', optional(field('error', $.identifier)))),
+                  '?', optional(field('error', $._error_type)))),
       seq('&', optional($.mutable),
           optional(choice($.lasting, $.lifetime)),
           field('pointee', $.type)),
@@ -480,7 +480,7 @@ module.exports = grammar({
         // belongs to the answer: a result of a length is a result whose answer
         // is a length, and there is nothing about a result for a unit to say.
         optional($.unit_suffix),
-        optional(seq('?', optional($.identifier))),
+        optional(seq('?', optional($._error_type))),
       ),
       // A collection is written the way a value of one is, so that a type and
       // a value of it look alike -- which a parameter list and a call do.
@@ -493,8 +493,13 @@ module.exports = grammar({
       // And a list, whose type is written the way a value of one is -- and a
       // result whose answer is one, the mark after the bracket.
       seq('[', field('element', $.type), ']', optional($.unit_suffix),
-          optional(seq('?', optional(field('error', $.identifier))))),
+          optional(seq('?', optional(field('error', $._error_type))))),
     ),
+
+    // What the error of a result carries, after the mark: a type of this
+    // file or the language's, or one reached through modules as a type is
+    // anywhere else -- `u64 ? std.string.ParseError`.
+    _error_type: $ => seq(repeat(seq($.identifier, '.')), $.identifier),
 
     // -- attributes --------------------------------------------------------
 

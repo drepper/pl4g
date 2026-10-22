@@ -8915,7 +8915,9 @@ class Checker:
                 return ERROR
             if ref.error is None:
                 return self._module.types.result_type(array)
-            carried = self._resolve_type(ast.TypeRef(span=ref.span, name=ref.error))
+            module, _, name = ref.error.rpartition(".")
+            carried = self._resolve_type(ast.TypeRef(span=ref.span, name=name,
+                                                     module=module or None))
             if carried is ERROR:
                 return ERROR
             return self._module.types.result_type(array, carried)
@@ -9255,14 +9257,18 @@ class Checker:
             return self._module.types.result_type(found)
         # What the error carries is a type like any other, named the way the
         # answer is: the same lookup, and the same report where the name is not
-        # one.  Through the answer's module, except a type the language has,
-        # which no module defines: `std.fs.Pending ? i32` carries an `i32`.
+        # one.  A name alone is reached through the answer's module, except a
+        # type the language has, which no module defines: `std.fs.Pending ?
+        # i32` carries an `i32`.  A name written through a module is that
+        # module's, whatever the answer's is: `u64 ? std.string.ParseError`.
         # The answer's type arguments are the answer's: `Parsed(f64) ? Fault`
         # carries a `Fault`, which takes none.
+        through, _, name = ref.error.rpartition(".")
         carried = self._resolve_type(
-            replace(ref, name=ref.error, result=False, error=None, unit=None,
+            replace(ref, name=name, result=False, error=None, unit=None,
                     args=(),
-                    module=None if ref.error in BUILTIN_TYPES else ref.module))
+                    module=(through if through
+                            else None if name in BUILTIN_TYPES else ref.module)))
         if carried is ERROR:
             return ERROR
         if carried is VOID:

@@ -1,0 +1,40 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ What the error of a result carries is a type, and is written as a type is
+※ anywhere else: a name of this file, one of the language's, or a name reached
+※ through a module -- `u64 ? std.string.ParseError`, an answer of the language's
+※ own carrying another module's error.  A name alone after the mark is looked
+※ up where the answer's is, so `std.string.Parsed(f64) ? ParseError` is
+※ `std.string`'s as it always was; a path says which module itself.
+※
+※ The same after the brackets of an array and of a list, whose answer has no
+※ module to look a name up through at all.
+
+let std := ⎕import("std")
+
+@[opaque]
+fn digits(text: u8⟦⟧) → u64 ? std.string.ParseError:
+    let read: std.string.Parsed(u64) = std.string.parse_int(text, ⌜u64⌝)?
+    if read.value > 100u64:
+        return ⊥ std.string.ParseError.out_of_range
+    read.value
+
+@[opaque]
+fn listed(n: u8) → [u8] ? std.string.ParseError:
+    if n = 0u8:
+        return ⊥ std.string.ParseError.absent
+    [n]
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let seven: u64 = digits(⎕bytes("7")) ?? 0u64
+    if seven ≠ 7u64:
+        return 1u6
+    let nothing: u64 = digits(⎕bytes("")) ?? 9u64
+    if nothing ≠ 9u64:
+        return 2u6
+    let some: [u8] = listed(3u8) ?? [0u8]
+    let none: [u8] = listed(0u8) ?? [5u8]
+    if #some ≠ 1 ∨ #none ≠ 1:
+        return 3u6
+    0u6

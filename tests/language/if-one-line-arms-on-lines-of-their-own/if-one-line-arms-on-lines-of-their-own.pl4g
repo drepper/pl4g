@@ -1,0 +1,33 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ An arm written on one line ends where its line does, as every block opened on
+※ its line does -- the block, and not the `if`.  The next arm may stand on the
+※ next line, at the indentation of the `if`, as it would after an indented
+※ block: `if a: x` and then `elif b: y` below it, which is what Python takes as
+※ well.  No statement begins with `elif` or `else`, so there is nothing else
+※ for such a line to be.  Arms written one way and the other may be mixed.
+
+@[opaque]
+fn which(n: u8) → u8:
+    if n = 1u8: 10u8
+    elif n = 2u8: 20u8
+    elif n = 3u8:
+        30u8
+    else: 40u8
+
+@[opaque]
+fn kept(n: u8) → u8:
+    let r: mut u8 = 0u8
+    if n > 5u8: r ← 1u8
+    else: r ← 2u8
+    r
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if which(1u8) ≠ 10u8 ∨ which(2u8) ≠ 20u8 ∨ which(3u8) ≠ 30u8 ∨ which(9u8) ≠ 40u8:
+        return 1u6
+    if kept(9u8) ≠ 1u8 ∨ kept(1u8) ≠ 2u8:
+        return 2u6
+    0u6
