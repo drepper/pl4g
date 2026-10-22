@@ -21,6 +21,7 @@ prints.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from importlib import import_module
 from time import perf_counter
 from typing import Final, Protocol, Sequence
 
@@ -202,47 +203,51 @@ def pipeline_for(level: int) -> Sequence[str]:
             "dropunreached", "splitedges")
 
 
+#: Where each pass is defined, and its class: imported when a pipeline names it.
+_PASSES: Final[dict[str, tuple[str, str]]] = {
+    "conditions": ("conditions", "BranchConditions"),
+    "constfold": ("constfold", "ConstantFolding"),
+    "coroutines": ("coroutines", "Coroutines"),
+    "purecalls": ("purecalls", "PureCalls"),
+    "dce": ("dce", "DeadCodeElimination"),
+    "divisions": ("divisions", "DivisionByConstants"),
+    "dropignored": ("dropignored", "DropIgnoredCalls"),
+    "dropunreached": ("dropunreached", "DropUnreached"),
+    "facts": ("facts", "Facts"),
+    "samevalues": ("samevalues", "SameValues"),
+    "inline": ("inline", "Inlining"),
+    "largeanswers": ("largeanswers", "LargeAnswers"),
+    "leanvalues": ("leanvalues", "LeanValues"),
+    "simplifycfg": ("simplifycfg", "SimplifyCFG"),
+    "splitedges": ("splitedges", "SplitEdges"),
+    "tailcalls": ("tailcalls", "TailCalls"),
+    "knownargs": ("knownargs", "KnownArguments"),
+}
+
+
+def _made(name: str) -> Pass:
+    """A new pass of the kind *name* says, its module imported now.
+
+    Only what the pipeline names is imported: the passes of `-O1` are a good
+    part of the optimizer, and a compilation at `-O0` that imported them all was
+    paying for reading them before it ran any.
+    """
+    if name == "settle":
+        return Settle(_made("constfold"), _made("simplifycfg"), _made("knownargs"))
+    module, kind = _PASSES[name]
+    return getattr(import_module("".join((__package__, ".passes.", module))), kind)()
+
+
 def build_manager(level: int, verifying: bool | None = None) -> PassManager:
     """Build the pass manager for optimization level *level*."""
-    from .passes.conditions import BranchConditions
-    from .passes.constfold import ConstantFolding
-    from .passes.coroutines import Coroutines
-    from .passes.dce import DeadCodeElimination
-    from .passes.divisions import DivisionByConstants
-    from .passes.dropignored import DropIgnoredCalls
-    from .passes.dropunreached import DropUnreached
-    from .passes.facts import Facts
-    from .passes.inline import Inlining
-    from .passes.largeanswers import LargeAnswers
-    from .passes.leanvalues import LeanValues
-    from .passes.purecalls import PureCalls
-    from .passes.samevalues import SameValues
-    from .passes.simplifycfg import SimplifyCFG
-    from .passes.splitedges import SplitEdges
-    from .passes.knownargs import KnownArguments
-    from .passes.tailcalls import TailCalls
-
-    available: dict[str, Pass] = {
-        "conditions": BranchConditions(),
-        "constfold": ConstantFolding(),
-        "coroutines": Coroutines(),
-        "purecalls": PureCalls(),
-        "dce": DeadCodeElimination(),
-        "divisions": DivisionByConstants(),
-        "dropignored": DropIgnoredCalls(),
-        "dropunreached": DropUnreached(),
-        "facts": Facts(),
-        "samevalues": SameValues(),
-        "inline": Inlining(),
-        "largeanswers": LargeAnswers(),
-        "leanvalues": LeanValues(),
-        "simplifycfg": SimplifyCFG(),
-        "settle": Settle(ConstantFolding(), SimplifyCFG(), KnownArguments()),
-        "splitedges": SplitEdges(),
-        "tailcalls": TailCalls(),
-    }
     manager = PassManager() if verifying is None \
         else PassManager(verifying=verifying)
+    made: dict[str, Pass] = {}
     for name in pipeline_for(level):
-        manager.add(available[name])
+        # One object for each pass however often the pipeline names it, as
+        # there always was: a pass that keeps something between its runs keeps
+        # it across the pipeline.
+        if name not in made:
+            made[name] = _made(name)
+        manager.add(made[name])
     return manager

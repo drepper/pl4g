@@ -457,6 +457,12 @@ def _addressed_in(node: object, into: set[str]) -> None:
     scope, so a name shadowed somewhere may give storage to a binding that never
     needed it; what that costs is a load, and never an answer.
     """
+    for one in _below(node):
+        _addressed_here(one, into)
+
+
+def _addressed_here(node: ast.Node, into: set[str]) -> None:
+    """What `_addressed_in` adds for one node, not counting what it holds."""
     if isinstance(node, ast.AddressOf) and isinstance(node.operand, ast.NameRef):
         into.add(node.operand.name)
     if isinstance(node, ast.TakeAt) and isinstance(node.base, ast.NameRef):
@@ -512,12 +518,6 @@ def _addressed_in(node: object, into: set[str]) -> None:
         written: list[str] = []
         _named_in(node.body, written)
         into.update(written)
-    if isinstance(node, ast.Node):
-        for one in fields_of(node):
-            _addressed_in(getattr(node, one.name), into)
-    elif isinstance(node, (list, tuple)):
-        for one in node:
-            _addressed_in(one, into)
 
 
 def _referenced(node: object, name: str) -> bool:
@@ -617,16 +617,11 @@ def _read_through(node: object, into: set[int]) -> None:
     target of `r⌖ ← v`.  Such a read is a use of the place the reference names,
     not a copy of the reference -- which every other read of a `&mut` is, and is
     lent for."""
-    if isinstance(node, ast.Deref) and isinstance(node.operand, ast.NameRef):
-        into.add(id(node.operand))
-    if isinstance(node, ast.DerefAssign) and isinstance(node.target, ast.NameRef):
-        into.add(id(node.target))
-    if isinstance(node, ast.Node):
-        for one in fields_of(node):
-            _read_through(getattr(node, one.name), into)
-    elif isinstance(node, (list, tuple)):
-        for one in node:
-            _read_through(one, into)
+    for one in _below(node):
+        if isinstance(one, ast.Deref) and isinstance(one.operand, ast.NameRef):
+            into.add(id(one.operand))
+        elif isinstance(one, ast.DerefAssign) and isinstance(one.target, ast.NameRef):
+            into.add(id(one.target))
 
 
 def _shell_for(defined: _NamedType) -> Type | None:
@@ -747,6 +742,40 @@ def _children(node: ast.Node) -> tuple[str, ...]:
     return found
 
 
+#: Every node below a node, in the order a walk over the fields meets them, by
+#: the node's identity, with the node kept so that the identity stays its own.
+_BELOW: dict[int, tuple[ast.Node, list[ast.Node]]] = {}
+
+
+def _below(node: object) -> list[ast.Node]:
+    """*node*, where it is one, and every node below it, each before what it holds
+    and in the order of its fields -- the order a walk descending into the
+    fields of each node meets them.
+
+    Found once for a node and kept: the walks a body is read with before it is
+    lowered -- what is addressed, read through, changed and used whole -- and
+    what a definition mentions each went over the tree a call per node, field
+    and element, and asking each of them for one list is a loop where that was
+    a recursion, the same nodes met in the same order.
+    """
+    if isinstance(node, ast.Node):
+        found = _BELOW.get(id(node))
+        if found is not None and found[0] is node:
+            return found[1]
+    out: list[ast.Node] = []
+    stack: list[object] = [node]
+    while stack:
+        one = stack.pop()
+        if isinstance(one, ast.Node):
+            out.append(one)
+            stack.extend(reversed([getattr(one, name) for name in _children(one)]))
+        elif isinstance(one, (list, tuple)):
+            stack.extend(reversed(one))
+    if isinstance(node, ast.Node):
+        _BELOW[id(node)] = (node, out)
+    return out
+
+
 def _lambdas_handed_on(node: object, calls: Callable[[ast.Call], bool],
                        taken: set[str], handed: list[ast.Lambda],
                        bound: list[tuple[str, ast.Lambda]]) -> None:
@@ -802,23 +831,17 @@ def _named_in(node: object, into: list[str]) -> None:
     inside this one -- which is a name that lambda reaches from *this* body, so
     a list that brings in everything this body reaches has to bring it in too.
     """
-    if isinstance(node, ast.NameRef) and node.name not in into:
-        into.append(node.name)
-    if isinstance(node, ast.Capture) and node.name not in into:
-        into.append(node.name)
-    if isinstance(node, ast.AssignStmt):
-        # A name written as the target of an assignment is a name the body
-        # reaches, and is kept as a string rather than as a name of its own --
-        # so it is not found by looking for names, and has to be looked for.
-        for one in (node.name, *(name for name, _ in node.more)):
-            if one not in into:
-                into.append(one)
-    if isinstance(node, ast.Node):
-        for one in fields_of(node):
-            _named_in(getattr(node, one.name), into)
-    elif isinstance(node, (list, tuple)):
-        for one in node:
-            _named_in(one, into)
+    for each in _below(node):
+        if isinstance(each, (ast.NameRef, ast.Capture)) and each.name not in into:
+            into.append(each.name)
+        elif isinstance(each, ast.AssignStmt):
+            # A name written as the target of an assignment is a name the body
+            # reaches, and is kept as a string rather than as a name of its own
+            # -- so it is not found by looking for names, and has to be looked
+            # for.
+            for one in (each.name, *(name for name, _ in each.more)):
+                if one not in into:
+                    into.append(one)
 
 
 def _bound_in(node: object, into: set[str]) -> None:
@@ -852,15 +875,10 @@ def _is_generic(name: str) -> bool:
 
 def _parameters_in(written: object, into: list[str]) -> None:
     """Every type parameter named below *written*, in the order they are written."""
-    if isinstance(written, ast.TypeRef) and written.module is None \
-            and _is_generic(written.name) and written.name not in into:
-        into.append(written.name)
-    if isinstance(written, ast.Node):
-        for one in fields_of(written):
-            _parameters_in(getattr(written, one.name), into)
-    elif isinstance(written, (list, tuple)):
-        for one in written:
-            _parameters_in(one, into)
+    for one in _below(written):
+        if isinstance(one, ast.TypeRef) and one.module is None \
+                and _is_generic(one.name) and one.name not in into:
+            into.append(one.name)
 
 
 def _type_names_in(written: object, into: list[str]) -> None:
@@ -871,15 +889,10 @@ def _type_names_in(written: object, into: list[str]) -> None:
     -- so this is the same walk as the one over types, over the other kind of
     node.
     """
-    if isinstance(written, ast.NameRef) and _is_generic(written.name) \
-            and written.name not in into:
-        into.append(written.name)
-    if isinstance(written, ast.Node):
-        for one in fields_of(written):
-            _type_names_in(getattr(written, one.name), into)
-    elif isinstance(written, (list, tuple)):
-        for one in written:
-            _type_names_in(one, into)
+    for one in _below(written):
+        if isinstance(one, ast.NameRef) and _is_generic(one.name) \
+                and one.name not in into:
+            into.append(one.name)
 
 
 @dataclass(slots=True)
@@ -1620,21 +1633,16 @@ def _mentioned(node: object, into: set[str]) -> None:
     A loop, `yield ⇉` and a call -- one handing a value to a `⇉T` parameter,
     `⎕start`, `⎕enumerate` -- may walk a value of a type with an `each`, which
     calls it without writing its name, so each of those mentions `each`."""
-    match node:
-        case ast.NameRef():
-            into.add(node.name)
-        case ast.Member():
-            into.add(node.name)
-        case ast.Fresh():
-            into.add(node.glyph)
-        case ast.ForEach() | ast.Yield() | ast.Call():
-            into.add(EACH_NAME)
-    if isinstance(node, ast.Node):
-        for one in fields_of(node):
-            _mentioned(getattr(node, one.name), into)
-    elif isinstance(node, (tuple, list)):
-        for one in node:
-            _mentioned(one, into)
+    for one in _below(node):
+        match one:
+            case ast.NameRef():
+                into.add(one.name)
+            case ast.Member():
+                into.add(one.name)
+            case ast.Fresh():
+                into.add(one.glyph)
+            case ast.ForEach() | ast.Yield() | ast.Call():
+                into.add(EACH_NAME)
 
 
 def _called_in(node: object) -> list[str]:
@@ -2045,14 +2053,9 @@ def _changed_names(node: object) -> set[str]:
                     # `⎕enumerate(v)`: what is walked is what it counts.
                     walked = walked.args[0]
                 root(walked)
-        if isinstance(one, ast.Node):
-            for field_ in fields_of(one):
-                visit(getattr(one, field_.name))
-        elif isinstance(one, (tuple, list)):
-            for item in one:
-                visit(item)
 
-    visit(node)
+    for each in _below(node):
+        visit(each)
     return found
 
 
@@ -2080,14 +2083,9 @@ def _used_whole(node: object) -> set[str]:
                 reading.add(id(one.iterable))
             case ast.NameRef() if id(one) not in reading:
                 found.add(one.name)
-        if isinstance(one, ast.Node):
-            for field_ in fields_of(one):
-                visit(getattr(one, field_.name))
-        elif isinstance(one, (tuple, list)):
-            for item in one:
-                visit(item)
 
-    visit(node)
+    for each in _below(node):
+        visit(each)
     return found
 
 
