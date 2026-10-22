@@ -4585,6 +4585,10 @@ class Checker:
         #: Which argument of which function is being lowered, so that a type
         #: that does not match is reported as what it is.
         self._handing_over: tuple[str, int] | None = None
+        #: Which field of which record or sum is being given its value, so that
+        #: a type that does not match is reported as the field's and not as a
+        #: mistake of whatever the record itself stands in.
+        self._filling: tuple[str, str] | None = None
         #: The expressions put inside something -- a record, a tuple, a list, an
         #: array, a field, an element, a variable at the top level -- by what
         #: they are put into, which a value that must be closed may not be.
@@ -7307,7 +7311,7 @@ class Checker:
         "_thin_to", "_answer_arms", "_yield_answer", "_hands_out",
         "_hands_out_local", "_receiving", "_unscanned", "_borrows", "_places",
         "_iterator_loans", "_pick_in", "_pick_walked", "_demanding",
-        "_writing_in", "_block_spans")
+        "_writing_in", "_block_spans", "_filling")
 
     def _lower_set_aside(self, entry: _Collected) -> None:
         """Lower a body in the middle of another, with that one set aside."""
@@ -7320,6 +7324,7 @@ class Checker:
         self._writing_in = []
         self._initializing = self._assigning = self._operand_of = None
         self._handing_over = self._pick_in = self._pick_walked = None
+        self._filling = None
         self._answer_arms = self._yield_answer = None
         self._hands_out = self._hands_out_local = self._receiving = None
         self._out_of_arena, self._out_of_arenas = None, frozenset({_HEAP})
@@ -11947,15 +11952,15 @@ class Checker:
         it: which type a program counts in is the program's business.
         """
         outer = (self._operand_of, self._initializing, self._assigning,
-                 self._handing_over)
+                 self._handing_over, self._filling)
         (self._operand_of, self._initializing, self._assigning,
-         self._handing_over) = None, None, None, None
+         self._handing_over, self._filling) = None, None, None, None, None
         try:
             bare = isinstance(written, ast.IntLit) and written.type_name is None
             return self._lower_expr(builder, written, U64 if bare else None)
         finally:
             (self._operand_of, self._initializing, self._assigning,
-             self._handing_over) = outer
+             self._handing_over, self._filling) = outer
 
     def _field_place(self, builder: IRBuilder, where: Value, ty: ProductType,
                      at: int, span: Span) -> Value:
@@ -12003,8 +12008,9 @@ class Checker:
                                    written.span)
                 continue
             builder.store(place,
-                          self._lower_into(builder, written.value, held,
-                                           written.span), span)
+                          self._lower_field_value(builder, written.value, held,
+                                                  written.span, ty,
+                                                  ty.fields[at][0]), span)
             self._owning_field(written.value, ty, ty.fields[at][0], held)
 
     def _is_record_literal(self, expr: ast.Expr, ty: ProductType) -> bool:
@@ -14043,7 +14049,7 @@ class Checker:
                  self._out_of_arena, self._out_of_arenas, self._made_from,
                  self._answer_kinds, self._thin_to, self._answer_arms,
                  self._yield_answer, self._hands_out, self._hands_out_local,
-                 self._receiving, self._unscanned)
+                 self._receiving, self._unscanned, self._filling)
         self._scopes, self._addressed = [], set()
         self._answer_arms = self._yield_answer = None
         self._hands_out = self._hands_out_local = self._receiving = None
@@ -14059,7 +14065,7 @@ class Checker:
         self._answering, self._impure = func.ty.ret, func.attrs.impure
         self._carried, self._loops, self._outside = set(), [], []
         self._initializing = self._assigning = self._operand_of = None
-        self._handing_over = None
+        self._handing_over = self._filling = None
         # This body's own conditions, at its entry and at its every `return`, and
         # not those of the body whose call made it.
         outer_demanding, self._demanding = self._demanding, (node, func)
@@ -14119,7 +14125,7 @@ class Checker:
              self._out_of_arena, self._out_of_arenas, self._made_from,
              self._answer_kinds, self._thin_to, self._answer_arms,
              self._yield_answer, self._hands_out, self._hands_out_local,
-             self._receiving, self._unscanned) = outer
+             self._receiving, self._unscanned, self._filling) = outer
             self._demanding, self._at_entry = outer_demanding, outer_entry
             self._marking = outer_marking
             self._unsettled_tables = outer_unsettled
@@ -14693,7 +14699,7 @@ class Checker:
         # What the lambda is being given to, which a mismatch below names: the
         # body's own statements say other things while it is lowered.
         context = (self._operand_of, self._handing_over, self._assigning,
-                   self._initializing)
+                   self._initializing, self._filling)
         try:
             adopting, self._adopting = self._adopting, frozenset(
                 pair for one in (adopted or {}).values() for pair in one.outer)
@@ -14711,7 +14717,7 @@ class Checker:
                     if one.by_reference or isinstance(self._held_by(local), PtrType)]
         finally:
             (self._operand_of, self._handing_over, self._assigning,
-             self._initializing) = context
+             self._initializing, self._filling) = context
         if func is None:
             return UndefConst(ERROR)
         # Made once the body is: whether it changes anything is what lowering it
@@ -18666,15 +18672,16 @@ class Checker:
         type that does not match as a mistake about the definition.
         """
         outer = (self._operand_of, self._initializing, self._assigning,
-                 self._handing_over, self._leaving)
+                 self._handing_over, self._leaving, self._filling)
         (self._operand_of, self._initializing, self._assigning,
-         self._handing_over, self._leaving) = None, None, None, None, True
+         self._handing_over, self._leaving, self._filling) = (None, None, None,
+                                                              None, True, None)
         return outer
 
     def _as_it_was(self, outer: tuple) -> None:
         """Put back what `_as_the_loops_value` set aside."""
         (self._operand_of, self._initializing, self._assigning,
-         self._handing_over, self._leaving) = outer
+         self._handing_over, self._leaving, self._filling) = outer
 
     def _wanted_of_a_loop(self, stmt: ast.While | ast.ForEach,
                           expected: Type | None, produces: bool
@@ -24740,6 +24747,13 @@ class Checker:
             # operands, so what they answer with is a result: the number where
             # there is one, and the fact that there is none where there is not.
             answer = self._module.types.result_type(ty)
+            if not self._accepts(expected, answer):
+                # A result where a plain number is wanted -- the value of a
+                # field, an argument, a variable's initializer -- is refused as
+                # every other result is: taking it would drop the error.  What
+                # is measured above is the operands, which are the number.
+                self._report_mismatch(expr.span, answer, expected)
+                return UndefConst(ERROR)
             if isinstance(ty, FloatType):
                 # A third question again, and not either of the two below: the
                 # answer is not truncated towards anything, and the only divisor
@@ -25735,15 +25749,15 @@ class Checker:
         # comparison it is an operand of -- whose types are not the argument's.
         told = self._diags.error_count
         outer = (self._handing_over, self._initializing, self._assigning,
-                 self._operand_of, self._leaving)
+                 self._operand_of, self._leaving, self._filling)
         self._handing_over = (name, 1)
         self._initializing = self._assigning = self._operand_of = None
-        self._leaving = False
+        self._leaving, self._filling = False, None
         try:
             given = self._lower_expr(builder, expr.args[0], wanted)
         finally:
             (self._handing_over, self._initializing, self._assigning,
-             self._operand_of, self._leaving) = outer
+             self._operand_of, self._leaving, self._filling) = outer
         found = self._value_type_of(given)
         if found is ERROR:
             return UndefConst(ERROR)
@@ -26959,8 +26973,8 @@ class Checker:
                                  name=one.name)
                 spoiled = True
                 continue
-            given[one.name] = self._lower_into(builder, one.value,
-                                               ty.fields[at][1], one.span)
+            given[one.name] = self._lower_field_value(
+                builder, one.value, ty.fields[at][1], one.span, ty, one.name)
             self._owning_field(one.value, ty, one.name, ty.fields[at][1])
         for name, _ in ty.fields:
             if name not in given:
@@ -26988,6 +27002,30 @@ class Checker:
             self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)
         return made
+
+    def _lower_field_value(self, builder: IRBuilder, expr: ast.Expr,
+                           held: Type, span: Span, owner: Type,
+                           name: str) -> Value:
+        """Lower *expr*, written for the field *name* of *owner*, as a *held*.
+
+        A mismatch is the field's and is said as one: what the record itself
+        stands in -- a `let`, a call's argument, a function's answer -- has the
+        record's type and not the field's, and borrowing its wording would name
+        the wrong two types.  So every context around the record is set aside
+        while its field is lowered, and one inside the field (an operator's
+        operands, a call's arguments) is the field's own again.
+        """
+        outer = (self._filling, self._handing_over, self._initializing,
+                 self._assigning, self._operand_of, self._leaving)
+        self._filling = (owner.written(), name)
+        self._handing_over = self._initializing = None
+        self._assigning = self._operand_of = None
+        self._leaving = False
+        try:
+            return self._lower_into(builder, expr, held, span)
+        finally:
+            (self._filling, self._handing_over, self._initializing,
+             self._assigning, self._operand_of, self._leaving) = outer
 
     def _lower_sum(self, builder: IRBuilder, expr: ast.Call, ty: Type,
                    expected: Type | None) -> Value:
@@ -27024,7 +27062,8 @@ class Checker:
             return UndefConst(ERROR)
         place = builder.frame(ty, expr.span)
         if held is not VOID:
-            value = self._lower_into(builder, written.value, held, written.span)
+            value = self._lower_field_value(builder, written.value, held,
+                                            written.span, ty, written.name)
             if self._value_type_of(value) is ERROR:
                 return UndefConst(ERROR)
             self._payload_into(builder, place, value, held, expr.span)
@@ -30501,6 +30540,12 @@ class Checker:
             name, position = self._handing_over
             self._diags.emit(D.LANG_CALL_ARGUMENT_MISMATCH, span, position=position,
                              name=name, expected=expected.written(),
+                             found=found.written())
+            return
+        if self._filling is not None:
+            owner, name = self._filling
+            self._diags.emit(D.LANG_FIELD_VALUE_MISMATCH, span, name=name,
+                             type=owner, expected=expected.written(),
                              found=found.written())
             return
         if self._assigning is not None:

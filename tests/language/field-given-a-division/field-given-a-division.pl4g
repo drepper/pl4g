@@ -1,0 +1,35 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=0
+※ pl4g-test: diag=none
+
+※ A division written for a field takes the number out of its result where it
+※ stands, with `??` or `?`, and the field is then given the number: a whole one,
+※ a floating-point one, and one in a function that answers with a result
+※ itself.  The same result written bare is refused (`field-given-a-result`).
+
+let std := ⎕import("std")
+
+type Point = x : f64 ; y : f64
+
+type Share = whole : u32 ; left : u32
+
+@[opaque]
+fn middle(a: f64, b: f64) → Point:
+    Point(.x ← (a + b) ÷ 2f64 ?? 0f64, .y ← (a - b) ÷ 0f64 ?? 7f64)
+
+@[opaque]
+fn shared(a: u32, b: u32) → Share?:
+    Share(.whole ← (a ÷ b)?, .left ← (a % b)?)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let p: Point = middle(1f64, 3f64)
+    if p.x < 1.5f64 ∨ p.x > 2.5f64 ∨ p.y < 6.5f64 ∨ p.y > 7.5f64:
+        return 1u6
+    let s: Share = shared(17u32, 5u32) ?? Share(.whole ← 0u32, .left ← 0u32)
+    if s.whole ≠ 3u32 ∨ s.left ≠ 2u32:
+        return 2u6
+    let none: Share = shared(17u32, 0u32) ?? Share(.whole ← 9u32, .left ← 9u32)
+    if none.whole ≠ 9u32:
+        return 3u6
+    0u6

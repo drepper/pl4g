@@ -3183,6 +3183,42 @@
       "option": null
     },
     {
+      "number": 4340,
+      "name": "LANG_FIELD_VALUE_MISMATCH",
+      "severity": "error",
+      "message": "the field '{name}' of '{type}' is '{expected}', not '{found}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the field"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the record or the sum the field is part of"
+        },
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "the type the field has"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written for it"
+        }
+      ],
+      "cause": "A value written for a field has the field's type, and nothing is widened to make two types meet -- the rule every other place a value is written into something follows.  A result is not its answer: a division written for a field of `f64` is an `f64?`, and what takes the number out of it is `?` or `??`.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product Types"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4401,
       "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
       "severity": "error",
