@@ -887,17 +887,19 @@ namespace pl4g::opt {
           return std::nullopt;
         auto op = inst->bin;
         Int width = ty->bits;
-        // The wrapping shift takes its distance modulo the width as a mask,
-        // which is the distance itself only where the width is a power of two.
-        bool exact = (ty->bits & (ty->bits - 1)) == 0;
+        // The wrapping shift takes its distance modulo the width, which below
+        // the width is the distance itself.  A checked shift that cannot go as
+        // far is made the wrapping one where the modulo costs no more than the
+        // check: a width that is a power of two, and a distance written down.
+        bool cheap = (ty->bits & (ty->bits - 1)) == 0 || as_int(inst->operands[1]) != nullptr;
         if (plain_op(op)) {
           // A checked shift as far as the width or further stopped the program.
           if (distance->lo >= width)
             return whole;
-          if (distance->hi < width && exact)
+          if (distance->hi < width && cheap)
             fits.insert(inst);
           distance->hi = std::min(distance->hi, width - 1);
-        } else if (distance->hi >= width || ! exact)
+        } else if (distance->hi >= width)
           *distance = Range{ 0, width - 1 };
         auto near = int(distance->lo), far = int(distance->hi);
         if (op == BinOp::shl || op == BinOp::wrap_shl) {

@@ -906,8 +906,11 @@ namespace pl4g::interp {
       case Arith::shift: {
         Cell distance = b;
         bool wrapped = bin >= BinOp::wrap_shl;
+        // Modulo the width, the distance read as the bits of its type without
+        // a sign: an `and` for a width that is a power of two, and a remainder
+        // for one that is not.
         if (wrapped)
-          distance &= s.bits - 1;
+          distance = extend(distance, s.bits, false) % s.bits;
         else if (distance >= s.bits)
           fault(op.message, status::overflow);
         switch (bin) {
@@ -916,7 +919,7 @@ namespace pl4g::interp {
         case BinOp::ashr: case BinOp::wrap_ashr: return in_type(Cell(std::int64_t(a) >> distance));
         default: {
           // Two shifts and an or, so that a narrow type turns within itself.
-          Cell other = (s.bits - distance) & (s.bits - 1);
+          Cell other = (s.bits - distance) % s.bits;
           bool left = bin == BinOp::rotl || bin == BinOp::wrap_rotl;
           Cell forwards = left ? distance : other;
           Cell backwards = left ? other : distance;
