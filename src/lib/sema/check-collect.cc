@@ -213,6 +213,11 @@ namespace pl4g::sema {
     // symbol of a name the image already has.  Refused whatever the
     // convention, so that a function does not become wrong by being given
     // another one.
+    // An interactive session writes what it keeps of an input, and the
+    // function each input runs in, as source under the compiler's own prefix:
+    // those are the compiler's definitions, given such names rightly.
+    if (session != nullptr && name.starts_with("__pl4g"))
+      return;
     if (name == "_start" || name.starts_with("__pl4g") || name.starts_with("pl4g_")) [[unlikely]]
       diags.emit(D::LANG_NAME_THE_IMAGE_USES, span, { { "name", name } });
   }
