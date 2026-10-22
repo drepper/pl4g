@@ -55,5 +55,12 @@ A change that touches the compiler is timed.  Run `bin/pl4g-timing` after commit
 `spec/timings.md`, and report what it shows.  Add a sample to the list in the script whenever a feature lands that could plausibly
 cost time; samples are never removed, so that an older column stays meaningful.
 
+The manual -- what `help` and the nodes under it say of the language and its library -- is made by `bin/pl4g-manual` on
+every build, from the nodes written by hand in `share/manual/` and from the modules' own `※※` comments.  A change to the
+language changes the hand-written nodes in the same commit; a change to a module's exports documents them in the module, which
+puts them in the manual by itself.  The script checks that every link names a node, that every node is reached from `help`,
+that none is more than 4 kB (split one that grows past it), and that every builtin, attribute and keyword is mentioned; the
+build and `tests/compiler/test_manual.py` fail where any of that does not hold.
+
 A commit that touches no compiler source runs neither the conformance suite nor the timing.  Documentation is such a commit: a
 column for one with no code in it is noise, and reporting it as noise is a lot of words to say nothing.

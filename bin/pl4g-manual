@@ -1,0 +1,387 @@
+#!/usr/bin/env python3
+"""Make the manual: the nodes of a graph of short texts, from `help` down.
+
+Run as ``pl4g-manual [--check] [--out DIR]``.  The manual is what a program
+asking for help is shown, a node at a time: `help` is the top, every node is
+reached from it by following the names it mentions, and none is more than four
+kilobytes, so that each is something to read on one screen and not a chapter.
+
+**Two kinds of node, and both are made every time.**  What the language is and
+how it is used is written by hand, a file per node in `share/manual/`; what the
+library offers is taken from the modules themselves (`modules/*.pl4g`): every
+definition a module exports and documents with a `※※` comment is a node, and
+every module is a node listing them, so that a function added to a module is in
+the manual the next time it is made, and a function changed is changed there.
+A hand-written node named after a module says what the module is for in place
+of the summary its own comment gives.
+
+**A link is a name in double brackets**, `[[std.string]]`, and stays one in the
+text served: the reader asks for what it names.  What is checked:
+
+- every link names a node, and every node is reached from `help`;
+- no node is more than `LIMIT` bytes -- a module's list of members is split over
+  as many nodes as it takes, each linked from the one before, and a hand-written
+  node that is too long is refused, being the writer's to split;
+- every builtin the compiler knows (`⎕name`), every attribute and every keyword
+  is mentioned in some node, so that one added to the language and not to the
+  manual is found by the next build and not by the next reader.
+
+With `--out DIR` the nodes are written there, one file each, named as the node
+is, and packed into `DIR/manual.pack` -- each name, a nul, its text, a nul, in
+the order of the names -- which the library serving them embeds.  With
+`--check` nothing is written and the status says whether all of it holds.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from collections import deque
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Final
+
+ROOT: Final[Path] = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from pypl4g.front import token  # noqa: E402
+from pypl4g.front.doccomment import parse as parse_doc  # noqa: E402
+from pypl4g.sema.attributes import REGISTRY  # noqa: E402
+
+#: Where the hand-written nodes are, and the modules.
+SOURCES: Final[Path] = ROOT / "share" / "manual"
+MODULES: Final[Path] = ROOT / "modules"
+
+#: The most a node may hold, in bytes of UTF-8.
+LIMIT: Final[int] = 4096
+
+#: The node everything is reached from.
+TOP: Final[str] = "help"
+
+#: A link, as a node writes one.
+LINK: Final[re.Pattern[str]] = re.compile(r"\[\[([^\[\]\s]+)\]\]")
+
+#: What a definition's first line begins with, and the name after it.
+DEFINITION: Final[re.Pattern[str]] = re.compile(
+    r"^(fn|type|enum|let|unit|bundle|macro)\s+(`[^`]+`|[\w.⍕]+)")
+
+#: What `std` hands on: `@[export] let NAME := ⎕import("FILE")`.
+HANDED_ON: Final[re.Pattern[str]] = re.compile(r'^let\s+(\w+)\s*:=\s*⎕import\("(\w+)"\)')
+
+
+@dataclass(slots=True)
+class Node:
+    """One text of the manual."""
+
+    name: str
+    title: str
+    body: str
+    #: Where it came from, for a message about it.
+    origin: str
+    links: list[str] = field(default_factory=list)
+
+    def text(self) -> str:
+        """The text served: the title, underlined, and the body."""
+        return "".join((self.title, "\n", "=" * len(self.title), "\n\n", self.body.strip(), "\n"))
+
+
+@dataclass(slots=True)
+class Definition:
+    """Something a module exports, with what its comment says of it."""
+
+    name: str
+    kind: str
+    headers: list[str]
+    doc: str
+
+
+def hand_written() -> dict[str, Node]:
+    """The nodes in `share/manual/`, each file `NAME.txt` holding the node NAME:
+    a `title:` line, a blank line, and the body."""
+    nodes: dict[str, Node] = {}
+    for path in sorted(SOURCES.glob("*.txt")):
+        lines = path.read_text(encoding="utf-8").split("\n")
+        if not lines or not lines[0].startswith("title:"):
+            raise SystemExit("".join((str(path), ": the first line is not 'title: ...'")))
+        name = path.stem
+        nodes[name] = Node(name=name, title=lines[0][len("title:"):].strip(),
+                           body="\n".join(lines[1:]).strip("\n"), origin=str(path))
+    return nodes
+
+
+def module_names() -> dict[Path, str]:
+    """What each module is called by a program: `std.NAME` for one std hands on,
+    its own name for any other."""
+    names = {MODULES / "std.pl4g": "std"}
+    exported = False
+    for line in (MODULES / "std.pl4g").read_text(encoding="utf-8").split("\n"):
+        if line.startswith("@[") and "export" in line:
+            exported = True
+            continue
+        found = HANDED_ON.match(line)
+        if found is not None and exported:
+            names[MODULES / "".join((found.group(2), ".pl4g"))] = "".join(("std.", found.group(1)))
+        if line.strip() and not line.startswith("※"):
+            exported = False
+    for path in sorted(MODULES.glob("*.pl4g")):
+        names.setdefault(path, path.stem)
+    return names
+
+
+def comment_text(lines: list[str]) -> str:
+    """A comment's text without its marks."""
+    out: list[str] = []
+    for line in lines:
+        text = line.lstrip()
+        text = text[2:] if text.startswith("※※") else text[1:]
+        out.append(text[1:] if text.startswith(" ") else text)
+    return "\n".join(out).strip()
+
+
+def definitions(path: Path) -> tuple[str, list[Definition]]:
+    """What a module says of itself, and what it exports with a comment."""
+    lines = path.read_text(encoding="utf-8").split("\n")
+    overview = ""
+    found: list[Definition] = []
+    at = 0
+    doc: list[str] = []
+    while at < len(lines):
+        line = lines[at]
+        if line.startswith("※※"):
+            doc = [line]
+            at += 1
+            while at < len(lines) and lines[at].startswith("※"):
+                doc.append(lines[at])
+                at += 1
+            continue
+        if not line.strip():
+            if doc and not overview and not found:
+                overview = comment_text(doc)
+            doc = [] if not line.strip() and doc and lines[at - 1].startswith("※") else doc
+            at += 1
+            continue
+        attributes: list[str] = []
+        while at < len(lines) and lines[at].startswith("@["):
+            attributes.append(lines[at])
+            at += 1
+        if at >= len(lines):
+            break
+        head = DEFINITION.match(lines[at])
+        if head is None or not any(re.search(r"\bexport\b", one) for one in attributes):
+            doc = []
+            at += 1
+            continue
+        headers = [lines[at]]
+        depth = sum(lines[at].count(o) - lines[at].count(c) for o, c in ("()", "[]", "⟦⟧", "⸨⸩"))
+        at += 1
+        # A header goes on where a bracket is still open, and a type whose
+        # alternatives or fields are on lines of their own goes on with them.
+        while at < len(lines) and (depth > 0 or (head.group(1) in ("type", "enum")
+                                                 and lines[at].startswith((" ", "\t"))
+                                                 and not lines[at].strip().startswith("※"))):
+            headers.append(lines[at])
+            depth += sum(lines[at].count(o) - lines[at].count(c)
+                         for o, c in ("()", "[]", "⟦⟧", "⸨⸩"))
+            at += 1
+        if head.group(1) == "fn" and headers[-1].rstrip().endswith(":"):
+            headers[-1] = headers[-1].rstrip()[:-1]
+        found.append(Definition(name=head.group(2).strip("`"), kind=head.group(1),
+                                headers=[one.rstrip() for one in headers], doc=comment_text(doc)))
+        doc = []
+    return overview, found
+
+
+def first_paragraphs(text: str, count: int) -> str:
+    """The first *count* paragraphs of *text*."""
+    return "\n\n".join(text.split("\n\n")[:count]).strip()
+
+
+def said(text: str) -> str:
+    """What a command of a comment says, on one line: its first paragraph, the
+    rest of a comment after a command being prose about the definition again."""
+    return " ".join(first_paragraphs(text, 1).split())
+
+
+def brief_of(doc: str) -> str:
+    """The first paragraph of a comment's summary, on one line, for a list."""
+    return said(parse_doc(doc).summary)
+
+
+def definition_node(module: str, one: Definition, headers: list[list[str]]) -> Node:
+    """The node of a definition of *module*, all of its headers together."""
+    doc = parse_doc(one.doc)
+    parts: list[str] = ["\n\n".join("\n".join("    " + line.strip() if at else "    " + line
+                                              for at, line in enumerate(lines))
+                                    for lines in headers)]
+    if doc.summary:
+        parts.append(doc.summary.strip())
+    details = doc.first("details")
+    if details is not None and details.text.strip():
+        parts.append(first_paragraphs(details.text, 1))
+    params = doc.of("param")
+    if params:
+        parts.append("\n".join(("Parameters:",
+                                *("".join(("  ", p.subject, " -- ", said(p.text)))
+                                  for p in params))))
+    for command, label in (("return", "Answers"), ("raises", "Refuses"), ("pre", "Asks"),
+                           ("post", "Promises"), ("note", "Note"), ("warning", "Warning")):
+        for part in doc.of(command):
+            parts.append("".join((label, ": ", said(part.text))))
+    parts.append("".join(("Part of [[", module, "]].")))
+    name = "".join((module, ".", one.name))
+    return Node(name=name, title="".join((name, " (", one.kind, ")")), body="\n\n".join(parts),
+                origin=str(MODULES))
+
+
+def library_nodes(hand: dict[str, Node]) -> dict[str, Node]:
+    """A node for every module and for everything each exports with a comment."""
+    nodes: dict[str, Node] = {}
+    for path, module in sorted(module_names().items(), key=lambda item: item[1]):
+        overview, found = definitions(path)
+        grouped: dict[str, list[Definition]] = {}
+        for one in found:
+            grouped.setdefault(one.name, []).append(one)
+        listing: list[str] = []
+        for name, same in grouped.items():
+            node = definition_node(module, same[0], [one.headers for one in same])
+            nodes[node.name] = node
+            brief = brief_of(same[0].doc)
+            listing.append("".join(("  [[", node.name, "]]", " -- " if brief else "", brief)))
+        intro = hand.pop(module).body if module in hand else first_paragraphs(overview, 2)
+        title = "".join(("The module ", module))
+        nodes.update(split_listing(module, title, intro, listing))
+    return nodes
+
+
+def split_listing(name: str, title: str, intro: str, listing: list[str]) -> dict[str, Node]:
+    """A node of *intro* and *listing*, split over as many as it takes to keep
+    each within `LIMIT`: NAME, then NAME.more, NAME.more2 and on, each linked
+    from the one before."""
+    nodes: dict[str, Node] = {}
+    part, at, first = 1, 0, True
+    while True:
+        own = name if part == 1 else "".join((name, ".more", "" if part == 2 else str(part - 1)))
+        after = "".join((name, ".more", "" if part == 1 else str(part)))
+        lines: list[str] = []
+        head = intro if first else "".join(("More of [[", name, "]]."))
+        budget = LIMIT - len(Node(own, title, "", "").text().encode()) - len(head.encode()) - 200
+        while at < len(listing) and budget - len(listing[at].encode()) - 1 > 0:
+            budget -= len(listing[at].encode()) + 1
+            lines.append(listing[at])
+            at += 1
+        body = "\n\n".join((head, "Contents:\n" + "\n".join(lines) if lines else "Contents: none."))
+        if at < len(listing):
+            body = "".join((body, "\n\nContinued in [[", after, "]]."))
+        nodes[own] = Node(name=own, title=title if first else "".join((title, ", continued")),
+                          body=body, origin=str(MODULES))
+        if at >= len(listing):
+            return nodes
+        part += 1
+        first = False
+
+
+def mentions_wanted() -> dict[str, str]:
+    """What the manual has to mention somewhere, and what each is."""
+    wanted: dict[str, str] = {}
+    for value in vars(token).values():
+        if isinstance(value, str) and value.startswith(token.BUILTIN_GLYPH) and len(value) > 1 \
+                and re.fullmatch(r"⎕[a-z_]+", value):
+            wanted[value] = "the builtin"
+    for name in REGISTRY:
+        wanted["".join(("@[", name))] = "the attribute"
+    for word in token.KEYWORDS:
+        if re.fullmatch(r"[a-z_]+", word):
+            wanted[word] = "the keyword"
+    return wanted
+
+
+def mentioned(word: str, texts: str) -> bool:
+    """Whether *texts* mentions *word*: an attribute as `@[name` or `, name` inside
+    one, anything else as a word of its own."""
+    if word.startswith("@["):
+        return re.search("".join((r"@\[[^\]]*\b", re.escape(word[2:]), r"\b")), texts) is not None
+    return re.search("".join((r"(?<![\w⎕])", re.escape(word), r"(?!\w)")), texts) is not None
+
+
+def check(nodes: dict[str, Node]) -> list[str]:
+    """What is wrong with the graph, as messages."""
+    wrong: list[str] = []
+    for node in nodes.values():
+        node.links = LINK.findall(node.body)
+        for link in node.links:
+            if link not in nodes:
+                wrong.append("".join((node.origin, ": ", node.name, " links to '", link,
+                                      "', which is no node")))
+        size = len(node.text().encode("utf-8"))
+        if size > LIMIT:
+            wrong.append("".join((node.origin, ": ", node.name, " is ", str(size), " bytes, more than ",
+                                  str(LIMIT), "; split it")))
+    if TOP not in nodes:
+        wrong.append("".join(("there is no node '", TOP, "'")))
+        return wrong
+    seen = {TOP}
+    waiting = deque([TOP])
+    while waiting:
+        for link in nodes[waiting.popleft()].links:
+            if link in nodes and link not in seen:
+                seen.add(link)
+                waiting.append(link)
+    for name in sorted(set(nodes) - seen):
+        wrong.append("".join((nodes[name].origin, ": ", name, " is not reached from ", TOP)))
+    texts = "\n".join(node.text() for node in nodes.values())
+    for word, what in mentions_wanted().items():
+        if not mentioned(word, texts):
+            wrong.append("".join(("no node mentions ", what, " '",
+                                  word if not word.startswith("@[") else word + "]", "'")))
+    return wrong
+
+
+def made() -> dict[str, Node]:
+    """Every node: the hand-written ones and the library's."""
+    hand = hand_written()
+    library = library_nodes(hand)
+    clash = sorted(set(hand) & set(library))
+    if clash:
+        raise SystemExit("".join(("written by hand and made from a module: ", ", ".join(clash))))
+    return {**hand, **library}
+
+
+def pack(nodes: dict[str, Node]) -> bytes:
+    """The nodes as the library embeds them: name, nul, text, nul, by name."""
+    out = bytearray()
+    for name in sorted(nodes):
+        out += name.encode("utf-8") + b"\0" + nodes[name].text().encode("utf-8") + b"\0"
+    return bytes(out)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Make the manual, and check its graph.")
+    parser.add_argument("--check", action="store_true", help="only check; write nothing")
+    parser.add_argument("--out", type=Path, help="where to write the nodes and manual.pack")
+    args = parser.parse_args()
+    nodes = made()
+    wrong = check(nodes)
+    for one in wrong:
+        print(one, file=sys.stderr)
+    if wrong:
+        return 1
+    if args.out is not None and not args.check:
+        args.out.mkdir(parents=True, exist_ok=True)
+        for stale in args.out.glob("*.txt"):
+            if stale.stem not in nodes:
+                stale.unlink()
+        for name, node in nodes.items():
+            target = args.out / "".join((name, ".txt"))
+            text = node.text()
+            if not target.exists() or target.read_text(encoding="utf-8") != text:
+                target.write_text(text, encoding="utf-8")
+        packed = pack(nodes)
+        target = args.out / "manual.pack"
+        if not target.exists() or target.read_bytes() != packed:
+            target.write_bytes(packed)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

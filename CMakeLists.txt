@@ -13,6 +13,8 @@
 #   pl4g-embed-example  a C program that loads it with dlopen and runs a
 #                     program calling back into it (src/examples/embed)
 #   pl4g-embed-example-cc  the same in C++, through embed/pl4g-embed.hh
+#   pl4g-manual       the manual, a node at a time (libpl4g-manual.so), and
+#                     pl4g-help, which shows one
 #   pl4g-embed-expressions  expressions as JSON evaluated in PL4G, the replies
 #                     checked with nlohmann::json and json-schema-validator
 #   pl4g-lexdump      the tokens of a file, for comparing with pypl4g
@@ -447,6 +449,31 @@ if(nlohmann_json_FOUND AND nlohmann_json_schema_validator_FOUND)
   add_test(NAME embed-expressions
     COMMAND prlimit --data=1073741824 --cpu=300 -- $<TARGET_FILE:pl4g-embed-expressions> $<TARGET_FILE:pl4g-embed>)
 endif()
+
+# The manual: bin/pl4g-manual makes its nodes -- from share/manual/ and from the
+# modules' own comments -- and checks the graph they make, every time anything
+# it reads changes, and the library embeds what it made.  Standalone: nothing
+# of the compiler is in it.
+file(GLOB PL4G_MANUAL_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/share/manual/*.txt
+     ${CMAKE_SOURCE_DIR}/modules/*.pl4g)
+set(PL4G_MANUAL_DIR ${CMAKE_BINARY_DIR}/manual)
+add_custom_command(OUTPUT ${PL4G_MANUAL_DIR}/manual.pack
+  COMMAND ${CMAKE_SOURCE_DIR}/bin/pl4g-manual --out ${PL4G_MANUAL_DIR}
+  DEPENDS ${PL4G_MANUAL_SOURCES} ${CMAKE_SOURCE_DIR}/bin/pl4g-manual ${CMAKE_SOURCE_DIR}/pypl4g/front/token.py
+          ${CMAKE_SOURCE_DIR}/pypl4g/front/doccomment.py ${CMAKE_SOURCE_DIR}/pypl4g/sema/attributes.py
+  COMMENT "Making the manual")
+add_custom_target(pl4g-manual-text DEPENDS ${PL4G_MANUAL_DIR}/manual.pack)
+add_library(pl4g-manual SHARED src/manual/manual.cc)
+target_include_directories(pl4g-manual PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_compile_options(pl4g-manual PRIVATE ${PL4G_COMMON_FLAGS} --embed-dir=${PL4G_MANUAL_DIR})
+target_link_libraries(pl4g-manual PRIVATE fstrcmp)
+set_source_files_properties(src/manual/manual.cc PROPERTIES OBJECT_DEPENDS ${PL4G_MANUAL_DIR}/manual.pack)
+add_dependencies(pl4g-manual pl4g-manual-text)
+add_executable(pl4g-help src/manual/help.cc)
+target_link_libraries(pl4g-help PRIVATE pl4g-manual)
+add_executable(pl4g-manual-graph src/manual/graph.cc)
+target_link_libraries(pl4g-manual-graph PRIVATE pl4g-manual)
+add_test(NAME manual-graph COMMAND $<TARGET_FILE:pl4g-manual-graph>)
 
 add_executable(pl4g-embed-host src/test/embed_host.cc)
 target_link_libraries(pl4g-embed-host PRIVATE pl4g)
