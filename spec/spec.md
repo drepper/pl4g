@@ -8638,7 +8638,8 @@ a definition whose hash moves when somebody reformats it says nothing about whet
 A definition's hash covers its attributes as well as its body, because what a definition says about itself is part of what it is.
 Every definition of a file the program was given is named, including one the image did not need and dropped.  **Of a module, the
 functions the program used are named and nothing else**: a module is read as far as the program names it, and what went in is
-those functions -- a body nobody read was never lexed, and is in the hash of the module's bytes and nowhere else.
+those functions -- a body nobody read was never lexed, and is in the hash of the module's bytes and nowhere else.  What the
+program's macros used counts as used: a function of a module a macro ran went into the program as much as one it calls.
 
 #### Generic Functions
 

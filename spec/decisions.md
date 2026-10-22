@@ -11629,6 +11629,65 @@ The diagnostic `⎕chr` gave a number of the wrong type was reported twice, once
 and once with the two types the other way round; it is now one report, as the conversion's argument (4213).  That is the
 checker's and needed no decision.
 
+## 2026-10-22T23:50+02:00 — compiler
+
+### What compiling cost on branch `json`, and where it went back
+
+The branch that brought `std.string` and `json` made pypl4g 1.57 times slower than 28f579f over every sample of
+`bin/pl4g-timing` (geometric mean; 3.7 times for the macro samples), and the C++ much slower on the large examples.  Bringing it
+back was the task, every output kept as it was.  What follows is what that settled; how is in the implementation notes ("What
+compiling cost after `json`, and where it went").
+
+**Nothing a program compiles to moves for compile time.**  The IR, the code, the diagnostics and the images are the same before and
+after every change here, compiled by both trees over every language test and every example and compared byte for byte -- with
+the one exception below, which is what the specification already said.  A faster compiler that writes another image is a second
+change hidden in the first, and the agreement of the two compilers (checks-agree, codegen-agrees, elf-agrees) is held to those
+bytes.  So what costs time and changes nothing is made cheaper -- a walk asked once, a question kept as its answer changes, a set
+replaced by a tree -- and what cannot be left out without moving an output is left in, said why, and put in the to-do list.
+Compare **GCC**, whose bootstrap builds the compiler with itself twice and compares the two byte for byte, and **Go**, whose
+toolchain is checked to build itself reproducibly.
+
+**A module the macros read is lowered as far as the macros name it.**  The macros' checker lowers every body of the unit it
+was given -- the macros, the `comptime` functions -- and handed `for_macros` on to the checker of every module it read, which made
+that one lower everything too: every body of `std` and of `std.string` for a program whose one macro calls nothing of them, 300 of
+macro-comptime-fn's 392 ms.  A module's checker is now always one that lowers what is asked for, as a module read by the program
+is, and its macros are among what is asked for -- the expander runs one by a name no body writes.  **What it changes is the bill
+of materials of a program with macros**: one row per function of a module whose body was read, which was every function of every
+module the macros' checker read, and is now those the program or its macros used.  That is what the specification says the rows
+are ("of a module, the functions the program used are named and nothing else"); the rows had said more, of every program with a
+macro in it, because the compiler did more.  Compare **Zig**, whose analysis reaches a declaration only where something names it,
+compile-time code included; **Rust**, which compiles a procedural macro as a crate of its own and runs only what an invocation
+calls; **Racket** and **Scheme** systems with phases, which instantiate a module for the expander as far as its syntax needs.
+
+**Left as it was, and why.**  Two things a program that imports `std` pays for though it names neither, about ten of exit0's
+37 ms:
+
+- **`std.string` is read for every program that imports `std`**, which hands it on.  Read where a program first names
+  `std.string` instead, it would be read later than `std` reads it, and what a module adds to the program is added in the order
+  it is read: the IR of every program using it would come out in another order.  It wants a reading that is lazy and keeps the
+  order -- the place a module's definitions take decided where it is imported, its definitions read when asked.
+- **`⍕` and everything it names are checked against their requirements for every program that imports `std`**, an operator being
+  asked for by nothing -- as a generic function is not checked until a name asks for it.  Asking for a generic operator by its glyph
+  was tried, and takes exit0 from 1.30 times 28f579f to 1.09.  It moves output, because a check that is thrown away leaves things
+  behind: the heap's variable that `⍕`'s body names is made by the check and kept, which puts it earlier among the variables and
+  renumbers every static after it; and `leanvalues` takes a part out of a tuple only where the part's type is the extraction's *as
+  an object*, and which object two equal types are depends on what was made before -- six programs of generators and tasks came
+  out different.  A check that leaves nothing behind, and types compared as types, would let it go in unchanged.
+
+Compare **C++**, whose templates are checked where they are written only for what does not depend on their parameters and are
+otherwise checked per instantiation; **Rust** and **Swift**, which check a generic body once against its bounds, as pl4g does, and
+for every generic of a crate whether anything instantiates it.
+
+**The passes the branch added cost what they buy.**  At `-O1` `facts`, `conditions` and `divisions` take std-read-write's
+optimization from 22 ms to 32 and spend 120 of examples/numbers' 508 -- and are what took a million numbers' writing from 1871
+instructions a number to 1522.  Their cost was not their questions but how often they were asked: `conditions` worked out
+every value's reads and every block's ways in for every block it looked at, which was 764 ms of examples/numbers alone; it is 33.
+
+Measured, pypl4g, the best of five: macro-comptime-fn 112.7 ms at 28f579f, 421.6 at the tip of `json`, 107.3 now; std-print-macro
+301.1, 578.9 and 280.5; exit0 28.3, 50.1 and 36.8; over the 221 samples, 1.157 times 28f579f where it was 1.57.  The C++ at
+the tip of `json` and now: examples/numbers at `-O1` 650 ms and 165, examples/documents 1173 and 434, macro-comptime-fn 30.1 and
+12.9.  The test suite, every core: 120 s and 81.
+
 Open questions
 --------------
 

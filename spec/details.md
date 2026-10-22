@@ -5555,7 +5555,13 @@ first.  A checker that lowers everything -- the program's own, one for the macro
 `whole_modules` is asked for -- hands every name its units mention to the modules it reads before lowering a body of its own, so
 that callees are lowered before callers across files as within one.  The names are an over-approximation: every `close` of every
 type is lowered for one `close` written anywhere.  Nothing reaches a function without its name being written, so nothing is
-missed; `tests/compiler/test_std_whole.py` checks `std` whole, so that a body no program reaches is still checked.
+missed; `tests/compiler/test_std_whole.py` checks `std` whole, so that a body no program reaches is still checked.  **What lowers
+everything is the checker started on the files, never a module it reads** (since 2026-10-22): `Checker(imported=True)` for every
+module `_read_module` reads, and `run` takes the branch that lowers everything for the macros' checker only where it is not
+`imported`.  `for_macros` is handed on to a module's checker, and that alone used to make it lower every body -- every
+number-reading body of `std.string` for a program whose one macro called nothing.  The macros of a module are its roots where the
+macros are checked (`entry.node.is_macro`), the expander running them by a name nothing in a body writes.  The C++ keeps
+`Checker::imported`, set on the module's checker before `run`.
 
 **A function's body is a job** (`parser.BodyJob`, `ast.DeferredBlock`).  The parser reads every definition's signature -- the
 parameters, the answer, the clauses, which a generic function's requirements are -- and, where the body is a braced block or an
@@ -5895,3 +5901,130 @@ against sixteen, and is worth five per cent at most: the blocks are not where th
 - **The prefix exclusive or is six shifts and exclusive ors**, the language having no carry-less multiplication: simdjson's is one
   `pclmulqdq` of the quote bits by all ones (`pmull` on AArch64, `clmul` in RISC-V's Zbc).  A `⎕clmul`, or the compiler knowing the
   ladder for what it is, would make it one instruction.
+
+
+What compiling cost after `json`, and where it went
+---------------------------------------------------
+
+`bin/pl4g-timing` put pypl4g at 1.57 times 28f579f over every sample after branch `json` (geometric mean; macro-comptime-fn 3.7
+times).  Every change below leaves the IR, the code, the diagnostics and the images as they were, with one exception said in its
+place: what the bill of materials of a program with macros lists.  `tests/language` compiled by the tree before and after --
+IR at `-O0` and `-O1`, images for the three targets with the bill of materials left empty -- and `examples/` at `-O1` are byte
+for byte the same.
+
+**The macros' checker lowered every module whole.**  `for_macros` is handed on to the checker of a module the macros read, and
+`run` took the branch that lowers everything wherever it was set; since `std` reads `std.string`, that was every number-reading
+and number-writing body of the library for a program whose one macro calls nothing of it -- 300 ms of macro-comptime-fn's 392.
+What lowers everything is now the checker the compilation started, never one it made for a module (`Checker(imported=True)`, and
+`Checker::imported` in the C++), and a module the macros read is lowered as `want` asks, its macros among the roots.  **The bill
+of materials of a program with macros lists fewer of its modules' functions**: one row per function whose body was read, which had
+been every function of every module, and is now the ones the program or its macros used -- what the specification says it is.
+
+**A body set aside is found with one search.**  `_set_aside` went through the rest of the file a line at a time in Python and
+counted each line's brackets with a pattern taking out text, characters and comments; over `std.string`'s 2 600 lines, at every
+import.  `_AT_THE_MARGIN` finds the line that ends the body, the comments at the margin before it are found walking back over the
+lines between, and `_depth_change` counts over the whole body once -- what it takes out never reaches past the end of a line, so
+the count over the text is the sum over its lines.  The pattern's three ways each begin with their own character now (the mark
+before a character's quote looked at once the quote is taken), which the engine looks for before trying anything.  A blank run is
+skipped with one match (`_BLANKS`), what goes on with a name is one match of `_is_ident_continue` as a pattern (`\w` is
+`isalnum` and the underscore), the ASCII spellings are asked about only where a character begins one, and a name beginning with
+an ASCII letter is tried first.  Every `.pl4g` file of the tree lexes to the same tokens -- whole, lazily, and body by body.
+
+**`Span`, `Token` and the nodes of the tree are not frozen.**  A frozen dataclass sets each field through `object.__setattr__`,
+which was half of what making a span cost; they hash by their fields as before (`unsafe_hash=True`), and nothing changed one once
+it was made.  `DeferredBlock` sets its own slots through `object.__setattr__` still, which works either way.
+
+**The walks over a tree ask once for its nodes.**  `ast.fields_of` is `dataclasses.fields` kept per class.  `_below(node)` is the
+node and every node under it, each before what it holds and in the order of its fields -- the order the recursive walks met them
+-- kept by the node's identity with the node beside it.  `_mentioned`, `_addressed_in`, `_read_through`, `_changed_names`,
+`_used_whole`, `_named_in`, `_parameters_in` and `_type_names_in` are loops over it.  `_lifetimes_of` is not: it goes into a node's
+own fields and tuples and not into a list or a tuple inside a tuple, which `_below` does.
+
+**The parser** reads the kind straight off the token list in `_check` and `_accept`, which are asked several times a token.
+
+**`conditions` keeps what it asks as it changes it** (`_Ways`).  For every block it might go through it worked out how often each
+value is read and every branch arriving at every block -- two walks of the function per block, 764 ms of examples/numbers at
+`-O1`.  A walk works both out once: an edge moved counts its arguments off and on (`moved`), a branch replaced counts the jump's
+off and its own on and arrives where it goes (`arrives`), and the ways into a block are those still pointing there from the
+branch their block ends with now (`into`).  What a block's rewrite does to the next one's question is the same either way, so the
+order the ways are taken in does not matter.  33 ms; the C++ `Ways`, 163 ms to 5.
+
+**`simplifycfg` joins in one sweep.**  `_merge_blocks` started again from the top with the edges worked out afresh after every
+join.  Joining a block into its one way in changes, for no block that stays, how many ways arrive -- the branches it held go
+where they went, from the block it is written into -- and makes no block before it worth joining that was not; so the counts are
+worked out once and the sweep goes on from the joined block, and the hundred joins a call may make are kept, the rest left to the
+next round as before.  `_settle_params` writes the parameters it drops into the function once at the end, reading each argument
+through what was dropped so far (`now`), which is what one replacement after another left; `_absorb` replaces a block's
+parameters all at once where none is handed another of them, and one at a time where one is.  `stands_for` makes no list for an
+instruction reading nothing it replaces, and `Value` has no `__eq__`: equality was identity already, and a list searched for a
+value -- `in`, `index`, `remove` -- compares in C rather than calling Python for every element.  236 ms to 21; the C++, 20 to 3.
+
+**`BinOp`, `UnOp`, `CmpPred` and `CastKind` hash as objects** (`__hash__ = object.__hash__`).  `Enum` hashes the member's name
+through Python; equality is identity, and the name's hash differs from run to run, so no answer depended on the value.
+
+**The register allocator walks the physical ranges in step** (`_Held`; the C++ `Held`).  The virtual ranges are assigned in the
+order they start; a physical range is looked at from when it starts until one that starts after it has ended -- one that ended
+before a range starts meets none after it.  Code generation of std-print-macro, 168 ms to 142.  And `covers`, asked of every pair
+of ranges an allocation weighs, walks the stretches with `_parts` and the lengths written out.
+
+**What a function's reads are is asked once** (`branches._Reads`): `condition_used_once` counted the reads of a comparison over
+the whole function for every comparison a selector met.  The counts, and the first instruction reading each value as an operand,
+are worked out on the first question about the function being lowered and forgotten when the next is (`lowering(func)`, at the
+top of each selector's `lower_function`); nothing changes the IR of a function while it is lowered.
+
+**Which edges close a loop is asked of the dominator tree** (`mc.loops._Dominance`, the C++ `Dominance`).  `back_edges` built
+every block's dominators as a set, which for a function of a few thousand blocks holds most of it per block, twice for every
+round of the allocator -- in the C++ three quarters of compiling examples/numbers.  The tree of immediate dominators, found as
+Cooper, Harvey and Kennedy find it, and numbered as it is walked, answers whether one block dominates another in constant time; a
+block the entry does not reach is dominated by nothing and dominates nothing, as with the sets.  `dominators` stays, and
+`test_spillweight.py` holds `back_edges` to it over three thousand graphs made at random.  Code generation of examples/numbers at `-O1`: pypl4g 1022 ms to
+530, the C++ 372 to 67.
+
+**A pipeline imports its own passes** (`pass_._made`): `build_manager` imported all of them whatever the level, and the import was
+timed as optimization -- 3 of macro-comptime-fn's 4.4 ms at `-O0`.
+
+### What was left, and why
+
+**`std.string` is read by every program that imports `std`**, which hands it on: lexed and parsed (4 ms) and its signatures
+checked.  Reading it only where a program names `std.string` would read it later than where `std` imports it, and what a module
+adds to the program -- functions, variables, texts -- is added in the order it is read: the IR of every program that uses it, or
+`json`, which imports it after `std`, would come out in another order.
+
+**`⍕` and what it names are checked against their requirements for every program that imports `std`**, an operator being asked for
+by no name: `⍕`, `text`, `list_text`, `set_text` and `dictionary_text`, and every function of every module that a name in them names
+-- `place` of `std.string` among them -- about 8 ms of exit0's 31, where 28f579f checked `⍕` and `text` in 4.  Asking a generic
+operator for by its glyph, as a generic function is by its name, takes exit0 from 1.30 times 28f579f to 1.09; it was tried, and it
+moves output, because the check leaves things behind.  The heap's variable is made where `⍕`'s body names `⎕heap` and kept (it is in
+`_top`), so it stands earlier among the variables than where a program first names it; a static's name is the number of variables
+there were (`__pl4g_static.N`), so every one after it is renumbered; and `leanvalues._fold` takes a part out of a tuple only where
+the part's type is the extract's type *as an object* -- and which `ptr<mut arena>` a tuple's operand has depends on what was made
+before.  Six tests of generators and tasks came out different, IR and code.  Both are in the to-do list.
+
+### Measured
+
+`python -m pypl4g --time-report`, the best of five, the sum of the stages as `bin/pl4g-timing` sums them, in ms: 28f579f, the tip
+of `json` (ebf4d33) and now.  Over the 221 samples the geometric mean is 1.157 times 28f579f, where it was 1.57.
+
+| sample | 28f579f | `json` | now | where it is |
+|---|---|---|---|---|
+| macro-comptime-fn | 112.7 | 421.6 | 107.3 | macro expansion 93.9, 392.5, 85.5 |
+| std-print-macro | 301.1 | 578.9 | 280.5 | macro expansion 96.5, 364.7, 87.6; code generation 141.4, 145.9, 137.5 |
+| std-format | 233.9 | 563.3 | 225.2 | semantic analysis 33.5, 47.9, 29.5 |
+| exit0 | 28.3 | 50.1 | 36.8 | semantic analysis 20.8, 42.7, 31.4 |
+| std-read-write | 108.7 | 138.3 | 112.9 | semantic analysis 43.7, 65.4, 47.1 |
+| collection-grows | 51.7 | 85.0 | 68.0 | code generation 23.1, 34.3, 31.6 |
+| references | 65.4 | 107.4 | 84.6 | code generation 22.7, 42.3, 37.5 |
+
+What is above 28f579f is work it did not do.  Every program importing `std` reads `std.string` and checks `⍕`'s family -- the 10 ms
+exit0 is above it (above).  The collections' code generation is the table runtime the branch grew -- collection-grows's text
+3 828 bytes where it was 3 172 -- and the allocator's splitting around calls, which takes more rounds (references: thirteen
+allocations for eight functions).  At `-O1`
+the passes the branch added cost what they buy: std-read-write's optimization is 32 ms where it was 22, of which `facts` is 4.2,
+`conditions` 1.7 and the second `samevalues` 1.9, and they are what took a million numbers' writing from 1 871 instructions a number
+to 1 522; examples/numbers spends 120 ms of 508 in `facts`.
+
+The examples at `-O1`, pypl4g, the stages summed: `numbers` 1.3 s where the tip of `json` took 3.0, `documents` 3.5 s where it
+took 7.9.  The C++,
+the tip of `json` and now: macro-comptime-fn 30.1 ms and 12.9 (macro expansion 26.2 and 9.0), std-print-macro 45.3 and 27.4,
+`numbers` at `-O1` 650 and 165 (optimization 251 and 77, code generation 379 and 68), `documents` 1 173 and 434.  The whole of
+`python -m pytest tests`, every core: 120 s, now 81.

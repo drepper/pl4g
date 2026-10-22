@@ -887,7 +887,28 @@ Optimizations
 [ ] what `std.string` costs every program.  Semantic analysis of a program that names nothing of it went from 22 ms to 35
     (pypl4g) and from 3.5 to 4.2 (C++): its declarations, and the three bodies `_takes_owned` reads to say whether a `mut` list
     parameter is the body's own -- which a body set aside could say without being parsed, were the question asked of the
-    tokens.
+    tokens.  On 2026-10-22 the lexing and parsing of it were made cheaper (4 ms of exit0's 31); what is left is that `std`
+    hands it on and so reads it.  Reading it where a program first names `std.string` moves the IR of every program using it,
+    a module's definitions being added in the order it is read; it wants the place they take decided where it is imported and
+    the reading done when asked (decisions, 2026-10-22T23:50).
+
+[ ] ask for a generic operator by its glyph, as a generic function is asked for by its name.  `want` takes every operator of a
+    module, so `⍕`, `text`, `list_text`, `set_text`, `dictionary_text` and what they name are checked for every program that
+    imports `std` -- about 8 ms of exit0's 31; asked for by glyph (`_mentioned` adding a unary's and a binary's glyph and the
+    pairs an element and a key are written in), exit0 is 1.09 times 28f579f rather than 1.30.  Two things stand in the way,
+    each a reason the output moves: the two below.
+
+[ ] a generic's check against its requirements leaves nothing behind.  It throws away the functions, variables and texts it
+    made, and keeps what the compiler provides that it named: the heap's variable made by `⍕`'s body stays, earlier among the
+    variables than a program would put it, and every `__pl4g_static.N` after it is numbered one higher (a static is named by how
+    many variables there are).  Nor are `_live_*`, `_made_in_told` and the other tables of the checker put back.  Which checks
+    run then decides where things stand in the image.
+
+[ ] `leanvalues._fold` compares types as objects.  It takes a part out of a tuple only where the part's type `is` the
+    extraction's, and two `ptr<mut arena>` that are equal are not always one object -- which they are depends on what was made
+    before, so leaving a check out folded extractions in six programs of generators and tasks (generator-generic-and-imported,
+    tasks-interleave, task-reads, ...) that had not been.  The C++ compares type pointers the same way and agrees today.  Whether
+    equal types should fold is the question; the answer goes into both compilers.
 
 
 [ ] code generation the `json` measurements point at (2026-10-22), each with its instructions in `spec/details.md` ("What `json`
