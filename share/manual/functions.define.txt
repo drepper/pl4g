@@ -1,0 +1,74 @@
+title: Defining a function
+
+Part of [[functions]].
+
+    fn NAME(PARAM: TYPE, …) → TYPE:      ※ and an indented body
+    fn NAME(PARAM: TYPE, …) → TYPE { … } ※ or a braced one
+    fn NAME(PARAM: TYPE, …): …           ※ answering nothing
+
+**A header with no arrow answers nothing**; `→ void` is no second way of
+saying it.  The body's last statement is the answer -- no `return` is written
+for it -- and in a function answering nothing the last statement is no
+value: an assignment or a call answering nothing.  `return VALUE` leaves
+early ([[statements.jumps]]).  A body on the header's line ends with it:
+`fn twice(a: u8) → u8: a + a`.
+
+**Conditions** stand between the header and the body, on its line or on lines
+of their own, indented further ([[functions.conditions]]):
+
+    fn take(xs: u8⟦⟧, i: u64) → u8
+        pre(i < ⎕drop(#xs)):
+        xs⟦⎕unit(i, ⌜idx⌝)⟧
+
+**What the answer may be**: any value; a fixed array by value; a view, text
+or a list with where it was made, `→ str in a` ([[memory.answers]]); a
+reference with how long it lives ([[memory.lifetimes]]); a tuple of what fits
+two registers; a result ([[types.results]]); several values a generator hands
+out, `⇉ T` ([[functions.generators]]).  An answer must be used by a caller
+(4474) unless `@[can_ignore]` says otherwise.
+
+**A function's name may be a path into a type** of its own file (4608):
+`fn Walk.next(it: &mut Walk) → u8`.  There is no receiver and no `self`; the
+first parameter is written out.  It is called `Walk.next(&mut w)`, or through
+a value, `w.next()`, which lends or hands `w` as the first parameter takes it.
+Through a module the path is `m.Walk.next` (4609 where it is not exported).
+A type's `each` is what a loop walks it with ([[functions.generators]]).
+
+**A call of a function to itself in tail position is a loop** and takes no
+stack, at every optimization level: the last expression, a `return` of the
+call, or the last of an arm in tail position.  Not where something is done
+with the answer, inside a `defer`'s block, with a `post` condition, or handing
+a reference to the caller's own storage.  Calls between two functions are not
+covered.
+
+**Every function is checked whether or not anything calls it**, and one
+nothing reaches is left out of the image.
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn count(n: u64, acc: u64) → u64:
+        if n = 0u64:
+            acc
+        else:
+            count(n - 1u64, acc + 2u64)     ※ a jump, not a call
+
+    type Walk = at : u8 ; last : u8
+
+    @[impure]
+    fn Walk.next(it: &mut Walk) → u8:
+        it⌖.at ← it⌖.at + 1u8
+        it⌖.at
+
+    @[startup, impure]
+    fn main(init: std.Init) → u6:
+        let w: mut Walk = Walk(.at ← 0u8, .last ← 9u8)
+        _ ← w.next()
+        let second: u8 = Walk.next(&mut w)
+        _ ← std.println⌜&mut init.io.output, "{} {}", count(10000000u64, 0u64), second⌝
+        0u6
+
+Output:
+
+    20000000 2

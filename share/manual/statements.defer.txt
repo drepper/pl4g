@@ -1,0 +1,53 @@
+title: defer
+
+Part of [[statements]].
+
+**`defer STATEMENT`** puts a statement off until **the block it is written in
+is left**, whichever way: off its end, by `return`, by a `break` or `continue`
+leaving it, by a `?` handing a failure on.  The last put off runs first, and
+only what was reached runs.  What the block comes to is worked out **before**
+anything put off runs, so a deferred assignment does not change what was
+answered.
+
+    let from: mut std.io.Reader = r
+    defer from.close()                 ※ closed however the block is left
+
+**What may be put off is something to do**: a call or an assignment.  Not a
+`return`, `break`, `continue` or `?`, not a `let`, and not another `defer`
+(4612).  It means what it would have meant where it was written.
+
+**A loop's body is a block**, so a `defer` in it runs at the end of every
+turn.  An arena is given back the same way when the block that made it is
+left, after what the block put off ([[memory.arenas]]); a value that has to
+be closed is closed by a `defer` ([[memory.unique]]).  A generator left part
+way through runs what it put off when the loop over it is left
+([[functions.generators]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    @[impure]
+    fn note(trail: &mut u64, n: u64):
+        trail⌖ ← trail⌖ × 10u64 + n
+
+    @[impure]
+    fn steps(trail: &mut u64, early: bool) → u8:
+        defer note(trail, 1u64)
+        if early:
+            return 7u8
+        defer note(trail, 2u64)
+        note(trail, 3u64)
+        8u8
+
+    @[startup, impure]
+    fn main(init: std.Init) → u6:
+        let trail: mut u64 = 0u64
+        let a: u8 = steps(&mut trail, false)
+        let b: u8 = steps(&mut trail, true)
+        _ ← std.println⌜&mut init.io.output, "{} {} {}", a, b, trail⌝
+        0u6
+
+Output:
+
+    8 7 3211

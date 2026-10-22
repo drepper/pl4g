@@ -1,0 +1,71 @@
+title: Enumerations
+
+Part of [[types]].
+
+**An enumeration is a fixed set of named values**, in braces or indented,
+separated by `;` (3021), at least one (3022), no two alike (4418):
+
+    enum Colour { red ; green ; blue }
+
+    enum Code : u16:
+        ok ;
+        again = 5 ;            ※ a number of its own
+        retry = again ;        ※ another name for the same value
+        other                  ※ one past the last: 6
+
+**A value is written `TYPE.NAME`**, `Colour.red`, and an arm of a `match`
+writes the name alone.  Values compare with `=` and `≠` only: their order is
+the order somebody wrote them in, which promises nothing.
+
+**`: TYPE` says how much room a value takes** (4419, 4420) and nothing else:
+a value is no number, and there is no conversion to one.  Without it the
+compiler takes the narrowest unsigned type that holds every value.  Two values
+written with one number are refused (4423); an alias names an earlier value.
+
+**A number becomes a value with `⎕narrow(n, ⌜Colour⌝)`**, answering a result
+whose failure is `absent` where the number is none of them
+([[expressions.conversions]]).  **`⎕fields(⌜Colour⌝)`** answers each value with
+its name, which is how a table of the names is made while compiling
+([[compiletime.reflection]]); `⍕` does not write a value's name yet.
+
+**`@[flag]` makes values meant to be combined**: each a bit of its own, and
+`&`, `|`, `^` and `~` defined on them.  A value may then be a combination no
+name stands for, so a `match` over one needs an arm `_` for the rest (4425).
+
+    @[flag]
+    enum Perm : u8 { read ; write ; run }
+    let mine: Perm = Perm.read | Perm.write
+
+Program:
+
+    let std := ⎕import("std")
+
+    enum Light { red = 1 ; amber = 2 ; green = 3 }
+
+    fn next(l: Light) → Light:
+        match l:
+            red:
+                Light.green
+            green:
+                Light.amber
+            amber:
+                Light.red
+
+    fn named() → ⸨Light: str⸩:
+        let names: mut ⸨Light: str⸩ = ⸨⸩
+        comptime foreach f := ⎕fields(⌜Light⌝):
+            names⸨f⟦1⟧⸩ ← f⟦0⟧
+        names
+
+    let NAMES: ⸨Light: str⸩ = named() in ⎕static
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let now: Light = next(Light.red)
+        let from: Light = ⎕narrow(2u8, ⌜Light⌝) ?? Light.red
+        _ ← std.println⌜&mut init.io.output, "{} {}", NAMES⸨now⸩ ?? "?", NAMES⸨from⸩ ?? "?"⌝
+        0u6
+
+Output:
+
+    green amber

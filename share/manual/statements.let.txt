@@ -1,0 +1,64 @@
+title: Definitions
+
+Part of [[statements]].
+
+    let NAME: TYPE = VALUE         ※ the type is stated
+    let NAME: mut TYPE = VALUE     ※ and the name may be given another value
+    let NAME := VALUE              ※ the type is the value's
+    let NAME: mut = VALUE          ※ the value's, and mut
+
+**The colon is always written**, and `:=` is the colon with the type left
+out.  **A variable is always given a value** where it is defined; there is no
+uninitialized variable.  **A name cannot be changed unless its type says
+`mut`**, which qualifies the type and not the name: `let count: mut u8 = 0u8`.
+On a set or a dictionary `mut` also says entries may be put in it.  A `mut`
+nothing changes is warned about (4931).
+
+    let limit: u8 = 255u8
+    let count: mut u8 = 0u8
+    let pair := 〈1u8, 2u16〉
+    let sum, product := both(a, b)          ※ names taking a tuple apart
+
+**At the top level** a variable lives as long as the program, its value laid
+out in the image; it is read by every function, and writing it makes a
+function `@[impure]`.  It is given a constant, or what a pure call of
+constants answers -- worked out while compiling ([[compiletime.constants]]).
+A container that never changes says `in ⎕static` (4638).  A variable at the
+top level holding a whole number and not `mut` is a constant, usable in a type
+and above where it is defined: `let ROWS: u64 = 3` and `u8⟦ROWS⟧`.
+
+**`in NAME` after the value** says which arena what it makes comes from:
+`let s: str = a ⧺ b in scratch` ([[memory.arenas]]); after the type, it
+receives an arena a call hands out ([[memory.answers]]).
+
+**`⟦⟧` and `⇉` alone as the type** ask for an array, or an iterator, whose
+element the value says: `let picked: ⟦⟧ = v⟦v > 2u8⟧` builds the array,
+`let walk: ⇉ = v⟦v > 2u8⟧` does not ([[functions.generators]]).
+
+**Attributes** may stand on a definition of a body, on a line of their own
+above it: `@[ignore(4006)]` ([[running.diagnostics]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    let LIMIT: u8 = 10u8
+    let seen: mut u16 = 0u16
+
+    @[impure]
+    fn count(by: u16):
+        seen ← seen + by
+
+    @[startup, impure]
+    fn main(init: std.Init) → u6:
+        let n := 3u16
+        let total: mut u16 = 0u16
+        foreach i := 0u16…n:
+            total ← total + i
+            count(1u16)
+        _ ← std.println⌜&mut init.io.output, "{} {} {}", LIMIT, total, seen⌝
+        0u6
+
+Output:
+
+    10 3 3

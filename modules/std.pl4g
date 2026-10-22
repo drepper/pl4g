@@ -43,9 +43,11 @@ type Io = mut input : io.Reader ; mut output : io.Writer ; mut error : io.Writer
 ※※ What a program is started with: the devices it inherited, what it does its
 ※※ I/O with, and the words it was named with.
 ※※
-※※ \details `fs` holds the ring every request goes through.  It is `mut`, so
-※※ `&mut init.fs` may be lent to `run` and `spawn`, and it needs to be lent to
-※※ nothing else: `std.fs.cwd()` answers the directory the process is in.
+※※ \details `io` holds the three devices, each lent as `&mut init.io.output`.
+※※ `fs` holds the ring every request goes through; it is `mut`, so `&mut
+※※ init.fs` may be lent to `run` and `spawn`.  `args` is the words the program
+※※ was named with, the first the name it was run under.  The environment is
+※※ `⎕environ`.
 ※
 ※ A record rather than the two of them outright, so that whatever else a program
 ※ inherits has somewhere to go without changing the one signature every program
@@ -61,16 +63,13 @@ type Io = mut input : io.Reader ; mut output : io.Writer ; mut error : io.Writer
 type Init = io : Io ; mut fs : fs.State ; args : str⟦⟧
 
 ※※ What the kernel said, where it refused.
-※
-※ The numbers are the kernel's own, so a reader who knows what `EAGAIN` means
-※ knows what `would_block` is; the names are the language's, so a reader who
-※ does not need not learn them.  `other` is what anything this list does not
-※ name comes to -- honest about what it cannot say rather than pretending the
-※ list is closed.
-※
-※ What is named is what a read or a write can actually give, and what opening a
-※ file by name can: `fs.Dir.open` reaches the refusals that belong to a path, and
-※ `read_lines` refuses a line longer than it holds with `ENOBUFS`.
+※※
+※※ \details The numbers are the kernel's own, so a reader who knows what
+※※ `EAGAIN` means knows what `would_block` is; the names are the language's, so
+※※ a reader who does not need not learn them.  `other` is what anything this
+※※ list does not name comes to.  What is named is what reading, writing and
+※※ opening a file by name can give.  `as_error` reads a number as one, and
+※※ `error_name` and `error_name_of` name one.
 @[export]
 enum Error:
     other = 0 ;
@@ -95,7 +94,11 @@ enum Error:
     reset = 104 ;            ※ ECONNRESET
     no_buffer = 105          ※ ENOBUFS
 
-※※ What the kernel answered, read as one of those.
+※※ What the kernel answered, read as an `Error`: `other` for a number it does
+※※ not name.
+※※
+※※ \param n the number the kernel gave -- what `read`, `write` and `flush` carry
+※※ when they fail
 ※
 ※ The enumeration's numbers are the kernel's, so this is the question "is this
 ※ number one of them" and nothing else -- which is what narrowing to an
@@ -158,11 +161,16 @@ fn drain(s: &mut fs.State):
     fs.State.drain(s)
 
 ※※ Start writing `what` to `to`, answering the request that was started.
-※
-※ It does not wait: the kernel is told about the request when something waits
-※ for it, which is `flush` or the drain a program does before it ends.  So
-※ several writes may be in flight at once, and a program that wants to know one
-※ of them happened says so.
+※※
+※※ \details It does not wait: the kernel is told about the request when
+※※ something waits for it, which is `flush` or the drain before the program
+※※ ends.  So several writes may be in flight at once, and a program that wants
+※※ to know how one went asks `flush`.
+※※
+※※ \param to the device to write to
+※※ \param what the bytes to write
+※※ \return the request, which `flush` waits for
+※※ \raises the number the kernel gave, or `EAGAIN` where every slot is taken
 ※
 ※ The kernel reads a run of bytes, so a view that is not one -- a column, every
 ※ other byte -- is copied into one first, in `⎕heap`.  The kernel reads it after
@@ -178,6 +186,10 @@ fn write(to: &mut io.Writer, what: u8⟦⟧) → io.Pending ? i32:
         io.Writer.start(to, at, ⎕drop(#laid))
 
 ※※ Wait for a request and answer how many bytes went, or what the kernel said.
+※※
+※※ \param of what `write` answered
+※※ \return how many bytes went
+※※ \raises the number the kernel gave
 @[export]
 fn flush(of: io.Pending) → u64 ¤size ? i32:
     let got: i64 = io.Pending.wait(of)
@@ -187,6 +199,15 @@ fn flush(of: io.Pending) → u64 ¤size ? i32:
         ⎕unit(⎕narrow(got, ⌜u64⌝) ?? 0u64, ⌜size⌝)
 
 ※※ Write `what` to `to` and wait for it, answering how many bytes went.
+※※
+※※ \details `write` and `flush` in one.  The kernel may take fewer bytes than
+※※ it is offered, and this answers what it took; `Io.print` offers the rest
+※※ again until every byte has gone.
+※※
+※※ \param to the device to write to
+※※ \param what the bytes to write
+※※ \return how many bytes went
+※※ \raises the number the kernel gave
 ※
 ※ `write` and `flush` in one, which is what a program that has nothing else to
 ※ do while it waits should say.
@@ -307,22 +328,21 @@ fn read(from: &mut io.Reader, into: mut u8⟦⟧) → u64 ¤size ? i32:
 
 ※※ Walk what `from` holds a line at a time.
 ※※
+※※ \details Each turn gives a view into a buffer the walk keeps, good until the
+※※ next turn: nothing is copied and nothing allocated, and a reader that wants
+※※ to keep a line copies it.  The end of line is kept, so that writing the text
+※※ back out writes it as it was.  The longest line handed out is 1024 bytes,
+※※ end of line included; a longer one is refused with `ENOBUFS` (105) rather
+※※ than handed out in pieces.
+※※
 ※※ \param from the device to read
 ※※ \return each line with the end of line after it -- the last one without,
 ※※ where the device ends without one -- or the number the kernel gave, which
 ※※ ends the walk
 ※
-※ What each turn gives is a view into a buffer the walk keeps, good until the
-※ next turn: nothing is copied and nothing allocated, which is what C's
-※ `getline` into one buffer does.  The end of line is kept, as `getline` and
-※ Python's walk of a file keep it, so that a reader can tell a last line that
-※ had one from one that did not -- which writing the text back out, as `cat`
-※ does, has to.  A reader that wants to keep a line copies it.
-※
-※ The longest line it hands out is 1024 bytes, the buffer's length: a longer one
-※ is refused with `ENOBUFS` rather than handed out in pieces a reader would take
-※ for lines.  The buffer is in the walk's frame, which is why it is not larger: a
-※ frame is the caller's room or the walk's description.
+※ What C's `getline` into one buffer does, and Python's walk of a file, which
+※ keep the end of line too.  The buffer is in the walk's frame, which is why it
+※ is not larger: a frame is the caller's room or the walk's description.
 @[export]
 fn read_lines(from: &mut io.Reader) ⇉ u8⟦⟧ ? i32:
     let buf: mut u8⟦1024⟧ = 1024 ⍴ 0u8
@@ -400,13 +420,16 @@ fn Io.print(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
         let laid: u8⟦⟧ = ⎕one_run(what) in scratch
         Io.all_of(to, ⎕address(&laid⟦0⟧), total)
 
-※※ The same, with a newline after it, written as one request.
+※※ Write every byte of `what` to `to` and a newline after it, as one request,
+※※ answering how many went.
 ※※
-※※ \details One request and not two: `writev` takes a list of runs of bytes, so
-※※ the text and the newline reach the kernel together and nothing else writing to
-※※ the same device can land between them.  Where the kernel takes fewer bytes than
-※※ it was offered the rest is written plainly, which is simpler than walking the
-※※ list and is the uncommon case.
+※※ \details One request and not two, so nothing else writing to the same device
+※※ can land between the text and its newline.
+※
+※ `writev` takes a list of runs of bytes, so the text and the newline reach the
+※ kernel together.  Where the kernel takes fewer bytes than it was offered the
+※ rest is written plainly, which is simpler than walking the list and is the
+※ uncommon case.
 ※※
 ※※ \param to the device to write to
 ※※ \param what the bytes to write before the newline
@@ -442,25 +465,21 @@ fn Io.println(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
 
 ※※ The text of a value, in one definition for every type.
 ※※
-※※ \details One definition and not one per type: the language has no overloading,
-※※ so a glyph has one meaning per number of operands -- and a generic body with
-※※ `comptime if` is what says a different thing for each type inside that one
-※※ meaning.  An arm not taken is not checked, which is what lets the arms be of
-※※ different shapes.
+※※ \details What comes out is what a program would write to mean the value: a
+※※ whole number in decimal with the raised minus, `⁻128`; `true` and `false`;
+※※ a character and text as they are; a record as it is made,
+※※ `Point(.x ← 1, .y ← 2)`, its fields written the same way; a list, a set
+※※ and a dictionary as each is written down -- `[1, 2]`, `⸨1, 2⸩`, `⸨a: 1⸩` --
+※※ in the order they are walked; and a sum as it is made, the one part it holds
+※※ named, `Shape(.line ← 7)`, and `Shape(.empty ← true)` for a part that
+※※ carries nothing.  Text inside something else is not quoted.  A
+※※ floating-point number, a tuple, an enumeration's value and a number with a
+※※ unit are not written yet: `std.string.format_f64` writes a floating-point
+※※ number, and `⎕drop` takes a unit off.
 ※※
-※※ A record is written by reflection over its fields, so a type this module was
-※※ never told about is written without being told: `⎕isrecord` picks the arm,
-※※ `⎕typename` is the name in front, and `⎕fields` is the fields as a tuple of
-※※ pairs, which `comptime foreach` walks.  It recurses, so a field that is a
-※※ record is written the same way.
-※※
-※※ A list, a set and a dictionary are written as each is written down --
-※※ `[1, 2]`, `⸨1, 2⸩`, `⸨"a": 1⸩` -- in the order they are walked, and a sum as
-※※ it is made, the one part it holds named: `Json(.text ← hi)`, and
-※※ `Json(.null ← true)` for a part that carries nothing.  `⎕kindof` picks the
-※※ arm and `⎕alternatives` takes a sum apart.  What they hold is written by this
-※※ same definition, so a type that reaches itself through a list is written all
-※※ the way down.
+※※ A program that wants other text for a type of its own writes `⍕` for its
+※※ own file, which wins over this module's, and hands every other type back to
+※※ `std.text`.
 ※※
 ※※ A number is written in *base*, ten unless said otherwise and anything from two
 ※※ to thirty-six, the digits past nine being letters -- small ones, or capitals
@@ -669,25 +688,26 @@ fn padded(v: T', a: &mut arena, width: u64 ← 0u64, fill: char ← ' ',
             return sign ⧺ ahead ⧺ rest ⧺ behind in a
     ahead ⧺ said ⧺ behind in a
 
-※※ The same, written where a reader expects an operator.
+※※ The text of a value as `text` writes it, as an operator: `⍕v in a` makes it
+※※ in the arena `a`.
 ※※
-※※ \details APL's own glyph for this: monadic `⍕` formats a value.  A program that
-※※ wants something else for a type of its own writes the definition for its own
-※※ file, which wins over this one, tests for the types it cares about, and hands
-※※ the rest back to `text` -- which is why both are here.
+※※ \details APL's own glyph for formatting a value.  A program that wants
+※※ something else for a type of its own writes the definition for its own file,
+※※ which wins over this one, tests for the types it cares about, and hands the
+※※ rest back to `text` -- which is why both are here.
 ※※
 ※※ \param v what to write
+※※ \param a the arena the text is made in
 ※※ \return what a program would have written to mean it
 @[export]
 fn `⍕`(v: T', a: &mut arena) → str in a, ⎕static:
     text(v, a)
 
-※※ The same with no arena named, which is the one the compiler provides.
+※※ The text of a value as `text` writes it, made in `⎕heap`: `⍕v`.
 ※※
-※※ \details Two definitions of one glyph, told apart by how many operands they take,
-※※ which is how every other operator with two readings is told apart.  This one takes
-※※ room from `⎕heap`, which a pure function may do -- what it makes is new -- and
-※※ `⍕v in a` is how a caller says to take it from another arena.
+※※ \details Two definitions of one glyph, told apart by how many operands they
+※※ take.  Taking room from `⎕heap` is no effect, so a pure function may write
+※※ `⍕v`; `⍕v in a` takes the room from another arena.
 ※※
 ※※ \param v what to write
 ※※ \return what a program would have written to mean it
@@ -858,11 +878,12 @@ macro print(to: syntax, template: syntax, ⁂args: syntax) → syntax:
         Io.print($to, ⎕bytes($said))
     ⌝
 
-※※ The same, with a newline after it, written as one request.
+※※ Write a template and its arguments to a device with a newline after it,
+※※ and answer how many bytes went.
 ※※
-※※ \details The newline goes to the kernel in the same request as the text, `Io.println`
-※※ being what does that -- so a line cannot be split by something else writing to the
-※※ same device.
+※※ \details The newline goes to the kernel in the same request as the text,
+※※ `Io.println` being what does that -- so a line cannot be split by something
+※※ else writing to the same device.  Otherwise it is `print`.
 ※※
 ※※ \param to the device to write to
 ※※ \param template the text, with `{}` where an argument goes
@@ -931,7 +952,8 @@ fn add_executable(b: &mut Build, name: str, sources: str⟦⟧)
 @[export, builtin]
 fn option(b: &mut Build, name: str, fallback: str) → str
 
-※※ The same question, asked of something that is either so or not.
+※※ What the command line said about a name that is either so or not, or what
+※※ the build file chose.
 ※※
 ※※ \details `-Dname` on its own means it is so; `-Dname=` takes `true`, `yes`,
 ※※ `on` and `1` for so and anything else for not.

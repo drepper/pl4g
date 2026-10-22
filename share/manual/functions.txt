@@ -1,0 +1,31 @@
+title: Functions
+
+Part of [[language]].
+
+  [[functions.define]]        -- `fn NAME(PARAMS) → TYPE:`, answering, paths
+                                 into a type, calling itself last
+  [[functions.parameters]]    -- types, `mut`, defaults, arenas left to the
+                                 caller, types handed as arguments
+  [[functions.purity]]        -- pure by default; `@[impure]`, `@[io]`,
+                                 devices, `@[opaque]`, `@[can_ignore]`
+  [[functions.conditions]]    -- `pre(…)` and `post(…)` over values,
+                                 `⎕answer`, `⎕entry`, `--conditions`
+  [[functions.requirements]]  -- `pre(…)` over types, and bundles
+  [[functions.generators]]    -- `⇉`, `yield`, iterators as values
+  [[functions.coroutines]]    -- `⇇`, `⎕start`, `⎕resume`, `⎕await`, and tasks
+  [[functions.operators]]     -- defining what a glyph means for a type
+  [[functions.special]]       -- the startup function, constructors,
+                                 destructors, tests and the build function
+
+**A function is defined at the top level** and called by name, through the
+module that exports it, through a value, or -- named inside a type -- through
+a value of that type: [[expressions.calls]].  Function values and their types
+are [[types.functions]], functions written where a value is wanted are
+[[expressions.lambdas]], and functions over types are [[types.generic]].
+
+**What the language guarantees of every function**: its arguments are worked
+out left to right before it runs; it is pure unless it says otherwise, and
+the compiler checks that; a call of itself in tail position takes no stack;
+a function with no body is defined somewhere else -- the runtime the compiler
+carries, `@[external]`, or the program it is embedded in, `@[host]`
+([[running.foreign]]).

@@ -1,0 +1,69 @@
+title: Attributes
+
+Part of [[help]].  `@[NAME, NAME(ARGUMENTS), …]` before a definition says
+something about it that is not part of its own description.  One list per
+definition (3208), each attribute once (3202), arguments as in a call --
+`@[test(build)]`, `@[cdecl(variadic=true)]` -- and none written without
+parentheses (3209).  An unknown name is an error (3201), never ignored.
+Before a statement, the list stands on its own line above it.
+
+    startup           where the program begins                 [[functions.special]]
+    constructor(p)    runs before the startup function; p orders them
+    destructor(p)     runs after the startup function returns
+    test(kind)        a test: always, build, or suite (the default)  [[running.testing]]
+    build             the function the compiler runs to learn what to build  [[running.builds]]
+    builtin           in `std`: provided by the compiler while it works out a build
+    impure            may change what outlives the call        [[functions.purity]]
+    io                does I/O through no device it was handed
+    opaque            every call kept as it is, the function staying pure
+    can_ignore        a caller may let the answer go
+    listable          an array handed for an element is walked [[types.arrays.walking]]
+    inline(mode)      always, the default, or never: whether calls are inlined
+    export            files importing the module may name it  [[modules]]
+    visible           the finished image offers its symbol     [[running.foreign]]
+    system            alone at a file's top: a system module   [[running.diagnostics]]
+    cdecl             the system's C convention and plain name; C's layout for an
+                      array variable
+    abi(name)         a named convention for a function; C's layout for a record
+    external(sym)     defined in the runtime the compiler carries
+    host(sym)         defined by the program the interpreter or shared object is in
+    device            a value of the type is permission to do I/O  [[functions.purity]]
+    unique            a value of the type is never copied      [[memory.unique]]
+    closed_by(f)      a value of the type has to be given back by T.f
+    flag              an enumeration whose values combine      [[types.enums]]
+    align(bytes)      asks for at least this alignment
+    section(name)     asks for the object to go in this section of the image
+    packed            asks for a record laid out with no padding
+    ignore(n)         diagnostic n is not reported here        [[running.diagnostics]]
+    expect(n)         nor reported, and must arise (3206 where it does not)
+
+**Layout** is otherwise the compiler's to choose, so
+`@[align(64), section(name=".hot")]` and `@[packed]` are requests about
+something no program can observe.  **Kinds of object**: an attribute says what
+it may stand on (3204) -- a function, a type, a variable, a module, a
+statement, or the file.  The special functions' marks exclude one another.
+**Before a function type or a lambda** only what a caller reads off the type
+may stand: `listable`, `can_ignore`, and `impure` before a function type -- a
+lambda's purity being read off its body ([[types.functions]]).  **Attributes
+that conflict** are refused (3205).
+
+Program:
+
+    let std := ⎕import("std")
+
+    @[inline(never), can_ignore]
+    fn noted(n: u8) → u8:
+        n + 1u8
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        noted(1u8)
+        @[ignore(4006)]
+        let unused: mut u8 = 1u8
+        unused ← noted(2u8)
+        _ ← std.println⌜&mut init.io.output, "done"⌝
+        0u6
+
+Output:
+
+    done

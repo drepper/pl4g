@@ -1,0 +1,32 @@
+title: Comments
+
+Part of [[lexical]].
+
+`※` (U+203B REFERENCE MARK) begins a comment that runs to the end of the
+line.  There are no block comments.
+
+`※※` begins a **documentation comment**, which belongs to the definition
+that follows it.  A run of such lines is one comment.  It is prose, and a line
+beginning with `\` or `@` and a word is a Doxygen command about one part of
+the definition: `\brief`, `\details`, `\param NAME`, `\return`, `\raises`,
+`\pre`, `\post`, `\note`, `\warning`, `\see`, `\since`, `\deprecated` and
+Doxygen's other spellings of them.  A command runs until the next begins.
+Nothing else is interpreted: there is no markup.
+
+    ※※ The larger of two numbers.
+    ※※
+    ※※ \param a one number
+    ※※ \param b the other
+    ※※ \return whichever is larger
+    fn larger(a: u8, b: u8) → u8:
+        a ⌈ b                     ※ an ordinary comment
+
+The compiler checks what a command claims and warns where it is wrong: a
+`\param` naming no parameter (4601) or one named twice (4602), a `\return`
+on a function that answers nothing (4603), either on a definition that is
+not a function (4604), and a word that is no command (4600).  It does not ask
+for a `\param` per parameter.
+
+The library's documentation is its `※※` comments: this manual's nodes of
+[[library]] are made from them.  A plain `※` comment among the `※※` lines is
+a remark about how the thing is made, and stays out of the manual.

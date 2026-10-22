@@ -1,0 +1,64 @@
+title: Records
+
+Part of [[types]].
+
+**`type NAME = FIELD : TYPE ; FIELD : TYPE …` defines a record**, a product
+holding all of its fields.  The fields may be written over several lines, a
+line ending after a `;`, or in braces.  Fields have names, no two alike
+(4406), and none is `void` (4409).  A record of one field is a record -- a name
+for a number that is not that number.
+
+    type Point = x : u32 ; y : u32
+    type Line =
+        from : Point ;
+        to : Point
+
+**A value gives every field, each once, by name**: `Point(.x ← 1u32, .y ←
+2u32)` (4576 to 4579).  There is no default.  **`p.x` reads a field**, and
+`p.x ← 9u32` writes one where `p` may be written (4004) -- a `mut` variable,
+or through a `&mut`.  `&p.x` is a reference to a field.
+
+**A record is a value**: two names are two records, and a record handed to a
+function is the function's own copy.  At the top level it is bytes in the
+image.  **`⍕p`** writes it as it would be written: `Point(.x ← 1, .y ← 2)`.
+
+**`mut FIELD : TYPE`** is a field that may be written and lent by `&mut` where
+the record holding it may not -- what `std.Init`'s devices are.  Only a
+record's field may be `mut` (4693).  **`singleton NAME : TYPE = VALUE`** among
+the fields is one read-only object for the whole program, no part of a value,
+reached through the type: `Limits.usual`, `&Limits.usual`.
+
+**A type may name itself only behind an indirection** -- a reference, a list or
+a dictionary's value (4408):
+
+    type Node = value : u8 ; next : &mut Node
+    type Tree = value : u8 ; kids : [Tree]
+
+**Functions may be named inside the type**, `fn Point.moved(p: Point, …)`,
+and called `Point.moved(p, …)` or `p.moved(…)` ([[functions.define]]).
+Records may take type parameters, `type Pair(T') = …` ([[types.generic]]).
+`@[unique]` keeps a record from being copied and `@[closed_by(f)]` makes
+it a resource to give back ([[memory.unique]]); `@[abi]` lays it out as C
+would ([[running.foreign]]).  Reflection takes a record's fields apart:
+`⎕fields` ([[compiletime.reflection]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    type Point = x : i16 ; y : i16
+
+    fn Point.moved(p: Point, by: i16) → Point:
+        Point(.x ← p.x + by, .y ← p.y - by)
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let p: mut Point = Point(.x ← 1i16, .y ← 2i16)
+        p.x ← 10i16
+        let q: Point = p.moved(5i16)
+        _ ← std.println⌜&mut init.io.output, "{} {}", p, q⌝
+        0u6
+
+Output:
+
+    Point(.x ← 10, .y ← 2) Point(.x ← 15, .y ← ⁻3)

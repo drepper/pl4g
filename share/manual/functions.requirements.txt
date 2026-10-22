@@ -1,0 +1,67 @@
+title: Requirements and bundles
+
+Part of [[functions]].
+
+**A `pre` clause over types is a requirement**: nothing is evaluated, and what
+is asked is that the expression *can be written* for the types a call gives.
+A type parameter stands for some value of its type; any other type is written
+lifted, `⌜u64⌝`.  **The arrow says what it answers**, and settles a type
+parameter nothing else does:
+
+    fn total(a: T', b: T') → T' pre(T' ⊞ T' → T'):
+        a ⊞ b
+
+    fn doubled(a: T') → E' pre(T' + T' → E'):     ※ E' is what T' + T' answers
+        a + a
+
+**A requirement is what a generic body may rely on**: an operation on a `T'`
+is allowed exactly where a requirement writes it, over the same types (4645,
+4648).  A call whose types cannot meet one is refused at the requirement, with
+a note naming the call (4900, 4901); a generic function calling another hands
+on what it was given, so the callee's requirements have to follow from the
+caller's (4646).  Only a generic function has requirements (4647); a
+requirement is a `pre` (4903), and a type parameter in an operand is one
+already settled (4904).  Types may have requirements too:
+`type Sorted(T') pre(T' < T' → bool) = …`.
+
+**A bundle names a set of requirements**, one per line or separated by `;`,
+and is applied as a clause of its own:
+
+    bundle number(T'):
+        T' ⊞ T' → T'
+        T' ⌈ T' → T'
+
+    fn bigger(a: T', b: T') → T' pre(number(T')):
+        a ⌈ b
+
+A bundle's parameters are type parameters (4910) and its arguments types
+(4912); it holds no condition (4917) and answers nothing (4915); a bundle may
+apply another, and a cycle is refused (4913).  `@[export]` lets a file that
+imports the module apply it, `pre(shapes.number(T'))`; its lines mean what its
+own file's names mean.  A condition over values is abbreviated by an ordinary
+pure function answering `bool`.
+
+`comptime if` is the other way generic code asks about types -- what they are
+rather than what they admit ([[compiletime.reflection]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    bundle summable(T'):
+        T' + T' → T'
+        T' < T' → bool
+
+    fn largest_sum(a: T', b: T', c: T') → T' pre(summable(T')):
+        let ab: T' = a + b
+        let bc: T' = b + c
+        if ab < bc: bc else: ab
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        _ ← std.println⌜&mut init.io.output, "{} {}", largest_sum(1u8, 5u8, 2u8), largest_sum(⁻3i32, 1i32, 9i32)⌝
+        0u6
+
+Output:
+
+    7 10

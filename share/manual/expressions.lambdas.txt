@@ -1,0 +1,70 @@
+title: Lambdas
+
+Part of [[expressions]].
+
+**`λ PARAM: TYPE, … [CAPTURES] → TYPE` and a body** is a function written
+where a value is wanted.  The parameters take no parentheses; the arrow and
+the answer's type are left out for one that answers nothing.  The body is
+written either way, and its last statement is what it answers.
+
+    let one: fn(u8) → u8 = λ a: u8 → u8 { a + 1u8 }
+    let two: fn(u8) → u8 = λ a: u8 → u8:
+        a + 2u8
+    let now: fn() → u8 = λ → u8 { 7u8 }
+
+**A lambda names its parameters, what its capture list brought in, and what
+the whole program has** -- nothing else from around it (4552):
+
+    λ a: u8 [n] → u8 { a + n }       ※ what n held, copied in
+    λ a: u8 [&n] → u8 { a + n }      ※ n itself: later changes are seen,
+                                     ※ and it may be written where n is mut
+    λ a: u8 [=] → u8 { a + n + m }   ※ every name the body reaches, copied
+    λ a: u8 [&] → u8 { a + n + m }   ※ every one, by reference
+
+A name is brought in once (4553) and everything brought in is used (4554); a
+lambda that brings nothing in has no list (3041).
+
+**Its type is `fn(u8) → u8`** ([[types.functions]]).  It is pure or impure as
+its body is; `@[listable]` and `@[can_ignore]` may be written before it, and
+are then part of its type.
+
+**Where what it brought in is kept is the compiler's choice**: a lambda that
+stays in the call that wrote it keeps it in that call's frame, every other in
+`⎕heap`.  **`[n] in pool`** keeps it in an arena, and goes with it.  A lambda
+that leaves the call may reach only what lasts beyond it (4632) -- `⎕heap`,
+the image, an arena the signature names -- and one held by a longer-lived
+name may not reach a shorter-lived variable (4570, 4614).  **`fn(u8) in ⎕heap
+→ u8`** is the type of one whose environment lasts, which may be answered and
+kept anywhere.
+
+    fn adding(n: u8) → fn(u8) in ⎕heap → u8:
+        λ a: u8 [n] in ⎕heap → u8 { a + n }
+
+A variable at the top level does not hold a lambda (4550).  A call through a
+value is a call to whatever it holds.
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn adding(n: u16) → fn(u16) in ⎕heap → u16:
+        λ a: u16 [n] in ⎕heap → u16 { a + n }
+
+    fn applied(f: fn(u16) → u16, xs: u16⟦⟧) → u16:
+        let sum: mut u16 = 0u16
+        foreach x := xs:
+            sum ← sum + f(x)
+        sum
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let five: fn(u16) in ⎕heap → u16 = adding(5u16)
+        let xs: u16⟦3⟧ = ⟦1u16, 2u16, 3u16⟧ in ⎕static
+        let scale: u16 = 10u16
+        let total: u16 = applied(λ x: u16 [scale] → u16 { x × scale }, xs)
+        _ ← std.println⌜&mut init.io.output, "{} {}", five(1u16), total⌝
+        0u6
+
+Output:
+
+    6 60

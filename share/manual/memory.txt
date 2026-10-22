@@ -1,0 +1,31 @@
+title: Memory
+
+Part of [[language]].  Where values live and how long, which the compiler
+checks rather than collects: there is no garbage collector, no `free`, and
+no way to read memory that was given back.
+
+  [[memory.arenas]]     -- `arena`, `⎕arena`, `in`, and `⎕heap`
+  [[memory.answers]]    -- `→ T in a`: where what a function answers was made,
+                           and handing an arena out
+  [[memory.static]]     -- `⎕static`: what is laid out in the image
+  [[memory.lifetimes]]  -- `&static` and `&⧖a`: how long a reference lives
+  [[memory.borrowing]]  -- one `&mut` or many `&`, and how long a borrow lasts
+  [[memory.unique]]     -- `@[unique]` values, never copied, and
+                           `@[closed_by]` ones, which have to be given back
+
+**What lives where.**  A value that points nowhere -- a number, a truth value,
+a record or fixed array of those -- lives where it is held: a register, the
+frame, the image.  Text, a list, a table and a lambda's environment take room
+from an allocator: an arena the program made, `⎕heap`, or the image.  Every
+such value carries which, so whatever holds it can give it back; the compiler
+reads that only where it does not already know.
+
+**Taking room is no effect**, so a pure function may build and answer what it
+likes.  An allocation that cannot be met stops the program (status 85), and a
+program that runs off the bottom of its stack stops with 86 -- the stack's
+size is `--stack-size` ([[running.compiler]]).
+
+**Every value of the program is a value**: binding, assigning and handing over
+copy what has to be copied -- an array's elements, a record's fields, a list
+either side may change -- and hand over without copying what nobody else
+holds.  Only references, views and tables are handles to something shared.

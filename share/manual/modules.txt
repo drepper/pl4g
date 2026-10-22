@@ -1,0 +1,69 @@
+title: Modules
+
+Part of [[language]].
+
+**A file brings another in with a definition at its top level**:
+
+    let limits := ⎕import("lib/limits")
+
+The name on the left is what the module is called here, and what it exports
+is reached through it: `limits.ceiling`, `limits.Box(u8)`, `limits.Box.open`,
+`limits.twice⌜…⌝`.  A module is no value: it is imported at the top level only,
+and cannot be computed with.
+
+**Where it is looked for**: a name beginning with `/` is that file; otherwise
+the directory of the importing file first, then the directories
+`--module-path` names, then -- for a name without `/` -- the ones the
+installation provides, where `std` and `json` are ([[library]]).  `.pl4g` is
+added where the name does not end in it.  **A module is read once** however
+many files reach it, and a ring of imports is refused.
+
+**Nothing of a module can be named unless it says `@[export]`** -- a function,
+a variable, a type with the functions inside it, an enumeration, a bundle, a
+macro.  One that is there and not exported is reported as such (4104), not as
+unknown.  Two modules may each define a name without either seeing the
+other's.
+
+    @[export]
+    fn ceiling(n: u8) → u8: n ⌈ 10u8
+
+    @[export]
+    let fs := ⎕import("fs")      ※ handed on: importers reach it as m.fs
+
+**An exported operator is in force wherever the module is imported**, written
+without the module's name -- which is how every program has `std`'s `⍕`; a
+definition in the importing file wins ([[functions.operators]]).  **A variable
+another module exports is a place**: its fields are read in place and a
+reference to it lasts as long as the program.
+
+**`@[export]` and `@[visible]` are two questions**: the first lets files that
+import the module name a definition, the second puts its symbol in the
+finished image for something outside the program ([[running.foreign]]).
+What nothing reaches is left out of the image either way.
+
+**`@[system]` alone at the top of a file**, a blank line after it, makes the
+file a system module, as `std` is: what only it would be warned about is not
+warned about, and what the compiler chose for it is not logged.
+`--ignore-system` turns that off ([[running.diagnostics]]).
+
+**A generic function or macro of a module means what its own file's names
+mean** wherever it is used; what a caller hands it is the caller's.  A module
+is lowered only as far as the program names it, so a large library costs a
+program what it uses.
+
+Program:
+
+    let std := ⎕import("std")
+    let json := ⎕import("json")
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let pool: mut arena = ⎕arena
+        let doc: json.Value = json.decode(⎕bytes("[1, 2.5, \"x\"]"), &mut pool) ?? json.Value(.null ← true)
+        let back: [u8] = json.encode(doc, &mut pool) ?? []
+        _ ← std.Io.println(&mut init.io.output, back)
+        0u6
+
+Output:
+
+    [1,2.5,"x"]

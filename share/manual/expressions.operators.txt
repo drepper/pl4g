@@ -1,0 +1,41 @@
+title: The operators, and how tightly they bind
+
+Part of [[expressions]].  Tightest first; parentheses group and mean nothing
+else.
+
+    after an operand    f(x)  a⟦i⟧  d⸨k⸩  p.x  r⌖  x?  a²  ps¨     calls,
+                        indices, fields, results, raised powers, each
+    before an operand   ¬ ~ # ⍴ ⌈ ⌊ ↓ ↑ ↕ ⇕ ∣ ∤ ⍕ † ⇧ ⇩ ⁂      prefix forms
+    ⁿ                   power, to the right                         [[expressions.arithmetic]]
+    × ÷ % ⊠ « » ↺ ↻     multiply, divide, shift, rotate;
+                        a glyph the language gives no meaning binds here
+    + - ⊞ ⊟             add and subtract
+    ⌈ ⌊                 the larger and the smaller of two
+    &                   bitwise and                                 [[expressions.bits]]
+    ^                   bitwise exclusive or
+    |                   bitwise or; on sets, either
+    ⍴                   reshape                                     [[types.arrays.shaping]]
+    ⧺                   join
+    …                   a range's ends                              [[statements.foreach]]
+    ??                  or else, to the right                       [[types.results]]
+    = ≠ < > ≤ ≥         compare: one level, never chained (3014)    [[expressions.comparisons]]
+    ≅ ≇ ⪅ ⪆ ⪉ ⪊ ∣ ∤     tolerant comparisons, divides
+    ⊼ ⊽                 not both, neither: never chained
+    ∧ and               and; `and` works out its right side only if needed
+    ⊕                   exactly one
+    ∨ or                or; `or` works out its right side only if needed
+
+So `a & b = c` is `(a & b) = c`, `a < b ∧ c < d` reads as it looks, `2 × a²`
+squares first, `a ÷ b ?? c + d` takes each side whole, and `¬ (a < b)` needs
+its parentheses.  **A comparison does not chain**: `a < b < c` is refused;
+write `a < b ∧ b < c`.
+
+**What is never an operator** a program may define: `∧ ∨ and or`, which
+decide whether to work something out; `? ??`, `⌖`, `¨` and `⌜⌝`.  Every other
+glyph may be given a meaning for a type of the program's own, a pair of
+brackets among them ([[functions.operators]]).  The meanings above cannot be
+replaced: `1u8 + 2u8` is three in every program.
+
+**Every operator that works out both of its sides walks arrays**, element by
+element ([[types.arrays.walking]]).  `-` is only subtraction: a negative
+number is written `⁻3i8`, and there is no unary minus.

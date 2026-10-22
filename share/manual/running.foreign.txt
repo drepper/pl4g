@@ -1,0 +1,51 @@
+title: The world outside the program
+
+Part of [[running]].
+
+**A function follows the language's own convention**, which the compiler
+chooses per function and may change.  **`@[cdecl]`** says it follows the
+system's C convention and keeps its plain name -- `@[cdecl(variadic=true)]`
+a variadic one; on an array variable, C's layout.  **`@[abi]`** says the same
+of a function, `@[abi("sysv64")]` naming a convention the target knows
+(3210); on a record it says the fields are laid out as C would and never
+reordered, and only a reference to one crosses a call (4596).
+
+**`@[visible]`** puts a definition's symbol in the finished image for something
+outside to find; `@[export]` is the other question, what files importing the
+module may name ([[modules]]).  The image's own names -- `_start`, anything
+beginning `__pl4g` or `pl4g_` -- are not a program's (4341).
+
+**A shared object**, `-shared`, is a library a program in another language
+loads with `dlopen`: it offers its `@[visible]` functions, each `@[cdecl]` or
+`@[abi]` (5303).  It needs no startup function; its constructors run when it
+is loaded and its destructors when it is unloaded.  A stop in it ends the
+process, as in a program.
+
+**A function with no body is defined somewhere else** -- the line ends after
+the header -- and says where, or is refused (4593, 4594):
+
+    @[external("pl4g_io_submit")]
+    fn io_submit(r: &mut Ring, which: i32, fd: i32, at: u64, len: u64) → i64
+
+    @[host("puts")]
+    fn puts(text: str) → i32
+
+**`@[external("SYMBOL")]`** names a function of the runtime the compiler
+carries (4595 for one it does not have).  **`@[host("SYMBOL")]`** names one of
+the program a shared object or the interpreter runs in, found with `dlsym` at
+the first call -- status 92 where it is not there -- and refused in an
+executable (5300).  What crosses is what C has (5301, 5302): whole and
+floating-point numbers, `bool`, `char`, references, an `@[abi]` record by
+reference, and `str`, handed over as a nul-terminated copy.  Both are impure
+by being defined elsewhere.
+
+**`⎕syscall(NUMBER, ARG…)`** asks the kernel directly, with at most six
+machine words (4572, 4573), answering the `i64` the kernel did, negative where
+it refused; **`⎕sc@NAME`** is the call's number on the target being built
+for, `⎕sc@write`, `⎕sc@pipe2` (4574, 4575).  A function asking is `@[impure]`.
+**`⎕at(ADDRESS, ⌜&T⌝)`** and **`⎕span(ADDRESS, COUNT, ⌜T⟦⟧⌝)`** make a place,
+or a run of them, out of an address something else gave, and
+**`⎕address(&x)`** is the way back; **`⎕acquire(&p)`** and **`⎕release(&mut
+p, v)`** read and write with the ordering a second observer needs, and make a
+function impure.  **`init.fs.adopt(fd, ⌜std.io.Writer⌝)`** makes a device of a
+descriptor such a call made ([[std.fs]]).

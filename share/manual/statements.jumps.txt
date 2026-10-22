@@ -1,0 +1,73 @@
+title: Labels, break, continue and return
+
+Part of [[statements]].
+
+**A loop is named by `§` and a name after its keyword**, and **`break` and
+`continue` always name the loop they mean** (3033) -- a jump that says which
+loop stays right when a loop is put around it.
+
+    foreach §rows r := 0u8…4u8:
+        foreach §cols c := 0u8…4u8:
+            if c = 0u8:
+                continue §cols         ※ the inner loop's next turn
+            if r × c = 6u8:
+                break §rows            ※ leaves both
+
+A jump names a loop it is inside (4467); a loop does not reuse the label of
+one around it (4468); a label nothing names is warned about (4469).
+`continue` does what reaching the end of the body does.
+
+**`break §x VALUE` hands a value out of the loop**, which is then an
+expression.  A loop has a way through that no `break` took -- the condition
+stopped holding, the values ran out -- so **a loop with no `else` comes to a
+result**, read with `??`, `?` or `match`, and **an `else` arm is what the
+ran-out way comes to**, the loop then coming to a plain value:
+
+    let found: u8? = foreach §look i := 0u8…10u8:
+        if i × i = square:
+            break §look i
+
+    let root: u8 = foreach §look i := 0u8…10u8:
+        if i × i = square:
+            break §look i
+    else:
+        99u8
+
+Everything a loop comes to is of one type (4473).  Where its value is read
+every `break` hands one over (4470); where it is not, none does (4471).  The
+`else` of a loop runs only where no `break` left it, as Python's does.
+
+**`return VALUE` leaves the function** with that value; **`return`** alone
+leaves one that answers nothing, and in such a function `return f()` is a call
+of a function answering nothing and then leaving.  A `return` as the last
+statement says nothing the last statement did not, and is warned about
+(5002); statements after a `return` are unreachable (5001).  What `defer` put
+off runs on the way out, after the answer is worked out
+([[statements.defer]]).  A generator's `return` ends its walk
+([[functions.generators]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn first_square_above(n: u16) → u16:
+        foreach §look i := 0u16…256u16:
+            if i × i > n:
+                break §look i × i
+        else:
+            0u16
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let pairs: mut u8 = 0u8
+        foreach §rows r := 1u8…5u8:
+            foreach c := 1u8…5u8:
+                if c > r:
+                    continue §rows         ※ the outer loop's next turn
+                pairs ← pairs + 1u8
+        _ ← std.println⌜&mut init.io.output, "{} {}", first_square_above(50u16), pairs⌝
+        0u6
+
+Output:
+
+    64 10

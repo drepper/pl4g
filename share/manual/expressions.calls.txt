@@ -1,0 +1,71 @@
+title: Calls
+
+Part of [[expressions]].
+
+**`f(a, b)` calls `f`**, the parentheses written even for none, `f()`.  An
+argument is for the parameter in its place, and of that parameter's type; a
+literal without a suffix takes it.  Nothing is variadic.  A call binds tighter
+than every operator, so `f(x) + 1` adds to the answer.
+
+**`.NAME ← VALUE` names the parameter an argument is for**, in any order, after
+the arguments written by place (4529).  A name that is no parameter (4527), a
+parameter given twice (4528) and one given nothing (4530) are refused.
+
+    fn line(text: str, indent: u8 ← 0u8, width: u8 ← 80u8) → u8: …
+
+    line("hello")                       ※ indent 0, width 80
+    line("hello", 4u8)                  ※ indent 4
+    line(.width ← 40u8, .text ← "hi")   ※ by name, in any order
+
+**A parameter's default** is written `← VALUE` after its type: a literal or an
+enumeration's value, settled once where the function is (4525), and every
+parameter after one with a default has one too (4526).  **An arena parameter
+a call leaves out** is given the arena the call stands in -- the one an `in`
+around it names, or `⎕heap` -- which is why `std.text(v)` needs no arena
+([[memory.arenas]]).
+
+**Arguments are worked out left to right, each once.**  A call's answer has to
+be used (4474), or dropped on purpose: `_ ← f()`.  `@[can_ignore]` on a
+function says every caller may let its answer go.  A call of a function that
+answers nothing stands as a statement of its own.
+
+**`⁂` spreads a tuple or a fixed array into the arguments**, a member or an
+element each, a table a row each; it stands only among a call's arguments and
+a tuple's members.
+
+    three(⁂pair, 4u8)                   ※ three(pair⟦0⟧, pair⟦1⟧, 4u8)
+
+**`v.f(args)` calls `T.f(v, args)`**, `T` being `v`'s type or what `v`
+refers to, the function named inside the type ([[functions.define]]).  Where
+`T.f` takes `&T` or `&mut T`, `v` is lent; where it takes `T`, `v` is handed
+on -- moved, if `T` is one that is closed ([[memory.unique]]).  A reference is
+never read out to hand a value (4698).
+
+**A call through a value** -- a parameter or variable of a function type --
+is a call of whatever it holds ([[types.functions]]).  **`m.f(…)`** calls what
+the module `m` exports ([[modules]]), and `m.f⌜…⌝` invokes its macro
+([[compiletime.macros]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn line(text: str, indent: u8 ← 0u8, fill: char ← '.') → str:
+        let pad: mut str = ""
+        foreach _ := 0u8…indent:
+            pad ← pad ⧺ ⎕str(fill)
+        pad ⧺ text
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let pair: 〈str, u8〉 = 〈"two", 2u8〉
+        _ ← std.println⌜&mut init.io.output, "{}", line("one")⌝
+        _ ← std.println⌜&mut init.io.output, "{}", line(⁂pair)⌝
+        _ ← std.println⌜&mut init.io.output, "{}", line(.fill ← '-', .text ← "three", .indent ← 3u8)⌝
+        0u6
+
+Output:
+
+    one
+    ..two
+    ---three

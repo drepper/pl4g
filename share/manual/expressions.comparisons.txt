@@ -1,0 +1,60 @@
+title: Comparisons and logic
+
+Part of [[expressions]].
+
+**Six comparisons**, each answering a `bool`: `=` `≠` `<` `>` `≤` `≥`
+(`<=` and `>=` are accepted for the last two).  `=` compares and never
+assigns -- assigning is `←` -- so a comparison standing as a statement is
+refused (5005).  Both sides have one type.  They bind looser than everything
+that computes a number and do not chain (3014).
+
+    numbers, char, str      =  ≠  and the order: by value, by code point
+    bool, an enumeration    =  ≠  only: no order is promised
+    a set, a dictionary     =  ≠  whether they hold the same entries
+    a record, a sum         none yet
+
+Text is ordered character by character, a prefix first: `"ab" < "abc"`, and
+`"Z" < "a"` -- an order of code points, not a collation.  `=` and `≠` on
+floating-point numbers are warned about (4217).
+
+**Six tolerant comparisons** ask of floating-point numbers only (4218), against
+`⎕tolerance` -- a `mut f64`, 10⁻¹³ until the program sets it:
+
+    a ≅ b   |a - b| ≤ t        a ≇ b   |a - b| > t
+    a ⪅ b   a - b ≤ t          a ⪆ b   b - a ≤ t
+    a ⪉ b   b - a > t          a ⪊ b   a - b > t
+
+**The logical operators** take truth values and nothing else:
+
+    a ∧ b   both          a ∨ b   at least one      a ⊕ b   exactly one
+    a ⊼ b   not both      a ⊽ b   neither           ¬a      not
+    a and b, a or b       the same as ∧ and ∨, with the right side worked out
+                          only where the left does not settle it
+
+They bind looser than the comparisons, so `a < b ∧ c < d` needs no
+parentheses; `∧` binds tighter than `⊕`, which binds tighter than `∨`, and
+`⊼` and `⊽` do not chain.  `¬` binds tightly: `¬ (a < b)` needs its
+parentheses.  Only `and` and `or` skip their right side, and they do not walk
+arrays; the glyphs do.
+
+**`b ∣ a`** -- does `b` divide `a` -- binds as a comparison too
+([[expressions.arithmetic]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn inside(x: f64, low: f64, high: f64) → bool:
+        x ⪆ low ∧ x ⪅ high
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let near: bool = inside((1f64 ÷ 3f64 ?? 0f64) × 3f64, 1f64, 2f64)
+        let words: bool = "apple" < "apples" ∧ "Zebra" < "apple"
+        let one: bool = (3u8 > 2u8) ⊕ (2u8 > 3u8)
+        _ ← std.println⌜&mut init.io.output, "{} {} {}", near, words, one⌝
+        0u6
+
+Output:
+
+    true true true

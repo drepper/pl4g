@@ -1,0 +1,65 @@
+title: Arrays
+
+Part of [[types]].  Several values of one type, one after another.
+
+    let a: mut u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
+    a⟦0⟧ ← 5u8                        ※ an element, counting from nought
+    let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧ in ⎕static
+    m⟦1,2⟧                            ※ 6: one index per dimension
+    m⟦1⟧                              ※ u8⟦3⟧: fewer indices name a row
+
+**The type is written after what it holds**, `u8⟦4⟧`, with one count per
+dimension -- `u8⟦2,3⟧` is two rows of three, in row-major order.  A count is a
+constant, which may be worked out: `u8⟦2 × 3⟧`.  `u8⟦4⟧⟦3⟧` is three arrays of
+four, a different type from `u8⟦3,4⟧`.  One element that says its type says it
+for all: `⟦1u8, 2⟧`; where none does, the array is refused.
+
+**`T⟦⟧` is a view**: where some elements are, how many, and how far apart --
+an array's elements, a run of them, a column, every other one.  It owns
+nothing.  A `T⟦N⟧` and a list `[T]` stand where a `T⟦⟧` is wanted, so a
+function taking `u8⟦⟧` takes any length.  A shape may be stated in part:
+`u8⟦,3⟧` is rows of three.
+
+**Every index is checked**: one outside stops the program (status 82), and one
+the compiler can see is outside is refused (4450).  An index is a whole number
+of `¤idx` ([[types.units]]).
+
+**An element is written only through a name that may be written**: a `mut`
+variable, a `mut u8⟦⟧` parameter, a `&mut` (4004).  **Giving an array to an
+array copies the elements**, one for one, and the two have one shape (4709,
+or status 82 where that is known only while running).  A definition copies
+too: `let chunk: u8⟦32⟧ = input⟦at…at + 32⟧`.
+
+**A function answers a fixed array by value**; a view it answers says where its
+elements are, `→ u8⟦⟧ in a` ([[types.arrays.views]]).  A definition that never
+changes and holds only constants says `in ⎕static` (4638) and is laid out in
+the image ([[memory.static]]).
+
+More of arrays:
+
+  [[types.arrays.views]]    -- slices `a⟦i…j⟧`, steps, columns, `⎕one_run`
+  [[types.arrays.shaping]]  -- `#`, `⍴`, `⧺`, `⌈`, `⌊`, and spreading with `⁂`
+  [[types.arrays.masks]]    -- picking and writing with truth values, `⎕mask`
+  [[types.arrays.walking]]  -- operators walk arrays; `¨` and `@[listable]`
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn total(xs: u8⟦⟧) → u8:
+        let sum: mut u8 = 0u8
+        foreach x := xs:
+            sum ← sum + x
+        sum
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧ in ⎕static
+        let row: u8 = total(m⟦1⟧)
+        let all: u8 = total(m⟦0⟧) + row
+        _ ← std.println⌜&mut init.io.output, "{} {} {}", m⟦0,2⟧, row, all⌝
+        0u6
+
+Output:
+
+    3 15 21

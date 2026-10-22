@@ -1,0 +1,35 @@
+title: Statements
+
+Part of [[language]].  What a body is made of.
+
+  [[statements.let]]         -- `let NAME: TYPE = VALUE`, `mut`, and names
+                                taking a tuple apart
+  [[statements.assignment]]  -- `←` to a name, a field, an element or an
+                                entry; `⧺←`; `_ ←`
+  [[statements.if]]          -- `if`, `elif`, `else`, as a statement and as
+                                an expression
+  [[statements.match]]       -- taking sums, results and enumerations apart
+  [[statements.while]]       -- `while` and `unless`
+  [[statements.foreach]]     -- walking ranges, arrays, lists, tables, text
+                                and generators; `⎕enumerate`
+  [[statements.jumps]]       -- labels, `break` and `continue`, what a loop
+                                comes to, and `return`
+  [[statements.defer]]       -- putting a statement off until the block is left
+
+**A body is a run of statements, and the last is its value.**  A function
+answers what its last statement comes to, without `return`; so does an arm
+of an `if` or a `match`, a lambda, and a block a macro writes.  An assignment
+as the last statement stands for the variable it changed.  A body that has to
+answer and ends in nothing -- a trailing `;` -- does not compile.
+
+**Every other value must be used** (5005): a statement that is only a name, a
+literal, an operator or a comparison is refused; a call's answer has to be
+taken too (4474).  `@[ignore(5005)]` on the statement says it is meant
+([[running.diagnostics]]).
+
+**A body is a scope**: a name defined in it is gone after it, and one defined
+in a loop's body is defined afresh each turn.  A name may not be defined twice
+(4001) in one scope; an inner scope may hide an outer name.
+
+**A value nothing reads is warned about** (4006), and so is a `mut` nothing
+changes (4931): both say something the program does not do.

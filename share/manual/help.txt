@@ -1,3 +1,52 @@
-title: PL4G
+title: PL4G, the Programming Language for Generators
 
-Stub top.  [[library]] [[stub]]
+PL4G is a compiled language meant to be written by programs and read by
+people.  A program does exactly what its text says: there is no undefined
+behaviour, nothing is converted or widened unless written, an operation that
+has no answer either answers a result saying so or stops the program with a
+message and an exit status of its own.  Functions are pure unless they say
+otherwise, operators walk arrays element by element, and operators and many
+other things are written with Unicode glyphs -- `←` assigns, `=` compares,
+`×` multiplies.  The compiler writes Linux ELF executables for x86-64,
+AArch64 and RISC-V by itself, and the C++ implementation also interprets.
+
+The smallest program that says something:
+
+Program:
+
+    let std := ⎕import("std")
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        _ ← std.println⌜&mut init.io.output, "hello, world"⌝
+        0u6
+
+Output:
+
+    hello, world
+
+How to read this manual
+-----------------------
+
+The manual is a set of short nodes, each with a name.  A name in double
+brackets, like [[language]], is a link: ask for that name to read the node.
+Names are lower case and dotted, a group first and a part after it --
+[[types.arrays]] is a part of [[types]] -- and the library's nodes are named
+as a program names what they describe, `std.string.parse_int`.  Every group
+node says what its parts cover and links them; every part links back.
+
+A block indented under `Program:` is a complete program, compiled and run
+as it stands, and one under `Output:` is what it prints; other indented
+blocks are fragments.  A number in parentheses, (4537), is the number of the
+diagnostic the compiler gives where that rule is broken.
+
+The top groups
+--------------
+
+  [[language]]    -- the language: its syntax, types, expressions,
+                     statements, functions, memory and modules
+  [[library]]     -- the modules the installation provides: `std`, its
+                     `std.io`, `std.fs` and `std.string`, and `json`
+  [[builtins]]    -- every name the compiler provides, `⎕` and a word
+  [[attributes]]  -- every attribute, the words written in `@[…]`
+  [[running]]     -- compiling, interpreting, testing and building programs

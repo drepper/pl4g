@@ -1,0 +1,54 @@
+title: Counting, shaping and joining arrays
+
+Part of [[types.arrays]].
+
+**`#a`** is how many along the outermost dimension, a `u64 ¤size`: rows of a
+table, not elements.  The same `#` counts a list, a tuple, a table's entries
+and a string's characters.
+
+**`⍴` is shape.**  Before one array it answers the shape -- a `u64` for one
+dimension, a tuple of them for more.  Between a shape and values it makes an
+array of that shape, filled in order and **going round again** where the
+values run out; more values than fit are refused (4498).  The shape has to be
+known while compiling (4496), and none of it nought (4497).
+
+    ⍴m                         ※ 〈2, 3〉 of a u8⟦2,3⟧
+    3 ⍴ 7u8                    ※ u8⟦3⟧: 7 7 7
+    6 ⍴ ⟦0u8, 1u8⟧             ※ 0 1 0 1 0 1
+    〈2, 3〉 ⍴ v                 ※ a table out of v's elements, round again
+    let buf: mut u8⟦1024⟧ = 1024 ⍴ 0u8
+
+**`a ⧺ b` joins along the first dimension**, every other staying as it was
+(4492): two tables of three columns make one of three columns.  Both sides
+hold one type (4491) and state their shape (4490).  `++` is its substitute.
+`⧺` joins strings and lists as well.
+
+**`⌈` and `⌊`** between two values answer the larger and the smaller;
+before one array, the largest and the smallest element -- of a table, a row
+whose *j*-th is the largest *j*-th.  Of nothing it stops the program (82).
+`⌈⌜T⌝` and `⌊⌜T⌝` are a type's extremes.
+
+**`⁂a` spreads an array whose type says its length** into a call's arguments
+or a tuple's members, an element each -- a table a row each
+([[expressions.calls]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn sum3(a: u8, b: u8, c: u8) → u8:
+        a + b + c
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let v: u8⟦3⟧ = ⟦4u8, 9u8, 2u8⟧ in ⎕static
+        let w: u8⟦2⟧ = ⟦7u8, 1u8⟧ in ⎕static
+        let both: u8⟦5⟧ = v ⧺ w
+        let pattern: u8⟦6⟧ = 6 ⍴ ⟦0u8, 1u8⟧
+        let n: u64 = ⎕drop(#both)
+        _ ← std.println⌜&mut init.io.output, "{} {} {} {}", n, ⌈both, sum3(⁂v), pattern⟦5⟧⌝
+        0u6
+
+Output:
+
+    5 9 15 1

@@ -1,0 +1,47 @@
+title: Assignment
+
+Part of [[statements]].
+
+**`PLACE ← VALUE`** gives a place a new value.  `←` has no ASCII substitute,
+and `=` is a comparison, never an assignment.  The value has the place's type
+and fits it: `count ← 300u8` does not compile.
+
+**What may stand on the left is a place**, written the way it is read:
+
+    count ← 7u8                    ※ a name defined `mut`
+    p.x ← 9u32                     ※ a field
+    l.to.x ← 7u32                  ※ a field of a field
+    a⟦2⟧ ← 1u8                     ※ an element; m⟦0⟧ ← row copies a row
+    v⟦v > 25u8⟧ ← 0u8              ※ every element a mask picks
+    ps¨.age ← 21u8                 ※ a field of each element
+    d⸨"k"⸩ ← 3u8                   ※ an entry of a dictionary
+    r⌖ ← 3i8                       ※ what a reference names
+    low, high ← sorted(b, a)       ※ names taking a tuple apart
+
+A field is as writable as what holds it, and a record reached through a
+reference as the reference: `p.x ← v` needs `p` to be `mut` (4004), `r⌖.x ← v`
+a `&mut` (4535).  A `mut` field may be written where its record may not.  A
+record the program worked out has no place to write a field of (4588): bind it
+first.  A member of a tuple is never assigned (4462).
+
+**`PLACE ⧺← MORE`** joins onto a list where it is ([[types.lists]]).  **`†`**
+takes an element out of a list, or a key out of a table, and answers it.
+
+**`_ ← VALUE`** works the value out and drops it: the way to call a function
+for what it does when its answer is not wanted.  `_` is no variable; nothing
+reads it and it is not defined (4475, 4476), and what is given to it has a
+value (4477).  A pure function's call dropped so is not made at all, and the
+report log says so.
+
+**An assignment stands for the variable it changed**, so as the last statement
+of a body it is the body's value:
+
+    let counter: mut u6 = 1u6
+
+    @[startup, impure]
+    fn main(init: std.Init) → u6:
+        counter ← 42u6                 ※ the program exits with 42
+
+**Arrays and records are copied** by assignment; a list is too, where either
+side may change it later; a reference is not -- it names the same place.  A
+value given and never read is warned about (4006).

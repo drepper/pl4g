@@ -1,0 +1,59 @@
+title: Tests
+
+Part of [[running]].
+
+**A test is a function marked `@[test]`** that takes nothing and answers
+whether it passed (4407).  The kind says which binary it is in and when it
+runs -- one attribute with three answers:
+
+    @[test(always)]       in the program, run every time it starts, before the
+                          startup function
+    @[test(build)]        in a binary of its own, run when a build finishes
+    @[test]               the same as @[test(suite)]: run when
+                          `pypl4g test` asks
+
+**`pypl4g test SOURCE…`** builds a binary of the `always` and `suite` tests,
+runs it, and says which failed:
+
+    $ pypl4g test gcd.pl4g
+    test gcd_fails failed
+    error: the suite tests did not pass [PL4G-1015]
+
+**Every test is run and every failure named** before the binary stops, with
+status 88, and the compiler then fails (1015).  A test of the program that
+fails stops it before the startup function is reached.  A suite test is no
+part of the program: nothing there reaches it, so it is left out of the image.
+
+**A target this machine does not run** has no way to run its tests unless
+`--test-runner=COMMAND` names one -- `qemu-aarch64`, say; a build then
+finishes with a warning (1014) rather than refusing.  A test is pure as any
+function is unless it says otherwise, and its own conditions are checked as
+always ([[functions.conditions]]).
+
+The language's own test suite is `python -m pytest tests`: every program in
+`tests/language` carries what it expects in comments beginning `※ pl4g-test:`,
+and every `Program:` of this manual is compiled and run as a test too.
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn gcd(a: u32, b: u32) → u32:
+        if b = 0u32: a else: gcd(b, (a % b) ?? 0u32)
+
+    @[test]
+    fn gcd_of_coprimes() → bool:
+        gcd(9u32, 28u32) = 1u32
+
+    @[test(always)]
+    fn gcd_of_equals() → bool:
+        gcd(7u32, 7u32) = 7u32
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        _ ← std.println⌜&mut init.io.output, "{}", gcd(12u32, 18u32)⌝
+        0u6
+
+Output:
+
+    6

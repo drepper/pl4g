@@ -457,7 +457,7 @@ endif()
 file(GLOB PL4G_MANUAL_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/share/manual/*.txt
      ${CMAKE_SOURCE_DIR}/modules/*.pl4g)
 set(PL4G_MANUAL_DIR ${CMAKE_BINARY_DIR}/manual)
-add_custom_command(OUTPUT ${PL4G_MANUAL_DIR}/manual.pack
+add_custom_command(OUTPUT ${PL4G_MANUAL_DIR}/manual.pack ${PL4G_MANUAL_DIR}/manual.stamp.hh
   COMMAND ${CMAKE_SOURCE_DIR}/bin/pl4g-manual --out ${PL4G_MANUAL_DIR}
   DEPENDS ${PL4G_MANUAL_SOURCES} ${CMAKE_SOURCE_DIR}/bin/pl4g-manual ${CMAKE_SOURCE_DIR}/pypl4g/front/token.py
           ${CMAKE_SOURCE_DIR}/pypl4g/front/doccomment.py ${CMAKE_SOURCE_DIR}/pypl4g/sema/attributes.py
@@ -465,9 +465,12 @@ add_custom_command(OUTPUT ${PL4G_MANUAL_DIR}/manual.pack
 add_custom_target(pl4g-manual-text DEPENDS ${PL4G_MANUAL_DIR}/manual.pack)
 add_library(pl4g-manual SHARED src/manual/manual.cc)
 target_include_directories(pl4g-manual PUBLIC ${CMAKE_SOURCE_DIR}/src)
+# The stamp is included, and the pack embedded, from where the script made them.
+target_include_directories(pl4g-manual PRIVATE ${PL4G_MANUAL_DIR})
 target_compile_options(pl4g-manual PRIVATE ${PL4G_COMMON_FLAGS} --embed-dir=${PL4G_MANUAL_DIR})
 target_link_libraries(pl4g-manual PRIVATE fstrcmp)
-set_source_files_properties(src/manual/manual.cc PROPERTIES OBJECT_DEPENDS ${PL4G_MANUAL_DIR}/manual.pack)
+set_source_files_properties(src/manual/manual.cc PROPERTIES OBJECT_DEPENDS
+                            "${PL4G_MANUAL_DIR}/manual.pack;${PL4G_MANUAL_DIR}/manual.stamp.hh")
 add_dependencies(pl4g-manual pl4g-manual-text)
 add_executable(pl4g-help src/manual/help.cc)
 target_link_libraries(pl4g-help PRIVATE pl4g-manual)

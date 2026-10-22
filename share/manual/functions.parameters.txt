@@ -1,0 +1,67 @@
+title: Parameters
+
+Part of [[functions]].
+
+**A parameter is a name and a type**, `n: u8`, and what it is handed is a
+value: the caller's own variable is never changed through it.  To change the
+caller's place, a function takes a reference, `at: &mut u8`, and is then
+`@[impure]` for writing through it ([[functions.purity]]).
+
+**`mut` before the type** says the body may give the name another value; it is
+no part of the signature, so no caller can tell (4931 where nothing changes
+it).  On an array view or a table it says something a caller sees as well:
+`xs: mut u8⟦⟧` writes the caller's elements, which makes the function
+`@[impure]`; `d: mut ⸨str: u8⸩` may put entries in the caller's table, which
+is no effect, the signature having said it.
+
+    fn countdown(n: mut u8) → u8:
+        let sum: mut u8 = 0u8
+        while n > 0u8:
+            sum ← sum + n
+            n ← n - 1u8
+        sum
+
+**`← VALUE` after the type is a default**, a literal or an enumeration's
+value, and every later parameter has one too: `width: u8 ← 80u8`
+([[expressions.calls]]).
+
+**An arena parameter, `a: &mut arena`, that a call leaves out** is handed the
+arena in force there -- the `in` the call stands in, or `⎕heap` -- and may
+stand before parameters with defaults.  `s: str in a` says what is handed was
+made in the arena handed for `a`, and `s: str in ⎕static` that it is in the
+image ([[memory.answers]]).
+
+**A type may be handed**: `kind: ⌜T'⌝`, given `⌜u16⌝` at the call, settles
+`T'` and is gone at run time (4688, 4689) ([[types.generic]]).
+
+**A reference parameter's lifetime** is said only where the answer depends on
+it, `v: &⧖a u8` ([[memory.lifetimes]]).  A parameter of a closed type is
+handed on by value and owes the close ([[memory.unique]]).  **The startup
+function's one parameter is the record `std.Init`**, and nothing else
+([[functions.special]]).
+
+Arguments past the registers go on the stack; a call with twenty is called and
+read like one with two.
+
+Program:
+
+    let std := ⎕import("std")
+
+    @[impure]
+    fn doubled(xs: mut u8⟦⟧) → u8:
+        let sum: mut u8 = 0u8
+        foreach &mut x := xs:
+            x⌖ ← x⌖ × 2u8
+            sum ← sum + x⌖
+        sum
+
+    @[startup, impure]
+    fn main(init: std.Init) → u6:
+        let v: mut u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+        let total: u8 = doubled(v)
+        _ ← std.println⌜&mut init.io.output, "{} {}", total, v⟦2⟧⌝
+        0u6
+
+Output:
+
+    12 6

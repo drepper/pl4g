@@ -1,0 +1,74 @@
+title: match
+
+Part of [[statements]].
+
+**`match` takes a value's alternatives apart**: a sum's parts, a result's
+answer and failure, an enumeration's values (4411 for anything else).  Each
+arm is a pattern and a body, indented or braced.
+
+    match s:                       ※ a sum: an arm names a part by its type
+        Point(p):                  ※ binding what it carries
+            …
+        u32:                       ※ taking it and binding nothing
+            …
+        void:                      ※ the part that carries nothing
+            …
+
+    match a ÷ b:                   ※ a result
+        u8(q):  …                  ※ the answer
+        ⊥:      …                  ※ the failure; ⊥(why) binds what it carries
+
+    match colour:                  ※ an enumeration: the value's name alone
+        red:   …
+        _:     …                   ※ every alternative no earlier arm took
+
+**Every alternative is taken, and none twice** (4414, 4413); an arm that can
+take nothing is reported (4417).  `_` binds nothing (4422).  A flag
+enumeration needs a `_` arm (4425).  A part of a generic type is written with
+its types, `Maybe(u8)(inner)`, and `T'(v)` in generic code.  An array or list
+answer is named as written: `u8⟦⟧(line):`, `[u8](bytes):`.
+
+**`match` is an expression where a value is wanted of it**: every arm ends in
+a value of one type (4426), or leaves with `return`.
+
+    let kept: u8 = match chosen:
+        red:
+            1u8
+        _:
+            2u8
+
+**A sum that is somewhere is matched where it is** -- through a reference, an
+element, a field: only its tag and the chosen part are read, and an arm binds
+the value the part had when the arm began.
+
+`if` asks whether something is so, and `match` which alternative a value
+holds; over a `bool` the two say the same ([[statements.if]]).  Results are
+in [[types.results]], sums in [[types.sums]], enumerations in [[types.enums]].
+
+Program:
+
+    let std := ⎕import("std")
+
+    type Token = number : u32 | word : str | stop : void
+
+    fn describe(t: Token) → str:
+        match t:
+            u32(n):
+                std.format⌜"number {}", n⌝
+            str(w):
+                std.format⌜"word {}", w⌝
+            void:
+                "stop"
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let ts: [Token] = [Token(.number ← 42u32), Token(.word ← "hi"), Token(.stop ← true)]
+        foreach t := ts:
+            _ ← std.println⌜&mut init.io.output, "{}", describe(t)⌝
+        0u6
+
+Output:
+
+    number 42
+    word hi
+    stop

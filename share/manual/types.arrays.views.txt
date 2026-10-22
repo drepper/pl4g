@@ -1,0 +1,62 @@
+title: Slices and views
+
+Part of [[types.arrays]].
+
+**`a⟦i…j⟧` is the elements from `i` up to but not including `j`**, a view
+`T⟦⟧` of them and no copy.  Either end may be the length: `a⟦#a…#a⟧` is the
+empty run after the last.  **A third number is a step**, at least one:
+`a⟦0…10…2⟧` is every other element (4453 for a step written as nought, and
+the program stops where one is worked out as nought).
+
+**A table is sliced along any dimension**: a number picks one place and drops
+its dimension, a run keeps it.  Of a `T⟦3,4⟧`, `m⟦1…3⟧` is two rows,
+`m⟦0…3, 1⟧` the second column, `m⟦1…3, 2…4⟧` a block.  A view is walked,
+indexed, sliced again, handed on and copied out of like any `T⟦⟧`, and given
+to: `m⟦0…3, 0⟧ ← m⟦0…3, 3⟧` copies a column, as though everything was read
+before anything was written.
+
+**`⎕one_run(v)`** is `v` where its elements are one run already, and a copy
+of them otherwise, in the arena `in` names or in `⎕heap`.  What hands elements
+to the kernel asks for one; `std.write` and `std.read` do it themselves.
+
+**A view lasts no longer than what it views**: it may not be given to a name
+or field that outlives the array (4570), and a view of a list borrows the
+list -- the list is not changed while the view is used (4566), and a view of a
+list is never written through (4251).
+
+**`mut` on a view parameter** says the body writes the caller's elements, so
+a caller hands it only elements that may be written (4640).
+
+**A function answering a view says where its elements are**, after `in`:
+some of a parameter's, `fn head(a: u8⟦⟧) → u8⟦⟧ in a`; in an arena it was
+handed, `→ u8⟦⟧ in p`, or in `⎕heap` where it says nothing, elements of its
+own frame being copied there; or in the image, `in ⎕static`
+([[memory.answers]]).  A variable at the top level is never a view (4455).
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn total(xs: u8⟦⟧) → u8:
+        let sum: mut u8 = 0u8
+        foreach x := xs:
+            sum ← sum + x
+        sum
+
+    fn head(a: u8⟦⟧) → u8⟦⟧ in a:
+        a⟦0…2⟧
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let m: u8⟦3,4⟧ = ⟦⟦1u8, 2u8, 3u8, 4u8⟧,
+                           ⟦5u8, 6u8, 7u8, 8u8⟧,
+                           ⟦9u8, 10u8, 11u8, 12u8⟧⟧ in ⎕static
+        let column: u8 = total(m⟦0…3, 1⟧)
+        let evens: u8 = total(m⟦1⟧⟦0…4…2⟧)
+        let first: u8 = total(head(m⟦2⟧))
+        _ ← std.println⌜&mut init.io.output, "{} {} {}", column, evens, first⌝
+        0u6
+
+Output:
+
+    18 12 19

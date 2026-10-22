@@ -1,0 +1,49 @@
+title: Tuples
+
+Part of [[types]].
+
+**`〈a, b〉` is a tuple**, several values travelling as one, each of its own
+type: `〈u8, u16〉` is its type.  The brackets are U+3008 and U+3009.  A tuple
+has at least one member, and a tuple of one is still a tuple.  It is a product
+with no names: where the parts mean something, a record says so
+([[types.records]]).
+
+**Names written next to each other take one apart**, as many names as members
+(4435), in a definition or an assignment:
+
+    let sum, product := both(a, b)
+    low, high ← sorted(b, a)
+
+**`t⟦0⟧` is one member**, counting from nought.  The index has to be known
+while compiling (4460) -- a literal, a constant, `#t - 1` -- since which member
+it is decides the type.  A member is read and never assigned (4462).
+
+**`⁂t` spreads a tuple** into a call's arguments or another tuple's members:
+`〈⁂pair, ⁂wide〉`, `three(⁂pair, 4u8)` ([[expressions.calls]]).
+
+**`comptime foreach v := t`** walks a tuple, the body written out once per
+member with `v` of that member's type -- the one loop whose turns differ in
+type ([[compiletime.reflection]]).
+
+A tuple is its members held separately, one register each; one answered from
+a function has to fit the registers an answer comes back in, which two always
+do.  A tuple's references may each say how long they live, `〈&⧖x u32, &⧖y
+u32〉` ([[memory.lifetimes]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn divided(a: u16, b: u16) → 〈u16, u16〉:
+        〈(a ÷ b) ?? 0u16, (a % b) ?? 0u16〉
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let q, r := divided(47u16, 5u16)
+        let pair: 〈u16, u16〉 = divided(9u16, 4u16)
+        _ ← std.println⌜&mut init.io.output, "{} {} {}", q, r, pair⟦1⟧⌝
+        0u6
+
+Output:
+
+    9 2 1

@@ -1,0 +1,63 @@
+title: Sums
+
+Part of [[types]].
+
+**`type NAME = PART : TYPE | PART : TYPE …` defines a sum**, which holds
+exactly one of its parts -- a tagged union.  `;` makes a record and `|` a sum,
+and one definition uses one of them (3017).  **No two parts have one type**
+(4410), since `match` names a part by its type; one part may be `void`, and
+carries nothing.
+
+    type Shape = dot : Point | line : u32 | empty : void
+    type Json = null : void | flag : bool | number : f64 | text : str
+              | items : [Json]
+
+**A value gives one part**, by name: `Shape(.line ← 7u32)`, and a `void`
+part `.empty ← true` (4800 to 4802).
+
+**`match` takes it apart**, an arm per part, named by the part's type and
+binding what it carries; `void:` takes the part that carries nothing, `_:`
+every part no earlier arm took.  Every part is taken, none twice (4413, 4414):
+
+    match s:
+        Point(p):  …
+        u32(n):    …
+        void:      …
+
+A sum that is somewhere -- through a reference, an element, a field -- is taken
+apart where it is, nothing but its tag and the chosen part read
+([[statements.match]]).
+
+A sum may reach itself behind a list, a reference or a dictionary's value, as
+`Json` does.  It has no `=` yet, so it is no key of a table.  `⍕` writes one as
+it is made, `Shape(.line ← 7)`; `⎕alternatives(v)` takes one apart for
+generic code ([[compiletime.reflection]]).  A sum with type parameters is
+written `Maybe(u8)`, and matched `Maybe(u8)(inner)` ([[types.generic]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    type Size = w : u16 ; h : u16
+    type Shape = square : u16 | rect : Size | empty : void
+
+    fn area(s: Shape) → u16:
+        match s:
+            u16(side):
+                side × side
+            Size(r):
+                r.w × r.h
+            void:
+                0u16
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let a: Shape = Shape(.square ← 4u16)
+        let b: Shape = Shape(.rect ← Size(.w ← 2u16, .h ← 5u16))
+        let c: Shape = Shape(.empty ← true)
+        _ ← std.println⌜&mut init.io.output, "{} {} {} {}", area(a), area(b), area(c), b⌝
+        0u6
+
+Output:
+
+    16 10 0 Shape(.rect ← Size(.w ← 2, .h ← 5))

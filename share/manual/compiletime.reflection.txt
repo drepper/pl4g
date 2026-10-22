@@ -1,0 +1,65 @@
+title: Reflection and comptime
+
+Part of [[compiletime]].
+
+**`⌜x⌝` lifts what is between the marks into the compiler**: `⌜u32⌝` is the
+type and not a value of it, `⌜a⌝` the name and not what it holds.  The marks
+keep the grammar from having to know what a name means.  A lift is read where
+a type is handed -- `⎕narrow(x, ⌜u8⌝)`, `kind: ⌜T'⌝` -- by `⎕typeof`, by a
+comparison of types, and by `⌈⌜T⌝` and `⌊⌜T⌝`, a type's largest and smallest
+values; anywhere else it is refused (4514).  In a macro it holds a piece of
+the program ([[compiletime.macros]]).
+
+**`comptime if` asks a question the compiler answers**, and the arms it does
+not choose are never compiled -- so they may be of types that would not
+otherwise agree.  `comptime` stands before each arm it applies to.  What may
+be asked is whether types are one, `⎕typeof(⌜v⌝) = ⌜u8⌝` or `⌜T'⌝ ≠ ⌜str⌝`,
+`⎕isrecord(⌜T⌝)` and `⎕kindof(⌜T⌝) = "list"`, joined by the logical
+operators; a question about a value is refused (4502).
+
+**`comptime foreach v := t` walks a tuple**, the body written out once per
+member with `v` of that member's type; a tuple is walked only so (4503, 4504).
+
+    ⎕typeof(⌜v⌝)         the type of what is lifted -- in a comparison only
+    ⎕typename(⌜T⌝)       the type written out, as str
+    ⎕isrecord(⌜T⌝)       whether T is a record -- in a comptime condition only
+    ⎕kindof(⌜T⌝)         "integer", "float", "bool", "char", "str",
+                         "enumeration", "record", "sum", "tuple", "array",
+                         "list", "set", "dictionary", "result", "reference",
+                         "function" or "other" -- compared in a condition
+    ⎕fields(v)           a record's fields: a tuple of 〈name, value〉 pairs
+    ⎕fields(⌜T⌝)         a record type's 〈name, type〉, for comptime foreach
+    ⎕fields(⌜E⌝)         an enumeration's 〈name, value〉 for every value
+    ⎕alternatives(v)     a sum's 〈name, view〉 pairs, the view one element
+                         long for the part it holds and empty for the rest
+
+They are in declaration order.  This is how `std.text` writes a type it was
+never told about, and how a program writes a definition of `⍕` for its own
+type that hands the rest back to `std.text` -- the language having no
+overloading ([[types.generic]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    type Point = x : u8 ; y : i16
+
+    fn described(v: T') → str:
+        let out: mut str = ⎕typename(⌜T'⌝) ⧺ ":"
+        comptime if ⎕isrecord(⌜T'⌝):
+            comptime foreach f := ⎕fields(v):
+                out ← out ⧺ " " ⧺ f⟦0⟧ ⧺ "=" ⧺ ⍕f⟦1⟧
+        else:
+            out ← out ⧺ " " ⧺ ⍕v
+        out
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let a: str = described(Point(.x ← 3u8, .y ← ⁻4i16))
+        let b: str = described(7u32)
+        _ ← std.println⌜&mut init.io.output, "{}; {}", a, b⌝
+        0u6
+
+Output:
+
+    Point: x=3 y=⁻4; u32: 7

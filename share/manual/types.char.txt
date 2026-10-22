@@ -1,0 +1,43 @@
+title: Characters
+
+Part of [[types]].
+
+`char` is one Unicode code point: a number up to U+10FFFF that is no
+surrogate (U+D800 to U+DFFF).  A value is held in 32 bits.  A literal is
+written between apostrophes, `'A'`, `'ω'`, `'\n'`, `'\u0041'`, and a number
+may stand where a character is wanted (4493 above the last, 4244 for a
+surrogate).
+
+**It is not a number.**  Arithmetic is not defined on it; **all six
+comparisons are**, in the order Unicode numbers the code points.
+
+**Crossing to a number and back** is written:
+
+    ⎕ord(c)                 ※ u32, always
+    ⎕chr(n)                 ※ char from a u32; one that is no code point
+                            ※ stops the program (status 83)
+    ⎕narrow(n, ⌜char⌝)      ※ char ? ⎕narrowing, for a number from outside
+
+**`⎕str(c)`** is the text of one character; `⌈"text"` and `⌊"text"` are its
+highest and lowest characters; `foreach c: char = text` walks a string's
+characters ([[types.str]]).  `std.string.format_char` writes one as UTF-8 and
+`std.string.decode_char` reads one ([[std.string]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn shout(c: char) → char:
+        if c ≥ 'a' ∧ c ≤ 'z': ⎕chr(⎕ord(c) - 32u32) else: c
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let out: mut str = ""
+        foreach c: char = "naïve":
+            out ← out ⧺ ⎕str(shout(c))
+        _ ← std.println⌜&mut init.io.output, "{} {}", out, ⎕ord('ï')⌝
+        0u6
+
+Output:
+
+    NAïVE 239

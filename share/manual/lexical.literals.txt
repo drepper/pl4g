@@ -1,0 +1,51 @@
+title: Literals
+
+Part of [[lexical]].
+
+**Whole numbers** are written in decimal, or after `0x`, `0o` or `0b` in
+hexadecimal, octal or binary, with `_` anywhere between digits: `1_000_000`,
+`0xff`, `0b1010`.  **A suffix names the type**, and is the type's own name:
+`3u8`, `42i32`, `0x1fu8`, `7u3`.  A literal without one takes the type wanted
+where it stands -- `let n: u16 = 5`, `count + 1` -- and where nothing wants a
+type it is refused rather than given one by a rule: `let n := 5` is reported
+as a number of no width, which the compiler does not have yet (9902).  A value
+that does not fit its type is an error where it is written: `300u8`, `⁻1u8`.
+
+**A negative literal begins with `⁻`** (U+207B SUPERSCRIPT MINUS) and nothing
+between it and the digits: `⁻3i8`, `⁻0x1fi32`, `⁻2.5f32`.  `-` is only ever
+subtraction, so `a - ⁻1i8` needs no rule about spaces.
+
+**Floating-point numbers** have a point with a digit after it, an exponent,
+or both, and a suffix `f32` or `f64`: `3.5f64`, `6.02e23f64`, `3f64`.  The
+hexadecimal form is exact: `0x1.8p3f64` is twelve.  `1.x` is a member of `1`,
+a point being part of a number only where a digit follows.
+
+**A character** is one code point between apostrophes: `'A'`, `'ω'`, `'\n'`.
+**A string** is text between quotation marks: `"a\tb£"`.  Both take
+the escapes `\n \t \r \0 \a \b \f \v \\ \' \"`, `\u` with four hexadecimal
+digits and `\U` with eight; an escape naming a surrogate or anything above
+U+10FFFF is refused.  Where a character is wanted a number may stand:
+`let last: char = 0x10ffff`.
+
+**Truth values** are `true` and `false`.  **A power written raised** is part
+of how a number is written: `a²`, `a¹⁴`, `a⁻²` ([[expressions.arithmetic]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let big: u32 = 1_000_000
+        let mask: u8 = 0b1010_0101
+        let low: i8 = ⁻128i8
+        let omega: char = 'ω'
+        _ ← std.println⌜&mut init.io.output, "{} {} {} {}", big, mask, low, omega⌝
+        0u6
+
+Output:
+
+    1000000 165 ⁻128 ω
+
+The text a program prints for a number is how it would write the number,
+which is why the minus is the raised one: [[std.text]].

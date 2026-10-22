@@ -1,0 +1,46 @@
+title: How a program is laid out
+
+Part of [[language]].
+
+**A block is indented or braced.**  After a colon and the end of the line, the
+lines indented further are the block, as in Python -- with spaces: a tab in
+indentation is an error (2103).  Braces hold a block
+whose statements are separated by `;`.  The two may be nested inside each
+other, but one block is written one way.
+
+    fn twice(a: u8) → u8:
+        a + a
+
+    fn thrice(a: u8) → u8 { let b: u8 = a + a ; b + a }
+
+**A colon with something after it on the same line opens a block the end of
+that line closes**: `fn twice(a: u8) → u8: a + a`, `if b: 0u6 else: 1u6`.
+Such a block may not open another one-line block (3044); write the inner one
+in braces.  An `elif` or `else` on the next line continues the `if`.
+
+**A semicolon separates statements and never ends one**: `a ← 3u6; b ← 4u6`
+is two statements on one line, and a body ending in `;` ends in an empty
+statement -- which matters, because **the last statement of a body is its
+value**.  `7u8` and `7u8;` are different bodies.
+
+**A line inside brackets continues.**  While a `(`, `⟦`, `[`, `〈`, `⸨`,
+`@[` or `{` is open, the end of a line ends nothing, so a long call or
+parameter list is written down the page.  There is no other continuation mark.
+The lifting marks `⌜⌝` are not brackets of that kind: a macro invocation
+such as `std.println⌜…⌝` stays on one line.
+
+    let n: u8 = four(1u8,
+                     2u8,
+                     .third ← 8u8)
+
+**What may stand at the top level of a file**: imports, type, enumeration,
+unit and bundle definitions, variables, functions and macros, in any order --
+a name may be used above where it is defined.  Inside a function, statements.
+
+**A statement whose value goes nowhere is an error** (5005), a bare `count =
+1u8` or `x + 1` among them: `=` compares, and a comparison thrown away is a
+mistake.  A call is a statement of its own, but what it answers must be used
+too (4474), or dropped on purpose with `_ ← f()`.
+
+See also [[lexical]] for the characters, [[statements]] for what a body holds,
+and [[functions.define]] for a function's header.

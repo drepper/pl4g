@@ -1,0 +1,37 @@
+title: Running programs
+
+Part of [[help]] and of [[language]].  What turns a source into something that
+runs, and the tools around it.
+
+  [[running.compiler]]     -- the compiler's command line: outputs, targets,
+                              optimization, conditions, stack, report log
+  [[running.interpreter]]  -- running a source without building it, the
+                              interactive session, and embedding the
+                              interpreter in a C or C++ program
+  [[running.foreign]]      -- shared objects, `@[visible]`, `@[cdecl]`,
+                              `@[abi]`, functions defined elsewhere and by the
+                              host, `⎕syscall`
+  [[running.testing]]      -- `@[test]` functions and `pypl4g test`
+  [[running.builds]]       -- `@[build]` and `build.pl4g`
+  [[running.diagnostics]]  -- warnings, `@[ignore]`, `@[expect]`, system
+                              modules and the report log
+
+**Two compilers take one command line**: `pypl4g` (`bin/pypl4g`), the
+compiler written in Python, and `pl4g`, the C++ one (`build/cpp/pl4g`).
+They write the same images.  Neither needs a C compiler, an assembler or a
+linker: the image is written whole, and what it needs of a runtime -- I/O
+through `io_uring`, the heap -- the compiler carries with it.  An executable
+is static and depends on nothing.
+
+    pypl4g -o hello hello.pl4g
+    bin/pl4g-run ./hello
+
+**`bin/pl4g-run COMMAND`** runs a program under limits on its memory and
+its CPU time (those of `tests/limits.py`; `PL4G_RUN_DATA` and `PL4G_RUN_CPU`
+replace them), so that one that runs away stops with its own `out of memory`
+rather than taking the machine with it.  A program built for another
+architecture runs under QEMU: `bin/pl4g-run qemu-aarch64 ./hello`.
+
+**The language server** is `pypl4g lsp` (and `pl4g-lsp`): diagnostics as an
+editor types, and an outline of the file.  The editor support in `editors/`
+uses it.

@@ -1,0 +1,62 @@
+title: What is in the image
+
+Part of [[memory]].
+
+**`⎕static` is the image**: what is in it is made while compiling, lies where
+nothing writes, lasts as long as the program and is never given back.  Text
+written down is there already.
+
+**`… in ⎕static` puts a container in the image** -- an array, a list, a set or a
+dictionary of what the compiler knows: numbers, characters, truth values,
+enumerations' values, text, records and containers of those.  Inside a body
+the name stands for where the image keeps it, and nothing is built when the
+line runs.
+
+    let digits: str⟦10⟧ = ⟦"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"⟧ in ⎕static
+    let primes: ⟦⟧ = ⟦2, 3, 5, 7u16⟧ in ⎕static            ※ a u16⟦4⟧
+
+**A definition that never changes and holds only what the compiler knows says
+it** (4638): the reader is told the table is not built every time the line
+runs.  What is worked out while running cannot go there (4636), and nothing
+there is written -- no `mut` name, no `mut` type, no element written, no
+`&mut` (4637).
+
+**A pure call in the initializer is run while compiling**, and what it answers
+is laid out as the literal it comes to would be -- which is how a table is read
+off an enumeration rather than written out beside it:
+
+    fn named() → ⸨Colour: str⸩:
+        let d: mut ⸨Colour: str⸩ = ⸨⸩
+        comptime foreach m := ⎕fields(⌜Colour⌝):
+            d⸨m⟦1⟧⸩ ← m⟦0⟧
+        d
+
+    let names: ⸨Colour: str⸩ = named() in ⎕static
+
+An impure or generic function is not run so (4665).  In a module the call is
+made only when something names the variable, so a library table nobody reads
+costs nothing.
+
+**Answers and parameters may say they are in the image**: `→ str in ⎕static`,
+`s: str in ⎕static` ([[memory.answers]]).  A **singleton** field of a record is
+in the image by what it is ([[types.records]]).  **A variable at the top level**
+is in the image whatever it holds; one holding a table written empty costs
+nothing until something is put in it.
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn digit(d: u64) → str in ⎕static:
+        let digits: str⟦10⟧ = ⟦"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"⟧ in ⎕static
+        digits⟦⎕unit(d % 10u64 ?? 0u64, ⌜idx⌝)⟧
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let squares: ⟦⟧ = ⟦1, 4, 9, 16u8⟧ in ⎕static
+        _ ← std.println⌜&mut init.io.output, "{}{} {}", digit(4u64), digit(2u64), squares⟦3⟧⌝
+        0u6
+
+Output:
+
+    42 16

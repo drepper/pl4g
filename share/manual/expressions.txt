@@ -1,0 +1,37 @@
+title: Expressions
+
+Part of [[language]].  What is worked out, and how it groups.
+
+  [[expressions.operators]]    -- every operator, and how tightly it binds
+  [[expressions.arithmetic]]   -- `+ - × ÷ %`, powers, divisibility, checked,
+                                  wrapping and saturating arithmetic
+  [[expressions.bits]]         -- bitwise operators, shifts and rotations,
+                                  counting bits, the whole of a product
+  [[expressions.comparisons]]  -- exact and tolerant comparisons, and the
+                                  logical operators
+  [[expressions.conversions]]  -- `⎕widen`, `⎕narrow`, `⎕float`, `⎕trunc`,
+                                  `⎕bits`, units and rounding
+  [[expressions.calls]]        -- arguments by place and by name, defaults,
+                                  `⁂` spreading, calls through a value
+  [[expressions.lambdas]]      -- functions written where a value is wanted,
+                                  and what they bring in
+
+**`if` and `match` are expressions** wherever a value is wanted of them --
+`let n: u8 = if a < b: 1u8 else: 2u8` -- and so is a loop a `break` hands a
+value out of: [[statements]].  A block's last statement is its value.
+
+**Both sides of an operator have one type**, the answer has it too (or `bool`
+for a comparison), and nothing is widened to make two types meet.  A literal
+without a suffix takes the other side's type.
+
+**Order**: arguments, operands, elements and entries are worked out left to
+right, each once; how an expression groups decides what is worked out from
+what, not what is worked out first.  `f(g(), h())` runs `g` and then `h`.
+
+**`EXPR in NAME`** says which arena what the expression makes takes its room
+from: `a ⧺ b in scratch`, `⍕v in pool` ([[memory.arenas]]).  **`⌜…⌝`**
+lifts a type or a piece of program into the compiler: `⎕narrow(x, ⌜u8⌝)`
+([[compiletime.reflection]]).
+
+Where an operation has no answer it either answers a result -- `÷`, a lookup
+-- or stops the program: [[errors]].

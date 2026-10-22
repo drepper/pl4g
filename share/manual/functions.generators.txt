@@ -1,0 +1,79 @@
+title: Generators and iterators
+
+Part of [[functions]].
+
+**A function answering `⇉ T` is a generator**: calling it describes a walk,
+and its body hands the walk's values out with **`yield v`**.
+
+    fn evens(n: u64) ⇉ u64:
+        foreach i := 0u64…n:
+            if ∣i:
+                yield i
+
+    foreach x := evens(10u64): …       ※ 0, 2, 4, 6, 8
+
+**`yield ⇉ g(…)` hands out everything `g` gives**, in one step however deep
+the recursion.  **`return`** alone, or the end of the body, is having nothing
+more (4672 for a value after it); `yield` stands only in a generator (4673).
+**`?` in a generator** hands the failure out as its last value, so what it
+gives is a result.  **`→ T` after the rest of the signature** is what it
+answers when it ends, and `yield ⇉ g(…)` written where a value is wanted comes
+to that answer.
+
+**`⇉T` is the type of anything a loop walks that gives a `T`**: a generator's
+call, a pick `v⟦mask⟧`, an array, a list, a string, a table.  A parameter of
+it takes any of them; `let r: ⇉ = …` keeps a walk without building anything.
+**A walk is described, not under way**: each loop over it starts afresh, and
+the names it reads are lent to it, so writing one meanwhile is refused (4667).
+It does not leave the call that made it (4670), and no array is built of one
+handed in (4669).
+
+**A type's own walk is the generator written inside it as `each`**, taking the
+value and an arena: `fn T.each(v: T, a: &mut arena) ⇉ E` (4926).  `foreach x
+:= v` over a `T` walks it, handing it the arena in force.  **A generator that
+walks itself** keeps the inner walks' frames in an arena, `yield ⇉
+walk(child, a) in a` (4675).
+
+**How a walk is compiled is the compiler's**: written into the loop where the
+loop can see the generator, costing what the loop written by hand would; or
+through calls, its frame kept with the description.  A walk through calls
+that a second walk of it overtakes stops the program (status 82); one left
+part way runs what the generator put off with `defer`.  The report log says
+which (`iterator`).  Driving a walk by hand, and coroutines that take values
+back, are [[functions.coroutines]].
+
+Program:
+
+    let std := ⎕import("std")
+
+    type Tree = value : u8 ; kids : [Tree]
+
+    fn Tree.each(t: &Tree, a: &mut arena) ⇉ u8:
+        yield t⌖.value
+        foreach &kid := t⌖.kids:
+            yield ⇉ kid in a
+
+    fn below(n: u8) ⇉ u8:
+        foreach i := 0u8…n:
+            yield i
+
+    fn total(s: ⇉u8) → u8:
+        let sum: mut u8 = 0u8
+        foreach x := s:
+            sum ← sum + x
+        sum
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let leaf: Tree = Tree(.value ← 3u8, .kids ← [])
+        let root: Tree = Tree(.value ← 1u8, .kids ← [leaf, Tree(.value ← 5u8, .kids ← [leaf])])
+        let pool: mut arena = ⎕arena
+        let seen: mut [u8] = []
+        foreach x := root in pool:
+            seen ⧺← [x]
+        _ ← std.println⌜&mut init.io.output, "{} {}", seen, total(below(5u8))⌝
+        0u6
+
+Output:
+
+    [1, 3, 5, 3] 10

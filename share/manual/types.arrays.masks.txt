@@ -1,0 +1,53 @@
+title: Picking with a mask
+
+Part of [[types.arrays]].
+
+**An array indexed by an array of truth values is picked from**: the
+elements the mask says `true` for, in their order.  A comparison walked over
+an array is such a mask ([[types.arrays.walking]]).
+
+    v⟦v > 25u8⟧                    ※ the elements above 25
+    m⟦⟦true, false, true⟧⟧         ※ rows 0 and 2 of a table, whole
+    v⟦v > 25u8⟧ ← 1u8              ※ every element picked becomes 1
+
+The mask's shape is the array's leading dimensions (4484), and what is picked
+keeps the rest.  How many are picked is not known while compiling, so the
+answer is an array whose first dimension is not stated, held in room enough
+for all of them -- which needs an array that states its shape (4485).
+**Writing through a mask** writes one value to everything picked; nothing
+branches, element by element.
+
+**Where a loop takes its turns from, a pick is not built**: the loop asks the
+mask at each place and skips what it does not pick, so any array can be
+walked this way, a `u8⟦⟧` parameter included.  Bound to a name with no array
+type, `let q := v⟦v > 25u8⟧`, a pick is an iterator, `⇉u8`, walked afresh by
+each loop over it ([[functions.generators]]).  Where an array is asked for
+it is built.
+
+**`⎕mask(b)` is a run of truth values as the bits of a number**, the first
+the lowest: the narrowest of `u8`, `u16`, `u32` and `u64` with a bit for each,
+at most sixty-four (4262), of one dimension whose length the type states
+(4261).  A comparison handed to it is asked of the whole run at once, so
+finding the few bytes that matter in a block is one comparison and a walk over
+the set bits with `⎕trail` ([[expressions.bits]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let v: mut u8⟦6⟧ = ⟦3u8, 30u8, 7u8, 40u8, 50u8, 1u8⟧
+        let big: u8⟦⟧ = v⟦v > 25u8⟧
+        let count: u64 = ⎕drop(#big)
+        let bits: u8 = ⎕mask(v > 25u8)
+        let sum: mut u8 = 0u8
+        foreach x := v⟦v < 10u8⟧:
+            sum ← sum + x
+        v⟦v > 25u8⟧ ← 0u8
+        _ ← std.println⌜&mut init.io.output, "{} {} {} {}", count, bits, sum, v⟦1⟧⌝
+        0u6
+
+Output:
+
+    3 26 11 0

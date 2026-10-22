@@ -6034,3 +6034,46 @@ took 7.9.  The C++,
 the tip of `json` and now: macro-comptime-fn 30.1 ms and 12.9 (macro expansion 26.2 and 9.0), std-print-macro 45.3 and 27.4,
 `numbers` at `-O1` 650 and 165 (optimization 251 and 77, code generation 379 and 68), `documents` 1 173 and 434.  The whole of
 `python -m pytest tests`, every core: 120 s, now 81.
+
+
+The manual
+----------
+
+The manual is what a program asking for help is shown: a directed graph of short texts, each with a name, every one reached from
+`help` by the names the texts mention, none more than four kilobytes.  Four pieces make and keep it.
+
+**The nodes.**  What the language is and how it is used is written by hand, a file per node in `share/manual/`: `NAME.txt`, a
+first line `title: ...`, a blank line and the body, a link to another node written `[[name]]`.  Names are lower case and dotted, a
+group first and its part after -- `types`, `types.arrays`, `types.arrays.views` -- and a group's node says what its section covers
+and links every part, each of which links back.  What the library offers is not written by hand: every module (`std`, `std.io`,
+`std.fs`, `std.string`, `json`) is a node, and so is every definition it exports with a `※※` comment, named as a program names it,
+`std.string.parse_int`.  A hand-written node named after a module stands in for the module's own introduction.  **A complete
+program in a node** is the block indented four spaces under a line `Program:`, and what it prints the block under a line `Output:`
+after it; any other indented block is a fragment.
+
+**The generator and its checks.**  `bin/pl4g-manual` makes every node each time it runs.  A library node is the definition's
+header as the module writes it -- every line of it: a type's fields with their remarks, a function's `pre` and `post` lines, each
+definition of a glyph, read with one operand and with two -- then what the `※※` comment says, its summary, its `\details`, the parameters as an aligned
+list, and what it answers and fails with, the prose filled again to 78 columns with a code span never broken.  Only `※※` lines
+are documentation: a `※` line among them is a remark about how the thing is made and stays out.  A node ends with the nodes its
+comment quotes by name (`See also`) and the module it is part of; a module's node lists its exports by kind and splits over
+`NAME.more`, `NAME.more2` and on where the list would pass the limit.  What is checked: every link names a node, every node is
+reached from `help`, none is more than 4096 bytes of UTF-8, every `Program:` line has a program under it, and every builtin of
+`pypl4g/front/token.py`, every attribute of `pypl4g/sema/attributes.py` and every keyword is mentioned in some node -- so that one
+added to the language and not to the manual fails the next build rather than surprising the next reader.  `--check` writes
+nothing; `--out DIR` writes the nodes and `manual.pack`, name, nul, text, nul, in the order of the names.
+
+**The library.**  CMake runs the generator whenever a node, a module or what the script reads changes, and `libpl4g-manual.so`
+(`src/manual/manual.cc`) embeds the pack with `#embed`: nothing is read at run time.  It also includes `manual.stamp.hh`, which
+the generator writes beside the pack with the pack's SHA-256 in it: a compiler cache hashes what a source includes and not what it
+embeds, and ccache handed back the object of the old manual until it had something to see change.  `pl4g::manual::lookup(name)` answers a
+node's text; a name that is no node is answered with a sentence saying so and naming up to three nodes whose lower-cased names
+are close to it by `fmemcmp`, at fstrcmp's own threshold (`FSTRCMP_THRESHOLD`), so that `JSON.Decode` finds `json.decode`.
+`exists` and `names` answer the rest.  `pl4g-help [NAME]` prints a node, exiting with one where there is none.  It needs nothing
+of the compiler.
+
+**The tests.**  ctest's `manual-graph` walks the graph through the library as served -- every link a node, every node reached, none
+too large, a near miss answered with the close name and a far one with none.  `tests/compiler/test_manual.py` runs the generator's
+check and then every program the manual shows: each is compiled by pypl4g for x86-64 and run through `bin/pl4g-run`, and has to
+compile without a diagnostic, exit with nought and print what its `Output:` block says.  So an example the language moves away from
+fails the suite, naming its node.

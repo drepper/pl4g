@@ -1,0 +1,58 @@
+title: Text
+
+Part of [[types]].
+
+`str` is text, and its bytes are always well-formed UTF-8.  A value is where
+the bytes are and how many there are; it owns nothing -- the bytes are a
+literal's, in the image, or an arena's ([[memory.arenas]]).
+
+**Four things make one**, which is why every `str` is well formed:
+
+    "literal"              written down
+    a ⧺ b                  a join, made in ⎕heap or in the arena `in` names
+    ⎕str(c)                one character
+    ⎕text(bytes)           bytes checked: str ? u64, the offset where they
+                           stop being UTF-8; the bytes are copied
+
+**There is no index.**  The *n*-th byte is not the *n*-th character, so a
+string is walked: `foreach c: char = s`.  **`#s` is how many characters**,
+which is a walk; `⎕bytes(s)` is the bytes, a `u8⟦⟧`, at no cost, and `#` of
+that is how many bytes.  Text goes to a device as its bytes.
+
+**All six comparisons** compare code point by code point, a prefix first --
+which is comparing the bytes.  It is no collation: `"Z" < "a"`.  Text may be
+a key of a set or a dictionary.
+
+**A join takes room**: `first ⧺ second` is made in `⎕heap`, and
+`first ⧺ second in scratch` in the arena `scratch`.  Taking room is no
+effect, so a pure function may join.  A string and an array do not join
+(4489).
+
+**The text of a value** is `⍕v` or `std.text(v)`, and `std.format⌜…⌝` fills a
+template ([[std.text]], [[std.format]]).  Reading numbers out of text and
+writing them is [[std.string]]'s.
+
+Program:
+
+    let std := ⎕import("std")
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let word: str = "a£€"
+        let raw: u8⟦⟧ = ⎕bytes(word)
+        let back: str = ⎕text(raw⟦0…3⟧) ?? "?"
+        let broken: u64 = match ⎕text(raw⟦0…2⟧):
+            str(_):
+                0u64
+            ⊥(at):
+                at
+        _ ← std.println⌜&mut init.io.output, "{} {} {} {}", ⎕drop(#word), ⎕drop(#raw), back, broken⌝
+        0u6
+
+Output:
+
+    3 6 a£ 1
+
+The first two bytes cut `£` in half, so the text is good up to byte 1.  `#`
+answers a `u64 ¤size`, and `⎕drop` takes the unit off: `⍕` does not write a
+number that carries a unit.

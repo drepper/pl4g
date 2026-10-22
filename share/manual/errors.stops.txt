@@ -1,0 +1,64 @@
+title: Exit statuses
+
+Part of [[errors]].
+
+A process that ends says how with its status, and the ranges have owners:
+
+    0 to 63       the program's own: what the startup function answers, a u6
+    64 to 78      sysexits.h's, left alone
+    79 to 127     the runtime's, one number per kind of stop
+    128 and up    a signal the program really died of, as a shell reports it
+
+The runtime's numbers:
+
+    79   a stop with no more particular number (none so far)
+    80   an answer that does not fit its type: a sum, a difference, a
+         product, a shift or a rotation
+    81   a floating-point answer that is no finite number
+    82   an index or a slice outside what it names; the largest or smallest
+         of nothing; a walk through calls overtaken by another of it
+    83   a number made a character that is no code point (⎕chr)
+    84   a cursor used after its walk ended, or moved off either end
+    85   the system would give no more memory
+    86   the program ran off the bottom of its stack
+    87   the processor is not one the program was built for
+    88   a test the binary runs did not pass, after all of them have run
+    89   a pre-condition did not hold: the caller's fault
+    90   a post-condition did not hold: the callee's fault
+    91   a range whose step was worked out as nought
+    92   a function the host defines, and the host has no such symbol
+
+**86** is reported from a stack of its own, there being no room left on the
+program's; **87** happens before the program has run at all, the startup
+code checking the processor first.  The `--stack-size` and `--guard-size`
+options say how big the stack is ([[running.compiler]]).
+
+A program run through `bin/pl4g-run` has its memory and time limited
+([[running]]): one that runs away stops with its own 85, or by the CPU limit's
+signal.
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn checked(a: u8, b: u8) → u8 ? str:
+        if ⎕widen(a, ⌜u16⌝) + ⎕widen(b, ⌜u16⌝) > 255u16:
+            ⊥ "too large"
+        else:
+            a + b
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        match checked(200u8, 100u8):
+            u8(n):
+                _ ← std.println⌜&mut init.io.output, "{}", n⌝
+            ⊥(why):
+                _ ← std.println⌜&mut init.io.output, "refused: {}", why⌝
+        0u6
+
+Output:
+
+    refused: too large
+
+Without the check, `200u8 + 100u8` would have stopped the program with
+status 80.

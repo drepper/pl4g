@@ -1,0 +1,47 @@
+title: Whole numbers
+
+Part of [[types]].
+
+`uN` is an unsigned number of N bits, for any N from 1 to 32 and 64; `iN` a
+signed one, from 2 to 32 and 64.  So `u3` holds 0 to 7, `i5` -16 to 15, `u1`
+nought and one.  There is no `i1`, and no type whose width depends on the
+machine.  In memory a value takes the narrowest machine width holding it.
+
+**Every value is checked against its type.**  A literal outside the range is
+refused where it is written, and an answer that does not fit stops the
+program (status 80): `200u8 + 100u8` is neither 44 nor 255.  Where the
+compiler can see the answer it refuses the program instead (4214).  Going
+past the end on purpose is written: `⎕wrap(…)` and the saturating `⊞ ⊟ ⊠`
+([[expressions.arithmetic]]).
+
+**Nothing widens or narrows on its own.**  Both sides of an operator have one
+type, so `1u8 + 2u16` is refused; `⎕widen(x, ⌜u16⌝)` and `⎕narrow(x, ⌜u8⌝)`
+cross between widths, the second answering a result
+([[expressions.conversions]]).
+
+**The extremes** of a type are `⌈⌜u8⌝` (255) and `⌊⌜i8⌝` (-128).
+
+A width says what a value is: the exit status of a program is a `u6`, because
+0 to 63 is what a program may exit with ([[errors.stops]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn average(a: u8, b: u8) → u8:
+        ⎕narrow((⎕widen(a, ⌜u16⌝) + ⎕widen(b, ⌜u16⌝)) ÷ 2u16 ?? 0u16, ⌜u8⌝) ?? 0u8
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let small: u3 = 7u3
+        let wide: u8 = ⎕widen(small, ⌜u8⌝)
+        let most: u8 = ⌈⌜u8⌝
+        _ ← std.println⌜&mut init.io.output, "{wide} {most} {}", average(200u8, 250u8)⌝
+        0u6
+
+Output:
+
+    7 255 225
+
+`200u8 + 250u8` would have stopped the program: the sum is worked out in
+`u16`, where it fits.

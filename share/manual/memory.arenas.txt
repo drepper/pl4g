@@ -1,0 +1,65 @@
+title: Arenas and the heap
+
+Part of [[memory]].
+
+**An arena is a pool**: room is taken from it by adding to a pointer, nothing
+is given back one object at a time, and all of it is given back at once.  It is
+a variable of type `arena`, always started `⎕arena` (4444), inside a function
+or at the top level:
+
+    let scratch: mut arena = ⎕arena
+
+**It is given back when the block it was defined in is left** -- off its end,
+by `return`, `break`, `continue` or `?` -- after what the block put off and
+after what the block comes to is worked out.  Nothing else gives one back, and
+nothing writes `⎕empty` (4932): an arena wanted afresh each turn is defined
+inside the loop.
+
+**`EXPR in NAME` says which arena an expression takes its room from**:
+
+    let both: str = first ⧺ second in scratch
+    let said: str = ⍕v in scratch
+    let made: str = std.text(v, .base ← 16u8) in scratch
+    let d: ⸨str: u8⸩ = ⸨"a": 1u8⸩ in scratch
+
+What may carry `in` is what takes room -- a join, a collection written out, an
+operator or call that takes an arena, a walk's frame -- and anything else is
+refused (4568).  **A call that leaves out an arena parameter is handed the
+arena in force** -- the one its `in` names, or `⎕heap` -- so `std.text(v)`
+inside `… in scratch` is made in `scratch`.
+
+**`⎕heap`** is the allocator everything comes from that names no other, and
+gives back one object at a time: what is made there lasts as long as the
+program, unless what holds it gives it back -- a list or a container in the
+heap replacing an element, say.  A function answering text it made answers it
+in the heap unless its signature names an arena ([[memory.answers]]).
+
+**A value made in an arena does not outlive it**: a name bound further out may
+not be given one (4614), and what a function answers out of an arena of its
+own is copied into the caller's allocator first.  The compiler follows every
+way through a body to say so; the report log shows which allocator each value
+got (`allocator`) and every copy (`copy-into-allocator`).
+
+**`std.print` and `std.println` make a pool of their own** at each invocation,
+so a printed line takes room only while it is written.
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn label(a: &mut arena, n: u16) → str in a:
+        "#" ⧺ ⍕n in a
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let kept: mut str = ""
+        foreach i := 1u16…4u16:
+            let scratch: mut arena = ⎕arena
+            let tmp: str = label(&mut scratch, i) ⧺ "!" in scratch
+            kept ← kept ⧺ tmp              ※ copied into ⎕heap: tmp goes with scratch
+        _ ← std.println⌜&mut init.io.output, "{}", kept⌝
+        0u6
+
+Output:
+
+    #1!#2!#3!

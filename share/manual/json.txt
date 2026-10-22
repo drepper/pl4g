@@ -1,0 +1,64 @@
+title: json
+
+Part of [[library]].  JSON documents read out of bytes into a `Value` and
+written back, imported on its own: `let json := ⎕import("json")`.
+
+**`json.decode(bytes, &mut pool)`** reads RFC 8259's JSON -- and what
+`Extensions` adds, `json5` among them -- into a `Value` made in the arena
+handed over, or answers a `json.Error`: the `Problem`, the offset of the
+byte, its line and column.  A whole number stays an `integer` (`i64`) or a
+`large` (`u64`) where it fits, everything else a `number` (`f64`); an object
+is its `Member`s in the order written, keys written twice kept unless
+`duplicates` says otherwise; `depth` bounds the nesting, 1024 by default.
+
+**`json.encode(v, &mut pool)`** writes what Python's `json.dumps` writes of
+the same value, compact or with `.pretty ← true` indented, and answers no
+bytes for an infinity or a not-a-number unless `.special ← true`.
+`json.equal` compares two values and `json.finite` asks whether a value can
+be written.  Everything is made in the arena handed over, and goes with it.
+
+Program:
+
+    let std := ⎕import("std")
+    let json := ⎕import("json")
+
+    fn whole(v: &json.Value) → i64:
+        match v⌖:
+            i64(n):
+                n
+            _:
+                0i64
+
+    fn total(v: json.Value) → i64:
+        let sum: mut i64 = 0i64
+        match v:
+            [json.Value](items):
+                foreach &item: json.Value = items:
+                    sum ← sum + whole(item)
+            _:
+                return 0i64
+        sum
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let pool: mut arena = ⎕arena
+        match json.decode(⎕bytes("[1, 2, {\"a\": null}, 39]"), &mut pool):
+            json.Value(doc):
+                let pretty: [u8] = json.encode(doc, &mut pool, .pretty ← true) ?? []
+                _ ← std.Io.println(&mut init.io.output, pretty)
+                _ ← std.println⌜&mut init.io.output, "{}", total(doc)⌝
+            ⊥(e):
+                _ ← std.println⌜&mut init.io.error, "at {}:{}", e.line, e.column⌝
+        0u6
+
+Output:
+
+    [
+      1,
+      2,
+      {
+        "a": null
+      },
+      39
+    ]
+    42

@@ -1,0 +1,43 @@
+title: std.string
+
+Part of [[library]], handed on by [[std]].  Numbers read out of bytes and
+written onto lists of bytes, and characters as UTF-8.  It works on bytes --
+what came off a device -- so a `str` is read as `⎕bytes(s)` and what is written
+becomes text with `⎕text`.  Nothing here allocates but the lists it writes
+onto, and nothing is impure.
+
+**Reading answers where the bytes after the number begin**: a
+`Parsed(T)` holds the `value` and its `end`, so a reader goes on from there.
+Why nothing was read is a `ParseError`: `absent`, `malformed`,
+`out_of_range`.  The grammar is JSON's unless `Allow` says more.
+`parse_int(bytes, ⌜u16⌝, .base ← 16u8)` reads any whole-number type in any
+base to 36; `parse_f64` the nearest `f64`, correctly rounded however many
+digits there are.
+
+**Writing hands the list in and back**: `out ← std.string.format_int(n,
+out)` moves the room into the call and out again, copying nothing.
+`format_f64` writes the shortest text that reads back as the same number, as
+JavaScript writes it or with `Form.python` as Python does; `numeral_int` and
+`numeral_f64` answer the text as a value instead, for a writer whose list is
+an arena's.
+
+Program:
+
+    let std := ⎕import("std")
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let input: u8⟦⟧ = ⎕bytes("42,0x1F,2.5")
+        let first: std.string.Parsed(u16) = std.string.parse_int(input, ⌜u16⌝) ?? std.string.Parsed(.value ← 0u16, .end ← 0)
+        let rest: u8⟦⟧ = input⟦first.end + 1…#input⟧
+        let hex: u32 = (std.string.parse_int(rest, ⌜u32⌝, .allow ← std.string.Allow.hex) ?? std.string.Parsed(.value ← 0u32, .end ← 0)).value
+        let out: mut [u8] = []
+        out ← std.string.format_int(hex, out, .base ← 2u8, .digits ← 8u8)
+        out ⧺← ⎕bytes(" ")
+        out ← std.string.format_f64(1f64 ÷ 8f64 ?? 0f64, out)
+        _ ← std.println⌜&mut init.io.output, "{} {}", first.value, ⎕text(out) ?? "?"⌝
+        0u6
+
+Output:
+
+    42 00011111 0.125

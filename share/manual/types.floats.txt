@@ -1,0 +1,51 @@
+title: Floating-point numbers
+
+Part of [[types]].
+
+`f32` and `f64` are IEEE 754 binary numbers, computed by the machine's own
+instructions.  Four operators are defined on them: `+`, `-`, `×` and `÷`.
+The bitwise operators, the shifts, `%` and the saturating ones are not.
+
+- **An answer that is no finite number stops the program** (status 81): an
+  overflow to an infinity, or a not-a-number.  So a program never computes
+  with an infinity, and where both operands are written down the compiler
+  refuses the program instead (4214).
+- **`÷` answers a result**, `f64?`, which has no answer for a divisor of
+  nought: `(a ÷ b) ?? 0f64` ([[types.results]]).
+- **`=` and `≠` are warned about** (4217), two numbers arrived at two ways
+  rarely being one; `@[ignore(4217)]` says it is meant.  The tolerant
+  comparisons `≅ ≇ ⪅ ⪆ ⪉ ⪊` ask with `⎕tolerance`, a `mut f64` that is 10⁻¹³
+  until the program sets it ([[expressions.comparisons]]).
+- **Rounding** is `↓x` (down), `↑x` (up), `↕x` (to the nearer, a tie to the
+  even) and `⇕x` (as the processor is rounding, which makes a function
+  `@[impure]`); each answers the same type.
+- **Crossing to whole numbers** is written: `⎕float(n, ⌜f64⌝)`,
+  `⎕trunc(x, ⌜i64⌝)` answering a result, and `⎕bits(x)` and
+  `⎕from_bits(u, ⌜f64⌝)` for the bits ([[expressions.conversions]]).
+  `⎕from_bits` is the one way to hold an infinity or a not-a-number.
+- `⌈⌜f64⌝` is the largest, `⌊⌜f64⌝` the most negative.  Nothing converts an
+  `f32` to an `f64` yet: `⎕widen` takes whole numbers only (4590).
+
+`⍕` does not write a floating-point number yet.  `std.string.format_f64`
+writes the shortest text that reads back as the same number:
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn shown(x: f64) → str:
+        ⎕text(std.string.format_f64(x, [])) ?? "?"
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let third: f64 = (1f64 ÷ 3f64) ?? 0f64
+        let near: bool = third × 3f64 ≅ 1f64
+        let whole: i64 = ⎕trunc(↓(2.5f64 × 3f64), ⌜i64⌝) ?? 0i64
+        _ ← std.println⌜&mut init.io.output, "{} {} {}", shown(third), near, whole⌝
+        0u6
+
+Output:
+
+    0.3333333333333333 true 7
+
+See also [[std.string.format_f64]] and [[std.string.parse_f64]].

@@ -1,0 +1,58 @@
+title: if
+
+Part of [[statements]].
+
+    if a < b:
+        kept ← 1u8
+    elif a = b:
+        kept ← 2u8
+    else:
+        kept ← 3u8
+
+**The condition stands on its own**, without parentheses, and is a `bool`
+(4427): a number is no condition, so `n ≠ 0u8` is written.  Any number of
+`elif` follow, each asked only where those before did not hold, and an `else`
+is the last arm (3024).  Each arm is a block, indented, braced, or on the same
+line:
+
+    if b: n ← 5u8
+    if b { 0u6 } else { 1u6 }
+    if n = 1u8: 10u8
+    elif n = 2u8: 20u8
+    else: 30u8
+
+A one-line arm may not open another one-line block (3044); braces say where
+the inner one ends: `if a: if b { 1u6 } else { 2u6 }`.
+
+**`if` is an expression wherever a value is wanted of it**: then every arm
+answers a value of one type and there is an `else` (4428).  An arm ending in
+`return` owes nothing.
+
+    let first: u8 = if a < b: 4u8 elif a = b: 5u8 else: 6u8
+
+A name assigned in one arm holds, after the `if`, what the arm that ran gave
+it.
+
+**`comptime if`** asks a question the compiler answers -- what a type is --
+and the arms it does not choose are not compiled at all
+([[compiletime.reflection]]).  For taking a value's alternatives apart there
+is [[statements.match]]; there is no `?:` and no need of one.
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn sign(n: i16) → str:
+        if n < 0i16: "negative" elif n = 0i16: "nought" else: "positive"
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let a: str = sign(⁻4i16)
+        let b: str = sign(0i16)
+        let c: str = sign(9i16)
+        _ ← std.println⌜&mut init.io.output, "{} {} {}", a, b, c⌝
+        0u6
+
+Output:
+
+    negative nought positive

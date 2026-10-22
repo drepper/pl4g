@@ -1,0 +1,60 @@
+title: Conversions
+
+Part of [[expressions]].  Nothing converts on its own, so every crossing from
+one type to another is written, and one that may fail answers a result.  The
+type made is lifted, `⌜u8⌝`, being no value (4547).
+
+    ⎕widen(x, ⌜T⌝)          T: every value of x's type fits T
+    ⎕narrow(x, ⌜T⌝)         T ? ⎕narrowing: x where it fits, why not otherwise
+    ⎕float(n, ⌜f64⌝)        the nearest f32 or f64, a tie to the even one
+    ⎕trunc(x, ⌜i64⌝)        T ? ⎕narrowing: the whole number toward nought
+    ⎕bits(x)                the bits of an f64 as a u64, of an f32 as a u32
+    ⎕from_bits(u, ⌜f64⌝)    and back
+    ⎕ord(c)   ⎕chr(n)       a character's number, and a number's character
+    ⎕drop(x)  ⎕unit(x, ⌜U⌝) take a unit off, put one on   [[types.units]]
+    ⎕bytes(s) ⎕text(b)      text as bytes, bytes as text  [[types.str]]
+
+**`⎕widen`** goes where every value fits: a narrower type of the same
+signedness, or an unsigned one into a wider signed one.  Anything else is a
+narrowing (4591).  **`⎕narrow`** asks whether a value fits, and its failure
+is a value of the compiler's enumeration **`⎕narrowing`**: `overflow` above
+the top, `underflow` below the bottom, `sign` a negative number into an
+unsigned type, `absent` a number that is no value of the type.  Both take
+whole numbers (4548), a unit travelling with the number; `⎕narrow` also reads
+a number as a value of an enumeration and as a `char`.
+
+**`⎕trunc`** drops what is after the point and answers a result with the same
+reasons, `absent` for a not-a-number.  The other roundings are operators on
+the floating-point number first: `⎕trunc(↓x, ⌜i64⌝)` is the floor, with `↑`
+the ceiling and `↕` the nearest.  **`⎕bits` and `⎕from_bits`** move the bits
+and convert nothing; `⎕from_bits` is how an infinity is made.
+
+**`⎕chr`** stops the program (status 83) for a number that is no code point;
+`⎕narrow(n, ⌜char⌝)` answers a result instead.
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn why(r: u8 ? ⎕narrowing) → str:
+        match r:
+            u8(n):
+                ⍕n
+            ⊥(w):
+                if w = ⎕narrowing.overflow: "overflow" elif w = ⎕narrowing.sign: "sign" else: "other"
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let small: str = why(⎕narrow(200i32, ⌜u8⌝))
+        let big: str = why(⎕narrow(300i32, ⌜u8⌝))
+        let below: str = why(⎕narrow(⁻1i32, ⌜u8⌝))
+        let wide: u64 = ⎕widen(255u8, ⌜u64⌝) + 1u64
+        let x: f64 = ⎕float(7u32, ⌜f64⌝) ÷ 2f64 ?? 0f64
+        let down: i64 = ⎕trunc(↓x, ⌜i64⌝) ?? 0i64
+        let up: i64 = ⎕trunc(↑x, ⌜i64⌝) ?? 0i64
+        _ ← std.println⌜&mut init.io.output, "{} {} {} {} {} {}", small, big, below, wide, down, up⌝
+        0u6
+
+Output:
+
+    200 overflow sign 256 3 4

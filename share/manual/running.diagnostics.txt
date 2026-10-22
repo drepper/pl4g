@@ -1,0 +1,45 @@
+title: Diagnostics, quieting them, and the report log
+
+Part of [[running]].
+
+**Every diagnostic has a number**, `[PL4G-4006]`, the same in every
+implementation, with its message, its cause and the rule it comes from in
+`share/diagnostics.json`.  The numbers group by kind: 1000s the command line
+and files, 2000s characters and layout, 3000s syntax, 4000s and 5000s meaning,
+7000s what is worked out while compiling.  `--diag-format=json` writes them
+for a program to read.
+
+**Errors stop the compilation; warnings do not.**  `-W NAME` turns a warning
+on and `-Wno-NAME` off, by the name of the option it has -- `unneeded-mut`,
+for one -- and `--Werror` makes every warning an error.  Some warnings are off
+until asked for, such as the one for an ASCII substitute.
+
+**`@[ignore(N)]` keeps diagnostic N from being reported** for the definition or
+the statement it stands on, whether or not it arises; **`@[expect(N)]`** does
+the same and asserts that it arises, and is an error where it does not.  On a
+statement in the layout notation the attribute stands on its own line,
+indented with the statement:
+
+    @[expect(4006)]
+    let a: mut u8 = 5u8
+    a ← 4u8
+
+Several may be given in one list, `@[ignore(5002), expect(4006)]`.  **Quieting
+an error discards the construct**, a definition being left out of the program
+whole -- except for an error about how the code is written, such as an unused
+value (5005), which leaves it standing.  The catalog says which kind each is.
+
+**A system module** -- a file with `@[system]` alone at its top -- is not warned
+about for what is wrong only in it, nor logged; `--ignore-system` treats it as
+any other.  `std` and its modules are system modules ([[modules]]).
+
+**The report log**, `--report-log=FILE`, is JSON, with a schema: every decision
+the compiler made that the program did not spell out, at the place it is
+about -- calls not made (`drop-call`), allocators (`allocator`), copies
+(`copy-into-allocator`), moves and ends of lifetimes (`move`,
+`lifetime-ended`, `scope-ended`), borrows (`borrow-ended`), lifetimes worked
+out (`lifetime`), types inferred (`type-inferred`), iterators (`iterator`),
+instances of generic functions (`instantiate`), tail calls (`tail-call`,
+`self-call`), conditions (`condition-dropped`, `condition-holds`).
+**`bin/pl4g-reports LOG`** shows the sources with each entry just above the
+line it is about.

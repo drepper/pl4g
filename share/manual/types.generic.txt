@@ -1,0 +1,68 @@
+title: Generic functions and types
+
+Part of [[types]].
+
+**A name with `'` after it is a type a call settles**: `T'`.  There is no
+list of them to write -- a function's type parameters are the marked names its
+parameters mention, each of which has to stand in some parameter's type
+(4555).  The types are read off the arguments, left to right, so a literal
+takes the type an earlier argument settled: `largest(9u8, 4)`.  A parameter's
+shape says how to read an argument: `T'⟦⟧`, `&T'`, `[T']`, `⸨K': V'⸩`,
+`〈T', U'〉`, `fn(T') → T'`.
+
+**A body may do to a `T'` only what its requirements say** (4645): bind it,
+hand it on, answer it, take apart the shape its parameter has, and otherwise
+what a `pre` clause over types names, with the types written there.  It is
+checked where it is written, whether or not anything calls it.
+
+    fn largest(a: T', b: T') → T' pre(T' ⌈ T' → T'):
+        a ⌈ b
+
+A call whose types do not meet a requirement is refused at the requirement,
+with a note naming the call ([[functions.requirements]]).  `comptime if` over
+the types is the one place a body asks what they are, its arms checked for the
+types a call gives ([[compiletime.reflection]]) -- which is how one `std.text`
+writes every type, the language having no overloading.
+
+**A type may be handed as an argument**, `kind: ⌜T'⌝`, given `⌜u8⌝` at the
+call: `std.string.parse_int(bytes, ⌜u16⌝)`.  Nothing is passed at run time.
+
+**One function is made per set of types**; a generic function is no value
+(4569), and none is a startup function, constructor or test (4558).
+
+**A type may take type parameters**, listed after its name:
+
+    type Pair(T') = first : T' ; second : T'
+    type Maybe(T') = some : T' | none : void
+    type Sorted(T') pre(T' < T' → bool) = low : T' ; high : T'
+
+It is a type once given its types, `Pair(u8)` (4653); a value written out takes
+them from where it stands or from its fields.  A generic function reads them
+out of one, `fn swap(p: Pair(T')) → Pair(T')`.  In a `match`,
+`Maybe(u8)(inner)` binds a part of such a type, and `(_)` binds nothing.
+
+Program:
+
+    let std := ⎕import("std")
+
+    type Pair(T') = first : T' ; second : T'
+
+    fn swapped(p: Pair(T')) → Pair(T'):
+        Pair(.first ← p.second, .second ← p.first)
+
+    fn largest(xs: T'⟦⟧, start: T') → T' pre(T' ⌈ T' → T'):
+        let best: mut T' = start
+        foreach x := xs:
+            best ← best ⌈ x
+        best
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let p: Pair(u16) = swapped(Pair(.first ← 1u16, .second ← 2))
+        let v: i32⟦3⟧ = ⟦⁻5i32, 12i32, 7i32⟧ in ⎕static
+        _ ← std.println⌜&mut init.io.output, "{} {}", p, largest(v, ⌊⌜i32⌝)⌝
+        0u6
+
+Output:
+
+    Pair(u16)(.first ← 2, .second ← 1) 12

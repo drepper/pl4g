@@ -1,0 +1,69 @@
+title: Where an answer was made
+
+Part of [[memory]].
+
+**`→ T in a` says what a function answers was made in the arena parameter
+`a`**, or in something lasting longer -- `⎕heap`, the image.  A caller takes
+the answer to live as long as what it handed for `a`; the body is held to it,
+an answer made anywhere else being copied there before the function leaves
+(4624 where it cannot be copied).  **Saying nothing means `⎕heap`.**
+
+    fn label(a: &mut arena, b: &mut arena, v: u16) → str in a:
+        let scratch: str = ⍕v in b          ※ working space
+        "#" ⧺ scratch in a                  ※ the answer
+
+    fn head(xs: u8⟦⟧) → u8⟦⟧ in xs:         ※ some of what xs holds
+        xs⟦0…2⟧
+
+- `→ T in a, b` -- the answer is from either, and lives as long as the shorter.
+- `→ T in ⎕heap` -- always the heap: the answer travels without its allocator.
+- `→ T in ⎕static` -- always the image; nothing else may be answered (4635).
+- `→ T in a, ⎕static` -- the arena or the image, text written down being
+  answered as it is.  `std.text` says this.
+- **`s: T in a`** on a parameter -- what is handed was made in what `a` is
+  handed (4620); **`s: T in ⎕static`** -- in the image (4649).
+
+What follows `in` is a parameter holding an arena, `&mut arena` or `&arena`
+(4618), or `⎕heap` or `⎕static`; on a type that points nowhere it says nothing
+(4621).  It is a lifetime spelled as the arena -- what `⧖a` says of a
+reference ([[memory.lifetimes]]).
+
+**A function may hand an arena of its own out with its answer**: `→ T in
+pool`, where `pool` is no parameter, says the body makes `let pool: mut arena
+= ⎕arena` (4627) and answers something made in it.  Only a definition receives
+it, naming the arena (4629):
+
+    fn words(text: str) → [str] in pool:
+        let pool: mut arena = ⎕arena
+        …
+
+    let found: [str] in kept = words(line)      ※ kept is now the caller's
+
+Nothing is copied: the arena starts where the caller will hold it.  `f(…) in
+kept` is refused (4630), as is a definition with `in` whose value is no such
+call (4631).
+
+**Writing into a place from outside the call** -- a field a reference
+parameter names, an element of an array handed in -- is held to what an
+answer is: made in `⎕heap` or the image, or copied into `⎕heap`.
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn shout(text: str) → str in pool:
+        let pool: mut arena = ⎕arena
+        let out: mut str = "" ⧺ text in pool
+        foreach _ := 0u8…3u8:
+            out ← out ⧺ "!" in pool
+        out
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let loud: str in kept = shout("hey")
+        _ ← std.println⌜&mut init.io.output, "{}", loud⌝
+        0u6
+
+Output:
+
+    hey!!!

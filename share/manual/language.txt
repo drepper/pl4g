@@ -1,0 +1,44 @@
+title: The language
+
+What a PL4G program is made of, from the characters up.  Each group below is
+a node of its own that says what it covers and links its parts.
+
+  [[syntax]]        -- how a program is laid out: indented blocks or braces,
+                       statements, lines that continue, one-line blocks
+  [[lexical]]       -- comments, names, keywords, literals and their
+                       suffixes, and the glyphs with their ASCII substitutes
+  [[types]]         -- whole numbers and units, floating-point numbers,
+                       truth values, characters and text, arrays, lists,
+                       sets and dictionaries, records, sums, tuples,
+                       results, references, enumerations, generic types and
+                       function types
+  [[expressions]]   -- the operators and how tightly they bind, checked,
+                       wrapping and saturating arithmetic, comparisons,
+                       conversions, calls, lambdas
+  [[statements]]    -- definitions and assignment, `if` and `match`, the
+                       loops, labels, `defer` and `return`
+  [[functions]]     -- defining functions, parameters and arguments,
+                       purity and effects, conditions and requirements,
+                       generators and coroutines, operators, the special
+                       functions
+  [[memory]]        -- arenas, `⎕heap` and `⎕static`, references and how
+                       long they live, values that are unique or closed
+  [[modules]]       -- importing, exporting, and what a module hands on
+  [[errors]]        -- results, stops and the exit statuses
+  [[compiletime]]   -- constants, reflection, `comptime` and macros
+  [[running]]       -- the compiler, the interpreter, tests and builds
+
+A few rules run through all of it:
+
+- **One type per value, and nothing changes it silently.**  Both sides of an
+  operator have one type; a literal without a suffix takes the type wanted
+  where it stands.  Conversions are written: [[expressions.conversions]].
+- **An operation that may have no answer says so in its type** -- `÷`
+  answers a result -- and one that should always have an answer but does not
+  stops the program: [[errors]].
+- **Pure by default.**  A function that changes something outside itself
+  says `@[impure]`; doing I/O needs a device handed to it: [[functions.purity]].
+- **The last statement of a body is its value**, and every other value must be
+  used: [[statements]].
+- **The order things are written in is the order they happen.**  Arguments,
+  elements and operands are worked out left to right, each once.

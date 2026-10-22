@@ -1,0 +1,47 @@
+title: The names the compiler provides
+
+Part of [[help]].  A name beginning with `⎕` belongs to the compiler: a
+program uses it and may not define one (4219).  Most look like calls and are
+shapes the syntax knows; a type handed to one is lifted, `⌜u8⌝`.  More are in
+[[builtins.more]].
+
+Values the program has:
+
+    ⎕heap          the arena everything comes from that names no other   [[memory.arenas]]
+    ⎕static        the image, as an allocator                            [[memory.static]]
+    ⎕arena         what a new arena starts as: `let a: mut arena = ⎕arena`
+    ⎕environ       the environment, a read-only ⸨str: str⸩                [[types.tables]]
+    ⎕tolerance     a mut f64, what ≅ and its kin measure against, 10⁻¹³   [[expressions.comparisons]]
+    ⎕narrowing     the enumeration ⎕narrow fails with: overflow, underflow,
+                   sign, absent                                          [[expressions.conversions]]
+
+Modules and conditions:
+
+    ⎕import("m")   bring a module in, at the top level                   [[modules]]
+    ⎕answer        in a post-condition, what the function answered       [[functions.conditions]]
+    ⎕entry(p)      in a post-condition, what a parameter held on entry
+
+Numbers:
+
+    ⎕widen(x, ⌜T⌝)      to a type every value fits                       [[expressions.conversions]]
+    ⎕narrow(x, ⌜T⌝)     to a narrower type, an enumeration or a char: T ? ⎕narrowing
+    ⎕float(n, ⌜F⌝)      a whole number as f32 or f64
+    ⎕trunc(x, ⌜T⌝)      a floating-point number toward nought: T ? ⎕narrowing
+    ⎕bits(x)            an f64's bits as a u64, an f32's as a u32
+    ⎕from_bits(u, ⌜F⌝)  and back
+    ⎕unit(x, ⌜U⌝)       put a unit on a number                           [[types.units]]
+    ⎕drop(x)            take its unit off
+    ⎕wrap(e)            every operator inside keeps the low bits         [[expressions.arithmetic]]
+    ⎕ones(n)            how many bits are set                            [[expressions.bits]]
+    ⎕lead(n)            how many zeroes above the highest set bit
+    ⎕trail(n)           how many zeroes below the lowest
+    ⎕wide_mul(a, b)     the 128-bit product of two 64-bit numbers, 〈upper, lower〉
+    ⎕mask(b)            truth values as the bits of a number             [[types.arrays.masks]]
+
+Characters and text:
+
+    ⎕ord(c)        a char's number, a u32                                [[types.char]]
+    ⎕chr(n)        a number's char; stops the program for no code point
+    ⎕str(c)        the text of one character                             [[types.str]]
+    ⎕bytes(s)      text as its bytes, a u8⟦⟧, at no cost
+    ⎕text(b)       bytes as text, checked and copied: str ? u64

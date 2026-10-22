@@ -1,0 +1,58 @@
+title: The compiler's command line
+
+Part of [[running]].
+
+    pypl4g [COMMAND] [OPTION]... SOURCE.pl4g...
+
+**Commands**: `build`, the default, compiles the sources -- or, with none
+named, runs the build function in `build.pl4g` ([[running.builds]]); `test`
+runs the sources' tests ([[running.testing]]); `lsp` is the language server.
+
+**What is written**
+
+    -o FILE                 the output; the first source renamed otherwise
+    --emit=KIND             stop after a stage: elf (the default), asm, ir,
+                            expanded, ast or tokens
+    -shared                 a shared object rather than an executable
+    -fpie / -fno-pie        position-independent, or at a fixed address
+                            (the default)
+    --target=TRIPLE         x86_64-linux-none, aarch64-linux-none or
+                            riscv64-linux-none; --print-targets lists them
+    --mclevel=LEVEL         the microarchitecture level the program may use;
+                            x86-64 has v1 to v4 and uses v4 by default
+
+**How**
+
+    -O LEVEL                optimization, 0 to 3
+    --conditions=WHAT       check, ignore or observe pre- and post-conditions
+                            ([[functions.conditions]])
+    --stack-size=SIZE       the program's own stack, 1M unless said; 0 leaves
+                            it on the kernel's.  K, M, G may follow
+    --guard-size=SIZE       the unreachable room below it, 64K unless said
+    --module-path=DIRS      where else modules are looked for ([[modules]])
+    -D NAME[=VALUE]         tell the build function something
+    -j N                    threads to parse function bodies with
+    --test-runner=COMMAND   run a test binary for another target through this
+
+**Diagnostics**
+
+    -W NAME, -Wno-NAME      a warning on or off; --Werror makes them errors
+    --color[=WHEN]          yes, no or auto
+    --diag-format=FORMAT    text, or json for a program to read
+    --ignore-system         warn about system modules as about any other
+    --report-log=FILE       the log of what the compiler chose, in JSON
+    -v, --time-report, --verify, --help, --help-json, --version
+
+**The report log** records every decision the compiler made that a program
+did not spell out: calls dropped, allocators chosen, copies made, borrows
+ended, lifetimes worked out, types inferred, functions instantiated, tail
+calls made, conditions dropped.  `bin/pl4g-reports` turns one into a report
+with the source around each entry ([[running.diagnostics]]).
+
+**Every image carries a bill of materials**, sections `.sbom` and `.sbomstr`:
+the SHA-256 of the compiler, of every source, and of every function, type,
+variable and unit, a definition hashed by its tokens so that reformatting it
+changes nothing.
+
+The table of options is `share/options.json`, which every implementation
+reads; `--help-json` writes it.

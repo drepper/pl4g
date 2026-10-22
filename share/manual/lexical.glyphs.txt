@@ -1,0 +1,36 @@
+title: The glyphs
+
+Part of [[lexical]].  A glyph is canonical: it is what the compiler and the
+documentation write.  The operators are in [[expressions.operators]]; what
+else is written with a glyph is here, with where it is explained.
+
+    ←  assign            [[statements.assignment]]   →  answers, in a signature
+    ⁻  negative literal  [[lexical.literals]]        ※  comment
+    ⌖  read through a reference [[types.references]] ¨  each element [[types.arrays.walking]]
+    ⟦⟧ array, index      [[types.arrays]]            [] list        [[types.lists]]
+    ⸨⸩ set, dictionary   [[types.tables]]            〈〉 tuple      [[types.tuples]]
+    …  range             [[statements.foreach]]      ⁂  spread      [[expressions.calls]]
+    ?  result type, `x?` hands a failure on          ?? or else     [[types.results]]
+    ⊥  failure, its `match` arm                      λ  lambda      [[expressions.lambdas]]
+    ⌜⌝ lift a type or a piece of program  [[compiletime.reflection]]
+    ⇉  iterator, generator   ⇇ what a coroutine takes back  [[functions.generators]]
+    ⇧ ⇩ next and previous of a cursor, † take out   [[types.lists]]
+    §  label             [[statements.jumps]]        ¤  unit        [[types.units]]
+    ⧖  lifetime          [[memory.lifetimes]]        ⎕  the compiler's names [[builtins]]
+    ⍕  text of a value   [[std.text]]                ⧺  join, ⧺← join onto
+
+**ASCII substitutes.**  A substitute is never a single character, which would
+be one no future feature could have, and never one that could be read as
+something else.  There are four:
+
+    ->  for →        <=  for ≤        >=  for ≥        ++  for ⧺
+
+Everything else has none: `<-` could be `< -`, `!=` and its rivals were not
+blessed, and `[[`, `...` and `**` would each be read as something else.  A
+substitute is accepted usage; a warning, off by default, reports one for
+whoever wants their sources canonical.
+
+**Typing them** is not the language's business: a program written by a program
+has them for free, and a person uses an input method.  The editor support in
+`editors/` (Neovim and Zed) colours them from the tree-sitter grammar, and
+`pypl4g lsp` reports diagnostics as you type ([[running.compiler]]).

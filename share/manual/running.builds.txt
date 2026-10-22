@@ -1,0 +1,42 @@
+title: Builds
+
+Part of [[running]].
+
+**A program may say how it is built, in its own language.**  A function marked
+`@[build]` is run by the compiler and not compiled into anything; what it
+leaves in the `std.Build` it is handed is what gets built.
+
+    let std := ⎕import("std")
+
+    @[build]
+    fn build(b: &mut std.Build):
+        b⌖.output_dir ← std.option(b, "out", "bin")
+        if std.option_flag(b, "small", false):
+            b⌖.stack_size ← 65536u64
+        foreach name := ⟦"hello", "tool"⟧:
+            std.add_executable(b, name, ⟦name ⧺ ".pl4g"⟧)
+
+**`pypl4g` with no source looks for `build.pl4g`** where it was run (1018
+where there is none); a source named on the command line that holds a build
+function is a build file whatever it is called.  A command line naming sources
+with no build function compiles them, as it always did.  The sources a build
+names are found beside the build file.
+
+**What it may say** is what a command line would have: the fields of
+`std.Build` -- `output_dir`, `target`, `opt_level`, `mclevel`, `stack_size`,
+`guard_size` -- each left alone keeping what the command line said; and
+`env`, the compiler's environment, read-only, which `⎕environ` is too.
+**`std.add_executable(b, name, sources)`** adds a program; **`std.option(b,
+name, fallback)`** and **`std.option_flag(b, name, fallback)`** read what
+`-Dname=value` and `-Dname` on the command line said ([[std.Build]]).
+
+**Everything in it is worked out by the compiler before anything runs**:
+numbers, truth values, text, arrays, records, references, the ordinary control
+flow and calls of the program's own functions.  It cannot open a file or start
+a process; one that does not finish within a hundred thousand steps is given
+up on (7001), and what cannot be worked out is named (7000).  There is at
+most one build function (7002), written `fn NAME(b: &mut std.Build)` (7004),
+and the functions `std` marks `@[builtin]` exist only while it runs (7006).
+
+**`@[test(build)]` tests** run when a build finishes ([[running.testing]]).
+A build file needs no startup function, being no program.

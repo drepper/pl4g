@@ -1,0 +1,63 @@
+title: The special functions
+
+Part of [[functions]].  An attribute says a function has a part in the life of
+the program; the attributes exclude one another.
+
+**`@[startup]` marks where the program begins**, exactly one per program
+(4401 where there is none).  It is written one way:
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        …
+
+Its one parameter is the record `std.Init`, by value and not `mut` (4404):
+`init.io.input`, `init.io.output` and `init.io.error` are the devices the
+process inherited, lent as `&mut init.io.output`; `init.fs` is what it does
+its I/O with; `init.args` the words it was named with, the first its own
+name.  The environment is `⎕environ`.  **What it answers is the exit status**,
+a `u6`: 0 to 63, the range below the ones `sysexits.h` and the runtime have
+([[errors.stops]]).  So every program imports `std` ([[std]]).
+
+**`@[constructor]` and `@[destructor]`** functions take nothing and answer
+nothing; constructors run before the startup function and destructors after it
+returns, `@[constructor(priority)]` ordering them.  The tables written at the
+top level are made before them, and `⎕environ` is read before them.  What is
+still being written when the program ends is waited for after them.
+
+**`@[test]`** marks a test: a function taking nothing and answering whether it
+passed, a `bool` (4407).  `@[test(always)]` runs every time the program starts,
+before the startup function; `@[test(build)]` when a build finishes;
+`@[test]` or `@[test(suite)]` when `pypl4g test` asks.  Every failure is
+named and the run exits with status 88 ([[running.testing]]).
+
+**`@[build]`** marks the function the compiler runs to learn what to build,
+taking `b: &mut std.Build` and answering nothing; at most one per program
+([[running.builds]]).
+
+A generic function is none of these (4558), and none of these is called by the
+program.  In a shared object, which has no startup function, constructors run
+when it is loaded and destructors when it is unloaded ([[running.foreign]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    let started: mut u8 = 0u8
+
+    @[constructor, impure]
+    fn prepare():
+        started ← 42u8
+
+    @[test(always)]
+    fn arithmetic_holds() → bool:
+        2u8 + 2u8 = 4u8
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let count: u64 = ⎕drop(#init.args)
+        _ ← std.println⌜&mut init.io.output, "{} {}", started, count⌝
+        0u6
+
+Output:
+
+    42 1

@@ -1,0 +1,67 @@
+title: Operators and functions over arrays
+
+Part of [[types.arrays]].
+
+**Every operator walks the arrays it is given**, element by element, down to
+what it is defined on: the arithmetic, the saturating operators, the
+comparisons, the bitwise operators and shifts, `∧ ∨ ⊕ ⊼ ⊽ ¬` and the other
+operators written before one operand.  Two arrays walked together agree in
+shape; a single value meets every element.
+
+    v + w                      ※ element by element
+    v + 10u8                   ※ ten added to each
+    v > 2u8                    ※ bool⟦…⟧: a mask
+    m + col                    ※ a table against a column: each row its number
+
+`and` and `or` do not walk: which side is worked out is their point, and over
+an array there is no one answer to that.  `#`, `⍴` and `⧺` are about the
+array itself and do not walk either.  Whether a check fails is the same
+whether the machine asks it of one element or of sixteen at once.
+
+**`@[listable]` on a function** says that handing it an array where an element
+is wanted calls it for each, answering an array of the answers; an argument
+that is no array goes to every call.  The walk stops, for each argument, at
+what its parameter takes, so a function of `u8⟦3⟧` walks a `u8⟦2,3⟧` once.
+Every dimension walked has a stated length (4482); a function of no
+parameters cannot be listable (4483).
+
+**`¨` after a value says what follows is done to each element**, for any
+function and any chain of fields:
+
+    ps¨.age                    ※ each one's age, for a Person⟦3⟧
+    ps¨.pos.x                  ※ a chain, walked once
+    add(ps¨.age, 1u8)          ※ a call for each element
+    add(total(w), w¨)          ※ w whole to total, and walked for add
+    ps¨.age ← 21u8             ※ written to as it is read: each one 21
+    ps¨.age ← w¨               ※ and in step, the first of w to the first
+
+Only what is marked is walked, each mark one dimension (4658); several marked
+arguments walk in step (4660).  `ps.age` is refused, an array having no fields
+(4662).  A walk read answers an array of the shape walked, which has to be
+stated (4659); a write is a loop and needs no length.
+
+Program:
+
+    let std := ⎕import("std")
+
+    type Person = name : str ; age : u8
+
+    @[listable]
+    fn older(age: u8) → u8:
+        age + 1u8
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let ps: mut Person⟦3⟧ = ⟦Person(.name ← "ann", .age ← 30u8),
+                                  Person(.name ← "bo", .age ← 17u8),
+                                  Person(.name ← "cy", .age ← 45u8)⟧
+        let ages: u8⟦3⟧ = ps¨.age
+        let adults: u64 = ⎕drop(#ps⟦ages ≥ 18u8⟧)
+        let next: u8⟦3⟧ = older(ages)
+        ps¨.age ← next¨
+        _ ← std.println⌜&mut init.io.output, "{} {} {}", adults, ps⟦1⟧.age, ⌈ages × 2u8⌝
+        0u6
+
+Output:
+
+    2 18 90

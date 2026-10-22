@@ -9,7 +9,7 @@
 ※ ring is.  So what reads and writes reaches the ring through what it was
 ※ handed, and no function here names a variable at the top level.
 
-※※ The ring, as the runtime keeps it.
+※※ The ring, as the runtime keeps it: nothing a program reads or writes.
 ※
 ※ The runtime's and not the language's: the queues the kernel shares, the
 ※ request each slot holds and what came back for it.  `state` says whether the
@@ -47,12 +47,15 @@ fn io_ready(r: &mut Ring, slot: i64) → i64
 fn io_close(r: &mut Ring, fd: i32) → i64
 
 ※※ A request that has been started, and may not have been answered yet.
+※※
+※※ \details `std.flush` waits for one and says how it went.  A program that
+※※ never flushes one loses nothing: every request still outstanding when the
+※※ startup function returns is waited for before the process ends.
 ※
 ※ What it holds is where the runtime is keeping the request and which ring
 ※ that is, and nothing else: what the kernel said goes there too, so a request
 ※ the ring is still working on and one that was done on the spot are the same
-※ handle read the same way.  A program that never flushes one loses nothing --
-※ the drain before it ends reads every one that is left.
+※ handle read the same way.
 @[export, device]
 type Pending = slot : i64 ; ring : u64
 
@@ -62,20 +65,26 @@ type Pending = slot : i64 ; ring : u64
 type Answer = got : i64 ; at : u64
 
 ※※ A device that can be read.
-※
-※ Moved and never copied, and closed with `Reader.close` -- by whatever variable
-※ holds one when its scope ends, or by what it was moved on to.  The one a
-※ process starts with is a field of `std.Init`, which nothing moves out of: it is
-※ handed along by reference and never closed.
+※※
+※※ \details Moved and never copied, and closed with `Reader.close` -- by
+※※ whatever variable holds one when its scope ends, or by what it was moved on
+※※ to.  The one a process starts with is a field of `std.Init`, which nothing
+※※ moves out of: it is lent by reference and never closed.
 @[export, device, closed_by(close)]
 type Reader = fd : i32 ; ring : u64
 
-※※ A device that can be written.  Closed with `Writer.close`.
+※※ A device that can be written.
+※※
+※※ \details Moved and never copied, and closed with `Writer.close`, as a
+※※ `Reader` is.  The two a process starts with, `init.io.output` and
+※※ `init.io.error`, are lent and never closed.
 @[export, device, closed_by(close)]
 type Writer = fd : i32 ; ring : u64
 
 ※※ A device that can be both, which is what a socket and a file opened either
-※※ way are.  Closed with `ReadWriter.close`.
+※※ way are.
+※※
+※※ \details Moved and never copied, and closed with `ReadWriter.close`.
 @[export, device, closed_by(close)]
 type ReadWriter = fd : i32 ; ring : u64
 
@@ -97,15 +106,14 @@ fn ReadWriter.close(rw: ReadWriter):
 
 ※※ Start reading into the `len` bytes at `at`, answering the request.
 ※※
+※※ \details What `std.read` is built on; a program reads with that.
+※※
 ※※ \raises `EAGAIN` where every slot holds an answer nobody has read
 @[export]
 fn Reader.start(r: &mut Reader, at: u64, len: u64) → Pending ? i32:
     ※ 0 is reading, as the runtime numbers the directions
     started(io_submit(⎕at(r⌖.ring, ⌜&mut Ring⌝), 0i32, r⌖.fd, at, len, 0u64), r⌖.ring)
 
-※※ Start writing the `len` bytes at `at`, answering the request.
-※※
-※※ \raises `EAGAIN` where every slot holds an answer nobody has read
 ※※ Start reading up to `len` bytes into room the ring keeps until the answer is
 ※※ taken, which is what a task reads with: the bytes are not in the task's own
 ※※ frame while the kernel may still be writing them.  `std.received` hands them
@@ -116,6 +124,11 @@ fn Reader.start(r: &mut Reader, at: u64, len: u64) → Pending ? i32:
 fn Reader.start_kept(r: &mut Reader, len: u64) → Pending ? i32:
     started(io_read_kept(⎕at(r⌖.ring, ⌜&mut Ring⌝), r⌖.fd, len), r⌖.ring)
 
+※※ Start writing the `len` bytes at `at`, answering the request.
+※※
+※※ \details What `std.write` is built on; a program writes with that.
+※※
+※※ \raises `EAGAIN` where every slot holds an answer nobody has read
 @[export]
 fn Writer.start(w: &mut Writer, at: u64, len: u64) → Pending ? i32:
     ※ 1 is writing

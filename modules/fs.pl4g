@@ -63,8 +63,12 @@ fn refusal(of: i64) → i32:
 fn cwd() → &static Dir:
     &State.cwd
 
-※※ A device made of a descriptor the program has from somewhere else -- a pipe
-※※ `⎕syscall` made, one a parent handed down -- which reaches the ring `s` keeps.
+※※ A device made of a descriptor the program has from somewhere else.
+※※
+※※ \details A pipe `⎕syscall` made, one a parent handed down: what comes back
+※※ reaches the ring `s` keeps, and is closed as one opened is.  Nothing is
+※※ asked of the kernel, so nothing is refused.  Written
+※※ `init.fs.adopt(fd, ⌜std.io.Writer⌝)`.
 ※※
 ※※ \param s what the program does its I/O with: `&init.fs`
 ※※ \param fd the descriptor
@@ -90,7 +94,8 @@ fn State.adopt(s: &State, fd: i32, kind: ⌜T'⌝) → T'
     else:
         Dir(.fd ← fd, .ring ← ring)
 
-※※ Wait for the kernel to answer something -- anything.
+※※ Wait for the kernel to answer something -- anything: what `std.run` does
+※※ when no task can go on.
 @[export]
 fn State.step(s: &mut State):
     io_step(&mut s⌖.ring)
@@ -101,11 +106,15 @@ fn State.step(s: &mut State):
 fn State.drain(s: &mut State):
     io_drain(&mut s⌖.ring)
 
-※※ Open the file `name` in `d`, for what the type handed says: `⌜io.Reader⌝` to
-※※ read it, `⌜io.Writer⌝` to write it, made if it is not there and emptied if it is,
-※※ and `⌜io.ReadWriter⌝` for both, made if it is not there and left as it is --
-※※ or, for `⌜Dir⌝`, the directory `name` to open files in, refused where it is
-※※ none.
+※※ Open the file `name` in `d`, for what the type handed says.
+※※
+※※ \details `⌜io.Reader⌝` to read it; `⌜io.Writer⌝` to write it, made if it is
+※※ not there and emptied if it is; `⌜io.ReadWriter⌝` for both, made if it is
+※※ not there and left as it is; and `⌜Dir⌝` for the directory `name`, to open
+※※ files in, refused (`not_a_directory`) where it is none.  The name is relative
+※※ to `d` unless it begins with `/`; one with a nul inside it or longer than
+※※ 4095 bytes is refused before the kernel is asked.  Written through a value,
+※※ `std.fs.cwd().open(name, ⌜std.io.Reader⌝)`.
 ※※
 ※※ \param d the directory `name` is relative to, where it is relative
 ※※ \param name the file

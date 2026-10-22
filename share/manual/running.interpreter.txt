@@ -1,0 +1,46 @@
+title: The interpreter
+
+Part of [[running]].
+
+**`pl4g-repl FILE [ARG...]`** -- built with the C++ compiler, `build/cpp/` --
+compiles a program from its source and interprets it, with the arguments
+after the file as its own; it ends as the program would, its status the
+program's, and a program that does not compile ends with 1.  It takes
+`-W`, `--Werror`, `--module-path`, `--conditions`, `--stack-size`,
+`--guard-size`, `--ignore-system`, `--color`, and `--input-fd`,
+`--output-fd` and `--error-fd` for where the program's devices are.
+
+**With no file it is the interactive session.**  A definition -- a function,
+a type, an import, a unit, a bundle, a macro -- is kept for the rest of the
+session, a later one of the same name replacing it.  Anything else is run at
+once as the body of a startup function: a variable it binds at its top is the
+session's from then on, and what the last statement comes to is shown with
+its type.  The session's own commands begin with `@`:
+
+    @help           what there is
+    @type EXPR      the type of an expression
+    @load FILE      take the definitions of a file
+    @defs, @vars    what the session holds
+    @reset          forget all of it
+    @quit, @exit    end the session
+
+**A program the interpreter runs has a host** -- the program the interpreter
+is in -- so it may declare functions the host defines, `@[host("SYMBOL")]`,
+found with `dlsym` the first time they are called ([[running.foreign]]); an
+executable cannot (5300).
+
+**The interpreter can be embedded.**  A C++ program links with the library
+and uses `pl4g::embed::Interpreter` (`src/lib/embed/embed.hh`), or loads
+`libpl4g-embed.so` through the header-only `pl4g::embed::LoadedInterpreter`
+(`pl4g-embed.hh`).  A C program loads the shared object and calls
+`pl4g_embed_state_new`, `pl4g_embed_run_source(state, text, length, name)`
+and `pl4g_embed_state_free` (`pl4g-embed.h`).  A run answers the status the
+program would have exited with, and a stop of the program -- an overflow, a
+failed condition -- ends the run and not the embedding program.  The host
+exports what its programs call with `-rdynamic`.  `src/examples/embed/` has
+a program for each way.
+
+**This manual is a library too**: `libpl4g-manual.so`, whose
+`pl4g::manual::lookup(name)` answers a node's text (`src/manual/manual.hh`),
+and `pl4g-help NAME`, which prints one.  A name that is no node is answered
+with the closest ones.

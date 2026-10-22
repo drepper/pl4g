@@ -1,0 +1,63 @@
+title: References
+
+Part of [[types]].
+
+**`&T` names a place someone else holds; `&mut T` one that may be written
+through.**  `&x` makes one out of a place -- a variable, a field, an element
+(4533) -- and `r⌖` reads what is at the place, `r⌖ ← v` writes it.  `⌖` is
+written after, so `r⌖.x` and `rows⌖⟦2⟧` read left to right.
+
+    let n: mut i8 = 1i8
+    let r: &mut i8 = &mut n
+    r⌖ ← 3i8                       ※ writes n
+    bump(&n)                       ※ & where &mut is wanted: the type says it
+
+Whether the place may be written is part of the type, so `&x` where a `&mut T`
+is wanted may write -- only where `x` may be written (4537).  `mut` before the
+type of a name holding a reference says the name may point elsewhere; inside
+the reference it says the place may be written.  **A reference is never
+nothing**: there is no null.
+
+**One `&mut`, or any number of `&`** (4563).  While a `&mut` is out the name
+may not be read (4565); while any reference is out it may not be written
+(4566).  A reference lasts until the last use of what holds it, on each way
+through, so the same place may be lent again on the next line.  Two fields are
+two places, and so are two elements whose indices are written down.  Copying
+a `&mut` borrows from what it was copied from.
+
+**A reference names one value** -- a number, a truth value, a character, an
+enumeration's value, a record, a sum or a reference (4536); an array, a list,
+a string, a table, a tuple and a result are already a place or several values.
+**Writing through a reference that was handed in** changes the caller's
+storage, so the function is `@[impure]`, and so is every caller of it
+([[functions.purity]]).
+
+**Where a reference leaves the call, it says how long it lives**: `&static T`
+lasts as long as the program, `&⧖a T` as long as what the parameters marked
+`⧖a` named (4562 where it says neither).  A record's reference field is
+`&static` (4707).  That is [[memory.lifetimes]], and borrowing in detail is
+[[memory.borrowing]].
+
+Program:
+
+    let std := ⎕import("std")
+
+    @[impure]
+    fn bump(at: &mut u8):
+        at⌖ ← at⌖ + 1u8
+
+    fn larger(a: &⧖x u8, b: &⧖x u8) → &⧖x u8:
+        if a⌖ ≥ b⌖: a else: b
+
+    @[startup, impure]                ※ it calls bump, which is
+    fn main(init: std.Init) → u6:
+        let n: mut u8 = 41u8
+        bump(&mut n)
+        let m: u8 = 7u8
+        let big: &u8 = larger(&n, &m)
+        _ ← std.println⌜&mut init.io.output, "{} {}", n, big⌖⌝
+        0u6
+
+Output:
+
+    42 42

@@ -1,0 +1,67 @@
+title: foreach
+
+Part of [[statements]].
+
+**`foreach NAMES: TYPE = WALKED:`** runs its body once for each value
+something gives, binding the names the way `let` does: `foreach i := 0u8…5u8:`.
+A type on the name says what a turn gives, and what is walked takes its own
+type from it: `foreach x: u8 = [1, 2, 3]:`.
+
+    a range A…B or A…B…STEP    each whole number, B left out
+    an array                   each element; of a table, each row
+    a pick v⟦mask⟧             each element the mask picks
+    a list                     each element
+    a set / a dictionary       each key / a key and its value, as two names
+    a string                   each character, a char
+    a generator's call, a ⇉T   each value it hands out
+    a value of a type with T.each   what its `each` hands out
+
+**A range** is half open, as Python's `range`: `0u8…10u8…2u8` is 0, 2, 4,
+6, 8, and `5u8…0u8…⁻1` counts down over an unsigned type.  Its ends are of one
+whole-number type (4439, 4440).  A step written down is no nought (4442); one
+worked out while running is of the ends' type or the signed type of their
+width, how many turns there are is worked out once, and a nought stops the
+program (status 91).  A range stands only where a loop takes its values from
+(4443).
+
+**Names**: several names take a turn's tuple apart, `foreach k, v := d`; `_`
+is a turn not wanted.  A name is a copy of what the turn gives unless it is
+marked `&` or `&mut`, then a reference to the element where it is -- for an
+array, a list or a pick, and over a `mut` name for `&mut`:
+`foreach &mut p := v: p⌖.age ← 0u8`.  A `@[unique]` element is walked only so.
+
+**`⎕enumerate(x)`** counts the turns: `foreach i, x := ⎕enumerate(v):` gives
+0 and the first, 1 and the second; `⎕enumerate(v, 1u8)` counts from one in a
+`u8`, the count checked as any sum is.  It stands only where a loop takes its
+values (4515).
+
+**What is walked is lent to the loop**: written while the loop runs, it is
+refused (4566).  A table is walked in the order its keys were put in.  A
+tuple is walked by `comptime foreach`, the body once per member
+([[compiletime.reflection]]).  A loop takes a label and an `else`
+([[statements.jumps]]); `while` with a binding is the same statement.
+
+Program:
+
+    let std := ⎕import("std")
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let d: ⸨str: u8⸩ = ⸨"one": 1u8, "two": 2u8⸩ in ⎕static
+        let evens: mut u8 = 0u8
+        foreach i := 0u8…10u8…2u8:
+            evens ← evens + i
+        let letters: mut u64 = 0u64
+        foreach n, c := ⎕enumerate("pl4g", 1u64):
+            if c = '4':
+                letters ← n
+        foreach k, v := d:
+            _ ← std.println⌜&mut init.io.output, "{} = {}", k, v⌝
+        _ ← std.println⌜&mut init.io.output, "{} {}", evens, letters⌝
+        0u6
+
+Output:
+
+    one = 1
+    two = 2
+    20 3

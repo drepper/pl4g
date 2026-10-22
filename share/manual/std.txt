@@ -1,0 +1,49 @@
+title: std
+
+Part of [[library]].  What every program starts with and the devices it starts
+with open, imported as `let std := ⎕import("std")`.
+
+**A program is handed `std.Init`**: `init.io.output`, `init.io.error` and
+`init.io.input`, the devices it inherited, each lent `&mut init.io.output` to
+what writes; `init.fs`, what its I/O goes through; `init.args`, its words.
+There is no other way to a device, and holding one is the permission to use
+it ([[functions.purity]]).
+
+**Writing**: `std.println⌜to, "x = {}", x⌝` and `std.print⌜…⌝` fill a template
+and write every byte, the line and its newline as one request; `std.Io.print`
+and `std.Io.println` write bytes; `std.write` starts a write and `std.flush`
+waits for it; `std.write_sync` is both.  Each answers how many bytes went or
+the number the kernel refused with, `u64 ¤size ? i32`.  **Reading**:
+`std.read` into a view, `std.read_lines` a line at a time.  What is still in
+flight when the program ends is waited for.
+
+**Text**: `⍕v` and `std.text(v)` write any value as it would be written,
+`std.padded` in a field, `std.format⌜…⌝` a template -- `{}` the next
+argument, `{name}` a name where the template is, `{{` a brace.
+
+**Tasks** -- coroutines over the ring -- are `std.spawn` and `std.run`
+([[functions.coroutines]]); the build function's object is `std.Build`
+([[running.builds]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let name: str = "world"
+        let n: u64 = ⎕drop(#init.args)
+        _ ← std.println⌜&mut init.io.output, "hello, {name}: {} word(s)", n⌝
+        _ ← std.println⌜&mut init.io.output, "[{}]", std.padded(42u8, .width ← 5u64)⌝
+        match std.write_sync(&mut init.io.output, ⎕bytes("done\n")):
+            u64 ¤size(_):
+                0u6
+            ⊥(why):
+                _ ← std.println⌜&mut init.io.error, "{}", std.error_name(why)⌝
+                1u6
+
+Output:
+
+    hello, world: 1 word(s)
+    [   42]
+    done

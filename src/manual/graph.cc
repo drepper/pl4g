@@ -18,15 +18,24 @@ namespace {
   // The most a node may hold.
   constexpr std::size_t limit = 4096;
 
-  // The names `text` mentions, `[[name]]` each.
+  // Whether `c` may stand in the name a link gives: anything but a bracket and
+  // white space, which is bin/pl4g-manual's rule.
+  constexpr bool in_a_name(char c) noexcept
+  {
+    return c != '[' && c != ']' && c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '\f' && c != '\v';
+  }
+
+  // The names `text` mentions, `[[name]]` each: two brackets, a name of one
+  // character or more, and two brackets, so that a `[[` in prose is no link.
   std::set<std::string> mentioned(std::string_view text)
   {
     std::set<std::string> out;
-    for (auto at = text.find("[["); at != std::string_view::npos; at = text.find("[[", at + 2)) {
-      auto end = text.find("]]", at + 2);
-      if (end == std::string_view::npos) [[unlikely]]
-        break;
-      out.emplace(text.substr(at + 2, end - at - 2));
+    for (auto at = text.find("[["); at != std::string_view::npos; at = text.find("[[", at + 1)) {
+      auto end = at + 2;
+      while (end < text.size() && in_a_name(text[end]))
+        ++end;
+      if (end > at + 2 && text.substr(end, 2) == "]]")
+        out.emplace(text.substr(at + 2, end - at - 2));
     }
     return out;
   }

@@ -1,0 +1,38 @@
+title: Errors and stops
+
+Part of [[language]].  A program does what its text says or it does not run
+on: there is no undefined behaviour, no exception, and no value standing for
+no value.
+
+**Where having no answer is ordinary, the type says so** -- a result, `T?` or
+`T ? E` -- and the program reads it with `??`, `?` or `match`
+([[types.results]]): a division, a lookup, a narrowing, reading text out of
+bytes, everything the kernel may refuse.  The library answers what the
+kernel refused as the kernel's number, `i32`, which `std.error_name` and
+`std.as_error` name ([[std]]).
+
+**Where having no answer means the program is wrong, it stops** -- an answer
+that does not fit its type, an index outside its array, a condition that does
+not hold.  The message says what, where, and how the program got there, one
+line per function still standing:
+
+    t.pl4g:6:5: pl4g: addition that does not fit in 'inner'
+      called from 'middle'
+      called from 'main'
+
+and the process exits with the status of that kind of stop, never through a
+signal ([[errors.stops]]).  The message is built while compiling, so nothing
+that could itself fail runs at the moment of the fault.  **Where the compiler
+can see that a stop must happen**, it refuses the program instead: an
+overflow of constants (4214), an index of constants outside (4450), a
+condition that cannot hold (4918).  A check that cannot fail is not made.
+
+**What the compiler says** is a diagnostic with a number, `[PL4G-4537]`: the
+same number in every implementation, listed with its explanation in
+`share/diagnostics.json`.  Errors stop the compilation; warnings do not, and
+`--Werror` makes them errors.  `@[ignore(N)]` and `@[expect(N)]` on a
+definition or a statement quiet one ([[running.diagnostics]]).
+
+**A program cannot exit with a status of the runtime's**: the startup function
+answers a `u6`, 0 to 63, so a caller reading 79 to 127 knows the runtime
+stopped the program.

@@ -1,0 +1,72 @@
+title: Macros
+
+Part of [[compiletime]].
+
+**A macro is invoked with lifting marks around its arguments**, `twice⌜3u8⌝`,
+and is handed what is written there as written -- a piece of the program, not
+what it evaluates to -- and replaced by what it writes.  A macro and a function
+are not in one namespace.  An invocation stays on one line.
+
+**A macro of rules** lists what the arguments look like and what the
+invocation becomes, tried in order, the first that matches deciding (7012
+where none does).  In a pattern **`$a` is a hole** matching anything; a hole
+written twice matches only where the two are written alike; anything else
+matches itself.  A template is one expression (7019), or statements indented
+under the opening mark:
+
+    macro pick:
+        ⌜$x, $x⌝ → ⌜1u8⌝             ※ written alike
+        ⌜$x, $y⌝ → ⌜0u8⌝             ※ anything else
+
+    macro swap:
+        ⌜$a, $b⌝ → ⌜
+            let t: u8 = $a
+            $a ← $b
+            $b ← t
+        ⌝
+
+**A macro writing statements is invoked on a line of its own**, its statements
+going into the run around it; where a value stands instead they are a scope of
+their own and the last is an expression (7014), what it comes to.
+
+**Hygiene**: a name a macro binds is renamed to something no source can spell,
+so `swap`'s `t` cannot meet the caller's `t`; a name it reads means what it
+means where the macro was written, through that module.  The one exception is
+`⎕caller_name`, by which `std.format` reads `{name}` at its caller.
+
+**Expansion comes after parsing and before any check**: what the checker sees
+has no macro left in it, so every rule of the language is asked of what the
+macro wrote, and every message points where the offending text was written --
+in the invocation or in the macro.  A macro writing another is expanded in
+turn, at most 64 times over (7015).
+
+**A macro may be exported**, and is invoked through its module:
+`std.println⌜…⌝` ([[std.println]]).  Macros written as functions over the
+program's text, and `comptime fn`, are [[compiletime.macros.functions]].
+
+Program:
+
+    let std := ⎕import("std")
+
+    macro twice:
+        ⌜$x⌝ → ⌜$x + $x⌝
+
+    macro swap:
+        ⌜$a, $b⌝ → ⌜
+            let t: u8 = $a
+            $a ← $b
+            $b ← t
+        ⌝
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let t: mut u8 = 1u8
+        let u: mut u8 = 2u8
+        swap⌜t, u⌝
+        let four: u8 = twice⌜u⌝
+        _ ← std.println⌜&mut init.io.output, "{} {} {}", t, u, four⌝
+        0u6
+
+Output:
+
+    2 1 2

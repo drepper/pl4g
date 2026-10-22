@@ -1,0 +1,57 @@
+title: Units
+
+Part of [[types]].
+
+**A number may say what it counts**, after its type: `u32 ¤meter`,
+`f64 ¤meter÷second²`.  The unit is part of the type -- a length is not a
+time -- and nothing of it reaches the generated code.
+
+- `+`, `-` and the comparisons want both sides in one unit, since they are of
+  one type.  `×` and `÷` work the new unit out, exponents added and taken
+  away, so `¤meter÷second` times `¤second` is `¤meter`.
+- A literal counts nothing: `d × 2` is twice a length, and a literal beside
+  `+` takes the other side's unit.
+- A unit is written `¤` and base units, `×` putting the next above the line,
+  `÷` below it, a raised number its power; a name in quotation marks is a unit
+  whose name is no identifier.  Only numbers have units (4540); an array's
+  unit is its elements', `u8 ¤meter⟦4⟧`.
+
+**The language's units** are the SI base units `second`, `meter`, `gram`,
+`ampere`, `kelvin`, `mole`, `candela`, and two it counts with: **`¤size`** is
+what `#` answers, and **`¤idx`** is what an index has to be (4541) -- a literal
+is whatever it is asked to be, so `v⟦2⟧` needs nothing.
+
+**Every other unit is introduced before it is used** (4539), at the top level
+for the file or inside a body for that body:
+
+    unit apples                                     ※ a base unit of its own
+    unit mph = 1609344 ÷ 3600000 × meter ÷ second   ※ recorded, not converted
+    unit ¤size → ¤idx                               ※ a count may stand as an index
+
+The last form lets a value of the first unit stand where the second is wanted,
+and only that way round.  **Crossing is written**: `⎕drop(x)` takes a unit off
+(4543 where there is none) and `⎕unit(x, ⌜U⌝)` puts one on (4544 where there
+is one).
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn speed(d: u32 ¤meter, t: u32 ¤second) → u32 ¤meter÷second:
+        (d ÷ t) ?? 0
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let t: u32 ¤second = 5
+        let v: u32 ¤meter÷second = speed(100, t)
+        let back: u32 ¤meter = v × t              ※ the seconds cancel
+        let plain: u32 = ⎕drop(back)
+        _ ← std.println⌜&mut init.io.output, "{} m/s, {} m", ⎕drop(v), plain⌝
+        0u6
+
+Output:
+
+    20 m/s, 100 m
+
+`v × 5` would be a speed still, the literal counting nothing, and refused
+where a length is wanted (4203).

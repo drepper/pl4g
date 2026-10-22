@@ -26,15 +26,26 @@ text served: the reader asks for what it names.  What is checked:
   is mentioned in some node, so that one added to the language and not to the
   manual is found by the next build and not by the next reader.
 
+**A complete program in a node is written under a line `Program:`**, indented
+by four spaces, and what it prints under a line `Output:` after it, indented the
+same way.  `programs` finds them, and `tests/compiler/test_manual.py` compiles
+each, runs it and holds it to its output and to the status nought -- so that an
+example the language has moved away from is found by the next run of the suite.
+A fragment that is no whole program is indented without the line above it, and
+nothing compiles it.
+
 With `--out DIR` the nodes are written there, one file each, named as the node
 is, and packed into `DIR/manual.pack` -- each name, a nul, its text, a nul, in
-the order of the names -- which the library serving them embeds.  With
+the order of the names -- which the library serving them embeds; and
+`DIR/manual.stamp.hh` holds the pack's SHA-256, which that library includes so
+that a compiler cache sees the pack change.  With
 `--check` nothing is written and the status says whether all of it holds.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
 from collections import deque
@@ -83,7 +94,7 @@ class Node:
 
     def text(self) -> str:
         """The text served: the title, underlined, and the body."""
-        return "".join((self.title, "\n", "=" * len(self.title), "\n\n", self.body.strip(), "\n"))
+        return "".join((self.title, "\n", "=" * len(self.title), "\n\n", self.body.strip("\n").rstrip(), "\n"))
 
 
 @dataclass(slots=True)
@@ -94,6 +105,28 @@ class Definition:
     kind: str
     headers: list[str]
     doc: str
+
+
+#: What a node's title says a definition is, by the word it is written with.
+KINDS: Final[dict[str, str]] = {
+    "fn": "function", "type": "type", "enum": "enumeration", "let": "variable",
+    "unit": "unit", "bundle": "bundle", "macro": "macro"}
+
+#: The order a module's contents are listed in, by kind, and the heading of each.
+SECTIONS: Final[tuple[tuple[str, str], ...]] = (
+    ("module", "Modules it hands on"), ("type", "Types"), ("enum", "Enumerations"),
+    ("fn", "Functions"), ("macro", "Macros"), ("let", "Variables"), ("unit", "Units"),
+    ("bundle", "Bundles"))
+
+#: A name a comment quotes, `like.this`, which may be a node's.
+QUOTED: Final[re.Pattern[str]] = re.compile(r"`([A-Za-z_][\w.]*)(?:\(\))?`")
+
+#: What begins a complete program in a node, and the output it prints.
+PROGRAM: Final[str] = "Program:"
+OUTPUT: Final[str] = "Output:"
+
+#: How far a program and its output are indented under the line naming them.
+INDENT: Final[str] = "    "
 
 
 def hand_written() -> dict[str, Node]:
@@ -130,13 +163,23 @@ def module_names() -> dict[Path, str]:
 
 
 def comment_text(lines: list[str]) -> str:
-    """A comment's text without its marks."""
+    """What the documentation comments among *lines* say, without their marks.
+
+    Only `※※` documents: a `※` line among them is a remark about how the thing
+    is made, for whoever reads the module, and stays out of the manual."""
     out: list[str] = []
     for line in lines:
         text = line.lstrip()
-        text = text[2:] if text.startswith("※※") else text[1:]
+        if not text.startswith("※※"):
+            continue
+        text = text[2:]
         out.append(text[1:] if text.startswith(" ") else text)
     return "\n".join(out).strip()
+
+
+def bracket_depth(line: str) -> int:
+    """How many brackets *line* opens and does not close."""
+    return sum(line.count(o) - line.count(c) for o, c in ("()", "[]", "⟦⟧", "⸨⸩"))
 
 
 def definitions(path: Path) -> tuple[str, list[Definition]]:
@@ -172,21 +215,33 @@ def definitions(path: Path) -> tuple[str, list[Definition]]:
             doc = []
             at += 1
             continue
+        kind = head.group(1)
+        if kind == "let" and "⎕import(" in lines[at]:
+            kind = "module"
         headers = [lines[at]]
-        depth = sum(lines[at].count(o) - lines[at].count(c) for o, c in ("()", "[]", "⟦⟧", "⸨⸩"))
+        depth = bracket_depth(lines[at])
         at += 1
-        # A header goes on where a bracket is still open, and a type whose
-        # alternatives or fields are on lines of their own goes on with them.
-        while at < len(lines) and (depth > 0 or (head.group(1) in ("type", "enum")
-                                                 and lines[at].startswith((" ", "\t"))
-                                                 and not lines[at].strip().startswith("※"))):
-            headers.append(lines[at])
-            depth += sum(lines[at].count(o) - lines[at].count(c)
-                         for o, c in ("()", "[]", "⟦⟧", "⸨⸩"))
+        # A header goes on where a bracket is still open; a type whose fields or
+        # alternatives are on lines of their own goes on with them, the remarks
+        # about each among them; and a function's conditions on lines of their
+        # own are part of what a caller reads.
+        while at < len(lines):
+            more = lines[at]
+            if depth > 0:
+                pass
+            elif kind in ("type", "enum") and more.startswith((" ", "\t")):
+                pass
+            elif kind in ("fn", "macro") and more.lstrip().startswith(("pre(", "post(")) \
+                    and more.startswith((" ", "\t")):
+                pass
+            else:
+                break
+            headers.append(more)
+            depth += bracket_depth(more)
             at += 1
-        if head.group(1) == "fn" and headers[-1].rstrip().endswith(":"):
+        if kind in ("fn", "macro") and headers[-1].rstrip().endswith(":"):
             headers[-1] = headers[-1].rstrip()[:-1]
-        found.append(Definition(name=head.group(2).strip("`"), kind=head.group(1),
+        found.append(Definition(name=head.group(2).strip("`"), kind=kind,
                                 headers=[one.rstrip() for one in headers], doc=comment_text(doc)))
         doc = []
     return overview, found
@@ -208,30 +263,101 @@ def brief_of(doc: str) -> str:
     return said(parse_doc(doc).summary)
 
 
-def definition_node(module: str, one: Definition, headers: list[list[str]]) -> Node:
-    """The node of a definition of *module*, all of its headers together."""
-    doc = parse_doc(one.doc)
-    parts: list[str] = ["\n\n".join("\n".join("    " + line.strip() if at else "    " + line
-                                              for at, line in enumerate(lines))
-                                    for lines in headers)]
-    if doc.summary:
-        parts.append(doc.summary.strip())
-    details = doc.first("details")
-    if details is not None and details.text.strip():
-        parts.append(first_paragraphs(details.text, 1))
-    params = doc.of("param")
+def signature(headers: list[str]) -> str:
+    """A definition's header as a node shows it: indented, as the module writes it."""
+    return "\n".join("".join((INDENT, line)) for line in headers)
+
+
+#: How wide the prose a node makes from a comment is.
+WIDTH: Final[int] = 78
+
+
+def filled(text: str, indent: str = "", first: str = "") -> str:
+    """*text* filled to `WIDTH`, keeping the two spaces this project's prose
+    puts between sentences; *first* begins the first line and *indent* every
+    line after it."""
+    lines: list[str] = []
+    line = first
+    # A span in backticks is one word, so that a line never breaks inside one.
+    for word, gap in re.findall(r"((?:[^`\s]*`[^`]*`)+[^`\s]*|\S+)(\s*)", text):
+        if line and len(line) + len(word) > WIDTH:
+            lines.append(line.rstrip())
+            line = indent
+        line = "".join((line, word, "  " if len(gap) > 1 else " "))
+    lines.append(line.rstrip())
+    return "\n".join(lines)
+
+
+def reflowed(text: str) -> str:
+    """*text* with each paragraph filled to `WIDTH` again: a comment's command
+    takes the start of its first line, which leaves that line short.  A list's
+    items are filled each with its own hanging indent; an indented block is
+    left as it is."""
+    out: list[str] = []
+    for paragraph in text.split("\n\n"):
+        lines = paragraph.split("\n")
+        if any(line.startswith((" ", "\t")) for line in lines):
+            out.append(paragraph)
+            continue
+        items: list[list[str]] = []
+        for line in lines:
+            if line.startswith("- ") or not items:
+                items.append([line])
+            else:
+                items[-1].append(line)
+        made: list[str] = []
+        for item in items:
+            # A sentence that ended a line ends with two spaces once joined.
+            joined = ""
+            for line in item:
+                if joined:
+                    joined += "  " if joined.rstrip().endswith((".", "?", "!")) else " "
+                joined += line.strip()
+            made.append(filled(joined, "  " if joined.startswith("- ") else ""))
+        out.append("\n".join(made))
+    return "\n\n".join(out)
+
+
+def described(doc: str) -> list[str]:
+    """The paragraphs a comment says of a definition, in the order a reader wants
+    them: what it is, the details, what it takes, what it answers and refuses,
+    and the remarks."""
+    parsed = parse_doc(doc)
+    parts: list[str] = []
+    if parsed.summary:
+        parts.append(reflowed(parsed.summary.strip()))
+    for part in parsed.of("details"):
+        if part.text.strip():
+            parts.append(reflowed(part.text.strip()))
+    params = parsed.of("param")
     if params:
+        width = max(len(p.subject) for p in params)
         parts.append("\n".join(("Parameters:",
-                                *("".join(("  ", p.subject, " -- ", said(p.text)))
+                                *(filled(said(p.text), " " * (width + 4),
+                                         "".join(("  ", p.subject.ljust(width), "  ")))
                                   for p in params))))
-    for command, label in (("return", "Answers"), ("raises", "Refuses"), ("pre", "Asks"),
-                           ("post", "Promises"), ("note", "Note"), ("warning", "Warning")):
-        for part in doc.of(command):
-            parts.append("".join((label, ": ", said(part.text))))
-    parts.append("".join(("Part of [[", module, "]].")))
-    name = "".join((module, ".", one.name))
-    return Node(name=name, title="".join((name, " (", one.kind, ")")), body="\n\n".join(parts),
-                origin=str(MODULES))
+    for command, label in (("return", "Answers"), ("raises", "Fails with"), ("pre", "Requires"),
+                           ("post", "Promises"), ("note", "Note"), ("warning", "Warning"),
+                           ("see", "See")):
+        for part in parsed.of(command):
+            parts.append(filled("".join((label, ": ", said(part.text))), "  "))
+    return parts
+
+
+def definition_node(module: str, same: list[Definition]) -> Node:
+    """The node of a definition of *module*: each definition of the name with
+    what its own comment says, a comment the same as the one before said once."""
+    parts: list[str] = []
+    before = None
+    for one in same:
+        parts.append(signature(one.headers))
+        if one.doc and one.doc != before:
+            parts.extend(described(one.doc))
+        before = one.doc
+    name = "".join((module, ".", same[0].name))
+    kinds = sorted({KINDS.get(one.kind, one.kind) for one in same})
+    return Node(name=name, title="".join((name, " -- ", " and ".join(kinds))),
+                body="\n\n".join(parts), origin=str(MODULES))
 
 
 def library_nodes(hand: dict[str, Node]) -> dict[str, Node]:
@@ -242,19 +368,29 @@ def library_nodes(hand: dict[str, Node]) -> dict[str, Node]:
         grouped: dict[str, list[Definition]] = {}
         for one in found:
             grouped.setdefault(one.name, []).append(one)
-        listing: list[str] = []
+        listing: dict[str, list[str]] = {}
         for name, same in grouped.items():
-            node = definition_node(module, same[0], [one.headers for one in same])
-            nodes[node.name] = node
-            brief = brief_of(same[0].doc)
-            listing.append("".join(("  [[", node.name, "]]", " -- " if brief else "", brief)))
+            brief = brief_of(next((one.doc for one in same if one.doc), ""))
+            if same[0].kind == "module":
+                node_name = "".join((module, ".", name))
+            else:
+                node = definition_node(module, same)
+                nodes[node.name] = node
+                node_name = node.name
+            listing.setdefault(same[0].kind, []).append(
+                "".join(("  [[", node_name, "]]", " -- " if brief else "", brief)))
         intro = hand.pop(module).body if module in hand else first_paragraphs(overview, 2)
-        title = "".join(("The module ", module))
-        nodes.update(split_listing(module, title, intro, listing))
+        lines: list[str] = []
+        for kind, heading in SECTIONS:
+            if kind in listing:
+                lines.extend(("", "".join((heading, ":")), *listing[kind]))
+        nodes.update(split_listing(module, "".join(("The module ", module)), intro,
+                                   lines[1:], module))
     return nodes
 
 
-def split_listing(name: str, title: str, intro: str, listing: list[str]) -> dict[str, Node]:
+def split_listing(name: str, title: str, intro: str, listing: list[str],
+                  back: str) -> dict[str, Node]:
     """A node of *intro* and *listing*, split over as many as it takes to keep
     each within `LIMIT`: NAME, then NAME.more, NAME.more2 and on, each linked
     from the one before."""
@@ -264,13 +400,21 @@ def split_listing(name: str, title: str, intro: str, listing: list[str]) -> dict
         own = name if part == 1 else "".join((name, ".more", "" if part == 2 else str(part - 1)))
         after = "".join((name, ".more", "" if part == 1 else str(part)))
         lines: list[str] = []
-        head = intro if first else "".join(("More of [[", name, "]]."))
+        head = intro if first else "".join(("More of [[", back, "]]."))
         budget = LIMIT - len(Node(own, title, "", "").text().encode()) - len(head.encode()) - 200
+        # A part that begins in the middle of a section says which it is.
+        if not first and at < len(listing) and not listing[at].endswith(":"):
+            heading = next((one for one in reversed(listing[:at]) if one.endswith(":")), "")
+            if heading:
+                lines.append("".join((heading[:-1], ", continued:")))
+                budget -= len(lines[-1].encode()) + 1
         while at < len(listing) and budget - len(listing[at].encode()) - 1 > 0:
             budget -= len(listing[at].encode()) + 1
             lines.append(listing[at])
             at += 1
-        body = "\n\n".join((head, "Contents:\n" + "\n".join(lines) if lines else "Contents: none."))
+        while lines and not lines[-1]:
+            lines.pop()
+        body = "\n\n".join((head, "\n".join(lines) if lines else "It exports nothing."))
         if at < len(listing):
             body = "".join((body, "\n\nContinued in [[", after, "]]."))
         nodes[own] = Node(name=own, title=title if first else "".join((title, ", continued")),
@@ -279,6 +423,60 @@ def split_listing(name: str, title: str, intro: str, listing: list[str]) -> dict
             return nodes
         part += 1
         first = False
+
+
+def related(nodes: dict[str, Node]) -> None:
+    """End each node made from a module with the nodes its comment names and the
+    module it is part of, so that a definition leads to the ones it is used with."""
+    modules = set(module_names().values())
+    for node in nodes.values():
+        if node.origin != str(MODULES) or node.name in modules or ".more" in node.name:
+            continue
+        module = max((one for one in modules if node.name.startswith(one + ".")), key=len)
+        seen: list[str] = []
+        for word in QUOTED.findall(node.body):
+            for candidate in ("".join((module, ".", word)), "".join(("std.", word)), word):
+                if candidate in nodes and candidate != node.name and candidate != module:
+                    if candidate not in seen:
+                        seen.append(candidate)
+                    break
+        tail = "".join(("Part of [[", module, "]]."))
+        if seen:
+            tail = "".join(("See also ", ", ".join("".join(("[[", one, "]]")) for one in seen),
+                            ".\n", tail))
+        node.body = "\n\n".join((node.body, tail))
+
+
+def programs(text: str) -> list[tuple[str, str | None]]:
+    """The complete programs a node holds, each with the output it says it
+    prints where it says, as `Program:` and `Output:` blocks write them."""
+    lines = text.split("\n")
+    found: list[tuple[str, str | None]] = []
+    at = 0
+
+    def block(start: int) -> tuple[str, int]:
+        """The block indented under the line before *start*, and where it ends."""
+        taken: list[str] = []
+        at = start
+        while at < len(lines) and (not lines[at].strip() or lines[at].startswith(INDENT)):
+            taken.append(lines[at][len(INDENT):])
+            at += 1
+        while taken and not taken[-1].strip():
+            taken.pop()
+        while taken and not taken[0].strip():
+            taken.pop(0)
+        return "\n".join(taken) + "\n" if taken else "", at
+
+    while at < len(lines):
+        if lines[at].strip() == PROGRAM:
+            program, at = block(at + 1)
+            output: str | None = None
+            if at < len(lines) and lines[at].strip() == OUTPUT:
+                output, at = block(at + 1)
+            found.append((program, output))
+        else:
+            at += 1
+    return found
 
 
 def mentions_wanted() -> dict[str, str]:
@@ -329,6 +527,11 @@ def check(nodes: dict[str, Node]) -> list[str]:
                 waiting.append(link)
     for name in sorted(set(nodes) - seen):
         wrong.append("".join((nodes[name].origin, ": ", name, " is not reached from ", TOP)))
+    for node in nodes.values():
+        for program, _ in programs(node.body):
+            if not program:
+                wrong.append("".join((node.origin, ": ", node.name, " has a '", PROGRAM,
+                                      "' line with no program indented under it")))
     texts = "\n".join(node.text() for node in nodes.values())
     for word, what in mentions_wanted().items():
         if not mentioned(word, texts):
@@ -344,7 +547,9 @@ def made() -> dict[str, Node]:
     clash = sorted(set(hand) & set(library))
     if clash:
         raise SystemExit("".join(("written by hand and made from a module: ", ", ".join(clash))))
-    return {**hand, **library}
+    nodes = {**hand, **library}
+    related(nodes)
+    return nodes
 
 
 def pack(nodes: dict[str, Node]) -> bytes:
@@ -380,6 +585,15 @@ def main() -> int:
         target = args.out / "manual.pack"
         if not target.exists() or target.read_bytes() != packed:
             target.write_bytes(packed)
+        # A compiler cache hashes what a source includes and not what it
+        # embeds, so the source including this sees the manual change.
+        stamp = "".join(("// The SHA-256 of manual.pack, which src/manual/manual.cc embeds: included\n",
+                         "// there so that a compiler cache, which hashes what is included and not\n",
+                         "// what is embedded, compiles it again when the manual changes.\n",
+                         "#define PL4G_MANUAL_STAMP \"", hashlib.sha256(packed).hexdigest(), "\"\n"))
+        target = args.out / "manual.stamp.hh"
+        if not target.exists() or target.read_text(encoding="utf-8") != stamp:
+            target.write_text(stamp, encoding="utf-8")
     return 0
 
 

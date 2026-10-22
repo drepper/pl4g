@@ -1,0 +1,58 @@
+title: Conditions
+
+Part of [[functions]].
+
+**`pre(EXPR)` and `post(EXPR)` in a signature say what must hold** of a call's
+values, one expression per clause and as many clauses as there are things to
+say, between the header and the body:
+
+    fn twice(a: u8) → u8 pre(a > 0u8) post(⎕answer > a):
+        a ⊞ a
+
+**A `pre` is checked at the top of the body and a `post` before every
+return**, in the callee: a `pre` that fails exits with status 89, the caller's
+fault, and a `post` with 90, the callee's.  `⎕answer` is what the function
+answers, and only a `post` names it (4908); `⎕entry(NAME)` is what a parameter
+held when the function was entered, for one the body changed -- a parameter's
+name and nothing else (4920, 4921), only in a `post` (4919).
+
+**A condition is a `bool`** (4906) and pure, whatever its function may do.  One
+that comes to a constant falsehood is refused (4918); one that comes to a
+constant truth costs nothing.  A condition over the types a call gives --
+`pre(⌜T'⌝ = ⌜u8⌝ ∨ ⌜T'⌝ = ⌜u16⌝)` -- is settled at the call.
+
+**Clauses over types are requirements**, which are another thing: what a
+generic function needs of its types ([[functions.requirements]]).  A clause
+mixing values and types is refused (4905).
+
+**What a build does with conditions** is `--conditions=…`:
+
+    check     evaluate, stop the program where one does not hold (the default)
+    ignore    evaluate nothing, emit nothing
+    observe   evaluate, report where one does not hold, and go on
+
+Every build asks the same questions of the clauses, so nothing compiles only
+because the checks are off; the report log lists the conditions a build left
+out (`condition-dropped`) and those the compiler settled (`condition-holds`).
+A generic function's conditions are checked in each body it becomes.
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn mean(xs: u16⟦⟧) → u16 pre(#xs > 0) post(⎕answer ≤ ⌈xs):
+        let sum: mut u32 = 0u32
+        foreach x := xs:
+            sum ← sum + ⎕widen(x, ⌜u32⌝)
+        let n: u32 = ⎕narrow(⎕drop(#xs), ⌜u32⌝) ?? 1u32
+        ⎕narrow((sum ÷ n) ?? 0u32, ⌜u16⌝) ?? 0u16
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let v: u16⟦4⟧ = ⟦3u16, 5u16, 9u16, 7u16⟧ in ⎕static
+        _ ← std.println⌜&mut init.io.output, "{}", mean(v)⌝
+        0u6
+
+Output:
+
+    6

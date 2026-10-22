@@ -1,0 +1,72 @@
+title: How long a reference lives
+
+Part of [[memory]].
+
+**A reference that leaves a call says how long what it names lives**, in the
+slot after `mut` and before the type -- there is no default (4562):
+
+    fn counter() → &mut static u8:        ※ as long as the program
+        &mut total
+
+    fn first(v: &⧖a u8) → &⧖a u8:         ※ as long as what v named
+        v
+
+    fn either(c: bool, b: &mut ⧖x u32, d: &mut ⧖x u32) → &mut ⧖x u32:
+        if c: b else: d                   ※ as long as the shorter of the two
+
+**`⧖` and a name is a lifetime**, declared by being used: "as long as whatever
+else in this signature carries it".  One on the answer stands on a parameter
+too (4567), and the answer really has to come from one carrying it (4561).
+**The caller works out the rest**: `first(&total)` for a variable at the top
+level lasts as long as the program, `first(&n)` for a local as long as `n`.
+A reference lasting longer stands where a shorter one is wanted, never the
+other way (4203).  The report log says what each call's answer came to
+(`lifetime`).
+
+**Where a reference is kept says it too.**  A variable at the top level holds
+only a `&static` (4532), given the address of another such variable, a field
+of one, or an element at a written index.  A record's reference field is
+`&static` or says nothing (4707); a record holding a reference that is not
+`static` stays in the function that made it (4531).  A tuple in an answer says
+it of each member: `→ 〈&⧖x u32, &⧖y u32〉`.  A lambda answering a reference
+says it, and a function type does: `fn(&⧖x u32) → &⧖x u32`.
+
+**Inside a body, outward never**: a name may hold a reference only to a place
+that lasts as long as it does (4570), and that is asked of everything that can
+reach a place -- a view, a tuple, a lambda that brought something in by
+reference.  **A place the call did not make takes only a lasting reference**
+(4571), unless the signature says the two live alike:
+
+    @[impure]
+    fn keep(slot: &mut &mut ⧖a u32, r: &mut ⧖a u32):
+        slot⌖ ← r                          ※ the call is then what is checked
+
+There is no null, no dangling reference and nothing checked while running:
+all of it is settled while compiling.  Borrowing -- how many references to a
+place may be out at once -- is [[memory.borrowing]]; references themselves
+are [[types.references]].
+
+Program:
+
+    let std := ⎕import("std")
+
+    let total: mut u8 = 0u8
+
+    fn counter() → &mut static u8:
+        &mut total
+
+    fn larger(a: &⧖x u8, b: &⧖x u8) → &⧖x u8:
+        if a⌖ ≥ b⌖: a else: b
+
+    @[startup, impure]
+    fn main(init: std.Init) → u6:
+        let c: &mut static u8 = counter()
+        c⌖ ← 40u8
+        let mine: u8 = 2u8
+        let big: &u8 = larger(&total, &mine)
+        _ ← std.println⌜&mut init.io.output, "{} {}", big⌖ + mine, total⌝
+        0u6
+
+Output:
+
+    42 40

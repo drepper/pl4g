@@ -1,0 +1,61 @@
+title: Results
+
+Part of [[types]].  How a value that may not be there is said.
+
+**`T?` is an answer of type `T` or the fact that there is none**, and
+**`T ? E`** one whose failure carries a value of `E`, saying why: `u8?`,
+`u64 ¤size ? i32`, `std.string.Parsed(f64) ? ParseError`.  The mark belongs to
+what it follows: `u8⟦⟧ ? i32` is a view or an `i32`, `u8?⟦4⟧` four results.
+The answer type is never `void` (4222).
+
+**What answers one**: `÷` and `%` (a divisor of nought), `ⁿ` and a negative
+power, `∣` with a worked-out divisor, a dictionary's lookup, `⎕narrow`,
+`⎕trunc` and `⎕text`, a loop with no `else` ([[statements.jumps]]), and every
+function whose signature says so.
+
+**Three ways to read one:**
+
+    x ?? fallback          ※ the answer, or the fallback, worked out only then
+    x?                     ※ the answer, or leave this function with the failure
+    match x:               ※ both ways
+        u8(n):  …          ※ the answer's arm names its type
+        ⊥(why): …          ※ the failure's arm, binding what it carries
+
+`??` binds looser than arithmetic and tighter than a comparison, and to the
+right: `a ÷ b ?? c + d` takes each side whole, and `(a ∣ n) ?? false` needs its
+parentheses.  `?` binds as tightly as a call, so `(a ÷ b)?` is the division's;
+it needs a function answering a result with the same error type (4220, 4221).
+
+**Making one**: a value of the answer type, written where a result is wanted,
+*is* the successful result -- `fn f() → u8?: 4`.  **`⊥`** is the failure, and
+`⊥ VALUE` one carrying a value; it takes the whole of what follows it, and
+whether it carries one is the type's to say (4523, 4524).  A result where a
+plain value is wanted is refused: the failure would be dropped silently.
+
+**A result is a value like any other**: kept in a variable, handed to a call,
+put in a field.  `match` on a result in a place reads it where it is.
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn share(total: u16, people: u16) → u16 ? str:
+        if people = 0u16:
+            return ⊥ "nobody to share with"
+        (total ÷ people) ?? 0u16      ※ not `?`: ÷'s failure carries no str (4221)
+
+    fn report(total: u16, people: u16) → str:
+        match share(total, people):
+            u16(each):
+                std.format⌜"{} each", each⌝
+            ⊥(why):
+                why
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        _ ← std.println⌜&mut init.io.output, "{}; {}", report(10u16, 4u16), report(3u16, 0u16)⌝
+        0u6
+
+Output:
+
+    2 each; nobody to share with

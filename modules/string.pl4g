@@ -2436,11 +2436,11 @@ fn numeral_f64(x: f64, form: Form ← Form.javascript) → Numeral:
     Numeral(.text ← out, .from ← 0, .to ← length)
 
 ※※ The shortest text that reads back as the same `f64`, written onto the end of
-※※ some bytes, in the form JavaScript's `Number.prototype.toString` gives it --
-※※ which is what `JSON.stringify` writes -- or with *form* the form Python's
-※※ `repr` gives it.
+※※ some bytes.
 ※※
-※※ \details The digits are the fewest that `parse_f64` reads back as this number,
+※※ \details In the form JavaScript's `Number.prototype.toString` gives it --
+※※ which is what `JSON.stringify` writes -- or with *form* the form Python's
+※※ `repr` gives it.  The digits are the fewest that `parse_f64` reads back as this number,
 ※※ and of several so few the nearest to it, a tie to the even digit.  Where they
 ※※ go is JavaScript's rule.  With the digits d₁…dₖ and the number d₁.d₂…dₖ ×
 ※※ 10ⁿ⁻¹:
@@ -2455,9 +2455,9 @@ fn numeral_f64(x: f64, form: Form ← Form.javascript) → Numeral:
 ※※ Python's rule is the same with 16 for 21 and -4 for -6, `.0` after a whole
 ※※ number, `0.0` for nought and at least two digits of exponent: `1e-07`.
 ※※
-※※ A negative number has a `-` in front.  Where JavaScript and this part is
-※※ nought with its sign, which this writes `-0` and JavaScript `0`: what is written
-※※ here reads back as the number it was, and `0` is the other nought.  A number
+※※ A negative number has a `-` in front.  The one place this parts from
+※※ JavaScript is nought with its sign, which this writes `-0` and JavaScript
+※※ `0`: what is written here reads back as the number it was.  A number
 ※※ that is not finite, which JSON has no way to write, is what JavaScript calls it
 ※※ -- `Infinity`, `-Infinity`, `NaN` -- and what `parse_f64` reads back with
 ※※ `Allow.special`.

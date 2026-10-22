@@ -1,0 +1,65 @@
+title: Arithmetic
+
+Part of [[expressions]].
+
+    a + b   a - b   a × b      checked: an answer that does not fit stops
+                               the program (status 80)
+    a ÷ b   a % b              answer a result: T?
+    a ⊞ b   a ⊟ b   a ⊠ b      saturating: the nearest value the type holds
+    ⎕wrap(EXPR)                every operator inside keeps the low bits
+    a ⁿ b   a²   a⁻²           powers
+    b ∣ a   b ∤ a   ∣n   ∤n    divides, does not divide, even, odd
+
+**Checked by default.**  `200u8 + 100u8` stops the program with a message
+saying where and how it got there; where both sides are written down the
+compiler refuses it (4214).  A check the program can never fail is not made.
+
+**Division truncates toward nought**, and `%` keeps the sign of what was
+divided: `⁻7i8 ÷ 2i8` is `⁻3i8`, `⁻7i8 % 2i8` is `⁻1i8`.  Both answer a
+result, which has no answer for a divisor of nought or for the most negative
+number divided by `⁻1` -- so `(a ÷ b) ?? 0u8`, or `(a ÷ b)?`.
+
+**Saturating arithmetic** answers the end of the range instead of going past
+it: `200u8 ⊞ 100u8` is 255 and `5u8 ⊟ 9u8` is nought.  **`⎕wrap(EXPR)`**
+makes `+ - ×` keep the low bits and a shift take its distance modulo the
+width, for the operators written inside it and no further -- a function called
+there checks as it always does.  A saturating operator inside a wrap is
+refused, the two contradicting each other.
+
+**A power**: `a ⁿ b` answers `T?`, the exponent being a count that may turn
+out negative, and a negative power being one divided by the positive one.
+`a²` and `a¹⁴` are written raised, never negative, and answer `T`; `a⁻²`
+answers `T?`.  What is raised is a number, integer or floating-point
+(4509); what it is raised by is a whole number (4510), so `1.5f64³` is
+3.375.  It binds tighter than `×` and to the right; anything to the nought
+is one.
+
+**`b ∣ a` asks whether `b` divides `a`**, and binds as a comparison.  With
+the divisor written down it answers `bool`; worked out, `bool?u8`, since it
+may be nought: `(b ∣ a) ?? false`.  A nought written there is refused (4520).
+`∣n` and `∤n` ask whether `n` is even and odd.
+
+These are defined on whole numbers, and `+ - × ÷` on floating-point ones
+([[types.floats]]); bits are [[expressions.bits]].
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn hash(x: u32) → u32:
+        ⎕wrap(x × 2654435761u32 + 12345u32)
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let full: u8 = 250u8 ⊞ 10u8
+        let none: u8 = 5u8 ⊟ 9u8
+        let q: i8 = (⁻7i8 ÷ 2i8) ?? 0i8
+        let r: i8 = (⁻7i8 % 2i8) ?? 0i8
+        let cube: u16 = 7u16³
+        let even: bool = ∣cube
+        _ ← std.println⌜&mut init.io.output, "{} {} {} {} {} {} {}", full, none, q, r, cube, even, hash(1u32)⌝
+        0u6
+
+Output:
+
+    255 0 ⁻3 ⁻1 343 false 2654448106

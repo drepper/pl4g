@@ -1,0 +1,56 @@
+title: Bits
+
+Part of [[expressions]].
+
+    a & b   a | b   a ^ b   ~a     and, or, exclusive or, complement
+    a « n   a » n                  shift left and right
+    a ↺ n   a ↻ n                  rotate left and right
+    ⎕ones(a)  ⎕lead(a)  ⎕trail(a)  bits set, zeroes above, zeroes below
+    ⎕wide_mul(a, b)                the whole 128-bit product of two 64-bit numbers
+
+**The bitwise operators take whole numbers** -- and the values of a flag
+enumeration ([[types.enums]]) -- with both sides of one type: `1u8 & 2u16` is
+refused.  A truth value has no bits; `∧ ∨ ¬` are what apply to it.  They bind
+tighter than a comparison, so `a & mask = mask` asks about `a & mask`.
+
+**A shift** drops what falls off the end; a signed number shifted right brings
+in copies of its sign.  The distance is of the same type, and **a distance of
+the width or more stops the program** (status 80) -- or is taken modulo the
+width inside `⎕wrap` ([[expressions.arithmetic]]).  **A rotation** turns the
+bits of the type, not of the register, and is defined on unsigned types only:
+`13u8 ↻ 1u8` is `134u8`.  Shifts and rotations bind where `×` does.
+
+**Counting** answers a `u8` over the type's own width: `⎕ones(⁻1i8)` is 8,
+`⎕lead(1u8)` is 7, and `⎕lead` and `⎕trail` of nought are the width.
+`⎕trail` of a mask is the place of its lowest set bit, which is how a walk
+over the set bits goes: take it, then clear it with `m & (m - 1)`.
+
+**`⎕wide_mul(a, b)`** multiplies two `u64` or two `i64` (4243) and answers
+`〈upper, lower〉`, the lower half always a `u64`: `let high, low :=
+⎕wide_mul(x, y)`.  It never fails.
+
+**`⎕mask(b)`** makes the bits of a number out of an array of truth values
+([[types.arrays.masks]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn places(m: u16) → [u8]:
+        let out: mut [u8] = []
+        let rest: mut u16 = m
+        while rest ≠ 0u16:
+            out ⧺← [⎕trail(rest)]
+            rest ← rest & (rest - 1u16)
+        out
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let m: u16 = 0b1010_0000_0110u16
+        let high, low := ⎕wide_mul(1u64 « 63u64, 4u64)
+        _ ← std.println⌜&mut init.io.output, "{} {} {} {} {}", places(m), ⎕ones(m), 13u8 ↻ 1u8, high, low⌝
+        0u6
+
+Output:
+
+    [1, 2, 9, 11] 4 134 2 0

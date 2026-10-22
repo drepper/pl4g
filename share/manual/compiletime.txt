@@ -1,0 +1,23 @@
+title: Compile time
+
+Part of [[language]].  What the compiler works out before the program runs,
+and what a program may ask of it.
+
+  [[compiletime.constants]]   -- constant expressions, and pure calls the
+                                 compiler runs
+  [[compiletime.reflection]]  -- `⌜…⌝`, `⎕typeof`, `comptime if`,
+                                 `comptime foreach`, `⎕fields`, `⎕kindof`,
+                                 `⎕alternatives`, `⎕typename`
+  [[compiletime.macros]]      -- macros written as rules and as functions
+                                 over the program's text, `comptime fn`
+
+**The compiler has one evaluator for all of it**, held to every rule the
+language has: a function it runs is checked and lowered like any other, and
+one it cannot finish -- a hundred thousand steps for a build -- is given up on
+(7001); what it cannot work out yet it names (7000).  The same evaluator runs
+the build function ([[running.builds]]).
+
+**There is no preprocessor and no text substitution**: the grammar is
+context-free, every macro invocation is marked, and what a macro writes is a
+tree checked like anything else.  `--emit=expanded` writes the program after
+expansion, `--emit=ast` and `--emit=tokens` before ([[running.compiler]]).

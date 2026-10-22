@@ -1,0 +1,55 @@
+title: Constants
+
+Part of [[compiletime]].
+
+**Wherever a number has to be known while compiling, it may be worked out**:
+how long an array is, which member of a tuple, the shape left of `⍴`, the
+value of a variable at the top level.  An index is worked out too where it
+can be, and then checked against the length while compiling.
+
+**What is a constant**: a literal; a name bound at the top level to a whole
+number and not `mut`; `#` of something whose type says how many; an operator
+over constants -- arithmetic, saturating arithmetic, bitwise operators,
+shifts, rotations, `⌈`, `⌊`, a power; **and a call to a pure function of the
+program whose arguments are constants**, which the compiler runs.
+
+    fn square(n: u64) → u64: n × n
+
+    let SIDE: u64 = 1 + 2
+    let AREA: u64 = square(SIDE)       ※ 9, worked out while compiling
+    let grid: u8⟦square(2)⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧ in ⎕static
+    t⟦#t - 1⟧                          ※ the last member of a tuple
+
+**The top level has no order**: a constant may be used above where it is
+defined, in a signature or another constant; one reaching itself has no value
+(4666).  **The arithmetic is the program's**: an answer that does not fit is
+an error (4214), a shift by the width or more too (4664), and a division
+answers a result -- `(7 ÷ 2)?` is 3 and `(1 ÷ 0) ?? 2` is 2, a `?` with no
+answer refused (4663).  A function that is not pure is not run (4665), nor a
+generic one.
+
+**A variable at the top level is given what the compiler worked out**, laid
+out in the image -- a pure call of constants answering a table or an array
+included ([[memory.static]]).  **A pure call of constants inside a function**
+may be worked out while compiling when optimizing, and is kept where working
+it out stops.
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn cube(n: u64) → u64: n × n × n
+
+    let EDGE: u64 = 1 + 2
+    let VOLUME: u64 = cube(EDGE)
+    let FACES: u8⟦EDGE × 2⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8⟧ in ⎕static
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let quarter: u64 = (VOLUME ÷ 4) ?? 0
+        _ ← std.println⌜&mut init.io.output, "{} {} {}", VOLUME, quarter, ⎕drop(#FACES)⌝
+        0u6
+
+Output:
+
+    27 6 6

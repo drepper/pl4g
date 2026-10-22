@@ -1,0 +1,16 @@
+title: Lexical structure
+
+Part of [[language]].  The characters a program is written in, and what they
+make.  A source file is UTF-8 text; its name ends in `.pl4g`.
+
+  [[lexical.comments]]  -- `※` comments and `※※` documentation comments,
+                           and the commands a documentation comment may hold
+  [[lexical.names]]     -- identifiers, keywords, the compiler's `⎕` names,
+                           type parameters, lifetimes, labels and units
+  [[lexical.literals]]  -- whole numbers, floating-point numbers, characters
+                           and strings, their suffixes and escapes, and the
+                           raised minus `⁻` a negative literal is written with
+  [[lexical.glyphs]]    -- every glyph the language uses, what it is for, and
+                           the few ASCII substitutes there are
+
+How the lines of a program make blocks and statements is in [[syntax]].

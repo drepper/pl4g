@@ -11,6 +11,10 @@
 
 #include <fstrcmp.h>
 
+// What bin/pl4g-manual made, by its hash: included so that a compiler cache,
+// which does not look at what `#embed` reads, sees the manual change.
+#include "manual.stamp.hh"
+
 
 namespace pl4g::manual {
 

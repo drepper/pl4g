@@ -1,0 +1,69 @@
+title: Purity and effects
+
+Part of [[functions]].
+
+**A function is pure unless it says `@[impure]`**: calling it changes nothing
+a later call or reader could notice, so a call nothing reads is not made, a
+call repeated with the same arguments may be worked out once, and one of
+constants may be worked out while compiling.  The compiler checks it:
+
+    writing a variable at the top level                     4478
+    writing memory it did not make: an array it was handed,
+      a place a reference it was handed names               4479
+    calling an `@[impure]` function, or through an
+      `@[impure] fn(…)` value                               4480
+
+**Effects are a property of all a call reaches**: a function calling an
+impure one is impure, and the chain of `@[impure]` marks shows where the
+effects begin.  Each message names the pure function and points at it (4511).
+
+**Not effects**: reading anything; writing what the function made -- its
+locals, a list or table it made, room it took from an arena, however much;
+filling a table handed to it as `mut ⸨…⸩`.  Allocating is no effect.
+
+**Input and output need a device, not an attribute.**  A parameter whose type
+is marked `@[device]` -- `std.io.Writer`, `std.io.Reader`, `std.fs.Dir`,
+`std.fs.State`, or a record holding one, as `std.Init` holds them -- is
+permission to do I/O through it, so a function handed `&mut init.io.output`
+writes to it and says nothing.  **A function doing I/O through nothing it was
+handed** -- opening a file in `std.fs.cwd()`, a device it made of numbers --
+says **`@[io]`**, and a caller of it needs the same permission: a device it
+was handed, or `@[io]` of its own.  `@[impure]` and `@[io]` are two
+permissions, and a function doing both says both.
+
+**A mark is written only where it is needed** (4933): `@[impure]` on a
+function that changes nothing, or `@[io]` on one doing no I/O or handed a
+device, is refused, and so is `@[impure]` on a function type nothing given to
+it needs (4935).  A function with no body -- `@[external]`, `@[host]` -- is
+impure by being one.
+
+**`@[opaque]`** keeps every call of a pure function: never inlined, folded,
+moved or dropped, for a program that times a call or watches the optimizer.
+**`@[can_ignore]`** says a caller may drop the answer.  `⇕` reads the
+processor's rounding mode and makes a function impure (4508).  A condition in
+a signature is pure, whatever its function is ([[functions.conditions]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    let calls: mut u32 = 0u32
+
+    fn square(n: u32) → u32: n × n
+
+    @[impure]
+    fn counted(n: u32) → u32:
+        calls ← calls + 1u32
+        n
+
+    @[startup, impure]
+    fn main(init: std.Init) → u6:
+        _ ← square(7u32)            ※ pure and unread: the call is not made
+        _ ← counted(7u32)           ※ impure: it is made
+        let s: u32 = square(counted(3u32))
+        _ ← std.println⌜&mut init.io.output, "{} {}", s, calls⌝
+        0u6
+
+Output:
+
+    9 2

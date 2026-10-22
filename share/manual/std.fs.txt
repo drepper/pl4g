@@ -1,0 +1,47 @@
+title: std.fs
+
+Part of [[library]], handed on by [[std]].  Files and directories, and what a
+program does its I/O with.
+
+**`std.fs.cwd()`** is the directory the process is in, and **`d.open(name,
+⌜T⌝)`** opens a file in a directory for what the type handed says:
+`⌜std.io.Reader⌝` to read, `⌜std.io.Writer⌝` to write -- made if missing,
+emptied if not -- `⌜std.io.ReadWriter⌝` for both, and `⌜std.fs.Dir⌝` to open
+a directory.  It answers the device or the number the kernel refused with; a
+name is relative to the directory unless it begins with `/`.  A function
+opening through `cwd()` is handed no device and says `@[io]`
+([[functions.purity]]).
+
+**`State`** is what the I/O is done with -- the ring and the tasks
+`std.run` drives -- and `init.fs` is the program's.  **`init.fs.adopt(fd,
+⌜std.io.Writer⌝)`** makes a device of a descriptor the program got some other
+way, a pipe `⎕syscall` made say.
+
+Program:
+
+    let std := ⎕import("std")
+
+    @[io]
+    fn first_line(name: str) → str:
+        match std.fs.cwd().open(name, ⌜std.io.Reader⌝):
+            std.io.Reader(r):
+                let from: mut std.io.Reader = r
+                defer from.close()
+                foreach line := std.read_lines(&mut from):
+                    match line:
+                        u8⟦⟧(text):
+                            return ⎕text(text) ?? "?"
+                        ⊥(why):
+                            return std.error_name(why)
+                ""
+            ⊥(why):
+                std.error_name(why)
+
+    @[startup]                 ※ handed devices, so it may call first_line
+    fn main(init: std.Init) → u6:
+        _ ← std.println⌜&mut init.io.output, "{}", first_line("/nonexistent")⌝
+        0u6
+
+Output:
+
+    not_found

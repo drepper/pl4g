@@ -1,0 +1,70 @@
+title: Macros written as functions
+
+Part of [[compiletime.macros]].
+
+**A macro may be a function over the program's text**: written as a function
+is, with `macro` for `fn`, it is handed pieces of the program and answers the
+piece that replaces the invocation (7025, 7026).
+
+    macro sum(e: syntax) → syntax:
+        if ⎕head(e) = ⌜+⌝:
+            ⌜$(⎕part(e, 0u64)) × 10u8⌝
+        else:
+            ⌜$e⌝
+
+**`syntax` is a piece of the program**, a type only while the compiler runs:
+nothing at run time may hold one (7022).  `=` asks whether the same thing is
+written in both.  Taken apart by three questions (7027, 7028):
+
+    ⎕head(e)        what it is made by: an operator alone in marks, ⌜+⌝, or
+                    for a literal its type
+    ⎕parts(e)       how many pieces the head applies to
+    ⎕part(e, n)     the n-th of them
+
+and **`⎕name(e)`** is what a literal or a name is written as, as text.  **In a
+quote, `$a` puts in the piece `a` holds and `$(EXPR)` what an expression
+answers** -- a piece, a number as a literal (an `i64` one, whatever the
+number's type), text as a literal (7021).  A quote whose contents are
+indented writes statements.
+
+- **`⁂args: syntax` as the last parameter** stands for all the arguments from
+  there on (7030), the one piece several are: `⎕parts(args)` counts them.
+  **`⁂$args`** spreads them back out into a call's arguments, a tuple, or an
+  array, list or set written out -- where a dictionary is wanted, two at a
+  time.
+- **`⎕caller_name(TEXT)`** is a name meaning what it means at the
+  invocation, the one exception to hygiene; **`⎕refuse(TEXT)`** refuses the
+  invocation in the macro's own words, pointing at it (7029).
+- **`comptime fn`** is a function the macros may call -- one recursing,
+  say -- and is in the program too unless it takes or answers a piece.  A
+  name a macro binds is renamed once per run, every quote of the run alike.
+
+**A macro is compiled and run by the compiler** with every rule of the
+language asked of it; one that cannot be lowered is refused with the reason
+(7024), one whose run stopped with that (7023).  Not there yet: asking what
+kind a piece is without comparing heads, building a piece from a head and
+parts, an array of pieces, and a macro writing a definition.
+
+Program:
+
+    let std := ⎕import("std")
+
+    comptime fn deepest(e: syntax) → u64:
+        if ⎕parts(e) = 0u64: 1u64 else: 1u64 + deepest(⎕part(e, 0u64))
+
+    macro depth(e: syntax) → syntax:
+        ⌜$(deepest(e))⌝
+
+    macro count(⁂args: syntax) → syntax:
+        ⌜$(⎕parts(args))⌝
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let d: i64 = depth⌜1u8 + 2u8 + 3u8⌝
+        let n: i64 = count⌜a, b, c, d⌝
+        _ ← std.println⌜&mut init.io.output, "{} {}", d, n⌝
+        0u6
+
+Output:
+
+    3 4

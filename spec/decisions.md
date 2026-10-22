@@ -11688,6 +11688,61 @@ Measured, pypl4g, the best of five: macro-comptime-fn 112.7 ms at 28f579f, 421.6
 the tip of `json` and now: examples/numbers at `-O1` 650 ms and 165, examples/documents 1173 and 434, macro-comptime-fn 30.1 and
 12.9.  The test suite, every core: 120 s and 81.
 
+## 2026-10-22T11:57+02:00 — documentation
+
+### The manual: a graph of short named nodes from `help`, written by hand for the language and made from the modules for the library
+
+The user asked: "create a concise documentation of the language and the library (not the implementation of the language).
+create a C++ library which returns chunks of the manual based on a name defined for each chunk.  from a toplevel chunk named
+"help" all other chunks need to be recursively discoverable.  Group chunks by topic and have the call to the lookup function
+with the name of the group retrieve a text which explains the contained section.  If a single text is larger than 4kB, try to
+split it.  the resulting text files with their names result is a directed graph.  this structure has to be maintained if the
+language or library changes in future.  Always regenerate the document."
+
+What was chosen, and why:
+
+- **Names are lower case and dotted, a group first and its part after**: `types`, `types.arrays`, `types.arrays.views`,
+  `functions.coroutines`.  The library's nodes are named as a program names what they describe -- `std.string.parse_int`,
+  `std.fs.Dir.open` -- so that what a reader has in front of them in a program is what they ask for.  The top is `help`, under it
+  `language`, `library`, `builtins`, `attributes` and `running`; `language` holds `syntax`, `lexical`, `types`, `expressions`,
+  `statements`, `functions`, `memory`, `modules`, `errors`, `compiletime` and `running`.  A group's node says what its section
+  covers and links every part; every part links back to its group and to the nodes it relates to.  Compare **Emacs Info** and
+  **GNU Texinfo**, whose nodes have names and are reached by following them; **Python**'s `help()`, keyed by the dotted name of
+  what it describes; **man** pages, keyed by name and section.
+- **A link is the name in double brackets, `[[std.text]]`**, and stays so in the text served: the reader asks for what it names.
+  It is the wiki convention, needs no escaping in prose that uses single brackets for lists, and is found by one pattern in both
+  the generator and the C++ check.
+- **No node is more than 4096 bytes of UTF-8, and splitting is the writer's where the writer wrote it.**  A hand-written node
+  that grows past the limit is refused by the check -- it is split as `topic` and `topic.part`, the way `builtins.more` and
+  `compiletime.macros.functions` are -- because only the writer knows where a topic divides.  A module's list of exports is split
+  by the generator over `NAME.more`, `NAME.more2` and on, each linked from the one before, a section that continues saying so.
+- **The library is documented by its own `※※` comments**, so that a function added to a module is in the manual the next time
+  it is made, and changed where it changed.  Only `※※` lines are documentation; a `※` line among them is a remark about how the
+  definition is made, for whoever reads the module.  The comments that were implementation commentary, or that began "The same"
+  and so meant nothing out of the order of the file, were rewritten in the modules' voice; one that had been attached to the
+  wrong definition in `io.pl4g` was moved back, and `json.decode`'s, which still said the machine's stack bounds a document's
+  depth, says what the reader does.
+- **The coverage check**: every builtin the compiler's token table knows, every attribute of the registry and every keyword is
+  mentioned in some node, or the build fails.  So adding one to the language without the manual is found by the next build.
+  Diagnostics are not held to it -- there are hundreds, and the catalog is where each is explained -- but the nodes cite the number
+  of the rule they describe, as the specification does.
+- **Examples are programs, and programs are compiled.**  A block indented four spaces under a line `Program:` is a complete
+  program, and one under `Output:` after it is what it prints; `tests/compiler/test_manual.py` compiles each for x86-64 with
+  pypl4g, runs it through `bin/pl4g-run`, and holds it to no diagnostic, status nought and that output.  Any other indented block
+  is a fragment and nothing compiles it.  Compare **Python**'s doctest and **Rust**'s documentation tests, which run the examples
+  of the documentation for the same reason; **Go**'s `Example` functions, which compare what they print with an `Output:`
+  comment -- the convention taken here.
+- **A name that is no node is answered with the closest**, by fstrcmp's `fmemcmp` over lower-cased names at its own threshold,
+  `FSTRCMP_THRESHOLD`, and **at most three** offered, the closest first: one suggestion is often wrong, and more than three is a
+  list to read rather than a correction.  Compare **git**'s "did you mean" and **GCC**'s spelling hints, which use the same
+  library's idea.
+
+The generator's output was improved with it: a definition's header is shown whole -- a type's fields with their remarks, a
+function's conditions, both definitions of a glyph read with one and with two operands, each with its own comment -- the
+parameters aligned, the prose filled
+again to 78 columns without breaking a code span, the kinds of export listed under headings, and each node ending with the
+nodes its comment names.
+
 Open questions
 --------------
 

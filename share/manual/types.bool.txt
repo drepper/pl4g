@@ -1,0 +1,23 @@
+title: Truth values
+
+Part of [[types]].
+
+`bool` has two values, `true` and `false`, and nothing else is one: a number
+is no condition, so `if n:` is refused for a number `n` (4427) and
+`n ≠ 0u8` asks what was meant.  Nothing converts between `bool` and a number
+in either direction.  What a `bool` occupies is the compiler's business.
+
+**The logical operators** take truth values and nothing else:
+`∧` and, `∨` or, `⊕` exactly one, `⊼` not both, `⊽` neither, `¬` not; and the
+words **`and` and `or`**, which do not work out their right side where the left
+settles the answer.  `&` and `|` are no logical operators, a `bool` having no
+bits a program may see ([[expressions.comparisons]]).
+
+**Comparing** two truth values asks only `=` and `≠`: neither comes before
+the other, so `<` is refused.
+
+A comparison answers a `bool`, and so does a set asked about a key, `s⸨k⸩`,
+and a test function ([[running.testing]]).
+
+    let ready: bool = count > 3u8 ∧ ¬done
+    if ready and expensive(): …       ※ expensive() runs only where ready

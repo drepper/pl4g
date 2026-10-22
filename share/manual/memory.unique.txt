@@ -1,0 +1,68 @@
+title: Values that are unique or closed
+
+Part of [[memory]].
+
+**`@[unique]` on a type says there is one of a value and it is never copied**
+(4400): binding it to a second name, handing it by value, answering it, putting
+it in something else are refused.  A field read and a reference taken are no
+copies, so such a value is passed along as `&` or `&mut`, and walked with
+`foreach &x`.  `std.Init` is unique: having it is having the process's devices.
+
+**`@[closed_by(f)]` says a value stands for something to be given back** -- a
+file, a socket -- and that `T.f` gives it back.  `std.io.Reader`, `Writer` and
+`ReadWriter` and `std.fs.Dir` are closed by `close`.
+
+- **It is moved, never copied.**  Binding it, handing it by value, answering it
+  hands it on, and the variable it came from holds nothing after: reading it
+  again is refused (4682).
+- **Every variable holding one owes the close**, on every way out of its scope
+  -- the end, `return`, `break`, `continue`, `?`: it is handed to `T.f`, moved
+  on, or put off with `defer x.close()` (4681).  A by-value parameter owes it
+  too, which is how handing one to a function hands it the duty.
+- **Refused**, for what each would lose: giving a variable a new one while it
+  holds one (4684); moving, in a loop, one from outside it (4685); moving out
+  of a field, an element, a variable at the top level or through a reference
+  (4683); putting one in a tuple, a record, a list or a lambda (4687).
+- `T.f` is a function of the type's own file taking one `T` by value (4686).
+
+The language closes nothing on its own: nothing the program did not write
+runs, and a program that forgot is refused.  The three streams of `std.Init`
+are never moved and never closed -- they are lent, `&mut init.io.output`.  The
+report log has every move and every end (`move`, `lifetime-ended`).
+
+Program:
+
+    let std := ⎕import("std")
+
+    let live: mut u8 = 0u8
+
+    @[closed_by(close)]
+    type Handle = id : u8
+
+    @[impure]
+    fn Handle.close(h: Handle):
+        live ← live - 1u8
+
+    @[impure]
+    fn opened(id: u8) → Handle:
+        live ← live + 1u8
+        Handle(.id ← id)
+
+    @[impure]
+    fn used(h: Handle) → u8:
+        defer h.close()
+        h.id × 2u8
+
+    @[startup, impure]
+    fn main(init: std.Init) → u6:
+        let a: Handle = opened(1u8)
+        let b: Handle = opened(20u8)
+        defer b.close()
+        let twice: u8 = used(a)                ※ a is moved into used
+        let line: str = ⍕twice ⧺ " " ⧺ ⍕b.id ⧺ " " ⧺ ⍕live
+        _ ← std.Io.println(&mut init.io.output, ⎕bytes(line))
+        0u6
+
+Output:
+
+    2 20 1

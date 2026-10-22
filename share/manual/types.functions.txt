@@ -1,0 +1,61 @@
+title: Function types
+
+Part of [[types]].
+
+**`fn(TYPE, …) → TYPE` is the type of a function value**, and `fn(TYPE, …)`
+one that answers nothing.  A function named where a value is wanted is one,
+and so is a lambda ([[expressions.lambdas]]); either stands where the other
+does.  Calling through a value costs what calling by name does.
+
+    fn twice(g: fn(u8) → u8, x: u8) → u8:
+        g(g(x))
+
+    twice(λ a: u8 → u8 { a × 2u8 }, 3u8)       ※ 12
+
+**What a caller reads off the type is written before it**, and nothing else:
+
+- **`@[impure] fn(u8) → u8`** may change what outlives the call.  A function
+  type is pure unless it says so, so a pure function may call through
+  `fn(u8) → u8` and not through the impure one (4480).  Saying it where
+  nothing given to the slot needs it is refused (4935).
+- **`@[listable] fn(u8) → u8`** walks an array handed where an element is
+  wanted ([[types.arrays.walking]]).
+- **`@[can_ignore] fn(u8) → u8`** lets a call's answer go nowhere.
+
+A value promising more stands where less is wanted -- a listable one where a
+plain one is, a pure one where an impure one is -- and never the other way
+(4203).
+
+**`fn(u8) in ⎕heap → u8`** is a function whose environment lasts: one kept in
+`⎕heap`, or one that brought nothing in.  Only such a value may be answered or
+kept beyond the call that made it when it reaches anything
+([[expressions.lambdas]]).  A function answering a reference says its lifetime
+in its type, `fn(&⧖x u32) → &⧖x u32` ([[memory.lifetimes]]).
+
+**Not a value**: a generic function (4569), and a function that writes an
+array it is handed (4641).  A variable at the top level may not hold a lambda
+(4550).  A function of C's convention, `@[cdecl]`, is called through a value
+in the language's own.
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn doubled(n: u16) → u16: n × 2u16
+    fn squared(n: u16) → u16: n × n
+
+    fn both(f: fn(u16) → u16, g: fn(u16) → u16, x: u16) → u16:
+        g(f(x))
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let pick: mut fn(u16) → u16 = doubled
+        let first: u16 = both(pick, squared, 3u16)
+        pick ← squared
+        let second: u16 = both(pick, λ n: u16 → u16 { n + 1u16 }, 3u16)
+        _ ← std.println⌜&mut init.io.output, "{} {}", first, second⌝
+        0u6
+
+Output:
+
+    36 10

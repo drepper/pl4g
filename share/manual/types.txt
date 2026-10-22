@@ -1,0 +1,45 @@
+title: Types
+
+Part of [[language]].  Every value has one type, and nothing becomes a value of
+another type unless the program writes the conversion.  A type is written
+after the name it is for, `let n: u8 = 3u8`, and may be left to the value,
+`let n := 3u8`.
+
+Numbers and other single values:
+
+  [[types.integers]]   -- `u1` to `u64` and `i2` to `i64`: any width, checked
+  [[types.units]]      -- `u32 ¤meter`: what a number counts, in its type
+  [[types.floats]]     -- `f32` and `f64`, which never hold an infinity
+  [[types.bool]]       -- `bool`, which is no number
+  [[types.char]]       -- `char`, one Unicode code point
+  [[types.str]]        -- `str`, text that is always well-formed UTF-8
+
+Several values:
+
+  [[types.arrays]]     -- `u8⟦4⟧`, `u8⟦2,3⟧` and views `u8⟦⟧`: shape, index,
+                          slice, `⍴`, `⧺`, masks and `¨`
+  [[types.lists]]      -- `[u8]`: as many as there turn out to be, growing
+  [[types.tables]]     -- `⸨K⸩` sets and `⸨K: V⸩` dictionaries
+  [[types.tuples]]     -- `〈u8, u16〉`: several values travelling as one
+
+Types a program defines:
+
+  [[types.records]]    -- `type P = x : u8 ; y : u8`: products with named fields
+  [[types.sums]]       -- `type S = a : u8 | b : str`: one of several parts
+  [[types.enums]]      -- `enum Colour { red ; green }`, and `@[flag]` ones
+  [[types.generic]]    -- type parameters, `T'`, of functions and types
+
+And:
+
+  [[types.results]]    -- `u8?` and `u8 ? E`: an answer or why there is none
+  [[types.references]] -- `&T`, `&mut T`: a name for a place someone holds
+  [[types.functions]]  -- `fn(u8) → u8`: functions and lambdas as values
+  `arena`              -- where memory comes from: [[memory.arenas]]
+  `⇉T`                 -- something a loop walks: [[functions.generators]]
+  `void`               -- nothing: a part of a sum that carries nothing
+
+**`mut` before a type** says a name may be given another value; on a set or a
+dictionary it also says entries may be put in ([[statements.let]]).  **Two
+defined types are two types** even where their parts agree: a definition says
+what a value is.  What a value occupies in memory is the compiler's to decide,
+except where `@[abi]` or `@[cdecl]` asks for C's layout ([[running.foreign]]).

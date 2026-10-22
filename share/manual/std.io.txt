@@ -1,0 +1,19 @@
+title: std.io
+
+Part of [[library]], handed on by [[std]].  The devices a program reads and
+writes: **`Reader`**, **`Writer`** and **`ReadWriter`**, each a descriptor
+and where the ring its requests go through is.  A device is `@[device]`, so
+holding one is permission to do I/O through it, and `@[closed_by(close)]`, so
+one that was opened is moved, never copied, and closed by whoever holds it
+last -- `defer out.close()` where it is bound ([[memory.unique]]).  The three
+a process starts with are fields of `std.Init`, lent and never closed.
+
+**`Pending`** is a request that has been started and may not have been
+answered: `std.write` answers one and `std.flush` waits for it.  **`Answer`**
+is what a task is handed back when the kernel has answered its request,
+`std.done` and `std.received` reading it ([[functions.coroutines]]).
+
+The rest -- `Ring`, the `start` functions, `Pending.wait`, `taken` and `ready`
+-- is what `std` and `std.fs` are built on; a program uses `std`'s functions.
+Every request goes through `io_uring` where the kernel has it, and straight to
+the kernel where it has not, which a program cannot tell apart.

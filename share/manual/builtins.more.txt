@@ -1,0 +1,41 @@
+title: The names the compiler provides, continued
+
+Part of [[builtins]].
+
+Arrays, lists and walks:
+
+    ⎕one_run(v)         a view's elements as one run, copied where they are not  [[types.arrays.views]]
+    ⎕reserve(l, n)      room in a list for n more                        [[types.lists]]
+    ⎕iter(l)            a cursor at a list's first element
+    ⎕enumerate(x, s)    count a loop's turns, from s, or 0u64            [[statements.foreach]]
+    ⎕start(w)           a walk under way, out of a coroutine or anything walked  [[functions.coroutines]]
+    ⎕resume(c, u)       hand u in and take the next turn, as a result
+    ⎕await(v)           `yield v`, under the name of what a task does
+
+Types, for comptime and generic code ([[compiletime.reflection]]):
+
+    ⎕typeof(⌜v⌝)        the type of what is lifted, compared with another
+    ⎕typename(⌜T⌝)      the type written out, as text
+    ⎕isrecord(⌜T⌝)      whether T is a record
+    ⎕kindof(⌜T⌝)        what kind of type T is, as text
+    ⎕fields(v)          a record's fields, or a type's or an enumeration's
+    ⎕alternatives(v)    a sum's parts, each with a view of what it carries
+
+In a macro, over pieces of the program ([[compiletime.macros.functions]]):
+
+    ⎕head(e)  ⎕parts(e)  ⎕part(e, n)    what a piece is made of
+    ⎕name(e)            what a name or a literal is written as
+    ⎕caller_name(t)     a name meaning what it means at the invocation
+    ⎕refuse(t)          refuse the invocation, in the macro's words
+
+The machine and the kernel ([[running.foreign]]):
+
+    ⎕syscall(n, …)      ask the kernel; ⎕sc@NAME is the call's number
+    ⎕at(addr, ⌜&T⌝)     a place at an address
+    ⎕span(addr, n, ⌜T⟦⟧⌝)   a run of places at an address, or a list adopted
+    ⎕address(&x)        a place as the number it is
+    ⎕acquire(&p)        read a place, nothing after it seen before it
+    ⎕release(&mut p, v) write one, nothing before it seen after it
+
+And one no program writes: **`⎕empty`**, giving an arena back, which the end
+of the block that made it does (4932).

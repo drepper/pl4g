@@ -1054,10 +1054,10 @@ fn special_at(input: u8⟦⟧, at: u64 ¤idx, begin: u64 ¤idx, negative: bool) 
 ※※ answered as an array.  The text is UTF-8, the strings are checked as such, and
 ※※ an escape names a code point: a surrogate pair is the one character, and half
 ※※ of one alone is refused unless `lone_surrogates` says otherwise.  *depth* is
-※※ how deeply arrays and objects may be nested, which bounds how much of the
-※※ stack reading one takes -- a hostile document of a million `[` is refused,
-※※ not a program run off its stack.  *duplicates* is what is done with a key an
-※※ object already had.
+※※ how deeply arrays and objects may be nested, one deeper being refused at its
+※※ bracket; what is open is kept on a stack of the reader's own and not the
+※※ machine's, so the limit is a policy.  *duplicates* is what is done with a key
+※※ an object already had.
 ※※
 ※※ Everything the value holds is made in `a`, and lives as long as it does.
 ※※

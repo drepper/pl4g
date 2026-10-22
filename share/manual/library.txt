@@ -1,3 +1,32 @@
 title: The library
 
-[[std]] [[std.string]] [[std.io]] [[std.fs]] [[json]]
+Part of [[help]].  The modules the installation provides, written in the
+language itself; what each node of them says is made from the modules' own
+documentation comments, so it is what the module is.
+
+  [[std]]         -- what every program starts with: `std.Init`, the devices,
+                     writing and reading, text of values, formatting,
+                     tasks, and what a build function is handed
+  [[std.io]]      -- the devices themselves and the requests to them
+  [[std.fs]]      -- files and directories, and what I/O is done with
+  [[std.string]]  -- numbers read out of bytes and written onto them,
+                     characters as UTF-8
+  [[json]]        -- JSON documents read into a value and written back
+
+`std` hands on `std.io`, `std.fs` and `std.string`, so a program that imports
+`std` -- every program does -- reaches all four.  `json` is imported on its own:
+
+    let std := ⎕import("std")
+    let json := ⎕import("json")
+
+**Where to look for what**: printing is `std.println⌜…⌝` and `std.print⌜…⌝`,
+text of a value `⍕v` and `std.text`, `std.padded` and `std.format⌜…⌝`;
+reading `std.read` and `std.read_lines`; files `std.fs.cwd().open(…)`; what the
+kernel refused `std.error_name`; numbers in text `std.string.parse_int`,
+`parse_f64`, `format_int` and `format_f64`.
+
+The modules are system modules: what is wrong only in them is not warned
+about ([[running.diagnostics]]).  What a program does not use of them costs it
+nothing -- a module is compiled only as far as the program names it.  Under the
+modules is the runtime the compiler carries, C compiled for each architecture,
+which drives `io_uring` and keeps the heap; a program never names it.

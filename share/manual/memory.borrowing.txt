@@ -1,0 +1,63 @@
+title: Borrowing
+
+Part of [[memory]].
+
+**A `&mut` is the only reference to its place while it lives; a `&` may share
+with other `&`s** (4563).  Whoever holds a `&mut` knows nothing else changes
+the place, and whoever holds a `&` that nothing does.  **The name counts as a
+way to the place**: while a `&mut` is out the name is not read (4565), and
+while any reference is out it is not written (4566).
+
+**A borrow lasts until the last use of what keeps it**, on each way through --
+after the statement that uses it last, at the start of an arm that never uses
+it, after a loop that does.  One nothing keeps, handed straight to a call, ends
+with the call.  So a place may be lent again on the next line:
+
+    let a: &mut u8 = &mut n
+    a⌖ ← 2u8                       ※ a's last use: n is free from here
+    let b: &mut u8 = &mut n        ※ no second one out
+    bump(&mut p) + bump(&mut p)    ※ lent twice, one after the other
+
+**Two fields are two places**, and so are two elements whose indices are
+written down: `&mut v⟦0⟧` and `&mut v⟦2⟧` may be out at once, and
+`copy(&mut init.io.input, &mut init.io.output)` lends two fields.  An element
+whose index is worked out while running is the whole array.  A field and the
+record holding it are one place.
+
+**Copying a `&mut` is a reborrow**: `let other: &mut u8 = r` borrows from `r`
+as `&mut x` borrows from `x`, and `both(r, r)` is refused.  A `&` copied from
+it shares, so `r` may still be read.  An arena is not counted.
+
+**Borrowing reaches beyond references**: a view of a list borrows the list, an
+iterator borrows what it walks (4667), and a loop borrows what it walks
+(4566).  Variables at the top level are not tracked, every function reaching
+them.
+
+**The report log** says where each borrow ended and why (`borrow-ended`),
+which is the range the compiler assumed.  This is Rust's rule with its
+non-lexical lifetimes; nothing of it costs anything while the program runs.
+
+Program:
+
+    let std := ⎕import("std")
+
+    @[impure]
+    fn swap(a: &mut u8, b: &mut u8):
+        let t: u8 = a⌖
+        a⌖ ← b⌖
+        b⌖ ← t
+
+    @[startup, impure]
+    fn main(init: std.Init) → u6:
+        let v: mut u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+        swap(&mut v⟦0⟧, &mut v⟦2⟧)         ※ two elements, two places
+        let n: mut u8 = 5u8
+        let r: &mut u8 = &mut n
+        r⌖ ← r⌖ + 1u8                      ※ r's last use
+        n ← n × 2u8                        ※ so n may be written again
+        _ ← std.println⌜&mut init.io.output, "{} {} {}", v⟦0⟧, v⟦2⟧, n⌝
+        0u6
+
+Output:
+
+    3 1 12

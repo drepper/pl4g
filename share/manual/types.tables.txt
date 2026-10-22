@@ -1,0 +1,56 @@
+title: Sets and dictionaries
+
+Part of [[types]].
+
+**`⸨T⸩` is a set and `⸨K: V⸩` a dictionary**, written as their values are:
+`⸨1u8, 2u8⸩`, `⸨"a": 1u8, "b": 2u8⸩`.  A colon after the first entry makes a
+dictionary.  An empty `⸨⸩` is whichever the type wanted says (4432).  Both
+hash their keys, with a seed of each table's own, so no input can be chosen to
+make lookups slow; `PL4G_HASH_SEED=n` in the environment repeats a run.
+
+**A key** is a type `=` answers exactly on: the whole numbers, `bool`,
+`char`, an enumeration and `str` (4429) -- no floating-point number, record or
+sum.  A value may be anything but `void` or another table (4430, 4445).
+
+    s⸨k⸩                        ※ bool: does the set hold k
+    d⸨k⸩                        ※ V?: the value, or a result holding none
+    d⸨k⸩ ?? 0u8                 ※ or this instead
+    d⸨k⸩ ← v                    ※ put or replace a value
+    †d⸨k⸩                       ※ take the key out, answering what d⸨k⸩ would
+
+**Putting anything in needs `mut` in the type**, `let d: mut ⸨str: u8⸩`
+(4598): a table is a handle, so what may be done to it is part of its type,
+and a writable one stands where a read-only one is wanted.  A set takes a key
+by a join, `s ← s | ⸨k⸩`.
+
+**A table is walked in the order its keys were first put in**: `foreach k :=
+s`, and `foreach k, v := d` for a key and its value.  `#t` is how many entries
+it holds.  **`|`, `&`, `^` and `-` join two sets** -- either, both, one and
+not the other, the first without the second -- with Python's meanings and
+order.  `=` and `≠` ask whether two tables hold the same; there is no order.
+
+A table is made in the arena `in` names or in `⎕heap`; one written down that
+never changes says `in ⎕static` and is laid out in the image, and one written
+empty at the top level costs nothing until something is put in it.
+`⎕environ` is the environment, a `⸨str: str⸩` ([[builtins]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn counted(words: str⟦⟧) → ⸨str: u8⸩:
+        let seen: mut ⸨str: u8⸩ = ⸨⸩
+        foreach w := words:
+            seen⸨w⸩ ← (seen⸨w⸩ ?? 0u8) + 1u8
+        seen
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let words: str⟦5⟧ = ⟦"to", "be", "or", "not", "to"⟧ in ⎕static
+        let d: ⸨str: u8⸩ = counted(words)
+        _ ← std.println⌜&mut init.io.output, "{} {}", d, d⸨"to"⸩ ?? 0u8⌝
+        0u6
+
+Output:
+
+    ⸨to: 2, be: 1, or: 1, not: 1⸩ 2

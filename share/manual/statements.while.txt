@@ -1,0 +1,53 @@
+title: while and unless
+
+Part of [[statements]].
+
+**`while CONDITION:` runs its body again for as long as the condition holds**;
+the condition is a `bool` (4437) and takes no parentheses.
+
+    let n: mut u8 = 5u8
+    while n > 0u8:
+        total ← total + n
+        n ← n - 1u8
+
+**`unless CONDITION:`** is the same loop with the condition read the other way
+round: the body runs until it holds.  It is what walks a list with a cursor,
+a cursor asked as a condition saying whether its walk is over
+([[types.lists]]).  It takes a condition and not a binding (4705).
+
+    unless it:
+        it ← ⇧it
+
+**`while NAME: TYPE = ITERATOR:`** is a `foreach` written with `while`: the
+colon is written, the type may be left out, `while i := 0u8…5u8:`
+([[statements.foreach]]).
+
+A name a turn changes is the same name on the next turn, and what follows the
+loop reads what the last turn left.  The body is a scope, made afresh each
+turn.  Both loops take a label, `while §outer n > 0u8:`, and an `else` arm for
+the way through no `break` took; what a loop comes to and how it is left are
+in [[statements.jumps]].
+
+A loop that never ends is no error, but a program run through `bin/pl4g-run`
+is stopped when its time runs out ([[running.compiler]]).
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn collatz(start: u64) → u64:
+        let n: mut u64 = start
+        let steps: mut u64 = 0u64
+        while n ≠ 1u64:
+            n ← if ∣n: (n ÷ 2u64) ?? 0u64 else: 3u64 × n + 1u64
+            steps ← steps + 1u64
+        steps
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        _ ← std.println⌜&mut init.io.output, "{} {}", collatz(6u64), collatz(27u64)⌝
+        0u6
+
+Output:
+
+    8 111

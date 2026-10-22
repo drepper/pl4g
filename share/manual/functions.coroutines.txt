@@ -1,0 +1,90 @@
+title: Coroutines and tasks
+
+Part of [[functions]].
+
+**A generator written with `⇇ U` takes a `U` back each time it is resumed**,
+and its `yield` answers it.  It is driven by hand:
+
+    fn running_total(start: u64) ⇉ u64 ⇇ u64:
+        let total: mut u64 = start
+        while true:
+            let more := yield total
+            total ← total + more
+
+**`⎕start(w)`** makes a walk under way out of a coroutine's call -- or out of
+anything a loop walks -- and **`⎕resume(c, u)`** hands `u` in and takes the
+next turn, as a result that fails once the walk has nothing more; one that
+takes nothing back is resumed `⎕resume(c)` (4678).  The first value handed in
+is not seen, the body having reached no `yield` yet.  A coroutine that takes
+values back is never walked by a loop (4677).  **`⌖⇉T ⇇ U`** is the type of a
+walk under way, a handle: it may be a parameter, and nothing that outlives the
+call that started it (4670) -- unless it was started in the heap,
+`⎕start(g(…) in ⎕heap)`, of type `⌖⇉T ⇇ U in ⎕heap`, which goes anywhere; what
+such a walk is handed has to last as long (4680).
+
+**`⎕await(v)` is `yield v`**, under the name of what a task does with it.
+
+**A task is a coroutine `⇉ std.io.Pending ⇇ std.io.Answer`**: it hands out each
+request it starts and is handed back what the kernel said.  `std.spawn(&mut
+init.fs, ⎕start(t(…) in ⎕heap))` hands one over and `std.run(&mut init.fs)`
+drives every task until each has ended, answering how many did.  The tasks
+share one thread, in rounds: each goes on as soon as what it waits for has
+come, and a round in which none can waits for the kernel:
+
+Program:
+
+    let std := ⎕import("std")
+
+    @[io]
+    fn say(what: u8⟦⟧) ⇉ std.io.Pending ⇇ std.io.Answer:
+        match std.fs.cwd().open("/dev/null", ⌜std.io.Writer⌝):
+            std.io.Writer(to):
+                let out: mut std.io.Writer = to
+                defer out.close()
+                match std.write(&mut out, what):
+                    std.io.Pending(p):
+                        _ ← std.done(⎕await(p))
+                    ⊥:
+                        return
+            ⊥:
+                return
+
+    @[startup, impure]                    ※ spawn keeps the task in init.fs
+    fn main(init: std.Init) → u6:
+        std.spawn(&mut init.fs, ⎕start(say(⎕bytes("one\n")) in ⎕heap))
+        std.spawn(&mut init.fs, ⎕start(say(⎕bytes("two\n")) in ⎕heap))
+        _ ← std.println⌜&mut init.io.output, "{} tasks ran", std.run(&mut init.fs)⌝
+        0u6
+
+Output:
+
+    2 tasks ran
+
+A task waits in a helper by handing it the walk, `yield ⇉ helper(…)`, the
+helper being a generator of the task's own type.  It reads with
+`std.read_start` and `std.received` ([[std]]).
+
+A coroutine driven by hand:
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn running_total(start: u64) ⇉ u64 ⇇ u64:
+        let total: mut u64 = start
+        while true:
+            let more := yield total
+            total ← total + more
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let c := ⎕start(running_total(10u64))
+        let a := ⎕resume(c, 0u64) ?? 0u64
+        let b := ⎕resume(c, 5u64) ?? 0u64
+        let d := ⎕resume(c, 7u64) ?? 0u64
+        _ ← std.println⌜&mut init.io.output, "{} {} {}", a, b, d⌝
+        0u6
+
+Output:
+
+    10 15 22

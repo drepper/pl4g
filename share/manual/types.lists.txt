@@ -1,0 +1,65 @@
+title: Lists
+
+Part of [[types]].
+
+**`[a, b, c]` is a list**, and `[u8]` its type: as many values of one type as
+there turn out to be (4500 where they differ).  Its elements live in an
+arena with room to spare, so it grows where it is.  An array is what a program
+reaches for when it knows how many, a list when it does not.  An empty `[]`
+takes the type wanted where it stands (4501).
+
+    let l: mut [u16] = []
+    l ⧺← [7u16]                    ※ join onto it in place
+    l ⧺← ⟦1u16, 2u16⟧               ※ an array, a view or a slice of elements
+    ⎕reserve(l, 1000)              ※ room for a thousand more, now
+    l⟦0⟧ ← 9u16                    ※ write an element, checked
+    let gone: u16 = †l⟦1⟧          ※ take one out: what followed moves down
+    let both: [u16] = l ⧺ [3u16]   ※ a new list of the two
+
+`#l` is how many, `foreach x := l` walks the elements, and `l⟦i⟧` reads one;
+an index past the end stops the program (status 82).  Room doubles where it
+runs out.  **`l⟦i⟧.field ← v`** writes part of an element where it is.
+Changing a list in place needs a `mut` name (4004).
+
+**A list is a value.**  Another name holding it keeps what it had whatever
+is done to the first: the compiler copies where either may change in place,
+and hands the room over without a copy where the first is not used again.
+So a function may take a list in and answer it grown, `out ← f(x, out)`,
+copying nothing -- which is how [[std.string]]'s writers work.
+
+**A list stands where a view `T⟦⟧` is wanted**, and is sliced, `l⟦i…j⟧`.  A
+view of a list borrows it: the list is not changed while the view is used.
+
+**A cursor walks a list and may take elements out as it goes**:
+
+    let it: mut = ⎕iter(l)         ※ at the first element; the name takes the type
+    unless it:                     ※ until the walk is over
+        if ∣it⌖:                   ※ what it is at: even?
+            it ← †it               ※ take it out, and go on with what followed
+        else:
+            it ← ⇧it               ※ on to the next; ⇩it is the one before
+
+Reading through a cursor whose walk is over, or stepping off either end,
+stops the program (status 84).  `⎕iter` is given the place the list is in, so
+the list has to be one that may be written.
+
+Program:
+
+    let std := ⎕import("std")
+
+    fn squares(n: u16) → [u16]:
+        let out: mut [u16] = []
+        foreach i := 1u16…n + 1u16:
+            out ⧺← [i × i]
+        out
+
+    @[startup]
+    fn main(init: std.Init) → u6:
+        let l: mut [u16] = squares(5u16)
+        let taken: u16 = †l⟦0⟧
+        _ ← std.println⌜&mut init.io.output, "{} {}", l, taken⌝
+        0u6
+
+Output:
+
+    [4, 9, 16, 25] 1
