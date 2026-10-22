@@ -439,15 +439,15 @@ class Lexer:
 
     def _lex_one(self) -> bool:
         """Lex one token.  Returns ``False`` at the end of the file."""
+        text = self._text
         while True:
-            ch = self._peek()
-            if ch == "":
+            if self._pos >= len(text):
                 return False
-            if ch == " " or ch == "\r":
-                self._pos += 1
-                continue
-            if ch == "\t":
-                self._pos += 1
+            ch = text[self._pos]
+            if ch == " " or ch == "\r" or ch == "\t":
+                # A run of them at once, which is what stands between most
+                # tokens: one search rather than a turn of this loop for each.
+                self._pos = _BLANKS.match(text, self._pos).end()
                 continue
             if ch == "\n":
                 self._pos += 1
@@ -483,7 +483,8 @@ class Lexer:
             self._pos += 2
             self._emit(TokKind.OR_ELSE, start)
             return True
-        for ascii_form, glyph in ASCII_SUBSTITUTES.items():
+        for ascii_form, glyph in (ASCII_SUBSTITUTES.items()
+                                  if ch in _ASCII_FIRST else ()):
             # Before the single characters below, because '<=' begins with one
             # of them and the longer reading is the one that was meant.
             if not self._text.startswith(ascii_form, self._pos):
@@ -615,15 +616,16 @@ class Lexer:
         may begin a name and what may go on with it are two questions, and the
         quad that begins one the compiler provides answers only the first.
         """
-        self._pos += 1
         # A name the compiler provides may carry a key: `⎕sc@write` is one name
         # and the compiler looks the whole of it up.  Only such a name may, so
         # the mark stays what it is everywhere else and `a@b` is still two
-        # things with nothing between them.
+        # things with nothing between them.  What may go on with a name is
+        # matched as one run, by a pattern saying what `_is_ident_continue`
+        # does: a word character -- what `isalnum` is, and the underscore --
+        # or the prime, and not a raised numeral or the raised letter.
         provided = self._text[start] == BUILTIN_GLYPH
-        while _is_ident_continue(self._peek()) or (provided
-                                                   and self._peek() == KEY_GLYPH):
-            self._pos += 1
+        self._pos = (_PROVIDED_GOES_ON if provided else _NAME_GOES_ON).match(
+            self._text, start + 1).end()
         text = self._text[start:self._pos]
         kind = KEYWORDS.get(text, TokKind.IDENT)
         if kind is TokKind.KW_FN and len(self._indents) == 1 \
@@ -912,6 +914,17 @@ _NOT_COUNTED: Final = re.compile(
     "|".join((r'"(?:[^"\\\n]|\\.)*"',
               r"'(?<!\w')(?<!'')(?:\\[^'\n]*|[^'\\\n])'",
               "".join((COMMENT_GLYPH, ".*$")))), re.MULTILINE)
+#: A run of what separates tokens on a line, skipped at once.
+_BLANKS: Final = re.compile("[ \\r\\t]+")
+#: What the ASCII spellings of glyphs begin with: only a token beginning with one
+#: of these can be one of them.
+_ASCII_FIRST: Final = frozenset(form[0] for form in ASCII_SUBSTITUTES)
+#: What goes on with a name: `_is_ident_continue` as a pattern, and with the key
+#: mark as well for a name the compiler provides.
+_GOES_ON: Final = "".join(("[^\\W", "".join(SUPERSCRIPT_DIGITS), POWER_GLYPH, "]|'"))
+_NAME_GOES_ON: Final = re.compile("".join(("(?:", _GOES_ON, ")*")))
+_PROVIDED_GOES_ON: Final = re.compile("".join(("(?:", _GOES_ON, "|", re.escape(KEY_GLYPH),
+                                               ")*")))
 #: The first character of a line at the left margin that is neither blank nor a
 #: comment, which is where a body set aside ends.
 _AT_THE_MARGIN: Final = re.compile("".join(("^[^ \\t\\n", COMMENT_GLYPH, "]")),

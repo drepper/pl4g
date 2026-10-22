@@ -42,7 +42,7 @@ class BlockStyle(Enum):
     INLINE = "inline"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Node:
     """Base of every syntax tree node."""
 
@@ -51,40 +51,40 @@ class Node:
 
 # -- attributes ----------------------------------------------------------------
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class AttrValue(Node):
     """A value given as an attribute argument."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class AttrInt(AttrValue):
     """An integer attribute argument."""
 
     value: int
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class AttrString(AttrValue):
     """A string attribute argument."""
 
     value: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class AttrBool(AttrValue):
     """A boolean attribute argument."""
 
     value: bool
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class AttrName(AttrValue):
     """A bare name used as an attribute argument, such as a variant selector."""
 
     value: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class AttrArg(Node):
     """One argument of an attribute; ``name`` is set for a named argument."""
 
@@ -92,7 +92,7 @@ class AttrArg(Node):
     name: str | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Attribute(Node):
     """One attribute, with its arguments."""
 
@@ -104,7 +104,7 @@ class Attribute(Node):
 
 # -- types and expressions -----------------------------------------------------
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class TypeRef(Node):
     """A reference to a type by name."""
 
@@ -125,14 +125,14 @@ class TypeRef(Node):
     args: tuple["TypeExpr", ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class TupleTypeRef(Node):
     """`\N{LEFT ANGLE BRACKET}T, T\N{RIGHT ANGLE BRACKET}`: several values travelling as one."""
 
     members: tuple[TypeExpr, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class CollectionTypeRef(Node):
     """`\N{LEFT DOUBLE PARENTHESIS}T\N{RIGHT DOUBLE PARENTHESIS}`, a set, or `\N{LEFT DOUBLE PARENTHESIS}K: V\N{RIGHT DOUBLE PARENTHESIS}`, a dictionary.
 
@@ -150,7 +150,7 @@ class CollectionTypeRef(Node):
     mutable: bool = False
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class ListTypeRef(Node):
     """`[T]`: however many of them there turn out to be.
 
@@ -165,7 +165,7 @@ class ListTypeRef(Node):
     error: str | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class ArrayTypeRef(Node):
     """`T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}N\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, several values of one type, or `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, as many as there turn out to be.
 
@@ -186,7 +186,7 @@ class ArrayTypeRef(Node):
     error: str | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class RefTypeRef(Node):
     """`&T` and `&mut T`: a name for a place someone else holds.
 
@@ -210,7 +210,7 @@ class RefTypeRef(Node):
     lifetime: str | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class UnitFactor(Node):
     """One base unit in a written unit, and what it is raised to."""
 
@@ -222,7 +222,7 @@ class UnitFactor(Node):
     exponent: int = 1
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class UnitRef(Node):
     """`\N{CURRENCY SIGN}meter\N{DIVISION SIGN}second\N{SUPERSCRIPT TWO}`: what a number counts.
 
@@ -235,7 +235,7 @@ class UnitRef(Node):
     factors: tuple[UnitFactor, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class UnitTypeRef(Node):
     """A type with a unit written after it: `u64 \N{CURRENCY SIGN}meter`."""
 
@@ -243,7 +243,7 @@ class UnitTypeRef(Node):
     unit: UnitRef
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class IterTypeRef(Node):
     """`⇉T`: something a loop can walk, giving a `T` each turn.
 
@@ -255,7 +255,7 @@ class IterTypeRef(Node):
     element: TypeExpr | None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class RunningTypeRef(Node):
     """`⌖⇉T ⇇ U in ⎕heap`: a walk under way, as `⎕start` makes one.
 
@@ -271,7 +271,7 @@ class RunningTypeRef(Node):
     kept_in: tuple[str, Span] | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class LiftedTypeRef(Node):
     """`⌜T'⌝` as a parameter's type: the parameter is handed a type, written
     `⌜u8⌝` at the call, and what it settles is the type parameter inside.
@@ -288,12 +288,12 @@ type TypeExpr = (TypeRef | CollectionTypeRef | TupleTypeRef | ArrayTypeRef
                  | IterTypeRef | RunningTypeRef | LiftedTypeRef)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Expr(Node):
     """Base of every expression."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class IntLit(Expr):
     """An integer literal.
 
@@ -305,28 +305,28 @@ class IntLit(Expr):
     type_name: str | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class BoolLit(Expr):
     """A boolean literal."""
 
     value: bool
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class StringLit(Expr):
     """A string literal, already decoded."""
 
     value: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class CharLit(Expr):
     """A character literal: the one code point it was written with."""
 
     value: int
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class NameRef(Expr):
     """A reference to something by name."""
 
@@ -430,7 +430,7 @@ class UnaryOp(StrEnum):
     ROUNDED = "\N{UP DOWN DOUBLE ARROW}"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class FloatLit(Expr):
     """A floating-point literal, with the type its suffix named."""
 
@@ -438,7 +438,7 @@ class FloatLit(Expr):
     type_name: str | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Spread(Expr):
     """`\N{ASTERISM}t` among a call's arguments: the members of a tuple, one argument each.
 
@@ -451,7 +451,7 @@ class Spread(Expr):
     operand: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Call(Expr):
     """A function called with the arguments written after its name.
 
@@ -463,7 +463,7 @@ class Call(Expr):
     args: tuple[Expr, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Member(Expr):
     """Something named through the thing it belongs to: `modname.NAME`."""
 
@@ -472,7 +472,7 @@ class Member(Expr):
     name_span: Span
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Hole(Expr):
     """`$a` in a macro's pattern or template.
 
@@ -492,7 +492,7 @@ class Hole(Expr):
     value: Expr | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Quote(Node):
     """What stands between the lifting marks where a macro is what reads them.
 
@@ -508,7 +508,7 @@ class Quote(Node):
     body: Block | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Allocated(Expr):
     """`EXPR in NAME`: which arena what the expression takes room from comes out of.
 
@@ -523,7 +523,7 @@ class Allocated(Expr):
     arena: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Scoped(Expr):
     """Statements a macro wrote, standing where a value is wanted.
 
@@ -537,7 +537,7 @@ class Scoped(Expr):
     body: Block
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Invoke(Expr):
     """`f\N{TOP LEFT CORNER}a, b\N{TOP RIGHT CORNER}`: a macro invoked, which is not a call.
 
@@ -555,7 +555,7 @@ class Invoke(Expr):
     through: str | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Rule(Node):
     """One line of a macro: what the arguments have to look like, and what the
     invocation is replaced by."""
@@ -564,7 +564,7 @@ class Rule(Node):
     template: Quote
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class MacroDef(Node):
     """`macro NAME:` and the rules it stands for.
 
@@ -581,7 +581,7 @@ class MacroDef(Node):
     doc_lines: tuple[Span, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Fresh(Expr):
     """An operator the language gives no meaning, applied to one operand or two.
 
@@ -603,7 +603,7 @@ class Fresh(Expr):
     operands: tuple[Expr, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Binary(Expr):
     """An operator applied to two operands."""
 
@@ -612,14 +612,14 @@ class Binary(Expr):
     right: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Try(Expr):
     """`EXPR?`: the answer, or the whole function leaving with the error."""
 
     operand: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Named(Expr):
     """`.name \N{LEFTWARDS ARROW} VALUE`: an argument that says which parameter it is for.
 
@@ -635,7 +635,7 @@ class Named(Expr):
     value: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Failure(Expr):
     """`\N{UP TACK}` and `\N{UP TACK} VALUE`: a result that has no answer, written out.
 
@@ -650,7 +650,7 @@ class Failure(Expr):
     value: Expr | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Lifted(Expr):
     """`\N{TOP LEFT CORNER}x\N{TOP RIGHT CORNER}`: what is written, lifted out of the program and into the compiler.
 
@@ -674,7 +674,7 @@ class Lifted(Expr):
     value: Expr | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Raised(Expr):
     """`EXPR\N{SUPERSCRIPT TWO}`: raised to a power written as a raised number.
 
@@ -690,14 +690,14 @@ class Raised(Expr):
     exponent: int
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class TupleLit(Expr):
     """`\N{LEFT ANGLE BRACKET}a, b\N{RIGHT ANGLE BRACKET}`: several values written as one."""
 
     members: tuple[Expr, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class SetLit(Expr):
     """`\N{LEFT DOUBLE PARENTHESIS}a, b, c\N{RIGHT DOUBLE PARENTHESIS}`: a set written down.
 
@@ -713,7 +713,7 @@ class SetLit(Expr):
     spread: bool = False
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class DictLit(Expr):
     """`\N{LEFT DOUBLE PARENTHESIS}k: v, k: v\N{RIGHT DOUBLE PARENTHESIS}`: a dictionary written down.
 
@@ -725,21 +725,21 @@ class DictLit(Expr):
     arena: Expr | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class ArrayLit(Expr):
     """`\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}a, b, c\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`: an array written down."""
 
     elements: tuple[Expr, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class ListLit(Expr):
     """`[a, b, c]`: a list written down."""
 
     elements: tuple[Expr, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Element(Expr):
     """`a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`: one element of an array, or `a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{HORIZONTAL ELLIPSIS}j\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, a run of them.
 
@@ -753,7 +753,7 @@ class Element(Expr):
     indices: tuple[Expr, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Index(Expr):
     """`c\N{LEFT DOUBLE PARENTHESIS}k\N{RIGHT DOUBLE PARENTHESIS}`: whether a set holds a key, or what a dictionary has for one."""
 
@@ -761,7 +761,7 @@ class Index(Expr):
     key: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Take(Expr):
     """`\N{DAGGER}c\N{LEFT DOUBLE PARENTHESIS}k\N{RIGHT DOUBLE PARENTHESIS}`: take a key out of a collection, and answer what was there.
 
@@ -777,7 +777,7 @@ class Take(Expr):
     key: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class TakeAt(Expr):
     """`\N{DAGGER}l\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`: take one element out of a list, and answer what it was.
 
@@ -791,7 +791,7 @@ class TakeAt(Expr):
     index: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class TakeThrough(Expr):
     """`\N{DAGGER}it`: take out the element a cursor is at, and answer the cursor at the
     next one.
@@ -804,7 +804,7 @@ class TakeThrough(Expr):
     operand: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Unary(Expr):
     """An operator applied to one operand."""
 
@@ -812,7 +812,7 @@ class Unary(Expr):
     operand: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class AddressOf(Expr):
     """`&x` and `&mut x`: a reference to the place *x* names.
 
@@ -827,7 +827,7 @@ class AddressOf(Expr):
     mutable: bool = False
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Each(Expr):
     """`v¨`: each element of an array rather than the array.
 
@@ -840,7 +840,7 @@ class Each(Expr):
     operand: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Deref(Expr):
     """`r⌖`: what is at the place a reference names.
 
@@ -854,7 +854,7 @@ class Deref(Expr):
 
 # -- statements ----------------------------------------------------------------
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Stmt(Node):
     """Base of every statement.
 
@@ -865,7 +865,7 @@ class Stmt(Node):
     attrs: tuple[Attribute, ...] = field(default=(), kw_only=True)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class ReturnStmt(Stmt):
     """A ``return``, or the bare final expression that stands for one."""
 
@@ -874,7 +874,7 @@ class ReturnStmt(Stmt):
     explicit: bool
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Yield(Stmt):
     """`yield v`: hand one value out of a generator and stop until asked for the
     next; `yield ⇉ g`: hand out every value `g` gives, in order."""
@@ -884,7 +884,7 @@ class Yield(Stmt):
     delegates: bool = False
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class YieldValue(Expr):
     """`yield v` where a value is wanted: hand *v* out, stop, and answer what
     the next `⎕resume` hands in -- or, after the doubled arrow, hand the walk on
@@ -894,14 +894,14 @@ class YieldValue(Expr):
     delegates: bool = False
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class ExprStmt(Stmt):
     """An expression evaluated for its effect."""
 
     value: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class EmptyStmt(Stmt):
     """A statement that does nothing, which is what stands between or after two
     semicolons.
@@ -913,7 +913,7 @@ class EmptyStmt(Stmt):
     """
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class VarDef(Stmt):
     """A variable definition, at the top level or inside a block.
 
@@ -940,7 +940,7 @@ class VarDef(Stmt):
     more: tuple[tuple[str, Span], ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Pattern(Node):
     """What one arm of a `match` matches.
 
@@ -961,7 +961,7 @@ class Pattern(Node):
     wildcard: bool = False
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class MatchArm(Node):
     """One arm: what it matches and what it does."""
 
@@ -969,7 +969,7 @@ class MatchArm(Node):
     body: Block
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class IfArm(Node):
     """One arm of an `if`: what has to hold for it, and what it does.
 
@@ -986,7 +986,7 @@ class IfArm(Node):
     comptime: bool = False
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class If(Expr):
     """`if`, its `elif`s and its `else`.
 
@@ -998,7 +998,7 @@ class If(Expr):
     arms: tuple[IfArm, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Match(Expr):
     """`match EXPR` and the arms that take its alternatives apart.
 
@@ -1011,7 +1011,7 @@ class Match(Expr):
     arms: tuple[MatchArm, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class AssignStmt(Stmt):
     """An assignment to a variable that already exists."""
 
@@ -1022,7 +1022,7 @@ class AssignStmt(Stmt):
     more: tuple[tuple[str, Span], ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class JoinAssign(Stmt):
     """`l ⧺← more`: *more* joined onto the end of the list in the place *target*,
     in the room the list has to spare where it has enough."""
@@ -1031,7 +1031,7 @@ class JoinAssign(Stmt):
     value: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class DerefAssign(Stmt):
     """`r⌖ ← v`: the place a reference names, written.
 
@@ -1044,7 +1044,7 @@ class DerefAssign(Stmt):
     value: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class ElementAssign(Stmt):
     """`a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} \N{LEFTWARDS ARROW} v`: what an array holds at one place, changed."""
 
@@ -1053,7 +1053,7 @@ class ElementAssign(Stmt):
     value: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class HoleAssign(Stmt):
     """`$a \N{LEFTWARDS ARROW} v` in a macro's template: an assignment to whatever the hole
     matched.
@@ -1069,7 +1069,7 @@ class HoleAssign(Stmt):
     value: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class MemberAssign(Stmt):
     """`p.x ← v`: one field of a record, changed.
 
@@ -1084,7 +1084,7 @@ class MemberAssign(Stmt):
     value: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class EntryAssign(Stmt):
     """`d\N{LEFT DOUBLE PARENTHESIS}k\N{RIGHT DOUBLE PARENTHESIS} \N{LEFTWARDS ARROW} v`: what a dictionary has for a key, changed."""
 
@@ -1093,7 +1093,7 @@ class EntryAssign(Stmt):
     value: Expr
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class UnitDef(Stmt):
     """`unit NAME`, `unit NAME = VALUE` and `unit \N{CURRENCY SIGN}FROM \N{RIGHTWARDS ARROW} \N{CURRENCY SIGN}TO`.
 
@@ -1122,7 +1122,7 @@ class UnitDef(Stmt):
     doc_lines: tuple[Span, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class ModuleImport(Node):
     """A module brought into a file, and the name it is known by there.
 
@@ -1148,7 +1148,7 @@ class ModuleImport(Node):
     attrs: tuple[Attribute, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Range(Expr):
     """`A…B`, or `A…B…C`: the numbers from one end towards the other.
 
@@ -1162,7 +1162,7 @@ class Range(Expr):
     step: Expr | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class ForEach(Expr):
     """``foreach NAMES [: TYPE] = EXPR BODY``: a turn for each value there is.
 
@@ -1199,7 +1199,7 @@ class ForEach(Expr):
     marks: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class While(Expr):
     """``while COND BODY``: the body runs again for as long as the condition holds.
 
@@ -1222,7 +1222,7 @@ class While(Expr):
     until: bool = False
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Label(Node):
     """`§name`: what a loop is called, so that a jump can say which one it means.
 
@@ -1234,7 +1234,7 @@ class Label(Node):
     name: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Break(Stmt):
     """`break §name [VALUE]`: leave the loop of that name, which we must be in.
 
@@ -1247,7 +1247,7 @@ class Break(Stmt):
     value: Expr | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Defer(Stmt):
     """`defer STMT`: run the statement when the block it is written in is left.
 
@@ -1264,7 +1264,7 @@ class Defer(Stmt):
     stmt: Stmt
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Continue(Stmt):
     """`continue §name`: begin the next turn of the loop of that name.
 
@@ -1276,7 +1276,7 @@ class Continue(Stmt):
     label: Label
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Block(Node):
     """A sequence of statements in one of the two notations."""
 
@@ -1362,7 +1362,7 @@ class DeferredBlock(Block):
 
 # -- definitions ---------------------------------------------------------------
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Param(Node):
     """One parameter of a function.
 
@@ -1387,7 +1387,7 @@ class Param(Node):
     made_in: tuple[str, Span] | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Capture(Node):
     """One name a lambda brings in from around it.
 
@@ -1414,7 +1414,7 @@ class CaptureAll(StrEnum):
     BY_REFERENCE = "&"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Lambda(Expr):
     """`\N{GREEK SMALL LETTER LAMDA} PARM: TYPE, \N{HORIZONTAL ELLIPSIS} [CAPTURES] \N{RIGHTWARDS ARROW} TYPE` and a body: a function written
     where a value is wanted.
@@ -1447,7 +1447,7 @@ class Lambda(Expr):
     kept_in: tuple[str, Span] | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class FuncTypeRef(Node):
     """`fn(u8, u8) \N{RIGHTWARDS ARROW} u8`: the type of a function written as a value.
 
@@ -1476,7 +1476,7 @@ class ClauseKind(StrEnum):
     POST = "post"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Clause(Node):
     """One `pre(…)` or `post(…)` of a signature, or one line of a bundle.
 
@@ -1491,7 +1491,7 @@ class Clause(Node):
     answers: TypeExpr | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class BundleDef(Node):
     """`bundle NAME(T', …)`: a name for a set of requirements.
 
@@ -1510,7 +1510,7 @@ class BundleDef(Node):
     doc_lines: tuple[Span, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class FuncDef(Node):
     """A function definition."""
 
@@ -1575,7 +1575,7 @@ class TypeKind(StrEnum):
     SUM = "|"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class Field(Node):
     """One `NAME : TYPE` of a type definition: a field, or a variant."""
 
@@ -1593,7 +1593,7 @@ class Field(Node):
     value: "Expr | None" = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class TypeDef(Node):
     """`type NAME = NAME : TYPE (';' | '|') ...`"""
 
@@ -1620,7 +1620,7 @@ class TypeDef(Node):
     doc_lines: tuple[Span, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class EnumMember(Node):
     """One value of an enumeration: its name, and the number it is stored as.
 
@@ -1634,7 +1634,7 @@ class EnumMember(Node):
     value: IntLit | NameRef | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class EnumDef(Node):
     """`enum NAME [: TYPE]` and the names of its values."""
 
@@ -1657,7 +1657,7 @@ type Definition = (FuncDef | VarDef | ModuleImport | TypeDef | EnumDef
                    | UnitDef | BundleDef | MacroDef)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class SourceUnit(Node):
     """Everything the parser found in one source file."""
 

@@ -2425,7 +2425,7 @@ def _reached_from(value: Value, sources: Sequence[Value],
 _Laid = tuple[Value, Sequence[Value], Sequence[Value], bool]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class _Defaulted(ast.Expr):
     """What a parameter is given where a call gives it nothing: the default its
     definition writes, which is read where the definition is."""
@@ -3756,7 +3756,7 @@ def _heap(module: Module) -> GlobalVar:
     return tables.heap_global(module)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class _Ready(ast.Expr):
     """A value already worked out, standing where an expression would.
 
@@ -3770,7 +3770,7 @@ class _Ready(ast.Expr):
     value: Value
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class _Emit(ast.Expr):
     """Code the compiler wrote, standing where a statement put off would.
 
@@ -3847,7 +3847,7 @@ def _holds_opaque(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
     return False
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, unsafe_hash=True)
 class _Known(ast.Expr):
     """A value the compiler worked out, standing where the literal it is would
     be written: what a function run for the image answered, taken apart into

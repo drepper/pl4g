@@ -19,7 +19,11 @@ type Loc = int
 NO_LOC: Final[Loc] = -1
 
 
-@dataclass(frozen=True, slots=True)
+# Not frozen, and hashed by its fields as a frozen one is: nothing changes a
+# span once it is made, and a frozen dataclass sets each field through
+# `object.__setattr__`, which is half of what making one costs -- and every
+# token and every node of the tree makes one.
+@dataclass(slots=True, unsafe_hash=True)
 class Span:
     """A half-open range of source text, ``[start, end)``."""
 

@@ -837,7 +837,9 @@ KEYWORDS: Final[dict[str, TokKind]] = {
 }
 
 
-@dataclass(frozen=True, slots=True)
+# Not frozen, for the reason `Span` is not: one is made for every token of
+# every file read, and nothing changes one once made.
+@dataclass(slots=True, unsafe_hash=True)
 class Token:
     """One token, with the source text it came from."""
 
