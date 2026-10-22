@@ -33,6 +33,7 @@ namespace pl4g::repl {
     options.environment = settings.environment;
     options.devices = settings.devices;
     options.sources = &sources;
+    options.defined = &settings.defined;
     auto outcome = interp::run(*module, options);
     return { outcome.status, outcome.signal };
   }

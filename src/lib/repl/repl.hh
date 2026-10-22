@@ -28,6 +28,8 @@ namespace pl4g::repl {
     // with the path it is known by: a program held in memory by whatever
     // embeds the interpreter, named among the inputs by that path.
     std::vector<std::pair<std::filesystem::path, std::string>> held;
+    // Functions the host hands over by name, asked before `dlsym` is.
+    interp::HostFunctions defined;
     // What the program is started with, beside its own name.
     std::vector<std::string> args;
     std::vector<std::string> environment;

@@ -1,7 +1,7 @@
 // PL4G's interpreter, for a C++ program that loads it as a shared object.
 //
 // The C++ face of embed/pl4g-embed.h: one object is one interpreter.  Making
-// it loads libpl4g-embed.so, finds the three functions the library offers and
+// it loads libpl4g-embed.so, finds the four functions the library offers and
 // makes a state of the interpreter; destroying it gives the state back and
 // lets the library go.  Several may exist at once, each with a state of its
 // own, the library being loaded once however many hold it.
@@ -56,7 +56,7 @@ namespace pl4g::embed {
     static constexpr const char* default_library = "libpl4g-embed.so";
 
     // Load `library`, find what it offers and make a state.  Throws
-    // std::runtime_error saying which of the three failed, having given back
+    // std::runtime_error saying which of them failed, having given back
     // whatever the ones before it took.
     explicit LoadedInterpreter(const char* library = default_library)
       PL4G_PRE(library != nullptr)
@@ -68,6 +68,7 @@ namespace pl4g::embed {
       state_new = found<::pl4g_embed_state_new_t>("pl4g_embed_state_new");
       state_free = found<::pl4g_embed_state_free_t>("pl4g_embed_state_free");
       run_source = found<::pl4g_embed_run_source_t>("pl4g_embed_run_source");
+      define_one = found<::pl4g_embed_define_t>("pl4g_embed_define");
       state = state_new();
       if (state == nullptr) [[unlikely]] {
         ::dlclose(handle);
@@ -83,7 +84,7 @@ namespace pl4g::embed {
     LoadedInterpreter(LoadedInterpreter&& other) noexcept
       PL4G_POST(! other.valid())
       : handle(std::exchange(other.handle, nullptr)), state_new(other.state_new), state_free(other.state_free),
-        run_source(other.run_source), state(std::exchange(other.state, nullptr))
+        run_source(other.run_source), define_one(other.define_one), state(std::exchange(other.state, nullptr))
     {
     }
 
@@ -96,6 +97,7 @@ namespace pl4g::embed {
         state_new = other.state_new;
         state_free = other.state_free;
         run_source = other.run_source;
+        define_one = other.define_one;
         state = std::exchange(other.state, nullptr);
       }
       return *this;
@@ -106,6 +108,21 @@ namespace pl4g::embed {
 
     // Whether this holds an interpreter, which one moved from does not.
     bool valid() const noexcept { return state != nullptr; }
+
+    // Hand over `function` as what a program's `@[host("SYMBOL")]` names with
+    // `symbol`, asked before dlsym is: a function this program does not
+    // export, or one put where an exported symbol of that name is.  It has to
+    // take and answer, with the system's convention, what the declaration
+    // says.  Answers whether it was kept.
+    template<typename R, typename... A>
+    bool define(const std::string& symbol, R (*function)(A...))
+      PL4G_PRE(valid())
+      PL4G_PRE(function != nullptr)
+    {
+      if (state == nullptr) [[unlikely]]
+        return false;
+      return define_one(state, symbol.c_str(), reinterpret_cast<void (*)()>(function)) == 0;
+    }
 
     // Compile the PL4G program `text` and run it in this interpreter's
     // state, `name` being what its diagnostics and faults call the file.
@@ -155,6 +172,7 @@ namespace pl4g::embed {
     ::pl4g_embed_state_new_t state_new = nullptr;
     ::pl4g_embed_state_free_t state_free = nullptr;
     ::pl4g_embed_run_source_t run_source = nullptr;
+    ::pl4g_embed_define_t define_one = nullptr;
     ::pl4g_embed_state* state = nullptr;
   };
 

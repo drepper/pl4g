@@ -14,6 +14,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -33,6 +35,10 @@ namespace pl4g::interp {
     int error = 2;
   };
 
+  // Functions a host hands the interpreter by name, each the address of a
+  // function of the system's convention.
+  using HostFunctions = std::map<std::string, void*, std::less<>>;
+
   struct Options {
     // What the program was started with, its own name first.
     std::vector<std::string> args;
@@ -45,6 +51,11 @@ namespace pl4g::interp {
     // Where to say which function is entered, for finding out what a program
     // did; no descriptor where nothing is to be said.
     int trace = -1;
+    // Functions the host defines, by the symbol a program's `@[host]` names
+    // them with: asked before `dlsym` is, so that a host can hand over what
+    // it does not export, or put something of its own where an exported
+    // symbol is.  Nothing where it hands over nothing.
+    const HostFunctions* defined = nullptr;
   };
 
   // How a run ended: the status it exited with, or the signal it would have

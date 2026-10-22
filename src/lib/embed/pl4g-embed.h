@@ -1,6 +1,6 @@
 /* PL4G's interpreter, for a program that loads it as a shared object.
 
-   libpl4g-embed.so offers these three functions with C's linkage, so that a
+   libpl4g-embed.so offers these four functions with C's linkage, so that a
    program -- in C or in anything that calls C -- can find them with dlsym
    after dlopen and needs none of the compiler's headers.  Everything else in
    the object is hidden.  A program wanting more than this links with the
@@ -29,11 +29,12 @@ extern "C" {
 /** A state of the interpreter, whose insides are the library's.  */
 typedef struct pl4g_embed_state pl4g_embed_state;
 
-/** The types of the three functions, for the pointers dlsym answers.  */
+/** The types of the four functions, for the pointers dlsym answers.  */
 typedef pl4g_embed_state *(*pl4g_embed_state_new_t)(void);
 typedef void (*pl4g_embed_state_free_t)(pl4g_embed_state *state);
 typedef int (*pl4g_embed_run_source_t)(pl4g_embed_state *state, const char *text, size_t length,
                                        const char *name);
+typedef int (*pl4g_embed_define_t)(pl4g_embed_state *state, const char *symbol, void (*function)(void));
 
 /** A new state, as fresh as the first: nothing allocated, nothing seeded.
     Answers NULL where there is no memory for one.  */
@@ -42,6 +43,17 @@ pl4g_embed_state *pl4g_embed_state_new(void);
 /** Give back STATE and everything its runs took and did not give back.
     STATE may be NULL, which does nothing.  */
 void pl4g_embed_state_free(pl4g_embed_state *state);
+
+/** Hand STATE's runs FUNCTION as what a program's @[host("SYMBOL")] names
+    with SYMBOL.  What is handed over is asked before dlsym is, so a host can
+    give a program a function it does not export -- one of internal linkage,
+    or any function of a program not linked with -rdynamic -- or put one of
+    its own where an exported symbol of that name is.  FUNCTION is cast to
+    void (*)(void) for the call and has to take and answer, with the system's
+    convention, what the declaration says.  A later one for the same SYMBOL
+    takes the place of the earlier.  Answers 0, and -1 where STATE, SYMBOL or
+    FUNCTION is NULL or there is no memory to keep it.  */
+int pl4g_embed_define(pl4g_embed_state *state, const char *symbol, void (*function)(void));
 
 /** Compile the PL4G program in the LENGTH bytes at TEXT and run it in STATE.
 

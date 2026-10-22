@@ -1452,12 +1452,18 @@ namespace pl4g::interp {
     {
       HostCall& host = host_call_of(callee);
       if (host.address == nullptr) {
-        // Asked of what the program loaded globally, as the compiled stub
-        // asks: once a symbol, however many declarations name it.
+        // Asked of what the host handed over by name first, and then of what
+        // the program loaded globally, as the compiled stub asks: once a
+        // symbol, however many declarations name it.
         const std::string& symbol = *callee->attrs.host;
         auto [at, fresh] = host_symbols.try_emplace(symbol, nullptr);
-        if (fresh)
-          at->second = ::dlsym(RTLD_DEFAULT, symbol.c_str());
+        if (fresh) {
+          if (options.defined != nullptr)
+            if (auto given = options.defined->find(symbol); given != options.defined->end())
+              at->second = given->second;
+          if (at->second == nullptr)
+            at->second = ::dlsym(RTLD_DEFAULT, symbol.c_str());
+        }
         if (at->second == nullptr) [[unlikely]] {
           // The program stops, as a shared object's stub stops it, and the
           // message is about the function the program wrote rather than the

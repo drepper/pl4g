@@ -13,6 +13,7 @@
 #   pl4g-embed-example  a C program that loads it with dlopen and runs a
 #                     program calling back into it (src/examples/embed)
 #   pl4g-embed-example-cc  the same in C++, through embed/pl4g-embed.hh
+#   pl4g-embed-defined  a host handing PL4G its functions by name, not dlsym
 #   pl4g-manual       the manual, a node at a time (libpl4g-manual.so, and
 #                     libpl4g-manual.a), and pl4g-help, which shows one
 #   pl4g-embed-expressions  expressions as JSON evaluated in PL4G, the replies
@@ -432,6 +433,17 @@ set_target_properties(pl4g-embed-example-cc PROPERTIES ENABLE_EXPORTS ON)
 add_dependencies(pl4g-embed-example-cc pl4g-embed)
 add_test(NAME embed-example-cc
   COMMAND prlimit --data=536870912 --cpu=120 -- $<TARGET_FILE:pl4g-embed-example-cc> $<TARGET_FILE:pl4g-embed>)
+# And the host handing its functions over by name rather than exporting them:
+# linked without -rdynamic, so that dlsym could not find them.
+add_executable(pl4g-embed-defined src/examples/embed/defined.cc)
+target_include_directories(pl4g-embed-defined PRIVATE ${CMAKE_SOURCE_DIR}/src/lib)
+target_compile_options(pl4g-embed-defined PRIVATE -Wall -Wextra -fcontracts)
+target_link_options(pl4g-embed-defined PRIVATE -fcontracts)
+target_link_libraries(pl4g-embed-defined PRIVATE ${CMAKE_DL_LIBS})
+add_dependencies(pl4g-embed-defined pl4g-embed)
+add_test(NAME embed-defined
+  COMMAND prlimit --data=536870912 --cpu=120 -- $<TARGET_FILE:pl4g-embed-defined> $<TARGET_FILE:pl4g-embed>)
+
 # Expressions handed over as JSON and evaluated in PL4G, the replies read with
 # nlohmann::json and checked against a schema with json-schema-validator;
 # built only where both are installed.

@@ -337,6 +337,7 @@ namespace pl4g::repl {
       options.environment = settings.environment;
       options.devices = settings.devices;
       options.sources = &sources;
+      options.defined = &settings.defined;
       auto program = std::make_unique<interp::Program>(*module, std::move(options));
       for (const auto& one : variables)
         if (auto var = global_named(*module, one.name)) {

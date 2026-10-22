@@ -83,6 +83,21 @@ namespace pl4g::embed {
     // Look for the modules a program imports in `directory` too, after the
     // directories already named.
     Interpreter& module_path(std::filesystem::path directory);
+    // Hand over `function` as the function a program's `@[host("SYMBOL")]`
+    // names with `symbol`.  What is handed over is asked before `dlsym` is,
+    // so a host can give a program what it does not export -- a function of
+    // internal linkage, one in a program not linked with -rdynamic -- or put
+    // a function of its own where an exported symbol of that name is.  It
+    // has to be a function of the system's convention taking and answering
+    // what the declaration says; a later one for the same symbol takes the
+    // place of the earlier, and the table holds for every run after.
+    Interpreter& define(std::string_view symbol, void* function);
+    // The same for a function pointer of any type, which is what a host has.
+    template<typename R, typename... A>
+    Interpreter& define(std::string_view symbol, R (*function)(A...))
+    {
+      return define(symbol, reinterpret_cast<void*>(function));
+    }
 
     // Compile the program in the file `path` and run it.
     Ended run_file(const std::filesystem::path& path);

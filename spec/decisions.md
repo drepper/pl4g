@@ -11743,6 +11743,21 @@ parameters aligned, the prose filled
 again to 78 columns without breaking a code span, the kinds of export listed under headings, and each node ending with the
 nodes its comment names.
 
+## 2026-10-22T14:00+02:00 — implementation
+
+### Functions handed to the interpreter by name, asked before `dlsym`
+
+The user asked for **a second way for the interpreter to find a function the host defines**: a function of the embedding
+library that adds a mapping of a name to a function to the interpreter's state, consulted first whenever a host function is
+looked for, with `dlsym` used where the table has nothing.  So `embed::Interpreter::define(symbol, function)` (with a template
+for any function pointer), `pl4g_embed_define(state, symbol, function)` in the C entry and `LoadedInterpreter::define` in its
+wrapper; a later definition of a symbol replaces an earlier, and the table lasts as long as the state.  Where the table has
+the name it wins even over an exported symbol of the same name, which is what lets a host put its own function in the place of
+a library's.  Only the interpreter has it: a shared object the compiler made has no one to hand it a table before its first
+call.  Compare Lua's `lua_register`, Python's `PyModule_AddFunctions`, Tcl's `Tcl_CreateCommand` and Guile's
+`scm_c_define_gsubr`, each a table of the host's functions by name, which is the usual way an embedded language is given its
+host; and `dlsym`, which needs the host to export, as LuaJIT's FFI does.
+
 Open questions
 --------------
 

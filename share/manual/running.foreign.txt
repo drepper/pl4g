@@ -33,7 +33,8 @@ the header -- and says where, or is refused (4593, 4594):
 **`@[external("SYMBOL")]`** names a function of the runtime the compiler
 carries (4595 for one it does not have).  **`@[host("SYMBOL")]`** names one of
 the program a shared object or the interpreter runs in, found with `dlsym` at
-the first call -- status 92 where it is not there -- and refused in an
+the first call -- after what the host handed the interpreter by name
+([[running.interpreter]]) -- status 92 where it is not there -- and refused in an
 executable (5300).  What crosses is what C has (5301, 5302): whole and
 floating-point numbers, `bool`, `char`, references, an `@[abi]` record by
 reference, and `str`, handed over as a nul-terminated copy.  Both are impure

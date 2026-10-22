@@ -340,6 +340,29 @@ namespace {
     "    verdict(1u32, false)\n"
     "    if x = 0u8: 1u6 else: 2u6\n";
 
+  // A program calling what the host hands over by name: a function nothing
+  // exports, and one put where an exported symbol of that name is -- the
+  // verdict, which then reaches what was handed over and not `embed_verdict`.
+  constexpr const char* handed = "@[host(\"embed_hidden\")]\nfn hidden(n: i64) \N{RIGHTWARDS ARROW} i64\n"
+    "@[host(\"embed_verdict\")]\nfn verdict(which: u32, ok: bool)\n"
+    "\n"
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
+    "\n"
+    "@[startup, impure]\n"
+    "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+    "    verdict(1u32, hidden(20i64) = 42i64)\n"
+    "    0u6\n";
+
+  // What the program handed `handed` called in place of `embed_verdict`.
+  std::vector<std::pair<std::uint32_t, bool>> handed_verdicts;
+
+  // Twice and two more: of internal linkage, so that nothing but the table
+  // can find it.
+  std::int64_t hidden(std::int64_t n)
+  {
+    return 2 * n + 2;
+  }
+
   // A program that does not compile.
   constexpr const char* broken = "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
     "\n"
@@ -438,6 +461,18 @@ int main()
            std::format("{} ended with status {}, signal {}, where {} was due", name, ended.status, ended.signal,
                        status));
     expect(seen.verdicts.empty(), std::format("{} went on past its end", name));
+  }
+
+  {
+    seen.verdicts.clear();
+    pl4g::embed::Interpreter interpreter;
+    interpreter.define("embed_hidden", hidden)
+      .define("embed_verdict", +[](std::uint32_t which, bool ok) { handed_verdicts.emplace_back(which, ok); });
+    auto ended = interpreter.run_source(handed, "embedded-handed.pl4g");
+    expect(ended.status == 0, std::format("a program calling what was handed over ended with status {}", ended.status));
+    expect(handed_verdicts == std::vector<std::pair<std::uint32_t, bool>>{ { 1, true } },
+           std::format("what was handed over saw {} verdicts", handed_verdicts.size()));
+    expect(seen.verdicts.empty(), "the exported verdict was called where one was handed over");
   }
 
   {

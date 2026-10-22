@@ -106,6 +106,13 @@ namespace pl4g::embed {
   }
 
 
+  Interpreter& Interpreter::define(std::string_view symbol, void* function)
+  {
+    state->settings.defined.insert_or_assign(std::string(symbol), function);
+    return *this;
+  }
+
+
   Ended Interpreter::run_file(const std::filesystem::path& path)
   {
     // A copy, so that what one run names is not left for the next.

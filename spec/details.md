@@ -1234,7 +1234,14 @@ held width extended as its type's signedness says, whatever C left above that wi
 **A symbol nobody defines stops the run** as a shared object's stub stops it: `pl4g: the host defines no 'SYMBOL' in 'NAME'`, at
 the declaration, on the error device, and status 92.  `NAME` is the function the program wrote, not the `NAME.host` the checker made
 of one taking a `str`.  The embedding program is not ended with it: the stop unwinds the interpreter, as every stop of a run does,
-and `run_source` or `run_file` answers 92.  **No way a program ends ends the program embedding it.**  Returning from the startup function, a
+and `run_source` or `run_file` answers 92.  **What the host hands over by name is asked first.**  `interp::Options::defined`, a map from a symbol to the address of a
+function, is consulted when a host function is first called, and `dlsym(RTLD_DEFAULT, ...)` only where it holds nothing of
+that name; what was found is kept for the run as before.  `embed::Interpreter::define(symbol, function)` fills it -- a template
+takes a function pointer of any type, the table holding addresses -- and so do `pl4g_embed_define` of the C entry and
+`LoadedInterpreter::define`.  The table is the interpreter's state, so it holds for every run after, and the interactive session
+reads it too.  `src/examples/embed/defined.cc` is a host linked without `-rdynamic` handing over functions of internal linkage,
+one of them under the name of a C library function, which its program reaches in place of the library's; ctest's
+`embed-defined` runs it, and `embed-host` holds the C++ interface.  **No way a program ends ends the program embedding it.**  Returning from the startup function, a
 stop -- an answer that does not fit, an index past the end, a host symbol not found -- and the system's own `exit` and
 `exit_group` asked for with `⎕syscall` all end the run alone: the interpreter takes those two calls before they reach the kernel,
 and each of the others unwinds it, and the call that ran the program answers with the status.  `embed-host` holds each of them.

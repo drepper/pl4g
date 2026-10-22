@@ -6644,7 +6644,9 @@ fn puts(text: str) → i32
 
 **Where it is found is the host's business, and when is the first call.**  The interpreter embedded in a program, and a shared
 object the compiler made and a program loaded, each ask `dlsym` for the symbol the first time the function is called, keep what
-it answered, and call it from then on with the system's convention.  A symbol `dlsym` does not find stops the program, with a
+it answered, and call it from then on with the system's convention.  **An embedding program may hand the interpreter functions by
+name**, and those are asked before `dlsym` is: a host gives a program what it does not export, or puts its own function where an
+exported symbol of that name is.  A shared object has only `dlsym`, there being nothing that runs before it to hand it anything.  A symbol `dlsym` does not find stops the program, with a
 status of its own (92), at that first call: what is in the host is known only once there is a host.  **An
 executable has none**, so a host function in one is refused (5300): the image a kernel starts has nobody to ask.
 
