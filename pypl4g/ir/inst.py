@@ -19,6 +19,12 @@ from .value import Value
 class BinOp(Enum):
     """The binary arithmetic and bitwise operations."""
 
+    # Hashed as the object it is, which is what equality already is: an `Enum`
+    # hashes its name with a call to Python, and the passes and the selectors
+    # ask a table keyed by these of nearly every instruction they look at.  No
+    # answer depends on the value -- a name's hash differs from run to run.
+    __hash__ = object.__hash__
+
     ADD = "add"
     SUB = "sub"
     MUL = "mul"
@@ -86,6 +92,9 @@ class BinOp(Enum):
 class UnOp(Enum):
     """The unary operations."""
 
+    # Hashed as the object it is, as `BinOp` is.
+    __hash__ = object.__hash__
+
     NEG = "neg"
     NOT = "not"
     #: How many bits of a value are set, and how many zeroes stand above the
@@ -119,6 +128,9 @@ class UnOp(Enum):
 class CmpPred(Enum):
     """The comparison predicates."""
 
+    # Hashed as the object it is, as `BinOp` is.
+    __hash__ = object.__hash__
+
     EQ = "eq"
     NE = "ne"
     SLT = "slt"
@@ -133,6 +145,9 @@ class CmpPred(Enum):
 
 class CastKind(Enum):
     """The conversions between representations."""
+
+    # Hashed as the object it is, as `BinOp` is.
+    __hash__ = object.__hash__
 
     ZEXT = "zext"
     SEXT = "sext"
