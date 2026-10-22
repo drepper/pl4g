@@ -391,6 +391,10 @@ namespace pl4g {
       bool begins_a_type(std::size_t ahead = 0) const noexcept;
       RunningTypeRef* parse_running_type();
       ListTypeRef* parse_list_type();
+      // What the error of a result carries, after the mark: nothing, a name,
+      // or a name reached through modules, kept as the path it was written
+      // as; and the last token of the type.
+      std::pair<MaybeText, const Token*> parse_error_type(const Token* mark);
       TypeRef* parse_named_type();
       bool type_arguments_follow() const noexcept;
       TypeDef* parse_type_definition(List<const Attribute*> attrs, MaybeText doc, List<Span> doc_lines);
@@ -423,6 +427,9 @@ namespace pl4g {
       Text reference_mark(Text keyword);
       If* parse_if();
       bool begins_an_arm(TokKind keyword) const noexcept;
+      // Read past the end of the line a one-line arm ends with, where the next
+      // line goes on with an `elif` or the `else` of the same chain.
+      void chain_goes_on();
       bool takes_comptime(TokKind keyword);
       IfArm* parse_if_arm(bool comptime = false);
       Match* parse_match();
@@ -1288,11 +1295,8 @@ namespace pl4g {
       if (is<ArrayTypeRef>(found) && check(TokKind::question)) {
         // A result whose answer is the array.
         auto array = static_cast<ArrayTypeRef*>(found);
-        const Token* last = &advance();
-        if (check(TokKind::ident)) {
-          last = &advance();
-          array->error = last->text;
-        }
+        auto [error, last] = parse_error_type(&advance());
+        array->error = error;
         array->span = array->span.to(last->span);
         array->result = true;
       }
@@ -1611,6 +1615,26 @@ namespace pl4g {
     }
 
 
+    std::pair<MaybeText, const Token*> Parser::parse_error_type(const Token* mark)
+    {
+      if (! check(TokKind::ident))
+        return { std::nullopt, mark };
+      const Token* last = &advance();
+      if (! (check(TokKind::dot) && peek().kind == TokKind::ident))
+        return { last->text, last };
+      // `u64 ? std.string.ParseError`: a type reached through modules, as
+      // anywhere else a type is written.
+      std::string path(last->text);
+      while (check(TokKind::dot) && peek().kind == TokKind::ident) {
+        advance();
+        last = &advance();
+        path += '.';
+        path += last->text;
+      }
+      return { arena.text(path), last };
+    }
+
+
     ListTypeRef* Parser::parse_list_type()
     {
       Span start = expect(TokKind::lbracket).span;
@@ -1620,11 +1644,8 @@ namespace pl4g {
       type->element = element;
       if (check(TokKind::question)) {
         // A result whose answer is the list.
-        const Token* last = &advance();
-        if (check(TokKind::ident)) {
-          last = &advance();
-          type->error = last->text;
-        }
+        auto [error, last] = parse_error_type(&advance());
+        type->error = error;
         type->span = start.to(last->span);
         type->result = true;
       }
@@ -1668,11 +1689,8 @@ namespace pl4g {
       type->unit = unit;
       type->args = list(args);
       if (const Token* mark = accept(TokKind::question)) {
-        const Token* last = mark;
-        if (check(TokKind::ident)) {
-          last = &advance();
-          type->error = last->text;
-        }
+        auto [error, last] = parse_error_type(mark);
+        type->error = error;
         type->span = first.span.to(last->span);
         type->result = true;
       }
@@ -2404,8 +2422,11 @@ namespace pl4g {
       // `[comptime] if COND BODY`, its `elif`s and its `else`.
       Span start = current().span;
       std::vector<const IfArm*> arms{ parse_if_arm(takes_comptime(TokKind::kw_if)) };
-      while (begins_an_arm(TokKind::kw_elif))
+      chain_goes_on();
+      while (begins_an_arm(TokKind::kw_elif)) {
         arms.push_back(parse_if_arm(takes_comptime(TokKind::kw_elif)));
+        chain_goes_on();
+      }
       if (check(TokKind::kw_else)) {
         advance();
         auto body = parse_body();
@@ -2420,6 +2441,20 @@ namespace pl4g {
       auto found = make<If>(start.to(arms.back()->body->span));
       found->arms = list(arms);
       return found;
+    }
+
+
+    void Parser::chain_goes_on()
+    {
+      // The end of the line an arm written on one line ends with closes its
+      // block and not the `if`: the next arm may stand on the next line, at
+      // the indentation of the `if`, as it would after an indented block.
+      if (! check(TokKind::newline))
+        return;
+      auto after = peek().kind;
+      if (after == TokKind::kw_elif || after == TokKind::kw_else
+          || (after == TokKind::kw_comptime && peek(2).kind == TokKind::kw_elif))
+        advance();
     }
 
 

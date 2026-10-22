@@ -2087,7 +2087,10 @@ namespace pl4g::sema {
       if (! error)
         return ir::result_type(array);
       auto named = syntax.make<ast::TypeRef>(ref->span);
-      named->name = *error;
+      auto dot = error->rfind('.');
+      named->name = dot == std::string_view::npos ? *error : error->substr(dot + 1);
+      if (dot != std::string_view::npos)
+        named->module = error->substr(0, dot);
       const ir::Type* carried_ = resolve_type(named);
       if (carried_ == ir::error_type())
         return ir::error_type();
@@ -2420,16 +2423,20 @@ namespace pl4g::sema {
     if (! ref->error)
       return ir::result_type(found);
     // What the error carries is a type like any other, named the way the
-    // answer is: through the answer's module, except a type the language has.
+    // answer is: a name alone through the answer's module, except a type the
+    // language has, and a name written through a module through that one.
     auto other = syntax.copy(*ref);
-    other->name = *ref->error;
+    auto dot = ref->error->rfind('.');
+    other->name = dot == std::string_view::npos ? *ref->error : ref->error->substr(dot + 1);
     other->result = false;
     other->error.reset();
     other->unit = nullptr;
     // The answer's type arguments are the answer's: `Parsed(f64) ? Fault`
     // carries a `Fault`, which takes none.
     other->args = {};
-    if (ir::builtin_type(*ref->error) != nullptr)
+    if (dot != std::string_view::npos)
+      other->module = ref->error->substr(0, dot);
+    else if (ir::builtin_type(*ref->error) != nullptr)
       other->module.reset();
     const ir::Type* carried_ = resolve_type(other);
     if (carried_ == ir::error_type())
