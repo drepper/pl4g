@@ -457,12 +457,12 @@ namespace pl4g::sema {
                             std::move(answer_kinds), thin_to, answer_arms, yield_answer, std::move(hands_out),
                             hands_out_local, std::move(receiving), unscanned, std::move(borrows), std::move(places),
                             std::move(iterator_loans), pick_in, std::move(pick_walked), demanding,
-                            std::move(writing_in), std::move(block_spans));
+                            std::move(writing_in), std::move(block_spans), std::move(filling));
     Finally restore{ [&] {
       std::tie(scopes, addressed, answering, impure, carried, loops, outside, initializing, assigning, operand_of,
                handing_over, deferred, emptied, answer_made_in, out_of_arena, out_of_arenas, made_from, answer_kinds,
                thin_to, answer_arms, yield_answer, hands_out, hands_out_local, receiving, unscanned, borrows, places,
-               iterator_loans, pick_in, pick_walked, demanding, writing_in, block_spans)
+               iterator_loans, pick_in, pick_walked, demanding, writing_in, block_spans, filling)
         = std::move(saved);
     } };
     scopes.clear();
@@ -481,6 +481,7 @@ namespace pl4g::sema {
     assigning.reset();
     operand_of.reset();
     handing_over.reset();
+    filling.reset();
     pick_in = nullptr;
     pick_walked = {};
     answer_arms = nullptr;

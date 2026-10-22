@@ -2819,11 +2819,12 @@ namespace pl4g::sema {
 
   LoopContext Checker::as_the_loops_value()
   {
-    LoopContext outer{ operand_of, initializing, assigning, handing_over, leaving };
+    LoopContext outer{ operand_of, initializing, assigning, handing_over, leaving, filling };
     operand_of.reset();
     initializing.reset();
     assigning.reset();
     handing_over.reset();
+    filling.reset();
     leaving = true;
     return outer;
   }
@@ -2836,6 +2837,7 @@ namespace pl4g::sema {
     assigning = outer.assigning;
     handing_over = outer.handing_over;
     leaving = outer.leaving;
+    filling = outer.filling;
   }
 
 

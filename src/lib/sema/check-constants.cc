@@ -1520,6 +1520,7 @@ namespace pl4g::sema {
     auto outer_assigning = std::move(assigning);
     auto outer_operand_of = std::move(operand_of);
     auto outer_handing_over = std::move(handing_over);
+    auto outer_filling = std::move(filling);
     auto outer_deferred = std::move(deferred);
     auto outer_emptied = std::move(emptied);
     auto outer_answer_made_in = answer_made_in;
@@ -1559,6 +1560,7 @@ namespace pl4g::sema {
     assigning.reset();
     operand_of.reset();
     handing_over.reset();
+    filling.reset();
     // This body's own conditions, at its entry and at its every `return`.
     auto outer_demanding = demanding;
     demanding = { node, func };
@@ -1585,6 +1587,7 @@ namespace pl4g::sema {
       assigning = std::move(outer_assigning);
       operand_of = std::move(outer_operand_of);
       handing_over = std::move(outer_handing_over);
+      filling = std::move(outer_filling);
       deferred = std::move(outer_deferred);
       emptied = std::move(outer_emptied);
       answer_made_in = std::move(outer_answer_made_in);
@@ -2222,6 +2225,7 @@ namespace pl4g::sema {
     auto context_handing_over = handing_over;
     auto context_assigning = assigning;
     auto context_initializing = initializing;
+    auto context_filling = filling;
     ir::Function* func;
     {
       Finally put_back([&] {
@@ -2229,6 +2233,7 @@ namespace pl4g::sema {
         handing_over = context_handing_over;
         assigning = context_assigning;
         initializing = context_initializing;
+        filling = context_filling;
       });
       {
         auto outer_adopting = std::move(adopting);

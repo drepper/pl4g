@@ -315,6 +315,13 @@ namespace pl4g::sema {
       // These have no answer for some pairs of operands, so what they answer
       // with is a result.
       auto answer = ir::result_type(ty);
+      // A result where a plain number is wanted is refused as every other
+      // result is: taking it would drop the error.  What was measured against
+      // the place above is the operands, which are the number.
+      if (! accepts(expected, answer)) [[unlikely]] {
+        report_mismatch(expr->span, answer, expected);
+        return error_value(module);
+      }
       if (ir::is<ir::FloatType>(ty))
         return builder.binary(ir::BinOp::fdiv, left, right, expr->span, answer);
       // Dividing signed numbers and dividing unsigned ones are different
@@ -1183,6 +1190,7 @@ namespace pl4g::sema {
       Setting outer_assigning(assigning, std::optional<std::string>{});
       Setting outer_operand(operand_of, std::optional<std::string>{});
       Setting outer_leaving(leaving, false);
+      Setting outer_filling(filling, std::optional<std::tuple<std::string, std::string>>{});
       given = lower_expr(builder, expr->args[0], wanted);
     }
     auto found = value_type_of(given);
@@ -2336,7 +2344,8 @@ namespace pl4g::sema {
         spoiled = true;
         continue;
       }
-      given[std::string(named->name)] = lower_into(builder, named->value, record->fields[*at].second, one->span);
+      given[std::string(named->name)]
+        = lower_field_value(builder, named->value, record->fields[*at].second, one->span, ty, named->name);
       owning_field(named->value, ty, named->name, record->fields[*at].second);
     }
     for (const auto& [name, _] : record->fields)
@@ -2371,6 +2380,22 @@ namespace pl4g::sema {
   }
 
 
+  ir::Value* Checker::lower_field_value(ir::Builder& builder, const ast::Expr* expr, const ir::Type* held, Span span,
+                                       const ir::Type* owner, std::string_view name)
+  {
+    // What the record itself stands in -- a `let`, a call's argument, a
+    // function's answer -- has the record's type and not the field's, and
+    // borrowing its wording would name the wrong two types.
+    Setting outer_filling(filling, std::optional{ std::tuple{ owner->written(), std::string(name) } });
+    Setting outer_handing(handing_over, std::optional<std::tuple<std::string, std::int64_t>>{});
+    Setting outer_initializing(initializing, std::optional<std::string>{});
+    Setting outer_assigning(assigning, std::optional<std::string>{});
+    Setting outer_operand(operand_of, std::optional<std::string>{});
+    Setting outer_leaving(leaving, false);
+    return lower_into(builder, expr, held, span);
+  }
+
+
   ir::Value* Checker::lower_sum(ir::Builder& builder, const ast::Call* expr, const ir::Type* ty,
                                 const ir::Type* expected)
   {
@@ -2400,7 +2425,7 @@ namespace pl4g::sema {
     }
     auto place = builder.frame(ty, expr->span);
     if (held != ir::void_type()) {
-      auto value = lower_into(builder, written->value, held, written->span);
+      auto value = lower_field_value(builder, written->value, held, written->span, ty, written->name);
       if (value_type_of(value) == ir::error_type()) [[unlikely]]
         return error_value(module);
       payload_into(builder, place, value, held, expr->span);

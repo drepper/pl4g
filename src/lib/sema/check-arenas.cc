@@ -2087,11 +2087,13 @@ namespace pl4g::sema {
     auto outer_initializing = std::exchange(initializing, std::nullopt);
     auto outer_assigning = std::exchange(assigning, std::nullopt);
     auto outer_handing = std::exchange(handing_over, std::nullopt);
+    auto outer_filling = std::exchange(filling, std::nullopt);
     Finally restore([&] {
       operand_of = std::move(outer_operand);
       initializing = std::move(outer_initializing);
       assigning = std::move(outer_assigning);
       handing_over = std::move(outer_handing);
+      filling = std::move(outer_filling);
     });
     auto literal = ast::as<ast::IntLit>(written);
     bool bare = literal != nullptr && ! literal->type_name;
@@ -2130,7 +2132,7 @@ namespace pl4g::sema {
         build_record(builder, place, written->value, record, written->span);
         continue;
       }
-      builder.store(place, lower_into(builder, written->value, held, written->span), span);
+      builder.store(place, lower_field_value(builder, written->value, held, written->span, ty, name), span);
       owning_field(written->value, ty, name, held);
     }
   }
