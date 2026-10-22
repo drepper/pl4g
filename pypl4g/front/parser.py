@@ -351,11 +351,18 @@ class Parser:
 
     def _check(self, kind: TokKind) -> bool:
         """Whether the current token has the given kind."""
-        return self._current.kind is kind
+        # Read straight off the list rather than through `_current`: this is
+        # asked several times for every token of every file read.
+        return self._tokens[self._pos].kind is kind
 
     def _accept(self, kind: TokKind) -> Token | None:
         """Consume the current token if it has the given kind."""
-        return self._advance() if self._check(kind) else None
+        token = self._tokens[self._pos]
+        if token.kind is not kind:
+            return None
+        if kind is not TokKind.EOF:
+            self._pos += 1
+        return token
 
     def _expect(self, kind: TokKind, ident: int = D.LANG_SYNTAX_UNEXPECTED_TOKEN) -> Token:
         """Consume a token of the given kind, or report and bail out."""

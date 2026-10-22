@@ -472,6 +472,12 @@ class Lexer:
 
         start = self._pos
         ch = self._peek()
+        if ch in _ASCII_NAME_START:
+            # The commonest token there is, and nothing tried before a name
+            # below -- no glyph, no ASCII spelling of one -- begins with one of
+            # these, so it is tried first.
+            self._lex_identifier(start)
+            return True
         if ch == "@" and self._peek(1) == "[":
             self._pos += 2
             self._bracket_depth += 1
@@ -914,6 +920,9 @@ _NOT_COUNTED: Final = re.compile(
     "|".join((r'"(?:[^"\\\n]|\\.)*"',
               r"'(?<!\w')(?<!'')(?:\\[^'\n]*|[^'\\\n])'",
               "".join((COMMENT_GLYPH, ".*$")))), re.MULTILINE)
+#: The ASCII characters a name may begin with.
+_ASCII_NAME_START: Final = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_")
 #: A run of what separates tokens on a line, skipped at once.
 _BLANKS: Final = re.compile("[ \\r\\t]+")
 #: What the ASCII spellings of glyphs begin with: only a token beginning with one
