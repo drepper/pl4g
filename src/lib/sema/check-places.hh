@@ -184,7 +184,14 @@
     // Note `written` as a value to copy where it is lowered, where it is a list read out of a place into
     // another -- one that may itself change it in place where `changes` says so -- and the two would
     // otherwise share the room the elements are in.
-    void copied_where_shared(const ast::Expr* written, bool changes);  // check.py:16524
+    bool copied_where_shared(const ast::Expr* written, bool changes);  // check.py:16524
+    // Say of the local `name`, just given a value, whether its room is its own.
+    void owning_room(std::string_view name, bool owns);
+    // Whether `written` is a list made where it is written, in room nothing
+    // else holds, or something made only of such lists.
+    bool room_made_here(const ast::Expr* written);
+    // Whether `written` is room made here, or something holding no list.
+    bool made_or_holds_none(const ast::Expr* written);
     // What a call hands the parameters `func` takes as its own: a copy, or -- where the argument is room
     // the caller is done with -- that room.
     std::vector<ir::Value*> owned_arguments(ir::Builder& builder, const ast::Call* expr, ir::Function* func, std::span<ir::Value* const> args);  // check.py:16556

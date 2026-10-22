@@ -1693,8 +1693,9 @@ namespace pl4g::sema {
         report_inferred(inferred(def), def->type);
         break;
       }
-      copied_where_shared(def->value, def->mutable_);
+      bool owns = copied_where_shared(def->value, def->mutable_);
       lower_local(builder, def);
+      owning_room(def->name, owns && def->more.empty());
       variable_slot(def);
       made_in(def->name, def->value, def->span);
       report_inferred(inferred(def), def->type);
@@ -1709,9 +1710,9 @@ namespace pl4g::sema {
       // function's result the way any other last statement can.
       auto assign = static_cast<const ast::AssignStmt*>(stmt);
       bool wants_value = is_last && func->fty->ret != ir::void_type();
-      if (assign->more.empty())
-        copied_where_shared(assign->value, true);
+      bool owns = assign->more.empty() && copied_where_shared(assign->value, true);
       ir::Value* result = lower_assignment(builder, assign, wants_value);
+      owning_room(assign->name, owns);
       if (assign->more.empty())
         made_in(assign->name, assign->value, assign->span, true);
       if (wants_value && result != nullptr) {
@@ -1728,6 +1729,7 @@ namespace pl4g::sema {
     }
     case ast::NodeKind::EntryAssign: {
       auto assign = static_cast<const ast::EntryAssign*>(stmt);
+      copied_where_shared(assign->value, true);
       lower_entry_assign(builder, assign);
       made_in_part(assign->base, assign->value, assign->span);
       break;
@@ -2123,6 +2125,14 @@ namespace pl4g::sema {
     auto given = fields_given(static_cast<const ast::Call*>(expr), ty);
     if (! given)
       return;
+    if (copying.contains(id_of(expr))) {
+      // The record was to be copied where it was lowered, and it is lowered a
+      // field at a time: what is copied is each field not made here already.
+      copying.erase(id_of(expr));
+      for (const auto& [name, _] : ty->fields)
+        if (const ast::Named* one = *given->get(name); ! made_or_holds_none(one->value))
+          copying.insert(id_of(one->value));
+    }
     for (std::size_t at = 0; at < ty->fields.size(); ++at) {
       const auto& [name, held] = ty->fields[at];
       ir::Value* place = field_place(builder, where, ty, static_cast<std::int64_t>(at), span);
