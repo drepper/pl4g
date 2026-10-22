@@ -171,12 +171,18 @@ class LiveRange:
     def covers(self, other: LiveRange) -> bool:
         """Whether the two ranges are wanted at the same time: whether a
         stretch of one meets a stretch of the other."""
-        if not (self.start <= other.end and other.start <= self.end):
+        if self.start > other.end or other.start > self.end:
             return False
-        mine, theirs = self._parts(), other._parts()
+        # `_parts` written out, and the lengths asked once: this is asked of
+        # every pair of ranges an allocation weighs, a million times over the
+        # functions of a document reader.
+        mine = self.stretches or ((self.start, self.end),)
+        theirs = other.stretches or ((other.start, other.end),)
         i = j = 0
-        while i < len(mine) and j < len(theirs):
-            (a, b), (c, d) = mine[i], theirs[j]
+        many, more = len(mine), len(theirs)
+        while i < many and j < more:
+            a, b = mine[i]
+            c, d = theirs[j]
             if a <= d and c <= b:
                 return True
             if b < d:
