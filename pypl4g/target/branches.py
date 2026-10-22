@@ -113,6 +113,48 @@ def labels_of(symbol: str, func: Function) -> list[str]:
             for index, block in enumerate(func.blocks)]
 
 
+class _Reads:
+    """How often each value of one function is read, and the first instruction
+    that reads it as an operand -- worked out once for the function being
+    lowered rather than once for every comparison in it, which over a function
+    of a few thousand instructions was most of what lowering it cost."""
+
+    __slots__ = ("func", "counted", "first")
+
+    def __init__(self, func: Function) -> None:
+        self.func = func
+        self.counted: dict[int, int] = {}
+        self.first: dict[int, Instruction] = {}
+        counted, first = self.counted, self.first
+        for block in func.blocks:
+            for inst in block.insts:
+                for operand in inst.operands:
+                    counted[id(operand)] = counted.get(id(operand), 0) + 1
+                    first.setdefault(id(operand), inst)
+                # What a branch hands the block it goes to is read as much as an
+                # operand is, and wants the value in a register.
+                for edge in inst.successors() if isinstance(inst, Terminator) else ():
+                    for arg in edge.args:
+                        counted[id(arg)] = counted.get(id(arg), 0) + 1
+
+
+#: What is known of the reads of the function being lowered, where it is known.
+_READS: list[_Reads] = []
+
+
+def lowering(func: Function) -> None:
+    """Say that *func* is about to be lowered: what was worked out about the
+    reads of a function before is forgotten, its body being what it is now."""
+    _READS.clear()
+
+
+def _reads_of(func: Function) -> _Reads:
+    """What is known of the reads of *func*, worked out where it is not."""
+    if not _READS or _READS[0].func is not func:
+        _READS[:] = [_Reads(func)]
+    return _READS[0]
+
+
 def condition_used_once(func: Function, value: Instruction) -> bool:
     """Whether *value* is read by exactly one instruction of *func*.
 
@@ -121,15 +163,7 @@ def condition_used_once(func: Function, value: Instruction) -> bool:
     is computed into a register instead, by `lower_comparison` below, and the
     branch then tests that register against zero like any other value.
     """
-    users = 0
-    for block in func.blocks:
-        for inst in block.insts:
-            users += sum(1 for operand in inst.operands if operand is value)
-            # What a branch hands the block it goes to is read as much as an
-            # operand is, and wants the value in a register.
-            for edge in inst.successors() if isinstance(inst, Terminator) else ():
-                users += sum(1 for arg in edge.args if arg is value)
-    return users == 1
+    return _reads_of(func).counted.get(id(value), 0) == 1
 
 
 def folded_into_branch(func: Function, value: Instruction) -> bool:
@@ -153,14 +187,11 @@ def folded_into_branch(func: Function, value: Instruction) -> bool:
         return False
     if not condition_used_once(func, value):
         return False
-    for block in func.blocks:
-        for inst in block.insts:
-            if value in inst.operands:
-                # A check is a branch too: where what it checks holds the
-                # program goes on, and where not it jumps to the stop.
-                return isinstance(inst, (CondBrInst, AssertInst)) \
-                    and inst.operands[0] is value
-    return False
+    inst = _reads_of(func).first.get(id(value))
+    # A check is a branch too: where what it checks holds the program goes on,
+    # and where not it jumps to the stop.
+    return inst is not None and isinstance(inst, (CondBrInst, AssertInst)) \
+        and inst.operands[0] is value
 
 
 def lower_comparison(asm: Assembler, inst: CmpInst, operands: Operands,

@@ -89,6 +89,98 @@ def dominators(edges: Edges) -> list[set[int]]:
     return doms
 
 
+class _Dominance:
+    """Whether one block dominates another, asked in constant time.
+
+    The tree of immediate dominators, found the way Cooper, Harvey and Kennedy
+    find it -- over the blocks in reverse postorder, each block's dominator the
+    point where the chains of its predecessors' meet, until nothing moves --
+    and numbered as it is walked, so that a block dominates exactly the blocks
+    whose numbers lie between its own two.  The same relation `dominators`
+    answers as sets, which for every block of a function of a few thousand
+    holds most of the function, and which was most of what allocating its
+    registers cost.  A block the entry does not reach dominates nothing and is
+    dominated by nothing, as there.
+    """
+
+    __slots__ = ("enter", "leave")
+
+    def __init__(self, edges: Edges) -> None:
+        count = len(edges)
+        self.enter = [-1] * count
+        self.leave = [-1] * count
+        if not count:
+            return
+        # Reverse postorder of the blocks the entry reaches.
+        post: list[int] = []
+        seen = [False] * count
+        seen[0] = True
+        stack: list[tuple[int, int]] = [(0, 0)]
+        while stack:
+            at, next_ = stack[-1]
+            if next_ < len(edges[at]):
+                stack[-1] = (at, next_ + 1)
+                reached = edges[at][next_]
+                if not seen[reached]:
+                    seen[reached] = True
+                    stack.append((reached, 0))
+            else:
+                stack.pop()
+                post.append(at)
+        order = post[::-1]
+        rank = [-1] * count
+        for place, at in enumerate(order):
+            rank[at] = place
+        predecessors = _predecessors(edges)
+        idom = [-1] * count
+        idom[0] = 0
+        changed = True
+        while changed:
+            changed = False
+            for at in order[1:]:
+                found = -1
+                for before in predecessors[at]:
+                    if idom[before] < 0:
+                        continue
+                    if found < 0:
+                        found = before
+                        continue
+                    one, other = before, found
+                    while one != other:
+                        while rank[one] > rank[other]:
+                            one = idom[one]
+                        while rank[other] > rank[one]:
+                            other = idom[other]
+                    found = one
+                if idom[at] != found:
+                    idom[at] = found
+                    changed = True
+        children: list[list[int]] = [[] for _ in range(count)]
+        for at in order[1:]:
+            children[idom[at]].append(at)
+        clock = 0
+        walk: list[tuple[int, int]] = [(0, 0)]
+        self.enter[0] = clock
+        while walk:
+            at, next_ = walk[-1]
+            if next_ < len(children[at]):
+                walk[-1] = (at, next_ + 1)
+                child = children[at][next_]
+                clock += 1
+                self.enter[child] = clock
+                walk.append((child, 0))
+            else:
+                walk.pop()
+                clock += 1
+                self.leave[at] = clock
+
+    def dominates(self, one: int, other: int) -> bool:
+        """Whether every path from the entry to *other* passes through *one*."""
+        return self.enter[one] >= 0 and self.enter[other] >= 0 \
+            and self.enter[one] <= self.enter[other] \
+            and self.leave[other] <= self.leave[one]
+
+
 def back_edges(edges: Edges) -> list[tuple[int, int]]:
     """Every edge that goes back to a block it is inside, as (latch, header).
 
@@ -96,9 +188,9 @@ def back_edges(edges: Edges) -> list[tuple[int, int]]:
     block that dominates the one it leaves cannot be taken without coming round
     again, since every path that reached here came through there.
     """
-    doms = dominators(edges)
+    tree = _Dominance(edges)
     return [(at, reached) for at, going in enumerate(edges) for reached in going
-            if reached in doms[at]]
+            if tree.dominates(reached, at)]
 
 
 def natural_loop(edges: Edges, latch: int, header: int) -> set[int]:

@@ -23,7 +23,7 @@ from ...mc.reg import Reg, VirtReg
 from ...mc.operand import SymExpr
 from ...source.location import Span
 from ..branches import (CONDITIONS, Move, UnsupportedBranch,
-                        condition_of, folded_into_branch, sequenced,
+                        condition_of, folded_into_branch, lowering, sequenced,
                         labels_of,
                         lower_branch, lower_comparison)
 from .. import statuses
@@ -1313,6 +1313,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
     The bootstrap compiler generates code for as much of the language as its own
     source needs.  A construct with no rule here is reported, not ignored.
     """
+    lowering(func)
     from ...ir.inst import (SelectInst, CodeInst, AddressInst, AnyLaneInst, BinaryInst, BrInst,
                             CallInst, CmpInst,
                             CondBrInst, SwitchInst,
