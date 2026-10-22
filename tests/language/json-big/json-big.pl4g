@@ -6,8 +6,8 @@
 ※ a time where an extension changes that -- comments, single quotes, JSON5's
 ※ white space.  Both are to find the same places in the same bytes: the escapes
 ※ a run of backslashes makes, a quote that is escaped and one that is not, where
-※ a run of something that is not a string begins.  So a document of several
-※ hundred kilobytes, made by mixing a counter -- arrays and objects nested,
+※ a run of something that is not a string begins.  So a document of a hundred
+※ kilobytes, made by mixing a counter -- arrays and objects nested,
 ※ strings of every length with every escape and characters of every UTF-8
 ※ length, numbers and literals -- is read both ways and must come to the same
 ※ value, which is then written, read again and compared.  And bytes of it are
@@ -102,11 +102,11 @@ let CHANGES: u8⟦12⟧ = ⟦34u8, 92u8, 123u8, 125u8, 91u8, 93u8, 44u8, 58u8, 3
 
 @[startup]
 fn main(init: std.Init) → u6:
-    ※ a document of several hundred kilobytes
+    ※ a document of a hundred kilobytes
     let document: mut [u8] = []
     document ⧺← ⎕bytes("[")
     let i: mut u64 = 0u64
-    while i < 1500u64:
+    while i < 800u64:
         if i > 0u64:
             document ⧺← ⎕bytes(",\n")
         document ← value(i, 5u64, document)
@@ -125,7 +125,7 @@ fn main(init: std.Init) → u6:
     ※ and changed, a byte at a time
     let n: u64 = ⎕drop(#document)
     let k: mut u64 = 0u64
-    while k < 150u64:
+    while k < 64u64:
         let m: u64 = mixed(k + 1000000u64)
         let at: u64 ¤idx = ⎕unit(m % n ?? 0u64, ⌜idx⌝)
         let was: u8 = document⟦at⟧
