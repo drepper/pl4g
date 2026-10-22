@@ -10,6 +10,9 @@
     void check_several(const ast::FuncDef* node);  // check.py:6637
     // Whether the first part of a definition's name is a type this file defines.
     bool a_type_here(const ast::FuncDef* node) pre(node->held.has_value());  // check.py:6656
+    // Report a definition named as the image's own code is: the entry point,
+    // what the compiler makes, the runtime.
+    void not_the_images(std::string_view name, Span span);
     // Register one function definition without looking at its body.
     Collected* collect_function(const ast::FuncDef* node, std::string_view path);  // check.py:6674
     // Register a generator: its signature, and the function its body is.

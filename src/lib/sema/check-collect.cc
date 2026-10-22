@@ -206,12 +206,26 @@ namespace pl4g::sema {
   }
 
 
+  void Checker::not_the_images(std::string_view name, Span span)
+  {
+    // A variable's symbol is its name and so is a function's under another
+    // language's convention, so a definition of one of these names is a second
+    // symbol of a name the image already has.  Refused whatever the
+    // convention, so that a function does not become wrong by being given
+    // another one.
+    if (name == "_start" || name.starts_with("__pl4g") || name.starts_with("pl4g_")) [[unlikely]]
+      diags.emit(D::LANG_NAME_THE_IMAGE_USES, span, { { "name", name } });
+  }
+
+
   Collected* Checker::collect_function(const ast::FuncDef* node, std::string_view path)
   {
     node = kept_in_the_signature(node);
     check_doc(node);
     if (! declare(declared_as(node), node->name_span, path))
       return nullptr;
+    if (! node->held && node->body != nullptr)
+      not_the_images(node->name, node->name_span);
     std::string whole = written_name(node);
     if (node->held && ! a_type_here(node))
       return nullptr;

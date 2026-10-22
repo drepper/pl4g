@@ -501,6 +501,7 @@ namespace pl4g::sema {
     }
     if (! declare(node->name, node->name_span))
       return;
+    not_the_images(node->name, node->name_span);
     auto attrs = bind_attributes(node->attrs, AttrTarget::variable);
     if (session != nullptr && session->variables.contains(node->name)) {
       session_variable(node);
