@@ -444,16 +444,18 @@ namespace pl4g::macro {
     auto ty = ir::as<ir::IntType>(inst->operands[0]->ty);
     if (ty == nullptr) [[unlikely]]
       throw InternalError("a macro counted the bits of what is no integer");
-    __int128 raw = as_written(held, ty);
+    // Counted over the type's own bits, which for a type narrower than what
+    // holds it are fewer than the holder's.
+    __int128 raw = held & ((__int128(1) << ty->bits) - 1);
     if (inst->un == ir::UnOp::count_ones)
       return __int128(std::popcount((unsigned __int128)raw >> 64) + std::popcount((std::uint64_t)raw));
     if (inst->un == ir::UnOp::count_leading)
-      return __int128(ty->held()) - __int128(bit_length(raw));
+      return __int128(ty->bits) - __int128(bit_length(raw));
     if (inst->un == ir::UnOp::count_trailing) {
       // The lowest set bit is the only one a value shares with its negation;
       // nought has none, and its count is the width.
       if (raw == 0)
-        return __int128(ty->held());
+        return __int128(ty->bits);
       return __int128(bit_length(raw & -raw)) - 1;
     }
     throw Refused(std::format("the operation {}", describe(inst->un)), inst);

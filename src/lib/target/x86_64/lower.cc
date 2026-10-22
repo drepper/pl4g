@@ -765,7 +765,7 @@ namespace pl4g::target::x86_64 {
           auto destination = computed(inst, inst->ty);
           auto counted = operand(0)->ty;
           auto given = value(operand(0), inst->span);
-          lower_count(asm_, inst->un, given, width_of(counted), is_signed(counted), destination, *this, inst->span);
+          lower_count(asm_, inst->un, given, int(ir::as<ir::IntType>(counted)->bits), is_signed(counted), destination, *this, inst->span);
           return;
         }
         std::optional<mc::Rounding> rounding;

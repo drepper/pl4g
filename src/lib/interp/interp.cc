@@ -1072,16 +1072,17 @@ namespace pl4g::interp {
         return s.is_signed || s.kind == Scalar::Kind::boolean ? ~a : extend(~a, s.bits, false);
       case UnOp::neg:
         return extend(Cell(-std::int64_t(a)), s.bits, s.is_signed);
+      // Every count is over the type's own bits, not its holder's.
       case UnOp::count_ones:
-        return Cell(std::popcount(extend(a, s.held, false)));
+        return Cell(std::popcount(extend(a, s.bits, false)));
       case UnOp::count_leading: {
-        Cell v = extend(a, s.held, false);
-        return Cell(std::countl_zero(v) - (64 - int(s.held)));
+        Cell v = extend(a, s.bits, false);
+        return Cell(std::countl_zero(v) - (64 - int(s.bits)));
       }
       case UnOp::count_trailing: {
-        // Nought counts the width of what holds it, as the back ends do.
-        Cell v = extend(a, s.held, false);
-        return v == 0 ? Cell(s.held) : Cell(std::countr_zero(v));
+        // Nought counts the width of the type, as the back ends do.
+        Cell v = extend(a, s.bits, false);
+        return v == 0 ? Cell(s.bits) : Cell(std::countr_zero(v));
       }
       case UnOp::fabs:
         return of_double(std::fabs(as_double(a, s.bits)), s.bits);

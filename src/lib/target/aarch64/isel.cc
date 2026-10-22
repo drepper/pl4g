@@ -1978,7 +1978,7 @@ namespace pl4g::target::aarch64 {
         held[inst] = made;
         const ir::Type* counted = inst->operands[0]->ty;
         auto value = operands.operand(inst->operands[0], inst->span);
-        lower_count(asm_, op, value, width_of(counted), is_signed_type(counted), made, operands, inst->span);
+        lower_count(asm_, op, value, int(ir::as<ir::IntType>(counted)->bits), is_signed_type(counted), made, operands, inst->span);
         return;
       }
       if (auto how = rounding_of(op)) {
