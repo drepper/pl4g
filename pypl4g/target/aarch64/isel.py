@@ -2072,9 +2072,11 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                               if inst is returned else None))
                     held[id(inst)] = destination
                     counted = inst.operands[0].ty
+                    assert isinstance(counted, IntType)
+                    # Counted over the type's own bits, not its holder's.
                     lower_count(asm, inst.op,
                                 operands.value(inst.operands[0], inst.span),
-                                _width_of(counted), _is_signed(counted),
+                                counted.bits, _is_signed(counted),
                                 destination, operands, inst.span)
                 case BinaryInst() if inst.op in SATURATING:
                     destination = _new_value(

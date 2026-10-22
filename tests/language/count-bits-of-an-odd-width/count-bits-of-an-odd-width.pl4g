@@ -1,0 +1,81 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=0
+※ pl4g-test: diag=none
+
+※ A type narrower than a byte is counted over its own bits and not over the
+※ byte that holds it: `⎕lead(0u5)` and `⎕trail(0u5)` are five, the width of the
+※ type, as the specification says of nought, and `⎕ones(⁻1i5)` is five as well.
+※ The three bits above a `u5` are the holder's, which no count reaches.
+※
+※ A count of a number written down is the compiler's and one of a parameter is
+※ the machine's (or an interpreter's); every way answers the same, which is what
+※ this program asks, on widths that are not a power of two at every holder.
+
+@[opaque]
+fn lead5(x: u5) → u8:
+    ⎕lead(x)
+
+@[opaque]
+fn trail5(x: u5) → u8:
+    ⎕trail(x)
+
+@[opaque]
+fn ones5(x: i5) → u8:
+    ⎕ones(x)
+
+@[opaque]
+fn lead_signed5(x: i5) → u8:
+    ⎕lead(x)
+
+@[opaque]
+fn trail_signed5(x: i5) → u8:
+    ⎕trail(x)
+
+@[opaque]
+fn lead12(x: u12) → u8:
+    ⎕lead(x)
+
+@[opaque]
+fn trail12(x: u12) → u8:
+    ⎕trail(x)
+
+@[opaque]
+fn lead27(x: i27) → u8:
+    ⎕lead(x)
+
+@[opaque]
+fn trail31(x: u31) → u8:
+    ⎕trail(x)
+
+@[opaque]
+fn ones31(x: i31) → u8:
+    ⎕ones(x)
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let wrong: mut u6 = 0u6
+    ※ numbers written down, which the compiler counts itself
+    if ⎕lead(0u5) ≠ 5u8 ∨ ⎕trail(0u5) ≠ 5u8 ∨ ⎕ones(⁻1i5) ≠ 5u8:
+        wrong ← 1u6
+    ※ and the same numbers counted where the program runs
+    if lead5(0u5) ≠ 5u8:
+        wrong ← 2u6
+    if trail5(0u5) ≠ 5u8:
+        wrong ← 3u6
+    if ones5(⁻1i5) ≠ 5u8:
+        wrong ← 4u6
+    if lead5(1u5) ≠ 4u8 ∨ lead5(16u5) ≠ 0u8 ∨ trail5(16u5) ≠ 4u8:
+        wrong ← 5u6
+    if lead_signed5(⁻1i5) ≠ 0u8 ∨ lead_signed5(0i5) ≠ 5u8 ∨ lead_signed5(1i5) ≠ 4u8:
+        wrong ← 6u6
+    if trail_signed5(0i5) ≠ 5u8 ∨ trail_signed5(⁻16i5) ≠ 4u8:
+        wrong ← 7u6
+    if lead12(0u12) ≠ 12u8 ∨ trail12(0u12) ≠ 12u8 ∨ lead12(1u12) ≠ 11u8:
+        wrong ← 8u6
+    if lead27(0i27) ≠ 27u8 ∨ lead27(⁻1i27) ≠ 0u8 ∨ lead27(1i27) ≠ 26u8:
+        wrong ← 9u6
+    if trail31(0u31) ≠ 31u8 ∨ ones31(⁻1i31) ≠ 31u8:
+        wrong ← 10u6
+    wrong

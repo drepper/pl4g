@@ -35,7 +35,9 @@ every bit, which is the width.
 **Every count is over the value's own type.**  A value narrower than the register it
 is held in is made to fill one first, without a sign, so that what is counted is
 the type's bits and nothing above them; and a count of leading zeroes then has
-the register's extra width taken off it.
+the register's extra width taken off it.  The type's width and not its holder's:
+a `u5` lives in a byte, and `⎕lead(0u5)` is five, as the specification says and
+as the value written down folds to -- the three bits above it are the holder's.
 """
 
 from __future__ import annotations
@@ -80,25 +82,29 @@ def lower_count(asm: Assembler, op: UnOp, value: MCOperand, bits: int,
                 span: Span) -> None:
     """Emit the count *op* asks for over a value of *bits* bits into *destination*.
 
-    The counting is done in a whole register and moved into the answer's at the
-    end, named at the width the answer's register *is*: a count is a `u8`, and
-    how wide a register a `u8` lives in is a thing each architecture decides for
-    itself.
+    *bits* is the type's width, which for a type narrower than a machine's is
+    less than that of what holds it: the value is read at the holder's width and
+    counted at the type's.  The counting is done in a whole register and moved
+    into the answer's at the end, named at the width the answer's register
+    *is*: a count is a `u8`, and how wide a register a `u8` lives in is a thing
+    each architecture decides for itself.
     """
+    holder = _holder(bits)
     held = scratch.scratch()
     if op is UnOp.COUNT_TRAILING:
         answer = scratch.scratch()
-        _trailing(asm, held, value, bits, answer, scratch, span)
+        _trailing(asm, held, value, bits, holder, answer, scratch, span)
         asm.loadreg(destination,
                     MCReg(answer, bits=getattr(destination, "bits", WIDTH)), span)
         return
     # The type's own bits and nothing above them, which for a value narrower
     # than its register is what filling one without a sign gives.
     if bits < WIDTH:
-        asm.widen(held, value, bits, False, span)
+        asm.widen(held, value, holder, False, span)
         if signed:
             # A signed value fills its register with copies of its sign, so the
-            # widening above read bits that are the sign and not the value.
+            # widening above read bits that are the sign and not the value --
+            # up to the holder's width, and above a narrower type's own.
             _mask_to(asm, held, bits, scratch, span)
     else:
         asm.loadreg(held, value, span)
@@ -113,6 +119,12 @@ def lower_count(asm: Assembler, op: UnOp, value: MCOperand, bits: int,
         _leading(asm, held, bits, answer, scratch, span)
     asm.loadreg(destination, MCReg(answer, bits=getattr(destination, "bits", WIDTH)),
                 span)
+
+
+def _holder(bits: int) -> int:
+    """How wide what holds a value of *bits* bits is: the narrowest of a
+    byte, two, four and eight that contains it, as `IntType.held` says."""
+    return next(width for width in (8, 16, 32, WIDTH) if bits <= width)
 
 
 def _mask_to(asm: Assembler, held: Reg, bits: int, scratch: Scratch,
@@ -193,7 +205,8 @@ def _leading(asm: Assembler, held: Reg, bits: int, destination: Reg,
 
 
 def _trailing(asm: Assembler, held: Reg, value: MCOperand, bits: int,
-              destination: Reg, scratch: Scratch, span: Span) -> None:
+              holder: int, destination: Reg, scratch: Scratch,
+              span: Span) -> None:
     """How many zeroes stand below the lowest set bit of *value*, counted over
     *bits*.
 
@@ -207,7 +220,7 @@ def _trailing(asm: Assembler, held: Reg, value: MCOperand, bits: int,
     it.
     """
     if bits < WIDTH:
-        asm.widen(held, value, bits, False, span)
+        asm.widen(held, value, holder, False, span)
         stop = scratch.scratch()
         asm.loadreg(stop, MCImm(1 << bits, WIDTH, signed=False), span)
         asm.op(ops.OR, held, MCReg(held), MCReg(stop), span=span)

@@ -381,16 +381,18 @@ class Machine:
         held = self._number(inst.operands[0], values)
         ty = inst.operands[0].ty
         assert isinstance(ty, IntType)
-        raw = _as_written(held, ty)
+        # Counted over the type's own bits, which for a type narrower than
+        # what holds it are fewer than the holder's.
+        raw = held & ((1 << ty.bits) - 1)
         if inst.op is UnOp.COUNT_ONES:
             return bin(raw).count("1")
         if inst.op is UnOp.COUNT_LEADING:
-            return ty.held - raw.bit_length()
+            return ty.bits - raw.bit_length()
         if inst.op is UnOp.COUNT_TRAILING:
             # The lowest set bit is the only one of a value's that its negation
             # shares with it, which is what finds it without a loop; nought
             # has none, and its count is the width.
-            return (raw & -raw).bit_length() - 1 if raw else ty.held
+            return (raw & -raw).bit_length() - 1 if raw else ty.bits
         raise Refused("".join(("the operation ", inst.op.value)), inst)
 
     def _cast(self, inst: CastInst, values: dict[int, object]) -> object:
