@@ -137,7 +137,6 @@ namespace pl4g::mc {
 
     std::vector<const VirtReg*> assign(std::span<const LiveRange> ranges, std::span<const LiveRange> blocked,
                                        Assignment& assignment);
-    std::set<const RegUnit*> blocked_by(const LiveRange& found, std::span<const LiveRange> blocked) const;
     const RegUnit* choose(const LiveRange& found, const std::set<const RegUnit*>& taken,
                           const Assignment& assignment) const;
 

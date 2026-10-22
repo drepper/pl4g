@@ -567,18 +567,62 @@ namespace pl4g::mc {
 
   // -- assignment -------------------------------------------------------------
 
+  namespace {
+
+    // The ranges physical registers are held over, walked in step with the
+    // virtual ranges being assigned, which come in the order they start: a
+    // physical range is looked at while it could still meet the range being
+    // assigned, and one that has ended before that starts never meets any that
+    // comes after it.  pypl4g's `_Held`.
+    class Held {
+    public:
+      explicit Held(std::span<const LiveRange> blocked)
+      {
+        for (const auto& one : blocked)
+          if (one.reg.is_physical())
+            pending.push_back(&one);
+        std::ranges::stable_sort(pending, {}, [](const LiveRange* one) { return one->start; });
+      }
+
+      // The units a physical register holds while `found` is wanted; asked of
+      // ranges in the order they start.
+      std::set<const RegUnit*> units_meeting(const LiveRange& found)
+      {
+        while (next < pending.size() && pending[next]->start <= found.start)
+          alive.push_back(pending[next++]);
+        std::erase_if(alive, [&found](const LiveRange* one) { return one->end < found.start; });
+        std::set<const RegUnit*> units;
+        for (auto other : alive)
+          if (other->covers(found))
+            units.insert(other->reg.phys()->unit);
+        for (auto at = next; at < pending.size() && pending[at]->start <= found.end; ++at)
+          if (pending[at]->covers(found))
+            units.insert(pending[at]->reg.phys()->unit);
+        return units;
+      }
+
+    private:
+      std::vector<const LiveRange*> pending;
+      std::size_t next = 0;
+      std::vector<const LiveRange*> alive;
+    };
+
+  } // anonymous namespace
+
+
   std::vector<const VirtReg*> LinearScan::assign(std::span<const LiveRange> ranges, std::span<const LiveRange> blocked,
                                                  Assignment& assignment)
   {
     std::vector<std::pair<const LiveRange*, const RegUnit*>> active;
     std::vector<const VirtReg*> crowded;
+    Held held(blocked);
     for (const auto& found : ranges) {
       std::erase_if(active, [&](const auto& pair) { return pair.first->end < found.start; });
       std::vector<std::pair<const LiveRange*, const RegUnit*>> meeting;
       for (const auto& pair : active)
         if (pair.first->covers(found))
           meeting.push_back(pair);
-      auto fixed = blocked_by(found, blocked);
+      auto fixed = held.units_meeting(found);
       std::set<const RegUnit*> taken = fixed;
       for (const auto& [_, unit] : meeting)
         taken.insert(unit);
@@ -618,16 +662,6 @@ namespace pl4g::mc {
       active.emplace_back(&found, freed);
     }
     return crowded;
-  }
-
-
-  std::set<const RegUnit*> LinearScan::blocked_by(const LiveRange& found, std::span<const LiveRange> blocked) const
-  {
-    std::set<const RegUnit*> units;
-    for (const auto& other : blocked)
-      if (other.covers(found) && other.reg.is_physical())
-        units.insert(other.reg.phys()->unit);
-    return units;
   }
 
 

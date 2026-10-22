@@ -83,13 +83,116 @@ namespace pl4g::mc {
   }
 
 
+  namespace {
+
+    // Whether one block dominates another, asked in constant time: the tree of
+    // immediate dominators, found the way Cooper, Harvey and Kennedy find it,
+    // numbered as it is walked so that a block dominates exactly the blocks
+    // whose numbers lie between its own two.  The relation `dominators`
+    // answers as sets; a block the entry does not reach dominates nothing and
+    // is dominated by nothing, as there.  pypl4g's `_Dominance`.
+    class Dominance {
+    public:
+      explicit Dominance(const Edges& edges) : enter(edges.size(), -1), leave(edges.size(), -1)
+      {
+        auto count = edges.size();
+        if (count == 0)
+          return;
+        // Reverse postorder of the blocks the entry reaches.
+        std::vector<std::size_t> post;
+        std::vector<bool> seen(count, false);
+        seen[0] = true;
+        std::vector<std::pair<std::size_t, std::size_t>> stack{ { 0, 0 } };
+        while (! stack.empty()) {
+          auto [at, next] = stack.back();
+          if (next < edges[at].size()) {
+            ++stack.back().second;
+            auto reached = edges[at][next];
+            if (! seen[reached]) {
+              seen[reached] = true;
+              stack.emplace_back(reached, 0);
+            }
+          } else {
+            post.push_back(at);
+            stack.pop_back();
+          }
+        }
+        std::vector<std::size_t> order(post.rbegin(), post.rend());
+        std::vector<std::size_t> rank(count, 0);
+        for (std::size_t place = 0; place < order.size(); ++place)
+          rank[order[place]] = place;
+        auto before = predecessors(edges);
+        std::vector<long> idom(count, -1);
+        idom[0] = 0;
+        for (bool changed = true; changed;) {
+          changed = false;
+          for (std::size_t place = 1; place < order.size(); ++place) {
+            auto at = order[place];
+            long found = -1;
+            for (auto one : before[at]) {
+              if (idom[one] < 0)
+                continue;
+              if (found < 0) {
+                found = long(one);
+                continue;
+              }
+              auto a = one;
+              auto b = std::size_t(found);
+              while (a != b) {
+                while (rank[a] > rank[b])
+                  a = std::size_t(idom[a]);
+                while (rank[b] > rank[a])
+                  b = std::size_t(idom[b]);
+              }
+              found = long(a);
+            }
+            if (idom[at] != found) {
+              idom[at] = found;
+              changed = true;
+            }
+          }
+        }
+        std::vector<std::vector<std::size_t>> children(count);
+        for (std::size_t place = 1; place < order.size(); ++place)
+          children[std::size_t(idom[order[place]])].push_back(order[place]);
+        long clock = 0;
+        enter[0] = clock;
+        std::vector<std::pair<std::size_t, std::size_t>> walk{ { 0, 0 } };
+        while (! walk.empty()) {
+          auto [at, next] = walk.back();
+          if (next < children[at].size()) {
+            ++walk.back().second;
+            auto child = children[at][next];
+            enter[child] = ++clock;
+            walk.emplace_back(child, 0);
+          } else {
+            leave[at] = ++clock;
+            walk.pop_back();
+          }
+        }
+      }
+
+      // Whether every path from the entry to `other` passes through `one`.
+      bool dominates(std::size_t one, std::size_t other) const noexcept
+      {
+        return enter[one] >= 0 && enter[other] >= 0 && enter[one] <= enter[other] && leave[other] <= leave[one];
+      }
+
+    private:
+      std::vector<long> enter;
+      std::vector<long> leave;
+    };
+
+  } // anonymous namespace
+
+
   std::vector<std::pair<std::size_t, std::size_t>> back_edges(const Edges& edges)
   {
-    auto doms = dominators(edges);
+    Dominance tree(edges);
     std::vector<std::pair<std::size_t, std::size_t>> found;
     for (std::size_t at = 0; at < edges.size(); ++at)
       for (auto reached : edges[at])
-        if (doms[at].contains(reached))
+        if (tree.dominates(reached, at))
           found.emplace_back(at, reached);
     return found;
   }
