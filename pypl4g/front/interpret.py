@@ -358,14 +358,8 @@ class Machine:
             return _in_range(left - whole * right, ty)
         if inst.op in (BinOp.ASHR, BinOp.LSHR):
             return _in_range(left >> right, ty)
-        if inst.op in (BinOp.ROTL, BinOp.ROTR):
-            bits = ty.held
-            turn = right % bits
-            if inst.op is BinOp.ROTR:
-                turn = (bits - turn) % bits
-            raw = _as_written(left, ty)
-            return _in_range(((raw << turn) | (raw >> (bits - turn)))
-                             & ((1 << bits) - 1), ty)
+        if inst.op in _MOVED:
+            return _moved(inst.op, left, right, ty)
         found = _ARITHMETIC.get(inst.op)
         if found is None:
             raise Refused("".join(("the operation ", inst.op.value)), inst)
@@ -607,6 +601,50 @@ def _in_range(number: int, ty: Type) -> int:
     if ty.signed and raw >= (1 << (bits - 1)):
         return raw - (1 << bits)
     return raw
+
+
+#: The rotations, and the shifts that take their distance modulo the width: the
+#: ones asked over the type's own bits rather than over its holder's.
+_MOVED: Final[frozenset[BinOp]] = frozenset((
+    BinOp.ROTL, BinOp.ROTR, BinOp.WRAP_SHL, BinOp.WRAP_LSHR, BinOp.WRAP_ASHR,
+    BinOp.WRAP_ROTL, BinOp.WRAP_ROTR))
+
+#: And of those, the ones written inside `⎕wrap`.
+_WRAPPING_MOVES: Final[frozenset[BinOp]] = frozenset((
+    BinOp.WRAP_SHL, BinOp.WRAP_LSHR, BinOp.WRAP_ASHR, BinOp.WRAP_ROTL,
+    BinOp.WRAP_ROTR))
+
+
+def _moved(op: BinOp, left: int, right: int, ty: IntType) -> int:
+    """A rotation, or a shift inside `⎕wrap`, of *left* by *right*, as the
+    generated program does it.
+
+    Over the type's own bits.  The distance is read as the bits of its type
+    without a sign; inside a wrap it is taken modulo the width -- every width,
+    whether or not it is a power of two -- and outside one a rotation as far as
+    the width or further stops, as the checked shifts do.
+    """
+    bits = ty.bits
+    mask = (1 << bits) - 1
+    distance = right & mask
+    if op in _WRAPPING_MOVES:
+        distance %= bits
+    elif distance >= bits:
+        raise Stopped("a rotation as far as the width or further")
+    raw = left & mask
+    match op:
+        case BinOp.WRAP_SHL:
+            answer = raw << distance
+        case BinOp.WRAP_LSHR:
+            answer = raw >> distance
+        case BinOp.WRAP_ASHR:
+            answer = left >> distance
+        case BinOp.ROTL | BinOp.WRAP_ROTL:
+            answer = (raw << distance) | (raw >> (bits - distance))
+        case _:
+            answer = (raw >> distance) | (raw << (bits - distance))
+    answer &= mask
+    return answer - (1 << bits) if ty.signed and answer >> (bits - 1) else answer
 
 
 def _as_written(number: int, ty: Type) -> int:

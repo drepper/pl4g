@@ -117,7 +117,8 @@ EXTREMA: dict[BinOp, Condition] = {
 #:
 #: The wrapping five are here too: they are the same five with the distance
 #: taken modulo the width of the type instead of being a question the program
-#: can get wrong, so it is one lowering with one thing decided differently.
+#: can get wrong, so it is one lowering with one thing decided differently --
+#: an `and` where the width is a power of two, and a remainder where it is not.
 SHIFTS = frozenset((BinOp.SHL, BinOp.ASHR, BinOp.LSHR, BinOp.ROTL, BinOp.ROTR,
                     BinOp.WRAP_SHL, BinOp.WRAP_ASHR, BinOp.WRAP_LSHR,
                     BinOp.WRAP_ROTL, BinOp.WRAP_ROTR))
@@ -566,18 +567,22 @@ def lower_shift(asm: Assembler, op: BinOp, ty: Type, value: MCOperand,
     if not isinstance(ty, IntType):
         raise Unsupported("a shift of something that is not an integer")
     held = _in_a_register(asm, value, scratch, span)
-    distance = _in_a_register(asm, amount, scratch, span)
     plain = _UNCHECKED.get(op)
-    if plain is not None:
+    if plain is not None and not _a_power_of_two(ty.bits):
+        distance = _modulo_the_width(asm, ty, amount, scratch, span)
+        op = plain
+    elif plain is not None:
         # Inside a wrap the distance is not a question the program can get
-        # wrong: it is taken modulo the width of the type, which every width
-        # being a power of two makes one `and` rather than a division.  The
+        # wrong: it is taken modulo the width of the type, which for a width
+        # that is a power of two is one `and` rather than a division.  The
         # architectures each take it modulo the width of the *register*, which
         # is not the same thing, so this is done here and not left to them.
+        distance = _in_a_register(asm, amount, scratch, span)
         asm.op(ops.AND, distance.reg, distance,
                MCImm(ty.bits - 1, 32, signed=False), span=span)
         op = plain
     else:
+        distance = _in_a_register(asm, amount, scratch, span)
         width = MCImm(ty.bits, 32, signed=False)
         _answer(asm, Condition.UGE, destination, distance, width,
                 MCImm(0, 32, signed=False), too_far, span)
@@ -598,6 +603,47 @@ def lower_shift(asm: Assembler, op: BinOp, ty: Type, value: MCOperand,
     asm.loadreg(destination, MCReg(answer, bits=register_bits), span)
 
 
+def _a_power_of_two(bits: int) -> bool:
+    """Whether a width of *bits* is a power of two."""
+    return bits & (bits - 1) == 0
+
+
+def _modulo_the_width(asm: Assembler, ty: IntType, amount: MCOperand,
+                      scratch: Scratch, span: Span) -> MCReg:
+    """The distance *amount* taken modulo the width of *ty*, a width that is
+    not a power of two, in a register of its own.
+
+    The distance is read as the bits of its type without a sign -- the reading
+    the checked shift compares with the width, and the one an `and` gives a
+    width that is a power of two -- and what is left of it divided by the width
+    is the distance.  A distance written down is worked out here and costs
+    nothing; any other is the machine's remainder by a constant, which is what
+    a width no machine has costs, and why the range analysis leaves a checked
+    shift of such a width checked unless its distance is written down.
+    """
+    if isinstance(amount, MCImm):
+        turned = (amount.value & ((1 << ty.bits) - 1)) % ty.bits
+        carried = MCReg(scratch.scratch())
+        asm.loadreg(carried.reg, MCImm(turned, 32, signed=False), span)
+        return carried
+    given = _in_a_register(asm, amount, scratch, span)
+    read = MCReg(scratch.scratch())
+    asm.loadreg(read.reg, _whole(given), span)
+    if ty.signed:
+        # The bits of the type and none of the sign that fills the register
+        # above them.
+        asm.op(ops.AND, read.reg, read,
+               MCImm((1 << ty.bits) - 1, 32 if ty.bits < 32 else 64,
+                     signed=False), span=span)
+    # In whole registers, which is what the scratch ones are: a remainder of
+    # a number below the width is what a narrower division would answer too.
+    width = MCReg(scratch.scratch())
+    asm.loadreg(width.reg, MCImm(ty.bits, 32, signed=False), span)
+    turned = MCReg(scratch.scratch())
+    asm.divide(turned.reg, read, width, False, True, 64, span)
+    return turned
+
+
 def _rotate(asm: Assembler, op: BinOp, ty: IntType, value: MCReg,
             distance: MCReg, destination: Reg, scratch: Scratch,
             span: Span) -> None:
@@ -606,17 +652,21 @@ def _rotate(asm: Assembler, op: BinOp, ty: IntType, value: MCReg,
     Two shifts and an or, rather than the rotate instruction the architectures
     have: theirs turns a whole register round, and a value of a narrower type
     occupies only part of one.  The other distance is the width less this one,
-    taken modulo the width -- which for a width that is a power of two is one
-    and, since every width here is one, is what makes a rotation by nothing come
-    out as the value itself rather than as a shift by the whole width.
+    taken modulo the width where the width is a power of two -- one `and` --
+    which is what makes a rotation by nothing come out as the value itself
+    rather than as a shift by the whole width of the register.  A width that is
+    no power of two is narrower than the register, so the other distance is
+    left at the width for a rotation by nothing: what a value of the type has
+    above its own bits is noughts, and the shift brings in nothing but them.
     """
     left = MCReg(scratch.scratch())
     right = MCReg(scratch.scratch())
     other = MCReg(scratch.scratch())
     asm.op(ops.MINUS, other.reg, MCImm(ty.bits, 32, signed=False),
            _whole(distance), span=span)
-    asm.op(ops.AND, other.reg, other, MCImm(ty.bits - 1, 32, signed=False),
-           span=span)
+    if _a_power_of_two(ty.bits):
+        asm.op(ops.AND, other.reg, other, MCImm(ty.bits - 1, 32, signed=False),
+               span=span)
     forwards, backwards = ((_whole(distance), other) if op is BinOp.ROTL
                            else (other, _whole(distance)))
     asm.shift(ops.SHIFT_LEFT, left.reg, _whole(value), forwards, 64, span)
