@@ -215,6 +215,12 @@ class _Local:
     #: a value: `let q := arr⟦arr > 1⟧` binds `q` to the description of a walk,
     #: and each walk of `q` starts it afresh.
     iterable: "_Iterable | None" = None
+    #: Whether the room a list it holds is in is its own: made where it was
+    #: bound, copied for it, or handed over by a name whose room was its own --
+    #: and so whether, once it is done with, that room may be handed on rather
+    #: than copied.  A parameter's is its caller's, and a name bound to one
+    #: shares it; nothing is known of a name bound any other way.
+    owns_room: bool = False
 
 
 @dataclass(slots=True)
@@ -543,6 +549,14 @@ def _referenced(node: object, name: str) -> bool:
     if isinstance(node, (list, tuple)):
         return any(_referenced(one, name) for one in node)
     return False
+
+
+def _value_of_block(block: ast.Block) -> ast.Expr | None:
+    """What a block written where a value is wanted comes to: its last
+    statement's expression, or nothing where it ends otherwise."""
+    if block.stmts and isinstance(block.stmts[-1], ast.ExprStmt):
+        return block.stmts[-1].value
+    return None
 
 
 def _given_its_own(name: str, body: ast.Block) -> bool:
@@ -11595,8 +11609,9 @@ class Checker:
                 self._report_inferred(((stmt.name, stmt.name_span), *stmt.more),
                                       stmt.type)
             case ast.VarDef():
-                self._copied_where_shared(stmt.value, stmt.mutable)
+                owns = self._copied_where_shared(stmt.value, stmt.mutable)
                 self._lower_local(builder, stmt)
+                self._owning_room(stmt.name, owns and not stmt.more)
                 self._variable_slot(stmt)
                 self._made_in(stmt.name, stmt.value, stmt.span)
                 self._report_inferred(((stmt.name, stmt.name_span), *stmt.more),
@@ -11605,9 +11620,10 @@ class Checker:
                 # An assignment stands for the variable it changed, so it can be
                 # a function's result the way any other last statement can.
                 wants_value = is_last and func.ty.ret is not VOID
-                if not stmt.more:
-                    self._copied_where_shared(stmt.value, True)
+                owns = not stmt.more \
+                    and self._copied_where_shared(stmt.value, True)
                 result = self._lower_assignment(builder, stmt, wants_value)
+                self._owning_room(stmt.name, owns)
                 if not stmt.more:
                     self._made_in(stmt.name, stmt.value, stmt.span,
                                   assigning=True)
@@ -11622,6 +11638,7 @@ class Checker:
                         result, func, stmt.span)
                     self._returning(builder, result, stmt.span)
             case ast.EntryAssign():
+                self._copied_where_shared(stmt.value, True)
                 self._lower_entry_assign(builder, stmt)
                 self._made_in_part(stmt.base, stmt.value, stmt.span)
             case ast.UnitDef():
@@ -12028,6 +12045,13 @@ class Checker:
         given = self._fields_given(expr, ty)
         if given is None:
             return
+        if id(expr) in self._copying:
+            # The record was to be copied where it was lowered, and it is not
+            # lowered as a value but a field at a time: what is copied is each
+            # field that is not room made here already.
+            self._copying.discard(id(expr))
+            self._copying.update(id(one.value) for one in given.values()
+                                 if not self._made_or_holds_none(one.value))
         for at, (_, held) in enumerate(ty.fields):
             place = self._field_place(builder, where, ty, at, span)
             written = given[ty.fields[at][0]]
@@ -17275,37 +17299,102 @@ class Checker:
         made = self._room_made(builder, place, ty, builder.int_const(U64, 0), span)
         self._room_kept(builder, place, ty, made, made[2], span)
 
-    def _copied_where_shared(self, written: ast.Expr, changes: bool) -> None:
+    def _copied_where_shared(self, written: ast.Expr, changes: bool) -> bool:
         """Note *written* as a value to copy where it is lowered, where it is a
         list read out of a place into another -- one that may itself change it
         in place where *changes* says so -- and the two would otherwise share
-        the room the elements are in.
+        the room the elements are in; and say whether the place it goes then
+        has room of its own (`_Local.owns_room`).
 
         A list is a value: changing one in place -- `l ⧺← x`, `l⟦i⟧ ← v`,
         `†l⟦i⟧` -- changes no other name's.  So where either the place it was
         read from or the place it goes may be changed so, the new one gets
-        elements of its own, unless the one it came from is done with: a local
-        of this function, not a parameter -- whose room is its caller's -- and
-        not used again after this statement, whose room is then simply handed
-        over.  Where neither may change, sharing is something nobody can see.
+        elements of its own, unless what it is given is room nobody else has:
+        a list made where it is given (`_room_made_here`), or a local done with
+        whose room was its own -- not a parameter, whose room is its caller's,
+        nor a name bound to one, which shares it -- and not used again after
+        this statement, whose room is then simply handed over.  A place that
+        may change asks this of whatever it is given, an `if` or a call of the
+        language's own as much as a name; where neither may change, sharing is
+        something nobody can see.
         """
         ty = self._said_to_be(written)
-        if ty is None or not _holds_a_list(ty) or not owned.can_own(ty) \
-                or not isinstance(written, (ast.NameRef, ast.Member, ast.Element,
-                                            ast.Deref)):
-            return
+        if ty is not None and (not _holds_a_list(ty) or not owned.can_own(ty)):
+            return False
+        if self._room_made_here(written):
+            return True
+        if isinstance(written, ast.NameRef):
+            local = self._find_local(written.name)
+            if local is not None and not local.is_parameter \
+                    and not self._used_after(local) \
+                    and (local.owns_room or not changes):
+                return local.owns_room
+        if changes:
+            # What the place is given is copied where it is lowered, whatever
+            # it turns out to be: a copy of something that holds no list is the
+            # value itself.
+            self._copying.add(id(written))
+            return True
+        if ty is None or not isinstance(written, (ast.NameRef, ast.Member,
+                                                  ast.Element, ast.Deref)):
+            return False
         root: ast.Expr = written
         through_a_reference = False
         while isinstance(root, (ast.Member, ast.Element, ast.Deref)):
             through_a_reference |= isinstance(root, ast.Deref)
             root = root.operand if isinstance(root, ast.Deref) else root.base
         local = self._find_local(root.name) if isinstance(root, ast.NameRef) else None
-        if local is not None and isinstance(written, ast.NameRef) \
-                and not local.is_parameter and not self._used_after(local):
-            return
         may_change = through_a_reference or local is None or local.mutable
-        if changes or may_change:
+        if may_change:
             self._copying.add(id(written))
+            return True
+        return False
+
+    def _owning_room(self, name: str, owns: bool) -> None:
+        """Say of the local *name*, just given a value, whether its room is its
+        own."""
+        local = self._find_local(name)
+        if local is not None:
+            local.owns_room = owns
+
+    def _room_made_here(self, written: ast.Expr) -> bool:
+        """Whether *written* is a list made where it is written, in room nothing
+        else holds: written out, a join, or what a function of the program
+        answers -- as `_given_its_own` takes them -- and a record, a tuple, a
+        list or an `if` made of nothing but such lists, or of what holds none.
+        Not a name, which may share its room, nor what the language's own
+        functions answer, some of which answer their argument."""
+        while isinstance(written, ast.Allocated):
+            written = written.value
+        match written:
+            case ast.Binary() if written.op is ast.BinaryOp.CONCAT:
+                return True
+            case ast.ListLit():
+                return all(self._made_or_holds_none(one) for one in written.elements)
+            case ast.TupleLit():
+                return all(self._made_or_holds_none(one) for one in written.members)
+            case ast.Call() if self._makes_a_record(written.callee):
+                return all(self._made_or_holds_none(
+                    one.value if isinstance(one, ast.Named) else one)
+                           for one in written.args)
+            case ast.Call():
+                return not (isinstance(written.callee, ast.NameRef)
+                            and (written.callee.name.startswith(BUILTIN_GLYPH)
+                                 or self._find_local(written.callee.name)
+                                 is not None))
+            case ast.If():
+                return all(self._made_or_holds_none(_value_of_block(arm.body))
+                           for arm in written.arms)
+        return False
+
+    def _made_or_holds_none(self, written: ast.Expr | None) -> bool:
+        """Whether *written* is room made here, or something holding no list."""
+        if written is None:
+            return False
+        if self._room_made_here(written):
+            return True
+        ty = self._said_to_be(written)
+        return ty is not None and not _holds_a_list(ty)
 
     def _owned_arguments(self, builder: IRBuilder, expr: ast.Call, func: Function,
                          args: Sequence[Value]) -> list[Value]:
@@ -17345,6 +17434,7 @@ class Checker:
         stmt = self._current_stmt
         if local is None or not local.mutable \
                 or local.named_parameter and not self._owned_parameter(written, current) \
+                or not local.named_parameter and not local.owns_room \
                 or stmt is None or _mentions(stmt, written.name) != 1:
             return False
         if written.name in self._addressed:
