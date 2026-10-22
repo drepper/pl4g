@@ -198,16 +198,74 @@ namespace pl4g::opt {
       return made;
     }
 
+    // What `thread` asks of a function as it changes it: how often each value
+    // is read, and every branch arriving at each block.  Worked out once per
+    // walk and kept up as the walk changes branches, rather than worked out
+    // again over the whole function for every block it looks at.  Both are
+    // what `uses_of` and `incoming_edges` would answer of the function as it
+    // stands: a block gone through stays until the end and goes on reading what
+    // it read, and a way into a block is asked of the branch that is there now.
+    // pypl4g's `_Ways`.
+    struct Ways {
+      Counts counted;
+      std::unordered_map<const BasicBlock*, std::vector<std::pair<BasicBlock*, BlockTarget*>>> arriving;
+
+      explicit Ways(Function& func) : counted(uses_of(func)), arriving(incoming_edges(func)) {}
+
+      // Count each of `values` read `by` times more.
+      void read(const std::vector<Value*>& values, int by)
+      {
+        for (auto one : values)
+          counted[one] += by;
+      }
+
+      // Every branch arriving at `block` now, and the block it is from: each
+      // once, and only where it still goes there and is still its block's.
+      std::vector<std::pair<BasicBlock*, BlockTarget*>> into(BasicBlock* block)
+      {
+        std::vector<std::pair<BasicBlock*, BlockTarget*>> found;
+        std::unordered_set<const BlockTarget*> seen;
+        for (auto [source, edge] : arriving[block]) {
+          if (edge->block != block || seen.contains(edge))
+            continue;
+          auto last = source->terminator();
+          if (last == nullptr
+              || std::ranges::none_of(last->targets, [edge](const BlockTarget& one) { return &one == edge; }))
+            continue;
+          seen.insert(edge);
+          found.emplace_back(source, edge);
+        }
+        arriving[block] = found;
+        return found;
+      }
+
+      // Note that `edge`, of `source`'s branch, goes where it now says.
+      void arrives(BasicBlock* source, BlockTarget* edge)
+      {
+        if (edge->block != nullptr)
+          arriving[edge->block].emplace_back(source, edge);
+      }
+
+      // Send `edge` where `made` goes, with what it carries, instead.
+      void moved(BasicBlock* source, BlockTarget* edge, BlockTarget made)
+      {
+        read(edge->args, -1);
+        *edge = std::move(made);
+        read(edge->args, 1);
+        arrives(source, edge);
+      }
+    };
+
     // Have every jump into `block` -- nothing but a branch on one of its
     // parameters -- branch itself, and every branch into it carrying a
     // constant go where that constant goes.
-    bool through_branch(Function& func, BasicBlock* block, Instruction* branch)
+    bool through_branch(Function& func, BasicBlock* block, Instruction* branch, Ways& ways)
     {
       auto cond = branch->operands[0];
       if (cond->vkind != ValueKind::block_param || static_cast<BlockParam*>(cond)->block != block
           || cond->ty != bool_type())
         return false;
-      auto counted = uses_of(func);
+      const auto& counted = ways.counted;
       Counts inside;
       ++inside[cond];
       for (const auto& target : branch->targets)
@@ -220,15 +278,12 @@ namespace pl4g::opt {
         return false;
       auto index = static_cast<BlockParam*>(cond)->index;
       bool changed = false;
-      auto edges = incoming_edges(func);
-      for (auto [source, edge] : edges[block]) {
-        if (edge->block != block)
-          continue;
+      for (auto [source, edge] : ways.into(block)) {
         auto known = edge->args[index];
         auto last = source->insts.back();
         if (known->vkind == ValueKind::bool_const) {
-          auto made = substituted(branch->targets[static_cast<BoolConst*>(known)->value ? 0 : 1], block, edge->args);
-          *edge = std::move(made);
+          ways.moved(source, edge,
+                     substituted(branch->targets[static_cast<BoolConst*>(known)->value ? 0 : 1], block, edge->args));
           changed = true;
           continue;
         }
@@ -239,6 +294,12 @@ namespace pl4g::opt {
                                     substituted(branch->targets[1], block, args), last->span);
         replaced->parent = source;
         source->insts.back() = replaced;
+        ways.read(edge->args, -1);
+        ways.read(replaced->operands, 1);
+        for (auto& target : replaced->targets) {
+          ways.read(target.args, 1);
+          ways.arrives(source, &target);
+        }
         changed = true;
       }
       return changed;
@@ -246,7 +307,7 @@ namespace pl4g::opt {
 
     // Have every branch into `block` -- nothing but a jump, taking nothing --
     // go where the jump goes instead.
-    bool through_jump(Function& func, BasicBlock* block, Instruction* jump)
+    bool through_jump(BasicBlock* block, Instruction* jump, Ways& ways)
     {
       if (jump->targets[0].block == block)
         return false;
@@ -254,13 +315,10 @@ namespace pl4g::opt {
       // its own again, to make the moves in: that is this block.
       bool carries = ! carried_values(jump->targets[0]).empty();
       bool changed = false;
-      auto edges = incoming_edges(func);
-      for (auto [source, edge] : edges[block]) {
-        if (edge->block != block)
-          continue;
+      for (auto [source, edge] : ways.into(block)) {
         if (carries && source->insts.back()->kind != InstKind::BrInst)
           continue;
-        *edge = BlockTarget{ jump->targets[0].block, jump->targets[0].args };
+        ways.moved(source, edge, BlockTarget{ jump->targets[0].block, jump->targets[0].args });
         changed = true;
       }
       return changed;
@@ -274,14 +332,15 @@ namespace pl4g::opt {
       std::vector<BasicBlock*> blocks;
       for (const auto& block : func.blocks)
         blocks.push_back(block.get());
+      Ways ways(func);
       for (auto block : blocks) {
         if (block == func.entry() || block->insts.size() != 1)
           continue;
         auto only = block->insts[0];
         if (only->kind == InstKind::CondBrInst)
-          changed |= through_branch(func, block, only);
+          changed |= through_branch(func, block, only, ways);
         else if (only->kind == InstKind::BrInst && block->params.empty())
-          changed |= through_jump(func, block, only);
+          changed |= through_jump(block, only, ways);
       }
       return changed;
     }

@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "ir/builder.hh"
@@ -110,6 +111,16 @@ namespace pl4g::opt {
     {
       bool changed = false;
       auto edges = incoming_edges(func);
+      // What each parameter dropped stands for, written into the function once
+      // at the end: a branch's arguments read before then are read through what
+      // has been dropped so far, which is what they would have said had every
+      // replacement been made as it was decided.
+      std::unordered_map<const Value*, Value*> instead;
+      auto now = [&instead](Value* value) {
+        for (auto it = instead.find(value); it != instead.end(); it = instead.find(value))
+          value = it->second;
+        return value;
+      };
       for (auto& block : func.blocks) {
         if (block.get() == func.entry() || block->params.empty())
           continue;
@@ -122,13 +133,13 @@ namespace pl4g::opt {
           auto param = block->params[at].get();
           std::vector<Value*> supplied;
           for (auto one : arriving) {
-            auto arg = one->args[at];
+            auto arg = now(one->args[at]);
             if (arg != param && std::ranges::find(supplied, arg) == supplied.end())
               supplied.push_back(arg);
           }
           if (supplied.size() != 1)
             continue;
-          stands_for(func, param, supplied.front());
+          instead[param] = supplied.front();
           for (auto one : arriving)
             one->args.erase(one->args.begin() + std::ptrdiff_t(at));
           func.retired.push_back(std::move(block->params[at]));
@@ -138,6 +149,10 @@ namespace pl4g::opt {
         for (std::size_t index = 0; index < block->params.size(); ++index)
           block->params[index]->index = index;
       }
+      std::unordered_map<const Value*, Value*> settled;
+      for (const auto& [gone, stands] : instead)
+        settled[gone] = now(stands);
+      all_stand_for(func, settled);
       return changed;
     }
 
@@ -185,8 +200,20 @@ namespace pl4g::opt {
       auto first = position_of(func, target);
       bool ahead = first < position_of(func, block);
       auto args = branch->targets[0].args;
-      for (std::size_t at = 0; at < target->params.size() && at < args.size(); ++at)
-        stands_for(func, target->params[at].get(), args[at]);
+      auto handed_on = std::ranges::any_of(args, [target](const Value* arg) {
+        return std::ranges::any_of(target->params, [arg](const auto& param) { return param.get() == arg; });
+      });
+      if (handed_on)
+        // A parameter handed to another of the same block, which one
+        // replacement after another reads differently from all at once.
+        for (std::size_t at = 0; at < target->params.size() && at < args.size(); ++at)
+          stands_for(func, target->params[at].get(), args[at]);
+      else {
+        std::unordered_map<const Value*, Value*> instead;
+        for (std::size_t at = 0; at < target->params.size() && at < args.size(); ++at)
+          instead.emplace(target->params[at].get(), args[at]);
+        all_stand_for(func, instead);
+      }
       block->insts.pop_back();
       for (auto one : target->insts) {
         one->parent = block;
@@ -201,33 +228,36 @@ namespace pl4g::opt {
         follow(func, block, first);
     }
 
+    // How many ways arrive at each block is asked once: writing a block into
+    // its one way in changes that for no block that stays, and makes no block
+    // before it worth joining, so the walk goes on from where it joined -- the
+    // hundred joins a call may make kept.
     bool merge_blocks(Function& func)
     {
       bool changed = false;
-      for (int round = 0; round < rounds; ++round) {
-        auto edges = incoming_edges(func);
-        bool joined = false;
-        std::vector<BasicBlock*> all;
-        for (auto& block : func.blocks)
-          all.push_back(block.get());
-        for (auto block : all) {
-          auto terminator = block->terminator();
-          if (terminator == nullptr || terminator->kind != InstKind::BrInst)
-            continue;
-          auto target = terminator->targets[0].block;
-          if (target == nullptr || target == func.entry())
-            continue;
-          // A loop of one would be written into itself twice.
-          if (target == block || target->terminator() == nullptr)
-            continue;
-          if (edges[target].size() != 1)
-            continue;
-          absorb(func, block, target, terminator);
-          joined = changed = true;
-          break;
-        }
-        if (! joined)
-          break;
+      std::unordered_map<const BasicBlock*, std::size_t> arriving;
+      for (const auto& [block, found] : incoming_edges(func))
+        arriving[block] = found.size();
+      int joined = 0;
+      for (std::size_t at = 0; at < func.blocks.size() && joined < rounds;) {
+        auto block = func.blocks[at++].get();
+        auto terminator = block->terminator();
+        if (terminator == nullptr || terminator->kind != InstKind::BrInst)
+          continue;
+        auto target = terminator->targets[0].block;
+        if (target == nullptr || target == func.entry())
+          continue;
+        // A loop of one would be written into itself twice.
+        if (target == block || target->terminator() == nullptr)
+          continue;
+        if (auto it = arriving.find(target); it == arriving.end() || it->second != 1)
+          continue;
+        absorb(func, block, target, terminator);
+        changed = true;
+        ++joined;
+        // The block again, from where it now stands: what it ends with is what
+        // the block written into it ended with.
+        at = position_of(func, block);
       }
       return changed;
     }
