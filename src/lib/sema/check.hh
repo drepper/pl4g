@@ -139,6 +139,10 @@ namespace pl4g::sema {
     bool image_waits(std::string_view name) const;  // check.py:3783
     Conditions conditions = Conditions::check;  // check.py:3786
     bool for_macros = false;  // check.py:3792
+    // Whether what is checked here is a module something else imported, rather
+    // than the files the checker was started on: lowered as far as it is named,
+    // for the macros as for the program.
+    bool imported = false;  // check.py:_imported
     // The trees quoted in the macros, in the order they were written, and the
     // holes each has.  The expander reads them: a quote lowers to a call that
     // names one by its place here and fills its holes with what the macro

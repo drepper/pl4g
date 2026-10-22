@@ -207,7 +207,7 @@ namespace pl4g::sema {
         }
     check_closers();
     // Callees before their callers, as far as the call tree goes.
-    if (whole_program || whole_modules || for_macros || notes != nullptr) {
+    if (whole_program || whole_modules || (for_macros && ! imported) || notes != nullptr) {
       // Everything here is lowered, so everything it names in a module has
       // to be there first.
       NameSet wanted;
@@ -235,7 +235,11 @@ namespace pl4g::sema {
         mentioned(item->value, roots);
       }
       for (auto entry : collected)
-        if (entry->func->attrs.special.has_value() || entry->func->linkage != ir::Linkage::internal)
+        // A macro is run by the expander, which names it by nothing written in
+        // a body: what the macros' checker reads of a module is its macros, and
+        // what they reach.
+        if (entry->func->attrs.special.has_value() || entry->func->linkage != ir::Linkage::internal
+            || (for_macros && entry->node->is_macro))
           roots.insert(std::string(entry->node->name));
       want(roots);
     }
@@ -880,6 +884,7 @@ namespace pl4g::sema {
     // `want`, which needs the checker that collected it.
     auto inner = std::make_shared<Checker>(module, diags, registry, found_at, inner_prefix, sources, &top_level,
                                            nullptr, conditions, for_macros, &quoted, whole_modules, ignore_system);
+    inner->imported = true;
     std::vector<const ast::SourceUnit*> just{ unit };
     inner->run(just, false);
     // What it owns goes on growing as more of it is lowered, and Python hands
