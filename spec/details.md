@@ -1248,7 +1248,10 @@ several of its objects; the call's description for libffi is made at the first c
 known, with a pointer put in front where there is a context.  A null context is no context.  The table is the interpreter's state, so it holds for every run after, and the interactive session
 reads it too.  `src/examples/embed/defined.cc` is a host linked without `-rdynamic` handing over functions of internal linkage,
 one of them under the name of a C library function, which its program reaches in place of the library's; ctest's
-`embed-defined` runs it, and `embed-host` holds the C++ interface.  **No way a program ends ends the program embedding it.**  Returning from the startup function, a
+`embed-defined` runs it, and `embed-host` holds the C++ interface.  `src/examples/embed/members.cc` hands over the member
+functions of objects: what is defined is a static member function of the class, the object is its context, and the static
+member turns the context back into the object and calls the member on it -- two accounts through one pair of statics, each
+its own context; ctest's `embed-members` runs it.  **No way a program ends ends the program embedding it.**  Returning from the startup function, a
 stop -- an answer that does not fit, an index past the end, a host symbol not found -- and the system's own `exit` and
 `exit_group` asked for with `⎕syscall` all end the run alone: the interpreter takes those two calls before they reach the kernel,
 and each of the others unwinds it, and the call that ran the program answers with the status.  `embed-host` holds each of them.

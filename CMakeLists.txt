@@ -14,6 +14,7 @@
 #                     program calling back into it (src/examples/embed)
 #   pl4g-embed-example-cc  the same in C++, through embed/pl4g-embed.hh
 #   pl4g-embed-defined  a host handing PL4G its functions by name, not dlsym
+#   pl4g-embed-members  the same with objects: a static member, the object its context
 #   pl4g-embed        the interpreter as libpl4g-embed.so and libpl4g-embed.a
 #   pl4g-manual       the manual, a node at a time (libpl4g-manual.so, and
 #                     libpl4g-manual.a), and pl4g-help, which shows one
@@ -464,6 +465,16 @@ target_link_libraries(pl4g-embed-defined PRIVATE ${CMAKE_DL_LIBS})
 add_dependencies(pl4g-embed-defined pl4g-embed)
 add_test(NAME embed-defined
   COMMAND prlimit --data=536870912 --cpu=120 -- $<TARGET_FILE:pl4g-embed-defined> $<TARGET_FILE:pl4g-embed>)
+
+# And objects handed over: a static member function, the object its context.
+add_executable(pl4g-embed-members src/examples/embed/members.cc)
+target_include_directories(pl4g-embed-members PRIVATE ${CMAKE_SOURCE_DIR}/src/lib)
+target_compile_options(pl4g-embed-members PRIVATE -Wall -Wextra -fcontracts)
+target_link_options(pl4g-embed-members PRIVATE -fcontracts)
+target_link_libraries(pl4g-embed-members PRIVATE ${CMAKE_DL_LIBS})
+add_dependencies(pl4g-embed-members pl4g-embed)
+add_test(NAME embed-members
+  COMMAND prlimit --data=536870912 --cpu=120 -- $<TARGET_FILE:pl4g-embed-members> $<TARGET_FILE:pl4g-embed>)
 
 # Expressions handed over as JSON and evaluated in PL4G, the replies read with
 # nlohmann::json and checked against a schema with json-schema-validator;
