@@ -28,11 +28,12 @@ class Value:
         #: somewhere else on the line, and sometimes on another line entirely.
         self.name_span: Span = INVALID_SPAN
 
+    # Equality is the object's own, which is identity, as `__hash__` is: no
+    # `__eq__` written here, so that a value looked for in a list -- `in`,
+    # `index`, `remove` -- is compared where the list is and not through a call
+    # to Python for every element passed over.
     def __hash__(self) -> int:
         return id(self)
-
-    def __eq__(self, other: object) -> bool:
-        return self is other
 
 
 class Const(Value):

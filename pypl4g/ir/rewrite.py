@@ -24,12 +24,17 @@ def stands_for(func: Function, gone: Value, instead: Value) -> None:
     """
     for block in func.blocks:
         for one in block.insts:
-            one.operands = [instead if operand is gone else operand
-                            for operand in one.operands]
+            # Looked for before anything is made: most instructions read
+            # something else, and a list made afresh for each of them, for every
+            # value replaced, was most of what a pass replacing many of them did.
+            if gone in one.operands:
+                one.operands = [instead if operand is gone else operand
+                                for operand in one.operands]
             if isinstance(one, Terminator):
                 for target in one.successors():
-                    target.args = [instead if arg is gone else arg
-                                   for arg in target.args]
+                    if gone in target.args:
+                        target.args = [instead if arg is gone else arg
+                                       for arg in target.args]
 
 
 def all_stand_for(func: Function, instead: dict[int, Value]) -> None:

@@ -240,18 +240,75 @@ def _movable(inst: Instruction) -> bool:
         and inst.ty is not MEM
 
 
+class _Ways:
+    """What `_thread` asks of a function as it changes it: how often each value
+    is read, and every branch arriving at each block.
+
+    Worked out once per walk and kept up as the walk changes branches, rather
+    than worked out again over the whole function for every block it looks at
+    -- which, over a function that inlining had made a few thousand blocks
+    long, was most of what compiling it cost.  Both are what `_uses` and
+    `incoming_edges` would answer of the function as it stands: a block gone
+    through stays in the function until the end and goes on reading what it
+    read, and a way into a block is asked of the branch that is there now.
+    """
+
+    __slots__ = ("counted", "arriving")
+
+    def __init__(self, func: Function) -> None:
+        self.counted = _uses(func)
+        self.arriving = incoming_edges(func)
+
+    def read(self, values: list[Value], by: int) -> None:
+        """Count each of *values* read *by* times more."""
+        counted = self.counted
+        for one in values:
+            counted[id(one)] = counted.get(id(one), 0) + by
+
+    def into(self, block: BasicBlock) -> list[tuple[BasicBlock, BlockTarget]]:
+        """Every branch arriving at *block* now, and the block it is from: each
+        once, and only where it still goes there and is still its block's."""
+        found: list[tuple[BasicBlock, BlockTarget]] = []
+        seen: set[int] = set()
+        for source, edge in self.arriving.get(id(block), ()):
+            if edge.block is not block or id(edge) in seen:
+                continue
+            terminator = source.terminator
+            if terminator is None \
+                    or not any(one is edge for one in terminator.successors()):
+                continue
+            seen.add(id(edge))
+            found.append((source, edge))
+        self.arriving[id(block)] = list(found)
+        return found
+
+    def arrives(self, source: BasicBlock, edge: BlockTarget) -> None:
+        """Note that *edge*, of *source*'s branch, goes where it now says."""
+        if isinstance(edge.block, BasicBlock):
+            self.arriving.setdefault(id(edge.block), []).append((source, edge))
+
+    def moved(self, source: BasicBlock, edge: BlockTarget, block: object,
+              args: list[Value]) -> None:
+        """Send *edge* to *block* with *args* instead of where it went."""
+        self.read(edge.args, -1)
+        edge.block, edge.args = block, args
+        self.read(args, 1)
+        self.arrives(source, edge)
+
+
 def _thread(func: Function) -> bool:
     """Go through every block that only branches on its parameter, or only
     jumps, rather than into it."""
     changed = False
+    ways = _Ways(func)
     for block in list(func.blocks):
         if block is func.entry or len(block.insts) != 1:
             continue
         only = block.insts[0]
         if isinstance(only, CondBrInst):
-            changed |= _through_branch(func, block, only)
+            changed |= _through_branch(block, only, ways)
         elif isinstance(only, BrInst) and not block.params:
-            changed |= _through_jump(func, block, only)
+            changed |= _through_jump(block, only, ways)
     return changed
 
 
@@ -264,8 +321,7 @@ def _substituted(target: BlockTarget, block: BasicBlock,
                                       for arg in target.args])
 
 
-def _through_branch(func: Function, block: BasicBlock,
-                    branch: CondBrInst) -> bool:
+def _through_branch(block: BasicBlock, branch: CondBrInst, ways: _Ways) -> bool:
     """Have every jump into *block* -- nothing but a branch on one of its
     parameters -- branch itself, and every branch into it carrying a constant
     go where that constant goes."""
@@ -275,7 +331,7 @@ def _through_branch(func: Function, block: BasicBlock,
         return False
     # Its parameters are read by its branch and nowhere else, so that once
     # nothing arrives here nothing is left reading them.
-    counted = _uses(func)
+    counted = ways.counted
     inside: dict[int, int] = {}
     for one in (branch.operands[0], *branch.true_target.args,
                 *branch.false_target.args):
@@ -287,15 +343,13 @@ def _through_branch(func: Function, block: BasicBlock,
     if branch.true_target.block is block or branch.false_target.block is block:
         return False
     changed = False
-    for source, edge in incoming_edges(func).get(id(block), ()):
-        if edge.block is not block:
-            continue
+    for source, edge in ways.into(block):
         known = edge.args[cond.index]
         last = source.insts[-1]
         if isinstance(known, BoolConst):
             chosen = branch.true_target if known.value else branch.false_target
             made = _substituted(chosen, block, list(edge.args))
-            edge.block, edge.args = made.block, made.args
+            ways.moved(source, edge, made.block, made.args)
             changed = True
             continue
         if not isinstance(last, BrInst) or last.target is not edge:
@@ -307,11 +361,15 @@ def _through_branch(func: Function, block: BasicBlock,
                               last.span)
         replaced.parent = source
         source.insts[-1] = replaced
+        ways.read(edge.args, -1)
+        ways.read([known, *replaced.true_target.args, *replaced.false_target.args], 1)
+        ways.arrives(source, replaced.true_target)
+        ways.arrives(source, replaced.false_target)
         changed = True
     return changed
 
 
-def _through_jump(func: Function, block: BasicBlock, jump: BrInst) -> bool:
+def _through_jump(block: BasicBlock, jump: BrInst, ways: _Ways) -> bool:
     """Have every branch into *block* -- nothing but a jump, taking nothing --
     go where the jump goes instead."""
     if jump.target.block is block:
@@ -320,11 +378,9 @@ def _through_jump(func: Function, block: BasicBlock, jump: BrInst) -> bool:
     # own again, to make the moves in: that is this block.
     carries = bool(carried_values(jump.target))
     changed = False
-    for source, edge in incoming_edges(func).get(id(block), ()):
-        if edge.block is not block:
-            continue
+    for source, edge in ways.into(block):
         if carries and not isinstance(source.insts[-1], BrInst):
             continue
-        edge.block, edge.args = jump.target.block, list(jump.target.args)
+        ways.moved(source, edge, jump.target.block, list(jump.target.args))
         changed = True
     return changed

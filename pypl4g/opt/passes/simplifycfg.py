@@ -35,8 +35,8 @@ from typing import Final
 from ...ir.function import BasicBlock, Function
 from ...ir.inst import BlockTarget, BrInst, CondBrInst, SwitchInst
 from ...ir.module import Module
-from ...ir.rewrite import incoming_edges, stands_for
-from ...ir.value import BoolConst, EnumConst, IntConst
+from ...ir.rewrite import all_stand_for, incoming_edges, stands_for
+from ...ir.value import BoolConst, EnumConst, IntConst, Value
 from ..flow import dominators
 
 #: How many times the four are run before it is taken to be a defect rather than
@@ -140,6 +140,18 @@ class SimplifyCFG:
         """
         changed = False
         edges = incoming_edges(func)
+        # What each parameter dropped stands for, written into the function
+        # once at the end rather than over the whole of it for every one: what
+        # is read here before then is a branch's arguments, each read through
+        # what has been dropped so far -- which is what it would have said had
+        # every replacement been made as it was decided.
+        instead: dict[int, Value] = {}
+
+        def now(value: Value) -> Value:
+            while id(value) in instead:
+                value = instead[id(value)]
+            return value
+
         for block in func.blocks:
             if block is func.entry or not block.params:
                 continue
@@ -148,17 +160,21 @@ class SimplifyCFG:
                 continue
             for at in reversed(range(len(block.params))):
                 param = block.params[at]
-                supplied = {id(one.args[at]): one.args[at] for one in arriving}
+                supplied: dict[int, Value] = {}
+                for one in arriving:
+                    given = now(one.args[at])
+                    supplied[id(given)] = given
                 supplied.pop(id(param), None)
                 if len(supplied) != 1:
                     continue
-                stands_for(func, param, next(iter(supplied.values())))
+                instead[id(param)] = next(iter(supplied.values()))
                 for one in arriving:
                     del one.args[at]
                 del block.params[at]
                 changed = True
             for index, param in enumerate(block.params):
                 param.index = index
+        all_stand_for(func, {key: now(value) for key, value in instead.items()})
         return changed
 
     def _merge_blocks(self, func: Function) -> bool:
@@ -172,27 +188,36 @@ class SimplifyCFG:
         branch is about to stop existing.
         """
         changed = False
-        for _ in range(ROUNDS):
-            edges = incoming_edges(func)
-            joined = False
-            for block in list(func.blocks):
-                terminator = block.terminator
-                if not isinstance(terminator, BrInst):
-                    continue
-                target = terminator.target.block
-                if not isinstance(target, BasicBlock) or target is func.entry:
-                    continue
-                # A block whose one way in is its own way out is a loop of one,
-                # and writing it into itself would be writing it twice.
-                if target is block or target.terminator is None:
-                    continue
-                if len(edges.get(id(target), ())) != 1:
-                    continue
-                self._absorb(func, block, target, terminator)
-                joined = changed = True
-                break
-            if not joined:
-                break
+        # How many ways arrive at each block, asked once: writing a block into
+        # its one way in changes that for no block that stays -- the branches
+        # it held go where they went, from the block it is written into -- so
+        # the count is the one a fresh look would find.  And so is everything
+        # that made a block before this one not worth joining, which is why
+        # the walk goes on from where it joined rather than starting again at
+        # the top, as it once did for every block joined.
+        arriving = {key: len(found) for key, found in incoming_edges(func).items()}
+        at = joined = 0
+        while at < len(func.blocks) and joined < ROUNDS:
+            block = func.blocks[at]
+            terminator = block.terminator
+            at += 1
+            if not isinstance(terminator, BrInst):
+                continue
+            target = terminator.target.block
+            if not isinstance(target, BasicBlock) or target is func.entry:
+                continue
+            # A block whose one way in is its own way out is a loop of one,
+            # and writing it into itself would be writing it twice.
+            if target is block or target.terminator is None:
+                continue
+            if arriving.get(id(target), 0) != 1:
+                continue
+            self._absorb(func, block, target, terminator)
+            changed = True
+            joined += 1
+            # The block again, from where it now stands: what it ends with is
+            # what the block written into it ended with.
+            at = func.blocks.index(block)
         return changed
 
     def _absorb(self, func: Function, block: BasicBlock, target: BasicBlock,
@@ -200,8 +225,15 @@ class SimplifyCFG:
         """Move everything of *target* into *block* and remove it."""
         first = func.blocks.index(target)
         ahead = first < func.blocks.index(block)
-        for param, arg in zip(target.params, branch.target.args):
-            stands_for(func, param, arg)
+        given = list(branch.target.args)
+        if any(arg is param for arg in given for param in target.params):
+            # A parameter handed to another of the same block, which one
+            # replacement after another reads differently from all at once.
+            for param, arg in zip(target.params, given):
+                stands_for(func, param, arg)
+        else:
+            all_stand_for(func, {id(param): arg
+                                 for param, arg in zip(target.params, given)})
         block.insts.pop()
         for one in target.insts:
             one.parent = block
