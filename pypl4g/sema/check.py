@@ -3574,6 +3574,18 @@ def _table_block(module: Module) -> ProductType:
                         ("index", module.types.ptr_type(U8, True))), name="table")
 
 
+#: The entry point's symbol, and the prefixes of everything else the image's
+#: own code goes by: what the compiler makes, and the runtime's functions and
+#: variables.
+_ENTRY_SYMBOL: Final[str] = "_start"
+_IMAGE_PREFIXES: Final[tuple[str, ...]] = ("__pl4g", "pl4g_")
+
+
+def _names_the_images(name: str) -> bool:
+    """Whether *name* is one the image's own code goes by, or may."""
+    return name == _ENTRY_SYMBOL or name.startswith(_IMAGE_PREFIXES)
+
+
 def _counted(op: UnOp, value: int, ty: IntType) -> int:
     """How many bits of *value* are set, or how many zeroes stand above the
     highest set one, counted over *ty*'s own width.
@@ -4987,6 +4999,7 @@ class Checker:
             return
         if not self._declare(node.name, node.name_span):
             return
+        self._not_the_images(node.name, node.name_span)
         attrs = self._bind_attributes(node.attrs, AttrTarget.VARIABLE)
         linkage = self._linkage_of(attrs)
         pairs = self._expected_numbers(attrs)
@@ -7092,12 +7105,28 @@ class Checker:
                          else "not a type this file defines")
         return False
 
+    def _not_the_images(self, name: str, span: Span) -> None:
+        """Report a definition named as the image's own code is.
+
+        The image is the program and what the compiler puts beside it -- the
+        entry point, what the compiler makes, the runtime -- each known by its
+        symbol.  A variable's symbol is its name and so is a function's under
+        another language's convention, so a definition of one of those names
+        is a second symbol of a name the image has already, and which of the two
+        a call reaches is the writer's doing.  Refused whatever the convention,
+        so that a function does not become wrong by being given another one.
+        """
+        if _names_the_images(name):
+            self._diags.emit(D.LANG_NAME_THE_IMAGE_USES, span, name=name)
+
     def _collect_function(self, node: ast.FuncDef, path: str) -> _Collected | None:
         """Register one function definition without looking at its body."""
         node = _kept_in_the_signature(node)
         self._check_doc(node)
         if not self._declare(_declared_as(node), node.name_span, path):
             return None
+        if node.held is None and node.body is not None:
+            self._not_the_images(node.name, node.name_span)
         whole = _written_name(node)
         if node.held is not None and not self._a_type_here(node):
             return None

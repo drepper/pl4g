@@ -3219,6 +3219,27 @@
       "option": null
     },
     {
+      "number": 4341,
+      "name": "LANG_NAME_THE_IMAGE_USES",
+      "severity": "error",
+      "message": "'{name}' is a name the image's own code goes by, and nothing a program defines may be given it",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function or variable"
+        }
+      ],
+      "cause": "The image is the program and the code the compiler puts beside it: the entry point `_start`, what the compiler makes under names beginning `__pl4g`, and the runtime's functions and variables beginning `pl4g_`.  A function under another language's convention keeps its plain name, and a variable always does, so a definition of one of those names would be a second symbol of a name the image already has -- and which of the two a call or the kernel reached would be the writer's doing.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Attributes / Exporting and Being Visible"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4401,
       "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
       "severity": "error",

@@ -1,0 +1,16 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4341 LANG_NAME_THE_IMAGE_USES
+
+※ A variable at the top level is known in the image by its name, so one named
+※ as a function of the runtime is a second symbol of that name: a program
+※ writing it would write over the runtime's code.  Refused where it is defined,
+※ as a function of such a name is (`name-the-image-uses`).
+
+let std := ⎕import("std")
+
+let pl4g_args: mut u8 = 3u8
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    pl4g_args ← pl4g_args + 1u8
+    if pl4g_args = 4u8: 0u6 else: 1u6
