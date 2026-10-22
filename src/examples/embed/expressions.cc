@@ -10,14 +10,13 @@
 // JSON through another: `{"id": 3, "value": 2.5}`, or `{"id": 4, "error":
 // "division by zero"}`.  The callback only stores the reply.
 //
-// The expressions are made here with jsoncpp, a few written out and many more
-// grown at random to depths from one to fourteen, and the value each must have
-// is worked out while it is grown.  Once the program has run, every reply is
-// checked against a JSON Schema with json-schema-validator -- which reads
-// nlohmann::json, so the reply is parsed once for that -- and then read with
-// jsoncpp and compared with what it should say.  The exit status is nought
-// where every reply was well-formed and right, and says what was wrong
-// otherwise.
+// The expressions are made here with nlohmann::json, a few written out and
+// many more grown at random to depths from one to fourteen, and the value each
+// must have is worked out while it is grown.  Once the program has run, every
+// reply is read with nlohmann::json, checked against a JSON Schema with
+// json-schema-validator, which works on what nlohmann::json read, and compared
+// with what it should say.  The exit status is nought where every reply was
+// well-formed and right, and says what was wrong otherwise.
 //
 // The callbacks are found by the interpreter with dlsym(RTLD_DEFAULT, ...), so
 // they have C's linkage and this program is linked with -rdynamic.
@@ -31,12 +30,10 @@
 #include <optional>
 #include <print>
 #include <random>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
 
-#include <json/json.h>
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 
@@ -195,23 +192,17 @@ namespace {
   })";
 
   // `value` written as JSON, compactly, the way the PL4G program reads it.
-  std::string written(const ::Json::Value& value)
+  std::string written(const ::nlohmann::json& value)
   {
-    ::Json::StreamWriterBuilder builder;
-    builder["indentation"] = "";
-    return ::Json::writeString(builder, value);
+    return value.dump();
   }
 
   // An operation of `op` over `args`, as the expressions write one.
-  ::Json::Value operation(const char* op, std::vector<::Json::Value> args)
+  ::nlohmann::json operation(const char* op, std::vector<::nlohmann::json> args)
   {
-    ::Json::Value made(::Json::objectValue);
-    made["op"] = op;
-    made["args"] = ::Json::Value(::Json::arrayValue);
-    for (auto& one : args)
-      made["args"].append(std::move(one));
-    return made;
+    return { { "op", op }, { "args", std::move(args) } };
   }
+
 
 
   // Expressions grown at random, each with the value it has, worked out as the
@@ -225,7 +216,7 @@ namespace {
     // operands, so that no expression comes to an infinity, which a PL4G
     // program stops at rather than answers.  Division by nought is left
     // out here; the cases written out below hold it.
-    std::pair<::Json::Value, double> grown(int depth)
+    std::pair<::nlohmann::json, double> grown(int depth)
     {
       if (depth <= 1)
         return leaf();
@@ -233,7 +224,7 @@ namespace {
         static constexpr const char* ops[] = { "+", "-", "*", "/", "min", "max", "neg", "abs" };
         auto op = std::string_view(ops[pick(0, 7)]);
         auto count = op == "neg" || op == "abs" ? 1 : pick(2, 3);
-        std::vector<::Json::Value> args;
+        std::vector<::nlohmann::json> args;
         std::vector<double> values;
         // One operand reaches the whole depth; the others are shallow, so that
         // an expression grows with its depth and not with a power of it.
@@ -252,13 +243,13 @@ namespace {
   private:
     // A number: a whole one, or one with two decimals, never nought, so
     // that no division grown here is one by nought.
-    std::pair<::Json::Value, double> leaf()
+    std::pair<::nlohmann::json, double> leaf()
     {
       auto whole = pick(1, 99) * (pick(0, 1) == 0 ? 1 : -1);
       if (pick(0, 2) == 0)
-        return { ::Json::Value(::Json::Int64(whole)), double(whole) };
+        return { ::nlohmann::json(std::int64_t(whole)), double(whole) };
       auto value = double(whole) + double(pick(1, 99)) / 100.0 * (whole < 0 ? -1.0 : 1.0);
-      return { ::Json::Value(value), value };
+      return { ::nlohmann::json(value), value };
     }
 
     // The value of `op` over `values`, or nothing where a division is by
@@ -301,10 +292,10 @@ namespace {
   // an expression comes to no value -- and many more grown at random.
   void make_cases()
   {
-    auto add = [](const ::Json::Value& expression, std::optional<double> value, std::string error = {}) {
+    auto add = [](const ::nlohmann::json& expression, std::optional<double> value, std::string error = {}) {
       cases.push_back({ written(expression), value, std::move(error) });
     };
-    add(::Json::Value(42), 42.0);
+    add(::nlohmann::json(42), 42.0);
     add(operation("+", { 1, 2 }), 3.0);
     add(operation("*", { operation("+", { 1, 2 }), operation("-", { 10, 4 }) }), 18.0);
     add(operation("/", { 7, 2 }), 3.5);
@@ -315,7 +306,7 @@ namespace {
     add(operation("neg", { 1, 2 }), std::nullopt, "malformed expression");
     add(operation("+", {}), std::nullopt, "malformed expression");
     add(operation("+", { 1, "two" }), std::nullopt, "malformed expression");
-    add(::Json::Value("seven"), std::nullopt, "malformed expression");
+    add(::nlohmann::json("seven"), std::nullopt, "malformed expression");
     cases.push_back({ "{\"op\": \"+\", \"args\": [1, 2", std::nullopt, "malformed expression" });
     Grower grower(20261022);
     for (int depth = 1; depth <= 14; ++depth)
@@ -333,23 +324,23 @@ namespace {
     if (! replies[id]) [[unlikely]]
       return "no reply";
     const auto& text = *replies[id];
+    // Read once, without throwing: what was read is what the schema is
+    // asked of and what is compared.
+    auto reply = ::nlohmann::json::parse(text, nullptr, false);
+    if (reply.is_discarded()) [[unlikely]]
+      return std::format("{} cannot be read", text);
     try {
-      validator.validate(::nlohmann::json::parse(text));
+      validator.validate(reply);
     } catch (const std::exception& error) {
       return std::format("{} does not fit the schema: {}", text, error.what());
     }
-    ::Json::Value reply;
-    std::string errors;
-    std::istringstream in(text);
-    if (! ::Json::parseFromStream(::Json::CharReaderBuilder(), in, &reply, &errors)) [[unlikely]]
-      return std::format("{} cannot be read: {}", text, errors);
-    if (reply["id"].asUInt64() != id) [[unlikely]]
+    if (reply["id"].get<std::uint64_t>() != id) [[unlikely]]
       return std::format("{} names the wrong expression", text);
     const auto& due = cases[id];
     if (due.value) {
-      if (! reply.isMember("value") || reply["value"].asDouble() != *due.value) [[unlikely]]
+      if (! reply.contains("value") || reply["value"].get<double>() != *due.value) [[unlikely]]
         return std::format("{} where {} was due", text, *due.value);
-    } else if (! reply.isMember("error") || reply["error"].asString() != due.error) [[unlikely]]
+    } else if (! reply.contains("error") || reply["error"].get<std::string>() != due.error) [[unlikely]]
       return std::format("{} where the error '{}' was due", text, due.error);
     return std::nullopt;
   }
