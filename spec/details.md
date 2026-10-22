@@ -357,8 +357,14 @@ definition left it.
 The wrapping opcodes were already there.  The compiler generates them for itself, in the hash of a key and the arithmetic on a
 table's indices, where a value is a bit pattern and there is nothing about an overflow to report to anyone; what `⎕wrap` adds is a
 way for a program to write one.  The five moving ones are new, and are the five checked ones with the distance taken modulo the
-width of the type rather than compared against it -- one `and`, every width being a power of two, in place of a comparison and a
-branch that does not come back.
+width of the type rather than compared against it -- one `and` for a width that is a power of two, in place of a comparison and a
+branch that does not come back.  **Any other width is a remainder** (`_modulo_the_width` in `target/saturate.py`): the distance
+masked to its type's bits where the type is signed, so that it is read without a sign, and divided by the width with the
+machine's unsigned division into a register of its own -- or, for a distance written down, worked out there and loaded as a
+number.  The checked rotation builds its other distance as the width less this one, and masks it only for a power of two: for
+any other width the type is narrower than the register, and a shift right by the whole width brings in the noughts above the
+value.  The IR interpreter takes `extend(b, bits, false) % bits`, and the macro interpreter does the moves of a wrap and the
+rotations over the type's own bits (`_moved`).
 
 **A wrapping operation is the only arithmetic that has to be brought back into its type.**  The checked and the saturating forms
 never produce a value outside it, so the bits above a narrow value already say what the type says; this one deliberately does
@@ -854,6 +860,32 @@ change there instead of reporting it; what was noted becomes the
 lambda function's `impure` and its type's, which is therefore made after the body rather than before it.  The context a mismatch
 is reported in -- what is being initialized, assigned, handed over -- is kept across lowering the body, which sets its own.  A call
 through a value is an effect only where its type says `impure`, and `_answer_is_taken` asks the type's `can_ignore`.
+
+**The context a mismatch is reported in is the innermost construct's**, so a construct whose parts have types of their own sets
+the others aside while it lowers them.  `_report_mismatch` asks the contexts in a fixed order -- a loop's value, an operator's
+operands, an argument, a field, an assignment, an initializer, and an answer last -- and each is a field of the checker set around
+what it is about: `_filling`, the record or sum and the field being given a value, is set by `_lower_field_value` for every field
+of a record written out (`_lower_record`, `_build_record`) and the part of a sum, with the others cleared, and reported as 4340;
+`⎕chr` and `⎕ord` set `_handing_over` to their own name and clear the rest, so a number of the wrong type is the conversion's
+argument, reported once -- the conversion's own check reports only where nothing was reported while lowering it.  Every place that
+sets the contexts aside and puts them back -- a body lowered in the middle of another (`_BODY_STATE`), an instance, a lambda, an
+index, a loop's value -- carries `_filling` with the rest.  **A division where a plain number is wanted** is asked by the
+operator itself: `÷` and `%` answer a result, and the result is measured against what is wanted (`_accepts`) before the
+instruction is made, the operands having been measured as numbers.
+
+**A definition named as the image's own code** is asked where it is collected (`_not_the_images`, from `_collect_function` for a
+function with a body that is not a type's member, and from `_collect_global`): `_start`, or a name beginning `__pl4g` or `pl4g_`
+(`_names_the_images`), 4341 at the name.  The C++ port's interactive session writes its own definitions under the compiler's prefix
+and is let through where a session is in force.
+
+**What the error of a result carries may be a path**, read by `_parse_error_type` after the mark of a name's, an array's and a
+list's result: a name, and `.NAME` while a name follows the dot, kept in `TypeRef.error` (and the array's and list's) as the text
+written, dots and all, so that the tree's shape is what it was.  `_result_of` and `_resolve_type` split it at the last dot: a path
+is looked up through its module, a name alone as before.  The grammar has the same as `_error_type`.
+
+**An arm written on one line may be followed by the next on the next line**: `_parse_if` asks `_chain_goes_on` after every arm,
+which reads past the end of the line where the next token is `elif`, `else` or `comptime elif` -- never a statement's first word,
+and on the next line at the same indentation, an indented one being an `INDENT` first.
 
 **A reference in a product or a tuple answered with** is asked about in two places.  `_holds_a_short_reference` says whether a type
 holds one that does not last as long as the program, which is what `_borrows_written` refuses in any answer (4531) and
@@ -2194,6 +2226,17 @@ kilobytes, past the twelve bits a load or a store carries.  Which functions thos
 afterwards a build without the extension has none left; every other function has every register it had.  The frame is then made
 and given back with the size built in `t6`, and a slot past two kilobytes is reached through it.
 
+**The registers a function keeps for its caller are saved as the convention keeps them.**  `_kept_registers` takes every unit of
+the convention's `callee_saved` the finished code names, and the system's conventions on AArch64 and RISC-V now name the
+floating-point ones as well -- `d8` to `d15`, and `f8`, `f9` and `f18` to `f27` -- so a `@[cdecl]` function saves those it used.
+Each has eight bytes beside the ordinary ones.  The selector saves one with `select_keep` and puts it back with `select_unkeep`,
+which are its spill and its reload unless it says otherwise: AArch64 spills a floating-point register whole, sixteen bytes, and
+keeps only the low half, `str d8, [sp, #n]`, which is what the convention asks; RISC-V's `fsd` and `fld` are its spill and reload
+already.  `keeps_all_of` says whether the whole register was kept, and only such a unit is in `MachineFunction.preserved`, which is
+what a caller here reads (`clobbered_units`): a run of lanes in `v8` would lose its upper half across a call that kept the low one.
+A call of the system's convention destroys, by its `caller_saved`, every floating-point register on AArch64 and all but the twelve
+on RISC-V.  The language's own convention keeps none.
+
 **A frame of any size works on AArch64 and RISC-V, and costs a register only where it is that large.**  A load or a store carries
 twelve bits of offset on both -- unsigned and counted in what is read on AArch64, so 4095 bytes of a byte and 32760 of a word;
 signed bytes on RISC-V, 2047 -- and so does what moves the stack pointer.  AArch64 moves it by twelve bits a page at a time and the
@@ -2338,8 +2381,9 @@ from moving an end); `_hand_on` widens each parameter of a successor by its argu
 still moving after `_WIDENINGS` (one) growth to the end of the type.  The function is walked again while a parameter of a block
 already walked changed, at most `_ROUNDS` times (forty; a function not settled by then is left as it was), and **what the last
 walk found is changed**: a check `_answer` says holds goes; `add`, `sub`, `mul`, the saturating three and the checked shifts whose
-range fits (`fits`) become the wrapping ones -- a shift only where the width is a power of two, the wrapping shift masking its
-distance; and a comparison `_answer` settles is replaced by the truth value, `settle` folding what follows.  `_answer` asks: the
+range fits (`fits`) become the wrapping ones -- a shift where its modulo costs no more than the check, a width that is a power of
+two (an `and`) or a distance that is a constant (worked out by the code generator), and not where it would be the machine's
+remainder; and a comparison `_answer` settles is replaced by the truth value, `settle` folding what follows.  `_answer` asks: the
 same value on both sides; the fact or its negation; the two ranges (`_compared`); and the two offsets, `a - b` at most `below +
 at_x - at_y` from `bounds`.  A shift of a narrow value is done in the whole register, so a right shift bringing in the other kind
 of bit than the type's reading has a range only where the top bit is clear; a division or remainder of a signed type has none.  A
@@ -4280,7 +4324,15 @@ copied out.
 or an element is lowered, and `_lower_expr` wraps it in `__pl4g_own.T` when it gets there: liveness answers by the identity of the
 statement, which a rewritten tree would not have.  `_copied_where_shared` decides -- a list, or a record or tuple holding one, read
 from a name, a field, an element or through a reference, where either side may change it -- and `_used_after` asks the new
-`live_out` whether a local is used again, which is the hand-over.  A `mut` parameter is copied on the way in where
+`live_out` whether a local is used again, which is the hand-over.  **The hand-over asks `_Local.owns_room`** as well, which the
+statement binding the name sets from what `_copied_where_shared` answers: room made here (`_room_made_here`: a list written out, a
+join, a call of a program function, and a record, tuple, list or `if` made of nothing else, `_made_or_holds_none`), a copy, or the
+room of a local done with whose room was its own.  A `mut` variable is always given one of those, so it always owns its room once
+bound by a `let` or an assignment; any other binding leaves the flag unset.  Where the place may change, anything else it is
+given is noted, not only a name, a field, an element or a reference -- an `if`, a call of the language's own, a table's entry
+`d⸨k⸩ ← x` (now asked as a field's value is) -- and `_build_record`, which writes a record written out a field at a time, moves
+the note from the record to each field not already room of its own.  `_movable` asks the flag of a variable that is not a
+parameter, so a variable bound to a shared name is not moved into a call either.  A `mut` parameter is copied on the way in where
 `_changed_in_place` finds the body changing it so, read off what is written.  Whether a change is an effect is `_made_here` of the
 list's place, the question an array's element write already asked.
 
@@ -5089,6 +5141,15 @@ is a to-do line rather than a guess.  RISC-V has all three counts in Zbb --
 by default has; where the program is built for a base without it, it counts
 itself.  The RISC-V selector answers `counts_ones`, `counts_leading` and
 `counts_trailing` by asking the ISA string, as it does for Zfa's rounding.
+
+**A count is over the type's width, not its holder's.**  The back ends hand
+`lower_count` the type's bits; it reads the value at the width of what holds it
+(`_holder`, the narrowest of eight, sixteen, thirty-two and sixty-four that
+contains the type) and counts at the type's: a signed value masked to its own
+bits, the leading count less the register's width beyond the type, the stop bit
+of the trailing count at the type's width.  The two interpreters mask to the
+type's bits as well, which is what the checker's folding of a number written
+down (`_counted`) always did.
 
 **`⎕trail` is the third count**, and the one where the zero case costs nothing to
 get right.  A value narrower than the register has the bit just above its own

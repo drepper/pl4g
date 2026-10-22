@@ -1650,7 +1650,10 @@ Three names the compiler provides ask about the bits of a number rather than abo
 **Both count over the type's own width.**  `⎕ones(255u8)` is eight and `⎕ones(255u64)` is eight as well, and
 `⎕lead` of the two is nought and fifty-six: the bits above a value's type are not the value's, and the zeroes above its
 highest set bit are the ones its type has room for.  A signed number is counted as the bits two's complement gives it, so
-`⎕ones(⁻1i8)` is eight.
+`⎕ones(⁻1i8)` is eight.  **A width no machine has is its own width too**: `⎕lead(0u5)` and `⎕trail(0u5)` are five and
+`⎕ones(⁻1i5)` is five -- the three bits above a `u5` are the byte's that holds it, and the machine, the interpreters and a
+number written down all count without them.  C23's `stdc_leading_zeros` of an `unsigned _BitInt(5)` and Zig's `@clz` of a
+`u5` answer the same.
 
 **`⎕lead` and `⎕trail` of nought are the width of the type.**  That is the only answer that makes a count of zeroes a count of
 zeroes, and it is said here because the architectures have instructions that leave it undefined -- x86-64's `bsr` and `bsf`, the
@@ -1744,8 +1747,12 @@ reader already looks for that.
 
 **Every operator written inside it that could go past the end wraps.**  `+`, `-` and `×` keep the low bits instead of
 stopping the program.  `«`, `»`, `↺` and `↻` take their distance modulo the width of the type instead of stopping the
-program where it is the width or more -- every width is a power of two, so that is exact.  The bitwise operators and the
-comparisons are unchanged, having nothing to go past.
+program where it is the width or more -- **every width, and not only one that is a power of two**: `⎕wrap(1u3 « 4u3)` is
+shifted by one, four being one more than three.  The distance is read as the bits of its type without a sign, as the checked
+shift reads it when it compares it with the width, so `⁻1i5` is thirty-one and a shift by it is a shift by one.  For a width
+that is a power of two that is one `and` with the width less one, which is what C's `x << (n & 31)`, Java's shifts and Rust's
+`wrapping_shl` all are; for any other it is a remainder, worked out while compiling where the distance is written down.  The
+bitwise operators and the comparisons are unchanged, having nothing to go past.
 
 **`⊞`, `⊟` and `⊠` inside a wrap are an error.**  A wrap says the low bits are the answer; a saturating operator says the
 end of the type is.  Only one of the two can be what the program meant, and which one is not something for a compiler to guess
@@ -2111,6 +2118,13 @@ what `std.received` answers.
 Compare **Rust**'s `Result<&[u8], E>`, **Zig**'s `E![]const u8`, **Swift**'s `[UInt8]?`, all of which wrap the whole type the
 same way; C and Go answer two values instead.
 
+**What the error carries is named as a type is anywhere else**, through the modules it is reached by: `u64 ? std.string.ParseError`
+is a number of the language's own or another module's reason for there being none.  **A name alone after the mark is looked up
+where the answer's is** -- `std.string.Parsed(f64) ? ParseError` is `std.string`'s, as is everything about that answer -- except
+a type of the language's, which no module defines; a path says which module itself.  Compare **Rust**'s `Result<u64,
+std::num::ParseIntError>`, **Zig**'s `std.fmt.ParseIntError!u64`, **Haskell**'s `Either Text.Read.Error Word64`, all paths as
+any type is.
+
 **The `⊥` arm of a `match` binds what the error carries**, exactly as the answer's arm binds the answer.  Where the error
 carries nothing there is nothing for a name there to stand for, and one written is refused (4521).
 
@@ -2163,7 +2177,9 @@ such a type that carries nothing.
 **A value of the answer type, written where a result is wanted, is the successful result.**  That is how a function that answers
 with a result says it succeeded -- `fn share(a: u8, b: u8) → u8?` ending in `(a ÷ b)? + 1u8` answers with the sum -- and there is
 no other way to write one.  The reverse is not admitted: a result where a plain value is wanted is refused, since accepting it
-would be dropping the error silently.
+would be dropping the error silently -- wherever it is written, a division as a function's answer, a variable's initializer, an
+argument or the value of a record's field alike: `Point(.x ← (a + b) ÷ 2f64)` gives a field of `f64` an `f64?` and is refused
+(4340), and `(a + b) ÷ 2f64 ?? 0f64` is what is meant.
 
 **The written type reaches what was written.**  Where a result is wanted, something that can only ever *be* an answer -- a
 literal, the two sides of an operator, the members of anything written out -- is asked for the answer's type, and the result is
@@ -4517,9 +4533,15 @@ it, so the name needs `mut` (4004).
 **A list is a value**, and **another name holding that list keeps what it had** whatever is done in place to the first -- an element
 taken out, one written, more joined on.  So a list read out of a place into another -- bound to a name, assigned, put in a field
 or an element -- **gets elements of its own where either place may change it in place**, and a `mut` parameter whose body changes
-it in place is a copy of what it was handed.  **Where the place it came from is done with** -- a local of the function, not a
-parameter, not used again -- its room is simply handed over and nothing is copied; and where neither place may change, the two
-share what nobody can see them share.  A record or a tuple holding a list is copied the same way, part by part.  Changing a list
+it in place is a copy of what it was handed.  **Where the place it came from is done with and its room is its own** -- a local
+of the function, not used again, whose list was made where it was bound, copied for it, or handed to it by a name whose room was
+its own -- its room is simply handed over and nothing is copied; and where neither place may change, the two share what nobody
+can see them share.  A parameter's room is its caller's, and so is the room of a name bound to one: `let y: [u8] = x` shares
+`x`'s, neither changing, and `let out: mut [u8] = y` with `y` done with is a copy -- or writing `out` would write the caller's
+list.  A place that may change asks this of whatever it is given -- an `if`, a record written out around a list, what a function
+answers, an entry of a table -- and a list made where it is given, written out, joined or answered by a function of the program,
+is room of its own already.  A record or a tuple holding a list is copied the same way, part by part, and so is a list put in a
+table's entry, which the one who handed it over may still change.  Changing a list
 in the function's own room is therefore no effect: nothing anyone else holds changes.  One reached through a reference is
 somebody's, and changing it is (4479).
 
@@ -6422,6 +6444,15 @@ name.  Both halves are the same request: the point of asking for the system's co
 that has never heard of this language, and such a thing cannot be expected to know how a name is mangled either.
 `@[cdecl(variadic=true)]` says a variadic one.
 
+**A function of the system's convention hands back what that convention says a callee keeps**, the floating-point registers among
+them: the low halves of `v8` to `v15` on AArch64 (AAPCS64), `fs0` to `fs11` on RISC-V (LP64D), and none on x86-64, whose System V
+convention keeps no `xmm` register.  Where it uses one it saves it on the way in and restores it before every return, as GCC and
+Clang do with `stp d8, d9` and `fsd fs0`, so a C program calling it finds its own floating-point values where it left them.  The
+language's own convention keeps none of them, and a call of anything is taken to destroy every one it does not keep whole --
+on AArch64 all of them, the upper half of `v8` to `v15` being the callee's to destroy and a run of lanes being held in the whole
+register.  Compare the **Windows x64** convention, which keeps `xmm6` to `xmm15` whole and so asks a callee for sixteen bytes of
+each.
+
 **A call is placed by the convention of the function being called.**  Which register an argument goes in is the callee's to say,
 not the caller's, so a program may hold both kinds of function and call each the way it expects.
 
@@ -6577,6 +6608,16 @@ does not lend it can change freely.  C has the opposite default, with `static` a
 be part of an interface so often becomes one by accident.  Compare Rust, which draws this same line -- `pub` for what a module
 lends and a separate attribute for what a binary offers -- with Go, which has one rule for the first and leaves the second to the
 linker.
+
+**The names the image's own code goes by are not a program's** (4341): `_start`, which is the entry point, and any name
+beginning `__pl4g`, the compiler's, or `pl4g_`, the runtime's.  A variable at the top level is known in the image by its name, and
+so is a function under another language's convention, so a definition of one of those would be a second symbol of a name the image
+already has -- a second entry point, which of the two the kernel started being the writer's doing, or a call meant for the
+runtime reaching the program.  It is refused where it is written, and under the language's own convention as well, whose symbol is
+the signature and would not collide today: a function does not become wrong by being given another convention.  Compare **C**,
+which reserves names beginning with two underscores and leaves a program using one undefined rather than refused, and the linker
+to find the duplicate; **Rust** and **Zig**, whose `#[no_mangle]` and `export` of `_start` are a duplicate symbol the linker
+reports.  Here the compiler writes the image, so it is the one to say so.
 
 `visible` decides two further things about a name in the generated program: how widely its symbol is bound, and how far it is
 visible.  Those are different questions too -- the binding says whether the name is one among many in this program or one the whole
@@ -6890,6 +6931,19 @@ f(if a: 1u8 else: 2u8)                 ※ the `)` closes the block the `else` o
 f(if a: 1u8 else: 2u8, 3u8)            ※ and so does the comma before the next argument
 ⟦if a: 1u8 else: 2u8, 3u8⟧            ※ in an array, a tuple, a set or a dictionary alike
 ```
+
+**The end of the line closes the block and not what it belongs to.**  An `if` whose arm was written on one line goes on with an
+`elif` or its `else` on the next line, at the indentation of the `if`, as it would after an indented block -- arms written one
+way and the other may be mixed -- and no statement begins with either keyword, so there is nothing else for that line to be:
+
+```
+if n = 1u8: 10u8
+elif n = 2u8: 20u8
+else: 30u8
+```
+
+Python reads this the same way; Go, whose `else` has to stand on the line of the brace before it, reads it the other way, a line
+ending there being the end of the statement.
 
 **A block written this way may not open another** (3044).  The inner one would end where the outer one does, so an `else` after
 the two would belong to either and a reader would have to know a rule to say which.  C, Java and their family settle that by

@@ -789,13 +789,19 @@ Optimizations
     not on typing.  The character was the last such program the tests had, and none was found in its place: the test now
     holds only that saving compiles and says nothing of a program that compiles.
 
-[ ] a function marked visible and named `_start` is accepted, beside the entry point the back end adds under that name: the
+[x] a function marked visible and named `_start` is accepted, beside the entry point the back end adds under that name: the
     image then has two symbols of one name, and which the kernel starts is the writer's doing.  It should be refused, as any
     other name the compiler's own image uses is.
+    Done on 2026-10-22: a function or a variable named `_start`, or anything beginning `__pl4g` or `pl4g_`, is refused where it
+    is defined (4341), whatever its convention; `tests/language/name-the-image-uses` and `variable-named-as-the-runtime`.
 
-[ ] a `÷` of floating-point numbers written as the value of a record's field is not unwrapped: `Point(.x ← (a + b) ÷ 2f64)`
+[x] a `÷` of floating-point numbers written as the value of a record's field is not unwrapped: `Point(.x ← (a + b) ÷ 2f64)`
     hands a `f64?` to a field of `f64`, which the IR does not check and the x86-64 back end refuses with a message about an
     encoding of `movsd`.  The same division answered by a function is right.
+    Done on 2026-10-22, and not by unwrapping: a result where a plain number is wanted is refused wherever it stands, as the
+    specification says -- the same division answered by a function, or given a variable, had been let through as well.  A
+    field's mismatch is said as the field's (4340).  `tests/language/field-given-a-result`, `field-given-a-division` and
+    `division-where-a-number-is-wanted`.
 
 [ ] RISC-V saves and restores `sp` in every function that names it: `sp` is among the callee-saved names, and a function whose
     code addresses its frame names it.  The restore puts back the value it already has; two instructions a function, wasted.
@@ -840,14 +846,35 @@ Optimizations
     Done on 2026-10-23, for a variable given only lists made where it is given them (`_given_its_own`): "changed in place" was
     not enough, as the next entry says.
 
-[ ] a `mut` variable bound to a non-`mut` one shares its room.  `fn g(x: [u8]) → u8: let y: [u8] = x; let out: mut [u8] = y;
+[x] a `mut` variable bound to a non-`mut` one shares its room.  `fn g(x: [u8]) → u8: let y: [u8] = x; let out: mut [u8] = y;
     out⟦0⟧ ← 9u8; …` writes the caller's list: `y` shares `x`'s room, neither changing, and `out` is handed `y`'s room as a
     local's that is done with -- which it is not, being the parameter's.  The specification says a list read into a place that
     may change it gets elements of its own; this one does not.  Found writing the answer of a local list without a copy.
+    Done on 2026-10-22: a local says whether its room is its own (`owns_room`), and only such a one hands its room on; a place
+    that may change asks it of whatever it is given, a table's entry included.  `tests/language/list-copied-from-a-shared-room`
+    and `tests/compiler/test_shared_room.py`.
 
-[ ] `⎕wrap` of a shift of a width that is not a power of two.  The wrapping shift takes its distance modulo the width as `and`
+[x] `⎕wrap` of a shift of a width that is not a power of two.  The wrapping shift takes its distance modulo the width as `and`
     with the width less one, which is the modulo only for a power of two: `⎕wrap(1u3 « 1u3)` shifts by nought.  It wants `%`, or
     a comparison and a subtraction, for the other widths.  `facts` makes a checked shift the wrapping one only for a power of two.
+    Done on 2026-10-22: the distance, read as the bits of its type without a sign, modulo every width -- a remainder where the
+    width is not a power of two, worked out while compiling where the distance is written down -- in the back ends and both
+    interpreters; a checked rotation of such a width no longer masks its other distance either.  `facts` makes a checked shift
+    the wrapping one where that costs nothing more: a power of two, or a distance written down.
+    `tests/language/wrap-shift-of-an-odd-width`, `macro-wrap-shift-of-an-odd-width`.
+
+[x] `⎕lead` and `⎕trail` of nought on an odd width such as `u5` fold to the type's width at compile time, while the machine and
+    the interpreters answered the holder's.  Done on 2026-10-22: all count over the type's width
+    (`tests/language/count-bits-of-an-odd-width`).
+
+[x] `⎕chr(name)` with a name of the wrong type reports the mismatch twice.  Done on 2026-10-22: once, as the conversion's argument
+    (4213; `tests/compiler/test_reported_once.py`).
+
+[x] a function of the system's convention does not hand back the floating-point registers the convention says it must: `d8` to
+    `d15` on AArch64, `fs0` to `fs11` on RISC-V.  Done on 2026-10-22: saved where used and restored before every return
+    (`select_keep`); a call of that convention destroys the rest, on AArch64 all of them (`tests/compiler/test_callconv.py`).
+    Merging with eed0de7 on `json` keeps every floating-point register a call's to destroy under `pl4g`, and this under the
+    system's.
 
 [ ] carry a relation round a loop.  `begin ≤ at` where `at` starts at `begin` and only grows, and `at ≤ n` where it grows only
     where `at < n`, are what `bytes⟦begin…at⟧` after the loops of `parse_f64` asks, and `facts` knows neither: a range of a
