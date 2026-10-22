@@ -1172,12 +1172,27 @@ namespace pl4g::sema {
       return error_value(module);
     }
     const ir::Type* wanted = to_a_number ? static_cast<const ir::Type*>(ir::char_type()) : ir::u32();
-    auto given = lower_expr(builder, expr->args[0], wanted);
+    // What is given is the conversion's argument and nothing else's: a
+    // mismatch is reported as one, once, and not as a mistake of whatever the
+    // conversion itself stands in.
+    auto told = diags.error_count;
+    ir::Value* given = nullptr;
+    {
+      Setting outer_handing(handing_over, std::optional{ std::tuple{ name, std::int64_t(1) } });
+      Setting outer_initializing(initializing, std::optional<std::string>{});
+      Setting outer_assigning(assigning, std::optional<std::string>{});
+      Setting outer_operand(operand_of, std::optional<std::string>{});
+      Setting outer_leaving(leaving, false);
+      given = lower_expr(builder, expr->args[0], wanted);
+    }
     auto found = value_type_of(given);
     if (found == ir::error_type()) [[unlikely]]
       return error_value(module);
     if (found != wanted) [[unlikely]] {
-      report_mismatch(expr->args[0]->span, wanted, found);
+      if (diags.error_count == told)
+        diags.emit(D::LANG_CALL_ARGUMENT_MISMATCH, expr->args[0]->span,
+                   { { "position", 1 }, { "name", name }, { "expected", wanted->written() },
+                     { "found", found->written() } });
       return error_value(module);
     }
     const ir::Type* answer = to_a_number ? static_cast<const ir::Type*>(ir::u32()) : ir::char_type();
