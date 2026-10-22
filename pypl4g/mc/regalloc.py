@@ -100,6 +100,46 @@ class RegisterPressureError(Exception):
         self.available = available
 
 
+class _Held:
+    """The ranges physical registers are held over, walked in step with the
+    virtual ranges being assigned -- which come in the order they start.
+
+    What a virtual range may not have is every unit a physical register holds
+    while it is wanted.  Asked of every physical range for every virtual one,
+    that was most of what allocating a long function cost; walked in step,
+    a physical range is looked at while it could still meet the range being
+    assigned and not after: one that has ended before it starts will never
+    meet any range that comes after it.
+    """
+
+    __slots__ = ("pending", "next", "alive")
+
+    def __init__(self, blocked: Sequence[LiveRange]) -> None:
+        self.pending = sorted((one for one in blocked if isinstance(one.reg, PhysReg)),
+                              key=lambda one: one.start)
+        self.next = 0
+        self.alive: list[LiveRange] = []
+
+    def units_meeting(self, found: LiveRange) -> set[RegUnit]:
+        """The units a physical register holds while *found* is wanted; asked
+        of ranges in the order they start."""
+        pending = self.pending
+        while self.next < len(pending) and pending[self.next].start <= found.start:
+            self.alive.append(pending[self.next])
+            self.next += 1
+        self.alive = [one for one in self.alive if one.end >= found.start]
+        units: set[RegUnit] = set()
+        for other in self.alive:
+            if other.covers(found):
+                units.add(other.reg.unit)  # type: ignore[union-attr]
+        at = self.next
+        while at < len(pending) and pending[at].start <= found.end:
+            if pending[at].covers(found):
+                units.add(pending[at].reg.unit)  # type: ignore[union-attr]
+            at += 1
+        return units
+
+
 @dataclass(slots=True)
 class LiveRange:
     """Where a register starts being wanted and where it stops, and the
@@ -723,10 +763,11 @@ class LinearScan:
         """
         active: list[tuple[LiveRange, RegUnit]] = []
         crowded: list[VirtReg] = []
+        held = _Held(blocked)
         for found in ranges:
             active = [(r, u) for r, u in active if r.end >= found.start]
             meeting = [(r, u) for r, u in active if r.covers(found)]
-            fixed = self._blocked_by(found, blocked)
+            fixed = held.units_meeting(found)
             taken = {u for _, u in meeting} | fixed
             unit = self._choose(found, taken, assignment)
             assert isinstance(found.reg, VirtReg)
@@ -764,15 +805,6 @@ class LinearScan:
             assignment.units[found.reg.ident] = freed
             active.append((found, freed))
         return crowded
-
-    def _blocked_by(self, found: LiveRange,
-                    blocked: Sequence[LiveRange]) -> set[RegUnit]:
-        """The units a physical register holds while *found* is wanted."""
-        units: set[RegUnit] = set()
-        for other in blocked:
-            if other.covers(found) and isinstance(other.reg, PhysReg):
-                units.add(other.reg.unit)
-        return units
 
     def _choose(self, found: LiveRange, taken: set[RegUnit],
                 assignment: Assignment) -> RegUnit | None:
