@@ -31,6 +31,16 @@ _FLOAT_ARGS = tuple(reg("".join(("d", str(n)))) for n in range(8))
 _FLOAT_ORDER = tuple(reg("".join(("d", str(n)))).unit
                      for n in (*range(0, 8), *range(16, 32), *range(8, 16)))
 
+#: What the system's convention says of the floating-point registers: a callee
+#: hands back the low halves of v8 to v15 as it found them, and may destroy the
+#: rest.  So a function of that convention saves and restores eight bytes of
+#: each of those it uses, which is what a C caller counts on.  A call is still
+#: taken to destroy every one of them: the upper half of v8 to v15 is not kept,
+#: and a run of lanes is held in the whole register.  The language's own
+#: convention keeps none of them.
+_FLOATS_KEPT = frozenset(reg("".join(("d", str(n)))).unit for n in range(8, 16))
+_FLOATS = frozenset(reg("".join(("d", str(n)))).unit for n in range(32))
+
 CC_PL4G: Final[CallConvDesc] = CallConvDesc(
     name="pl4g",
     int_arg_regs=_ARG_REGS,
@@ -62,8 +72,8 @@ CC_AAPCS64: Final[CallConvDesc] = CallConvDesc(
     # four a homogeneous aggregate may take.
     float_ret_regs=(reg("d0"), reg("d1")),
     float_allocation_order=_FLOAT_ORDER,
-    callee_saved=_CALLEE_SAVED,
-    caller_saved=_CALLER_SAVED,
+    callee_saved=_CALLEE_SAVED | _FLOATS_KEPT,
+    caller_saved=_CALLER_SAVED | _FLOATS,
     stack_align=16,
     allocation_order=_ALLOCATION_ORDER,
     red_zone=0,

@@ -1335,6 +1335,32 @@ class A64Selector(InstructionSelector):
         return (*before, self._inst("ldr", (MCReg(destination, bits=bits), base,
                                             MCImm(at, 12, signed=False)), span))
 
+    def select_keep(self, slot: int, source: Reg, span: Span) -> Sequence[MCInst]:
+        """Instructions that save a register the convention keeps for the
+        caller in the eight bytes at *slot*: an ordinary register as a spill
+        saves one, and of a floating-point register its low half, which is all
+        the system's convention keeps -- and all a value is held in."""
+        if not self._is_float(source):
+            return self.select_spill(slot, source, span)
+        before, base, at = self._frame_place(slot, 8, span)
+        return (*before, self._inst("str", (MCReg(source, bits=64), base,
+                                            MCImm(at, 12, signed=False)), span))
+
+    def keeps_all_of(self, register: Reg) -> bool:
+        """Whether `select_keep` saves the whole of *register*: an ordinary one
+        it does, and of a floating-point one only the half the system's
+        convention keeps."""
+        return not self._is_float(register)
+
+    def select_unkeep(self, destination: Reg, slot: int,
+                      span: Span) -> Sequence[MCInst]:
+        """Instructions that put back what `select_keep` saved."""
+        if not self._is_float(destination):
+            return self.select_reload(destination, slot, span)
+        before, base, at = self._frame_place(slot, 8, span)
+        return (*before, self._inst("ldr", (MCReg(destination, bits=64), base,
+                                            MCImm(at, 12, signed=False)), span))
+
     def select_frame(self, size: int, span: Span) -> Sequence[MCInst]:
         """Instructions that make room for *size* bytes on the stack: one `sub`
         where twelve bits hold it, the pages and the rest where twenty-four do,

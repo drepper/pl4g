@@ -860,11 +860,22 @@ class Assembler:
         opening = list(self._selector.select_frame(total, INVALID_SPAN))
         if link:
             opening.extend(self._selector.select_save_link(size, INVALID_SPAN))
+        # A register kept for the caller is saved as the convention keeps it,
+        # which for a floating-point one may be less than all of it: eight
+        # bytes a register, whatever a spill of one would take.
+        save = getattr(self._selector, "select_keep", self._selector.select_spill)
+        restore = getattr(self._selector, "select_unkeep",
+                          self._selector.select_reload)
         for index, register in enumerate(kept):
-            opening.extend(self._selector.select_spill(
-                size + link + 8 * index, register, INVALID_SPAN))
-        function.preserved = frozenset(reg.unit for reg in kept
-                                       if isinstance(reg, PhysReg))
+            opening.extend(save(size + link + 8 * index, register, INVALID_SPAN))
+        # What a caller this compilation knows may count on: what was saved
+        # whole.  The system's convention on AArch64 keeps only half of some of
+        # its floating-point registers, and a run of lanes held there would lose
+        # the other half.
+        whole = getattr(self._selector, "keeps_all_of", None)
+        function.preserved = frozenset(
+            reg.unit for reg in kept
+            if isinstance(reg, PhysReg) and (whole is None or whole(reg)))
         entry = function.blocks[0]
         entry.insts = [*opening, *entry.insts]
         for block in function.blocks:
@@ -872,8 +883,8 @@ class Assembler:
             for inst in block.insts:
                 if InstFlags.RETURN in inst.desc.flags:
                     for index, register in enumerate(kept):
-                        out.extend(self._selector.select_reload(
-                            register, size + link + 8 * index, inst.span))
+                        out.extend(restore(register, size + link + 8 * index,
+                                           inst.span))
                     if link:
                         out.extend(self._selector.select_restore_link(size, inst.span))
                     out.extend(self._selector.select_unframe(total, inst.span))

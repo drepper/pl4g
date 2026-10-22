@@ -470,3 +470,92 @@ def test_the_stack_pointer_does_not_move_around_a_call(triple: str, tmp_path) ->
              if re.search(r"\b(sub|add|addi) r?sp, ", line)]
     assert len(moves) == 2, moves
     assert run_it(tmp_path, triple, ON_THE_STACK) == 42
+
+
+def _float_pressure(convention: str) -> str:
+    """A function of *convention* holding more floating-point values at once
+    than there are registers a callee may destroy, so that it uses the ones a
+    function of the system's convention hands back as it found them."""
+    count = 28
+    lines = ["let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")", "",
+             convention,
+             "".join(("fn pressed(a: f64, b: f64) ", ARROW, " f64:"))]
+    for at in range(count):
+        lines.append("".join(("    let v", str(at), ": f64 = a \N{MULTIPLICATION SIGN} ",
+                              str(at + 2), "f64 + b")))
+    total = "v0"
+    for at in range(1, count):
+        total = "".join(("(", total, " + v", str(at), ") \N{MULTIPLICATION SIGN} v",
+                         str(at)))
+    lines.append("".join(("    ", total)))
+    lines += ["", "@[startup]", "".join(("fn main(init: std.Init) ", ARROW, " u6:")),
+              "    if pressed(0.5f64, 0.25f64) > 15f64: 0u6 else: 1u6", ""]
+    return "\n".join(lines)
+
+
+#: What a function of the system's convention hands back of the floating-point
+#: registers, by architecture, as the save and the restore name them: the low
+#: half of v8 to v15 (AAPCS64) and fs0 to fs11 (LP64D).  x86-64 keeps none.
+_FLOATS_KEPT_BY_THE_SYSTEM = {
+    "aarch64": ("str", "ldr", tuple("".join(("d", str(n))) for n in range(8, 16))),
+    "riscv64": ("fsd", "fld", tuple("".join(("f", str(n)))
+                                    for n in (8, 9, *range(18, 28)))),
+}
+
+
+def _body(dump: str, name: str) -> str:
+    """The text of the function *name* in a dump, up to the startup one."""
+    return dump.split("".join(("\n", name, ":\n")))[1].split("\nmain(ptr<Init>)u6:\n")[0]
+
+
+@pytest.mark.parametrize("arch", sorted(_FLOATS_KEPT_BY_THE_SYSTEM))
+def test_the_system_convention_keeps_its_floating_point_registers(
+        arch: str, tmp_path) -> None:  # noqa: ANN001
+    """A function a C program may call puts back the floating-point registers
+    the system's convention says a callee keeps, where it used them: saved on
+    the way in, and restored before the return."""
+    import re
+
+    save, restore, kept = _FLOATS_KEPT_BY_THE_SYSTEM[arch]
+    body = _body(listing(tmp_path, "".join((arch, "-linux-none")),
+                         _float_pressure("@[visible, cdecl]")), "pressed")
+    used = [one for one in kept
+            if re.search("".join((r"\b", one, r"\b")), body)]
+    assert used, body
+    for one in used:
+        assert "".join((save, " ", one, ", sp")) in body, (one, body)
+        assert "".join((restore, " ", one, ", sp")) in body, (one, body)
+
+
+@pytest.mark.parametrize("arch", sorted(_FLOATS_KEPT_BY_THE_SYSTEM))
+def test_the_languages_own_convention_keeps_none(arch: str, tmp_path) -> None:  # noqa: ANN001
+    """The language's own convention keeps no floating-point register, so the
+    same function under it saves none of them."""
+    save, _, kept = _FLOATS_KEPT_BY_THE_SYSTEM[arch]
+    body = _body(listing(tmp_path, "".join((arch, "-linux-none")),
+                         _float_pressure("@[opaque]")), "pressed(f64,f64)f64")
+    assert not any("".join((save, " ", one, ", sp")) in body for one in kept), body
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_and_the_floating_point_registers_add_up(triple: str, tmp_path) -> None:  # noqa: ANN001
+    """The function that keeps them answers what it did before."""
+    assert run_it(tmp_path, triple, _float_pressure("@[visible, cdecl]")) == 0
+
+
+@pytest.mark.parametrize("arch", sorted(_FLOATS_KEPT_BY_THE_SYSTEM))
+def test_a_call_into_the_system_destroys_what_it_does_not_keep(arch: str) -> None:
+    """What a call of the system's convention is taken to destroy is every
+    floating-point register it does not hand back whole: all of them on
+    AArch64, whose callee keeps half of eight of them and a run of lanes is held
+    in the whole, and all but fs0 to fs11 on RISC-V."""
+    import importlib
+
+    abi = importlib.import_module("".join(("pypl4g.target.", arch, ".abi")))
+    regs = importlib.import_module("".join(("pypl4g.target.", arch, ".regs")))
+    system = abi.lookup("cdecl")
+    kept = {regs.reg(one).unit for one in _FLOATS_KEPT_BY_THE_SYSTEM[arch][2]}
+    assert kept <= system.callee_saved
+    floats = set(system.float_allocation_order)
+    destroyed = floats & set(system.caller_saved)
+    assert destroyed == (floats if arch == "aarch64" else floats - kept)
