@@ -13,6 +13,8 @@
 #   pl4g-embed-example  a C program that loads it with dlopen and runs a
 #                     program calling back into it (src/examples/embed)
 #   pl4g-embed-example-cc  the same in C++, through embed/pl4g-embed.hh
+#   pl4g-embed-expressions  expressions as JSON evaluated in PL4G, the replies
+#                     checked with jsoncpp and json-schema-validator
 #   pl4g-lexdump      the tokens of a file, for comparing with pypl4g
 #   *-asan            the same, built with the address and undefined-behaviour
 #                     sanitizers (PL4G_SANITIZERS=ON, the default)
@@ -428,6 +430,23 @@ set_target_properties(pl4g-embed-example-cc PROPERTIES ENABLE_EXPORTS ON)
 add_dependencies(pl4g-embed-example-cc pl4g-embed)
 add_test(NAME embed-example-cc
   COMMAND prlimit --data=536870912 --cpu=120 -- $<TARGET_FILE:pl4g-embed-example-cc> $<TARGET_FILE:pl4g-embed>)
+# Expressions handed over as JSON and evaluated in PL4G, the replies read with
+# jsoncpp and checked against a schema with json-schema-validator; built only
+# where both are installed.
+pkg_check_modules(JSONCPP IMPORTED_TARGET jsoncpp)
+find_package(nlohmann_json_schema_validator QUIET)
+if(JSONCPP_FOUND AND nlohmann_json_schema_validator_FOUND)
+  add_executable(pl4g-embed-expressions src/examples/embed/expressions.cc)
+  target_include_directories(pl4g-embed-expressions PRIVATE ${CMAKE_SOURCE_DIR}/src/lib)
+  target_compile_options(pl4g-embed-expressions PRIVATE -Wall -Wextra -fcontracts)
+  target_link_options(pl4g-embed-expressions PRIVATE -fcontracts)
+  target_link_libraries(pl4g-embed-expressions PRIVATE PkgConfig::JSONCPP nlohmann_json_schema_validator
+    ${CMAKE_DL_LIBS})
+  set_target_properties(pl4g-embed-expressions PROPERTIES ENABLE_EXPORTS ON)
+  add_dependencies(pl4g-embed-expressions pl4g-embed)
+  add_test(NAME embed-expressions
+    COMMAND prlimit --data=1073741824 --cpu=300 -- $<TARGET_FILE:pl4g-embed-expressions> $<TARGET_FILE:pl4g-embed>)
+endif()
 
 add_executable(pl4g-embed-host src/test/embed_host.cc)
 target_link_libraries(pl4g-embed-host PRIVATE pl4g)

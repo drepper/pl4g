@@ -106,7 +106,8 @@ with `dlsym` at its first call and called through libffi, each value crossing as
 (details.md, "The Embedded Interpreter, and Its Calls into the Host"); `src/test/embed_host.cc`, ctest's `embed-host`, embeds it.
 `libpl4g-embed.so` is the interpreter as a shared object offering three C functions -- a state made, given back, and run in;
 ctest's `embed-example` runs `src/examples/embed/host.c`, which loads it with `dlopen`, and `embed-example-cc` its C++
-version `host.cc`, through the object `embed/pl4g-embed.hh` wraps the library in.  What a run leaves behind is in its state,
+version `host.cc`, through the object `embed/pl4g-embed.hh` wraps the library in.  `embed-expressions` runs `expressions.cc`, which hands
+the program arithmetic expressions as JSON and checks its JSON replies with jsoncpp and json-schema-validator.  What a run leaves behind is in its state,
 the runtime's heap and seed among it (details.md).
 
 The checker

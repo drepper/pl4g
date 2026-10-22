@@ -1255,7 +1255,13 @@ and not copied, and `run(text, name)` runs a program in its state.  What it asks
 are `pre` and `post` where the compiler has contracts (`__cpp_contracts`) and nothing where it has not.  GCC 16 has them in C++26
 without `-fcontracts` but links what reports a violation only with it, which no macro shows: a program using the header with
 GCC is compiled and linked with `-fcontracts`, or defines `PL4G_NO_CONTRACTS`.  `src/examples/embed/host.cc` is the example again through it,
-which ctest's `embed-example-cc` runs.
+which ctest's `embed-example-cc` runs.  `src/examples/embed/expressions.cc` is one that hands its work over as JSON: arithmetic
+expressions written as trees -- a number a leaf, an operation an object of `op` and `args` -- made with jsoncpp, some written out
+and the rest grown at random to depths of one to fourteen, read by the PL4G program through a callback as a view of the host's
+own bytes (`⎕span`), decoded with the `json` module and evaluated, and answered as JSON through another callback, which only
+stores the reply.  Each reply is held to a JSON Schema with json-schema-validator and read back with jsoncpp against the value the
+host worked out while growing the expression, folding from the left as the program does; ctest's `embed-expressions` runs it where
+both libraries are installed.
 
 **What a run leaves behind is its state's.**  The interpreter had no state of its own between runs, but the runtime it calls did,
 in variables of the C file: the heap's lists and the slab it cuts from, and the base every table's seed is worked out from.  Built
