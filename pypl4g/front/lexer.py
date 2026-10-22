@@ -377,38 +377,39 @@ class Lexer:
     def _set_aside(self) -> bool:
         """Leave the body that begins here as text, as one `BODY` token.
 
-        Where it ends is found a line at a time, with no token made: at the first
-        line at the left margin that is neither blank nor a comment -- comments
-        at the margin just before it being the next definition's -- which is
-        where the lexer would close the body.  The brackets are counted on the
-        way, with text and characters and comments taken out first; a body
-        that does not come out even, which would mean a line at the margin
-        inside a pair, is lexed here as it always was.
+        Where it ends is found with no token made: at the first line at the left
+        margin that is neither blank nor a comment -- comments at the margin just
+        before it being the next definition's -- which is where the lexer would
+        close the body.  The brackets are counted, with text and characters and
+        comments taken out first; a body that does not come out even, which
+        would mean a line at the margin inside a pair, is lexed here as it
+        always was.
+
+        The line that ends it is found by one search and not a line at a time,
+        and the comments before it by walking back over the few lines between;
+        and the brackets are counted once, over the whole body: what is taken
+        out first never reaches past the end of a line, so a sum over the lines
+        is the count over their text.  A module of two and a half thousand lines
+        was otherwise read a line at a time in Python, every time it was
+        imported.
         """
         text = self._text
-        start = pos = self._pos
-        depth = 0
-        end = len(text)
-        margin_comment: int | None = None
-        while pos < len(text):
-            newline = text.find("\n", pos)
-            stop = len(text) if newline < 0 else newline
-            line = text[pos:stop]
+        start = self._pos
+        found = _AT_THE_MARGIN.search(text, start)
+        end = at = len(text) if found is None else found.start()
+        while at > start:
+            # The line before *at*: its end, where its newline is, and its start.
+            last = at - 1 if text[at - 1] == "\n" else at
+            newline = text.rfind("\n", start, last)
+            begin = start if newline < 0 else newline + 1
+            line = text[begin:last]
             content = line.lstrip(" \t")
-            if not content or content.startswith(COMMENT_GLYPH):
-                if content and len(content) == len(line) and margin_comment is None:
-                    margin_comment = pos
-                pos = stop + 1
-                continue
-            if len(content) == len(line):
-                end = margin_comment if margin_comment is not None else pos
+            if content and not content.startswith(COMMENT_GLYPH):
                 break
-            margin_comment = None
-            depth += _depth_change(content)
-            pos = stop + 1
-        else:
-            end = margin_comment if margin_comment is not None else len(text)
-        if depth != 0 or end <= start:
+            if content and len(content) == len(line):
+                end = begin
+            at = begin
+        if end <= start or _depth_change(text[start:end]) != 0:
             return False
         self._tokens.append(Token(TokKind.BODY, self._span(start, end)))
         self._pos = end
@@ -900,25 +901,32 @@ def tokenize_body(source: SourceFile, span: Span, diags: DiagEngine) -> list[Tok
     return Lexer(source, diags, start=start, end=span.end - source.base).run()
 
 
-#: What `_depth_change` takes out of a line before counting: text, a character
+#: What `_depth_change` takes out of its lines before counting: text, a character
 #: written out (not the mark after a type parameter), and a comment.  Written
 #: raw, so that what the pattern says of a backslash is the pattern's: an escape
 #: in text takes the character after it, and a quote escaped does not end it.
+#: What stands before a character's quote is looked at once the quote is taken,
+#: so that every way the pattern can begin is one character -- which the engine
+#: looks for before it tries anything, rather than trying each way everywhere.
 _NOT_COUNTED: Final = re.compile(
     "|".join((r'"(?:[^"\\\n]|\\.)*"',
-              r"(?<![\w'])'(?:\\[^'\n]*|[^'\\\n])'",
-              "".join((COMMENT_GLYPH, ".*$")))))
+              r"'(?<!\w')(?<!'')(?:\\[^'\n]*|[^'\\\n])'",
+              "".join((COMMENT_GLYPH, ".*$")))), re.MULTILINE)
+#: The first character of a line at the left margin that is neither blank nor a
+#: comment, which is where a body set aside ends.
+_AT_THE_MARGIN: Final = re.compile("".join(("^[^ \\t\\n", COMMENT_GLYPH, "]")),
+                                   re.MULTILINE)
 _GLYPHS: Final = re.compile("[^\\x00-\\x7f]")
 _ASCII_OPEN: Final = "([{"
 _ASCII_CLOSE: Final = ")]}"
 
 
-def _depth_change(line: str) -> int:
-    """How much deeper in brackets a line of a body leaves the next one."""
-    line = _NOT_COUNTED.sub("", line)
-    change = sum(line.count(one) for one in _ASCII_OPEN) \
-        - sum(line.count(one) for one in _ASCII_CLOSE)
-    for ch in _GLYPHS.findall(line):
+def _depth_change(lines: str) -> int:
+    """How much deeper in brackets some lines of a body leave the next one."""
+    counted = _NOT_COUNTED.sub("", lines)
+    change = sum(counted.count(one) for one in _ASCII_OPEN) \
+        - sum(counted.count(one) for one in _ASCII_CLOSE)
+    for ch in _GLYPHS.findall(counted):
         # In the order the lexer asks: a glyph of the language is what it is,
         # and only one the language does not have may be a pair's.
         kind = _SIMPLE.get(ch)

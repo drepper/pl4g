@@ -38,7 +38,7 @@ on a caller's `t` -- would quietly do nothing.
 
 from __future__ import annotations
 
-from dataclasses import fields as fields_of, replace
+from dataclasses import replace
 from typing import Callable, Final, Sequence
 
 from ..diag import ids as D
@@ -47,6 +47,7 @@ from ..ir.module import Module
 from ..ir.function import Function
 from ..source.location import INVALID_SPAN, Span
 from . import ast
+from .ast import fields_of
 from ..target.allocator import ALLOC_SYMBOL, GROW_SYMBOL
 from ..sema.tables import HEAP_ALLOC_SYMBOL, HEAP_FREE_SYMBOL
 from .interpret import Machine, Refused, Stopped

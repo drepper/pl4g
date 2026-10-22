@@ -6,11 +6,29 @@ report against the text the user wrote.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import Field, dataclass, field, fields
 from enum import Enum, StrEnum
+from functools import cache
 from typing import Protocol
 
 from ..source.location import INVALID_SPAN, Span
+
+
+@cache
+def _fields_of_class(cls: type) -> tuple[Field[object], ...]:
+    """The fields of the dataclass *cls*, worked out once per class."""
+    return fields(cls)
+
+
+def fields_of(node: object) -> tuple[Field[object], ...]:
+    """The fields of *node*, a dataclass instance, in the order they are declared.
+
+    What `dataclasses.fields` answers, kept per class: a walk over a tree asks
+    it of every node it passes, and `fields` makes the tuple afresh each time --
+    which, over the bodies of a module, was a good part of what checking them
+    cost.
+    """
+    return _fields_of_class(type(node))
 
 
 class BlockStyle(Enum):

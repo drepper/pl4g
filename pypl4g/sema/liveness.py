@@ -49,9 +49,10 @@ log says the borrow ended.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, fields as fields_of
+from dataclasses import dataclass, field
 
 from ..front import ast
+from ..front.ast import fields_of
 from ..front.token import WILDCARD_NAME
 from ..source.location import Span
 

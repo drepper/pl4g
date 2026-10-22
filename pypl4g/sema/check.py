@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 import struct
-from dataclasses import dataclass, field, fields as fields_of, replace
+from dataclasses import dataclass, field, replace
 from fractions import Fraction
 from contextlib import contextmanager
 from typing import Callable, Final, Iterable, Iterator, Literal, Mapping, Sequence
@@ -19,6 +19,7 @@ from ..diag.ids import DiagID
 from ..target import statuses
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
+from ..front.ast import fields_of
 from ..comptime.evaluate import CannotEvaluate, Evaluator, Reflect, Table, power
 from ..front.expand import only_for_macros
 from ..front.doccomment import Part as DocPart, parse as parse_doc
@@ -4151,9 +4152,16 @@ class Checker:
                  for_macros: bool = False,
                  quoted: list[ast.Quote] | None = None,
                  whole_modules: bool = False,
-                 ignore_system: bool = False) -> None:
+                 ignore_system: bool = False,
+                 imported: bool = False) -> None:
         self._module = module
         self._diags = diags
+        #: Whether what is checked here is a module something else imported,
+        #: rather than the files a checker was started on.  Such a module is
+        #: lowered as far as it is named -- for the program and for the macros
+        #: alike, a macro calling one function of `std` asking for that function
+        #: and what it reaches, as the program does.
+        self._imported = imported
         #: Whether `@[system]` is read and then not acted on, so that a system
         #: module is warned about and logged like any other -- what
         #: `--ignore-system` asks for, as `-Wsystem-headers` does of GCC.
@@ -4762,7 +4770,8 @@ class Checker:
         # Callees before their callers, as far as the call tree goes: what a
         # body shows of where its answer is made is written on the function, and
         # a caller checked after it relies on it.
-        if whole_program or self._whole_modules or self._for_macros \
+        if whole_program or self._whole_modules \
+                or (self._for_macros and not self._imported) \
                 or self._notes is not None:
             # Everything here is lowered, so everything it names in a module has
             # to be there first: the modules are asked before anything of this
@@ -4796,8 +4805,12 @@ class Checker:
                     continue
                 _mentioned(item.value, roots)
             for entry in collected:
+                # A macro is run by the expander, which names it by nothing
+                # written in a body: what the macros' checker reads of a module
+                # is its macros, and what they reach.
                 if entry.func.attrs.special is not None \
-                        or entry.func.linkage is not Linkage.INTERNAL:
+                        or entry.func.linkage is not Linkage.INTERNAL \
+                        or (self._for_macros and entry.node.is_macro):
                     roots.add(entry.node.name)
             self.want(roots)
         self._build_the_tables()
@@ -5380,7 +5393,8 @@ class Checker:
                             for_macros=self._for_macros,
                             quoted=self.quoted,
                             whole_modules=self._whole_modules,
-                            ignore_system=self._ignore_system)
+                            ignore_system=self._ignore_system,
+                            imported=True)
             inner.run([unit], whole_program=False)
             loaded.want = inner.want
             loaded.exports = {name: what for name, what in inner._top.items()

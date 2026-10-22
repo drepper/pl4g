@@ -40,10 +40,11 @@ however many times the function is lowered.
 from __future__ import annotations
 
 from bisect import bisect_right
-from dataclasses import dataclass, field, fields as fields_of
+from dataclasses import dataclass, field
 from typing import Callable
 
 from ..front import ast
+from ..front.ast import fields_of
 from ..front.token import WILDCARD_NAME
 from ..source.location import NO_LOC, Loc, Span
 from ..source.manager import SourceFile, SourceManager
