@@ -1234,7 +1234,10 @@ held width extended as its type's signedness says, whatever C left above that wi
 **A symbol nobody defines stops the run** as a shared object's stub stops it: `pl4g: the host defines no 'SYMBOL' in 'NAME'`, at
 the declaration, on the error device, and status 92.  `NAME` is the function the program wrote, not the `NAME.host` the checker made
 of one taking a `str`.  The embedding program is not ended with it: the stop unwinds the interpreter, as every stop of a run does,
-and `run_source` or `run_file` answers 92.
+and `run_source` or `run_file` answers 92.  **No way a program ends ends the program embedding it.**  Returning from the startup function, a
+stop -- an answer that does not fit, an index past the end, a host symbol not found -- and the system's own `exit` and
+`exit_group` asked for with `⎕syscall` all end the run alone: the interpreter takes those two calls before they reach the kernel,
+and each of the others unwinds it, and the call that ran the program answers with the status.  `embed-host` holds each of them.
 
 **The interpreter is also a shared object**, `libpl4g-embed.so`, for a program that loads it with `dlopen` rather than linking
 with the library.  It offers three functions with C's linkage (`src/lib/embed/pl4g-embed.h`): `pl4g_embed_state_new`, which makes a
@@ -6064,7 +6067,9 @@ added to the language and not to the manual fails the next build rather than sur
 nothing; `--out DIR` writes the nodes and `manual.pack`, name, nul, text, nul, in the order of the names.
 
 **The library.**  CMake runs the generator whenever a node, a module or what the script reads changes, and `libpl4g-manual.so`
-(`src/manual/manual.cc`) embeds the pack with `#embed`: nothing is read at run time.  It also includes `manual.stamp.hh`, which
+(`src/manual/manual.cc`) embeds the pack with `#embed`: nothing is read at run time.  The same objects, compiled once and
+position-independent, are also the archive `libpl4g-manual.a`, for a program that carries the manual rather than loading it; it
+leaves fstrcmp to what links it.  `manual-graph` walks the graph through the archive and `pl4g-help` reads the shared object.  It also includes `manual.stamp.hh`, which
 the generator writes beside the pack with the pack's SHA-256 in it: a compiler cache hashes what a source includes and not what it
 embeds, and ccache handed back the object of the old manual until it had something to see change.  `pl4g::manual::lookup(name)` answers a
 node's text; a name that is no node is answered with a sentence saying so and naming up to three nodes whose lower-cased names

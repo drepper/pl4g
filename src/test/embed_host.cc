@@ -18,6 +18,7 @@
 #include <cstring>
 #include <print>
 #include <string>
+#include <tuple>
 #include <string_view>
 #include <vector>
 
@@ -285,6 +286,60 @@ namespace {
     "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
     "    if absent_text(\"x\") = 1i64: 1u6 else: 2u6\n";
 
+  // Programs that end before their startup function answers: through the
+  // system's own call -- for the whole process, and for the thread -- and by
+  // stopping, an answer that does not fit and an index past the end.  Each
+  // ends the run and nothing more: the interpreter answers how it ended and
+  // the program embedding it goes on, and what follows the end never runs.
+  constexpr const char* exits_group = "@[host(\"embed_verdict\")]\nfn verdict(which: u32, ok: bool)\n"
+    "\n"
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
+    "\n"
+    "@[startup, impure]\n"
+    "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+    "    let gone: i64 = \N{APL FUNCTIONAL SYMBOL QUAD}syscall(\N{APL FUNCTIONAL SYMBOL QUAD}sc@exit_group, 5i64)\n"
+    "    verdict(1u32, false)\n"
+    "    1u6\n";
+
+  constexpr const char* exits_thread = "@[host(\"embed_verdict\")]\nfn verdict(which: u32, ok: bool)\n"
+    "\n"
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
+    "\n"
+    "@[startup, impure]\n"
+    "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+    "    let gone: i64 = \N{APL FUNCTIONAL SYMBOL QUAD}syscall(\N{APL FUNCTIONAL SYMBOL QUAD}sc@exit, 6i64)\n"
+    "    verdict(1u32, false)\n"
+    "    1u6\n";
+
+  constexpr const char* overflows = "@[host(\"embed_verdict\")]\nfn verdict(which: u32, ok: bool)\n"
+    "\n"
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
+    "\n"
+    "@[opaque]\n"
+    "fn big() \N{RIGHTWARDS ARROW} u8:\n"
+    "    200u8\n"
+    "\n"
+    "@[startup, impure]\n"
+    "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+    "    let sum: u8 = big() + big()\n"
+    "    verdict(1u32, false)\n"
+    "    if sum = 0u8: 1u6 else: 2u6\n";
+
+  constexpr const char* past_the_end = "@[host(\"embed_verdict\")]\nfn verdict(which: u32, ok: bool)\n"
+    "\n"
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
+    "\n"
+    "@[opaque]\n"
+    "fn where() \N{RIGHTWARDS ARROW} u64 \N{CURRENCY SIGN}idx:\n"
+    "    7\n"
+    "\n"
+    "@[startup, impure]\n"
+    "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+    "    let l: [u8] = [1u8, 2u8, 3u8] in \N{APL FUNCTIONAL SYMBOL QUAD}static\n"
+    "    let x: u8 = l\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}where()\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}\n"
+    "    verdict(1u32, false)\n"
+    "    if x = 0u8: 1u6 else: 2u6\n";
+
   // A program that does not compile.
   constexpr const char* broken = "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
     "\n"
@@ -369,6 +424,20 @@ int main()
              == "embedded-missing-text.pl4g:2:1: pl4g: the host defines no 'embed_nobody_defines_that' in "
                 "'absent_text'\n",
            std::format("a missing symbol taking a str said {:?}", said));
+  }
+
+  // Each way of ending ends the run, with its status, and what came after it
+  // did not run -- and this program is still here to see it.
+  for (auto [text, name, status] : { std::tuple{ exits_group, "embedded-exit-group.pl4g", 5 },
+                                     std::tuple{ exits_thread, "embedded-exit.pl4g", 6 },
+                                     std::tuple{ overflows, "embedded-overflow.pl4g", 80 },
+                                     std::tuple{ past_the_end, "embedded-past-the-end.pl4g", 82 } }) {
+    seen.verdicts.clear();
+    auto [ended, said] = caught(text, name);
+    expect(ended.status == status && ended.signal == 0,
+           std::format("{} ended with status {}, signal {}, where {} was due", name, ended.status, ended.signal,
+                       status));
+    expect(seen.verdicts.empty(), std::format("{} went on past its end", name));
   }
 
   {
