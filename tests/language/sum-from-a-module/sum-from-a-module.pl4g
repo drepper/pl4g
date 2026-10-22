@@ -1,0 +1,26 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A sum another module exports is made through the module's name**, as a
+※ record of it is: `shapes.Shape(.circle ← 1.5f64)` is the value
+※ `Shape(.circle ← 1.5f64)` is where the type was written.  What the mark before
+※ a part's name means does not change with where the type was defined, and a
+※ program reading a document of a library's type writes one the same way --
+※ which is what a program building a value for `json.encode` does.
+
+let std := ⎕import("std")
+let shapes := ⎕import("shapes")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let one: shapes.Shape = shapes.Shape(.circle ← 1.5f64)
+    let all: shapes.Shape = shapes.Shape(.group ← [one, shapes.Shape(.dot ← true),
+                                                   shapes.Shape(.named ← "n"),
+                                                   shapes.Shape(.group ← [])])
+    let held: shapes.Labelled = shapes.Labelled(.label ← "l", .shape ← all)
+    if shapes.count(held.shape) ≠ 5u64:
+        return 1u6
+    match one:
+        f64(r):
+            if r ≇ 1.5f64: 2u6 else: 0u6
+        _:
+            3u6

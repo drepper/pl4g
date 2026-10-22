@@ -1,0 +1,152 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `std.string.format_f64(x, into, std.string.Form.python)` writes the shortest
+※ text that reads back as the same `f64` in the form Python's `repr` gives it,
+※ which is what Python's `json` writes: a point or an exponent on every number,
+※ so that what is read back is not taken for a whole one -- `1.0`, `100.0` --
+※ the exponent from 10^16 on and below 10^-4, and two digits of it at least:
+※ `1e+16`, `1e-05`, `0.0001`.  The digits are the ones the JavaScript form
+※ writes; only where they go differs.
+※
+※ What each should be is what Python 3.14's `repr` writes, read off it when the
+※ test was made.  And twenty thousand bit patterns of every exponent are written
+※ and read back by `parse_f64`, every one with a point, an exponent or a name.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+
+let NUMBERS: u64⟦40⟧ = ⟦
+    0x0000000000000000,
+    0x8000000000000000,
+    0x3FF0000000000000,
+    0xBFF0000000000000,
+    0x3FF8000000000000,
+    0xC028800000000000,
+    0x3FB999999999999A,
+    0x3FD3333333333334,
+    0x3FD5555555555555,
+    0x3FE5555555555555,
+    0x400921FB54442D18,
+    0x4059000000000000,
+    0x441AABDF2145B430,
+    0x444B1AE4D6E2EF50,
+    0x4480F0CF064DD592,
+    0x44B52D02C7E14AF6,
+    0x3EB0C6F7A0B5ED8D,
+    0x3E7AD7F29ABCAF48,
+    0x3E8421F5F40D8376,
+    0x3F201F31F46ED246,
+    0x4340000000000000,
+    0x4340000000000001,
+    0x00538CC7168670FB,
+    0x0000000000000001,
+    0x000FFFFFFFFFFFFF,
+    0x0010000000000000,
+    0x7FEFFFFFFFFFFFFF,
+    0x8000000000000001,
+    0x43E0000000000000,
+    0x0170000000000000,
+    0x40934A456D5CFAAD,
+    0x7FF0000000000000,
+    0xFFF0000000000000,
+    0x7FF8000000000000,
+    0x4330000000000000,
+    0x4341C37937E08000,
+    0x3F1A36E2EB1C432D,
+    0x3EE4F8B588E368F1,
+    0x3F50624DD2F1A9FC,
+    0xC0C81C8000000000
+⟧ in ⎕static
+
+let TEXTS: str⟦40⟧ = ⟦
+    "0.0",
+    "-0.0",
+    "1.0",
+    "-1.0",
+    "1.5",
+    "-12.25",
+    "0.1",
+    "0.30000000000000004",
+    "0.3333333333333333",
+    "0.6666666666666666",
+    "3.141592653589793",
+    "100.0",
+    "1.23e+20",
+    "1e+21",
+    "1e+22",
+    "1e+23",
+    "1e-06",
+    "1e-07",
+    "1.5e-07",
+    "0.000123",
+    "9007199254740992.0",
+    "9007199254740994.0",
+    "4.35e-307",
+    "5e-324",
+    "2.225073858507201e-308",
+    "2.2250738585072014e-308",
+    "1.7976931348623157e+308",
+    "-5e-324",
+    "9.223372036854776e+18",
+    "9.332636185032189e-302",
+    "1234.5678",
+    "Infinity",
+    "-Infinity",
+    "NaN",
+    "4503599627370496.0",
+    "1e+16",
+    "0.0001",
+    "1e-05",
+    "0.001",
+    "-12345.0"
+⟧ in ⎕static
+
+※ Whether a number's text says it is not a whole number: a point, an exponent,
+※ or the name of one that is not finite.
+fn marked(text: u8⟦⟧) → bool:
+    foreach c: u8 = text:
+        if c = 46u8 or c = 101u8 or c = 78u8 or c = 73u8:
+            return true
+    false
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let count: u64 ¤idx = #NUMBERS
+    let i: mut u64 ¤idx = 0
+    while i < count:
+        let written: [u8] = std.string.format_f64(⎕from_bits(NUMBERS⟦i⟧, ⌜f64⌝), [], std.string.Form.python)
+        if (⎕text(written) ?? "") ≠ TEXTS⟦i⟧:
+            return 1u6
+        i ← i + 1
+    ※ twenty thousand patterns, written and read back
+    let state: mut u64 = 88172645463325252u64
+    let n: mut u64 = 0u64
+    while n < 20000u64:
+        state ← state ^ (state » 12u64)
+        state ← state ^ (state « 25u64)
+        state ← state ^ (state » 27u64)
+        let r: u64 = ⎕wrap(state × 2685821657736338717u64)
+        ※ every exponent but the one that is not a number, below the normal
+        ※ ones a fifth of the time, and whole numbers a fifth
+        let pattern: u64 = if r % 5u64 ?? 0u64 = 0u64:
+            r & 0x800FFFFFFFFFFFFFu64
+        elif r % 5u64 ?? 0u64 = 1u64:
+            ⎕bits(⎕float(r » 20u64, ⌜f64⌝))
+        else:
+            r
+        if pattern & 0x7FF0000000000000u64 ≠ 0x7FF0000000000000u64:
+            let text: [u8] = std.string.format_f64(⎕from_bits(pattern, ⌜f64⌝), [], std.string.Form.python)
+            let length: u64 ¤idx = #text
+            if ¬marked(text):
+                return 2u6
+            match std.string.parse_f64(text):
+                std.string.Parsed(f64)(back):
+                    if ⎕bits(back.value) ≠ pattern:
+                        return 3u6
+                    if back.end ≠ length:
+                        return 4u6
+                ⊥:
+                    return 5u6
+        n ← n + 1u64
+    0u6

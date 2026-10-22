@@ -1416,7 +1416,9 @@ namespace pl4g::interp {
     Cell native_alloc(Machine& m, const Cell* args)
     {
       void* made = rt::arena_alloc(reinterpret_cast<rt::Arena*>(args[0]), args[1]);
-      if (made == nullptr) [[unlikely]]
+      // Nothing asked of an arena that has no chunk yet is where its bump
+      // pointer is, which is nought: that is no failure, nothing being wanted.
+      if (made == nullptr && args[1] != 0) [[unlikely]]
         m.fault("pl4g: out of memory\n", status::out_of_memory);
       return reinterpret_cast<Cell>(made);
     }

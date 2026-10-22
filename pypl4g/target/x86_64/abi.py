@@ -47,6 +47,11 @@ _ALLOCATION_ORDER = tuple(reg(n).unit for n in (
 #: that an argument is usually already where it is wanted.
 _PL4G_ARGS = (RAX, RDX, RCX, RSI, RDI, reg("r8"), reg("r9"), reg("r10"))
 
+#: A floating-point register is one no function hands back as it found it -- a
+#: prologue saves only the ordinary registers -- so a call whose callee has not
+#: said what it destroys destroys every one of them.
+_FLOATS_DESTROYED = frozenset(_FLOAT_ORDER)
+
 CC_PL4G: Final[CallConvDesc] = CallConvDesc(
     name="pl4g",
     int_arg_regs=_PL4G_ARGS,
@@ -57,7 +62,7 @@ CC_PL4G: Final[CallConvDesc] = CallConvDesc(
     float_ret_regs=(reg("xmm0"), reg("xmm1"), reg("xmm2")),
     float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
-    caller_saved=_CALLER_SAVED,
+    caller_saved=_CALLER_SAVED | _FLOATS_DESTROYED,
     stack_align=16,
     allocation_order=_ALLOCATION_ORDER,
     red_zone=128,
@@ -75,7 +80,7 @@ CC_SYSV: Final[CallConvDesc] = CallConvDesc(
     float_ret_regs=(reg("xmm0"), reg("xmm1")),
     float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
-    caller_saved=_CALLER_SAVED,
+    caller_saved=_CALLER_SAVED | _FLOATS_DESTROYED,
     stack_align=16,
     allocation_order=_ALLOCATION_ORDER,
     red_zone=128,

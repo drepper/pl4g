@@ -1368,3 +1368,17 @@ Runtime
     refused by the compiler ("expected an expression, found 'elif'"), which `tests/compiler/test_grammar.py` says of any program
     that has it.  One of the two is wrong.
 
+
+[ ] what the `json` module ran into and wrote around (2026-10-22), each still so:
+    - a result whose answer is a generic of another module, `string.Parsed(Value) ? Error`, looks the error type up in the answer's
+      module and not where it is written;
+    - a default argument naming an enumeration value of an imported module is an internal error (9902);
+    - `⍕` of a number with a unit, and of an `f64`, fails inside `std.text`;
+    - `l ⧺← (if c: ⟦a⟧ else: ⟦b⟧)` is an internal error, and an `if` expression of views a type error;
+    - a result cannot be copied, so a local list cannot be answered in `[u8] ? E` (4624) -- the encoder answers `[u8]?` of a list
+      handed in instead;
+    - a list of the heap's is never given back, so everything a program makes over and over must be made in an arena;
+    - `&l⟦i⟧` of a list's element is refused, and a list cannot be cut short in place;
+    - a view assigned to an array in a loop, `block ← view`, is refused as writing through a reference (4479);
+    - a self-call in tail position with an arena parameter ran out of stack -- nothing makes it a jump;
+    - there is no carry-less multiplication (`pclmulqdq`, `pmull`, `clmul`), which simdjson's prefix exclusive or is one of.

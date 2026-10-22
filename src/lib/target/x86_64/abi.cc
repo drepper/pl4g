@@ -59,6 +59,9 @@ namespace pl4g::target::x86_64 {
       made.float_allocation_order = float_order();
       made.callee_saved = units_of({ "rbx", "rbp", "r12", "r13", "r14", "r15" });
       made.caller_saved = units_of({ "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11" });
+      // A floating-point register is one no function hands back as it found it,
+      // so a call whose callee has not said what it destroys destroys every one.
+      made.caller_saved.insert(made.float_allocation_order.begin(), made.float_allocation_order.end());
       made.stack_align = 16;
       made.allocation_order = order_of({ "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11", "rbx", "r12",
                                          "r13", "r14", "r15" });

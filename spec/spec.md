@@ -256,7 +256,8 @@ which a test checks, so the log has nothing to leave out of them but what cannot
 One module the installation provides, holding what a program is started with and the devices it is started with open, and
 handing on three more: `std.io`, which holds the devices themselves and the ring every request to them goes through, `std.fs`,
 which holds files, directories and the `State` a program does its I/O with, and `std.string`, which reads numbers out of bytes and
-writes them onto lists of bytes (below).  `fs` imports `io`, since what it opens are devices:
+writes them onto lists of bytes (below).  `json`, which reads JSON documents and writes them, is a module of the installation that
+`std` does not hand on, imported on its own (below).  `fs` imports `io`, since what it opens are devices:
 
 ```
 let std := ⎕import("std")
@@ -677,11 +678,30 @@ the raised minus of this language's literals.  **Nought with its sign is `-0`**,
 reads back as the number it came from.  A number that is not finite, which JSON cannot write, is `Infinity`, `-Infinity` or `NaN`,
 which `special` reads back.  The digits are Giulietti's Schubfach.
 
+**`format_f64(x, into, Form.python)` lays the same digits out as Python's `repr` does**, which is what Python's `json` writes: the
+same four forms with 16 where JavaScript has 21 and -4 where it has -6, `.0` after a whole number and `0.0` for nought, and at
+least two digits of exponent -- `100.0`, `1e+16`, `1e-05`, `0.0001`.  A point or an exponent on every number is what keeps a
+reader that tells whole numbers from the rest, as JSON's own readers mostly do, from reading the one as the other.
+`Form.javascript` is the default.
+
 **`format_int(n, into)` writes a whole number of any type**, in any base, the digits past nine small letters or with `upper`
 capitals, at least `digits` of them with noughts in front: four hexadecimal digits of a `\u` escape are `.base ← 16u8, .digits ←
 4u8`.  **`format_char` writes a character as UTF-8 and `decode_char` reads one** -- the sequence the bytes begin with, well formed
 as `⎕text` asks (Table 3-7), and how many bytes it took.  **`digit_value`** is a digit's value in any base up to thirty-six, or
 nothing.
+
+**`numeral_int(n, base, digits, upper)` and `numeral_f64(x, form)` answer that text as a value**, a `Numeral`: room of seventy-two
+bytes -- a sign and the sixty-four digits of a `u64` in base two -- and the run `text⟦from…to⟧` of it the number takes.
+
+```
+let n: std.string.Numeral = std.string.numeral_f64(x, std.string.Form.python)
+into ⧺← n.text⟦n.from…n.to⟧                            ※ onto a list of an arena's, or into a buffer
+```
+
+It is what a writer takes whose list cannot be handed in and back as it is -- one of an arena's, which a `mut [u8]` parameter is
+answered as a copy of in the heap (Lists) -- or that wants the bytes somewhere of its own.  The room is answered and copied once;
+`format_int` writes in its own frame rather than through it, where the copy costs a fifth again of what a whole number's digits
+do.
 
 **A list written onto is handed in and handed back**: `out ← format_f64(x, out)` moves the room into the call and out again,
 copying nothing, as `v ← pushed(v, x)` does (Lists, above) -- through any number of calls between, each handing it on.  A
@@ -702,6 +722,84 @@ form written here; **D**'s `std.conv.to` and **Odin**'s `strconv`; **Haskell**'s
 White's method; **APL**'s `⍎` and `⍕`, **BQN**'s `•ParseFloat` and `•Repr`, **Uiua**'s `parse`, and **Wolfram**'s `ToExpression`
 and `ToString`, which read and write their own notations rather than JSON's.  What is unusual here is only that the whole of it is
 in the language itself, its tables included.
+
+#### `json`
+
+**A JSON document is read out of bytes into a value of a recursive type, and a value is written back as UTF-8**, by a module of
+the installation written in the language: `⎕import("json")`, which `std` does not hand on, a program that reads no JSON having no
+reason to carry it.
+
+```
+let json := ⎕import("json")
+
+type Value = null : void | boolean : bool | integer : i64 | large : u64 | number : f64 | text : str
+           | array : [Value] | object : [Member]                    ※ one line in the module, as a type is written
+type Member = key : str ; value : Value
+
+let pool: mut arena = ⎕arena
+let doc: json.Value ? json.Error = json.decode(bytes, &mut pool)                     ※ RFC 8259, into pool
+let five: json.Value ? json.Error = json.decode(bytes, &mut pool, json.Extensions.json5, .depth ← 64u64)
+let out: [u8]? = json.encode(v, &mut pool, .pretty ← true)                         ※ UTF-8, into pool
+```
+
+**A number is kept as it was written where that can be done exactly**: a whole number -- no point, no exponent -- is an `integer`
+where it fits an `i64`, a `large` where it is above that and fits a `u64`, and otherwise, like every number with a point or an
+exponent, a `number`, the `f64` nearest it (`std.string.parse_f64`).  Identifiers of 64 bits come back as they went, which
+JavaScript's numbers do not do and which is why some APIs write theirs twice.  **An object is its members in the order the document
+wrote them**, a list and not a table: what is read is written back as it was, a key written twice keeps both members, and nothing
+is hashed while reading; a program that looks keys up makes a table of them, `⸨str: Value⸩` keeping their order too.
+
+**`decode(bytes, a, allow, depth, duplicates)` answers the value, made in `a`, or a `json.Error`**: a `Problem` -- `truncated`,
+`unexpected`, `malformed_number`, `out_of_range`, `bad_escape`, `lone_surrogate`, `control_character`, `not_utf8`, `trailing`,
+`too_deep`, `duplicate_key`, `too_large` -- with the offset of the byte it was found at and the line and column that byte is on,
+counted from one, a column being a character.  It is the first problem found reading from the start, a key written twice being
+found when the object holding it is read whole.  **What is read is RFC 8259's grammar and nothing looser** unless `allow` says so,
+flags of `json.Extensions` combined with `|`: `comments` (`//` and `/* */`), `hash_comments` (`#`), `trailing_commas`,
+`single_quotes`, `unquoted_keys`, `special_numbers` (`NaN`, `Infinity`, `-Infinity`), `hex_numbers`, `leading_plus`,
+`loose_points` (`.5`, `5.`), `byte_order_mark`, `control_characters` in strings as they are, `several` values one after another
+-- JSON Lines -- answered as an array of them, `lone_surrogates` as U+FFFD, `escapes` (JSON5's `\'`, `\v`, `\0`, `\x`, a line's end
+after a backslash, any other character after one) and `whitespace` (JSON5's); `json5` is the ten of them JSON5 has.  **Text is
+UTF-8 and is checked**: an escape names a code point, a surrogate pair the one character, half of one alone refused; what is not an
+escape is checked as `⎕text` checks it.  **`depth`, 1024 unless said, is how deeply arrays and objects may nest**, and one deeper is
+refused at its bracket.  Reading keeps what is open on a stack of its own and not the machine's, so the limit is a policy rather
+than what keeps a program on its stack.  **`duplicates`** says what a key written twice in one object comes to: `keep`, the default,
+every member; `first`; `last`, the first one's place with the last one's value, as Python and JavaScript have it; `refuse`.  A
+document of four gigabytes or more is `too_large`, the places the first stage finds being 32 bits.
+
+**`encode(v, a, pretty, indent, ascii, special)` writes what Python's `json.dumps` writes of the same value**, byte for byte:
+compact, with `separators=(',', ':')`, or with `pretty` a member or element a line, `indent` spaces a level, a space after each
+colon and `[]` and `{}` for an empty array and object, `indent=2`'s form.  A string has `"`, `\` and the control characters
+escaped -- the five that have names by name, the rest as `\u` and four small hexadecimal digits -- and everything else as it is, or
+with `ascii` DEL and everything above it as `\u` escapes, a surrogate pair beyond U+FFFF, `ensure_ascii`'s form.  An `integer` and
+a `large` are written exactly and a `number` as `std.string.format_f64(x, into, Form.python)` writes it, so that a number with a
+point is decoded again as a `number` and a whole one as an `integer`.  **An infinity and a not-a-number are no JSON**: `encode`
+answers no bytes where `v` holds one, unless `special` asks for `Infinity`, `-Infinity` and `NaN`, which `special_numbers` reads
+back; `finite(v)` asks beforehand.
+
+**What is read and what is written is made in the arena the caller hands over**, and only there, every list and string of a
+document: so a value is put into the list holding it as it is, and the whole document is given back at once when the arena is.
+The heap keeps what it is given for as long as the program runs, which for documents read and written over and over is memory
+that is never had back.  **`equal(x, y)`** says whether two values are one -- of the same kind, numbers by their bits, members in
+order.
+
+**Reading is simdjson's two stages.**  The first finds every byte the second begins something at -- the six structural characters,
+a string's opening quote, the first byte of a number or a literal -- sixty-four bytes at a time: the block is compared with each
+class of byte at once and the comparisons gathered with `⎕mask`, the quotes a backslash escapes are taken out by arithmetic on
+the bits of the backslashes, what lies inside a string is a prefix exclusive or of the quotes, and the places are walked off the
+bits with `⎕trail`.  An extension that changes where a string or white space is -- comments, single quotes, JSON5's white space --
+is found a byte at a time instead, to the same places.  The second stage reads values from the places, strings thirty-two bytes at
+a time to the first byte that needs looking at, and copies what lies between in one move.
+
+Compare: **simdjson**, whose two stages these are, its document a tape in a buffer of its own and its values read where they are
+asked for; **yyjson**, whose document is a pool given back whole, as `a` is; **Rust**'s `serde_json`, whose `Value` keeps integers
+as here and whose objects are a `BTreeMap` unless `preserve_order` makes them an `IndexMap`; **Python**'s `json`, whose output is
+held to here and which reads `NaN` and `Infinity` unasked and half a surrogate pair without a word; **Go**'s `encoding/json`, which
+decodes into `float64` and `map[string]any` and loses both the integers and the order; **JavaScript**'s `JSON.parse`, numbers all
+`f64` and a key written twice its last value; **C++**'s RapidJSON, whose parse flags are this set of extensions; **JSON5**, whose
+grammar `json5` is; **Zig**'s `std.json`, **D**'s `std.json` and **Odin**'s `core:encoding/json`, which keep integers too; **Haskell**'s
+aeson, whose objects are maps and numbers `Scientific`; **Lisp** and **Scheme**, where a document is lists and alists; **Wolfram**'s
+`ImportString[s, "RawJSON"]`, rules in order; **APL**'s `⎕JSON`, **BQN**'s `•JSON`-like libraries and **Uiua**'s `json`, nested
+arrays for both arrays and objects.
 
 ### Expressions
 

@@ -247,9 +247,39 @@ namespace pl4g::sema {
         into.insert(heap_key);
       break;
     case ast::NodeKind::ListLit:
-    case ast::NodeKind::SetLit:
-    case ast::NodeKind::DictLit:
       into.insert(heap_key);
+      break;
+    case ast::NodeKind::Call: {
+      // Not lowered yet: what the signature says it answers in, which is what
+      // lowering it will say.
+      auto call = static_cast<const ast::Call*>(node);
+      if (auto func = read_ahead_callee(call); func != nullptr) {
+        answered_in(call, func, into);
+        return;
+      }
+      break;
+    }
+    case ast::NodeKind::JoinAssign: {
+      // A list written out and joined onto a pool's list is never made: its
+      // elements go in as they are, with what they were made in, and the list
+      // joined onto keeps what it had.
+      auto join = static_cast<const ast::JoinAssign*>(node);
+      if (auto list = ast::as<ast::ListLit>(join->value); list != nullptr && pool_joined_onto(join->target)) {
+        collect_arenas(join->target, into);
+        for (auto one : list->elements)
+          collect_arenas(one, into);
+        return;
+      }
+      break;
+    }
+    case ast::NodeKind::SetLit:
+      // Made in the arena it names, which the walk below finds.
+      if (static_cast<const ast::SetLit*>(node)->arena == nullptr)
+        into.insert(heap_key);
+      break;
+    case ast::NodeKind::DictLit:
+      if (static_cast<const ast::DictLit*>(node)->arena == nullptr)
+        into.insert(heap_key);
       break;
     case ast::NodeKind::Element: {
       // Where the container's elements were made, without the keys that name
@@ -313,6 +343,49 @@ namespace pl4g::sema {
       break;
     }
     each_field_node(node, [&](const ast::Node* each) { collect_arenas(each, into); });
+  }
+
+
+  ir::Function* Checker::read_ahead_callee(const ast::Call* expr)
+  {
+    auto name = ast::as<ast::NameRef>(expr->callee);
+    if (name == nullptr || find_local(name->name) != nullptr)
+      return nullptr;
+    auto found = top->get(std::string(name->name));
+    if (found == nullptr)
+      return nullptr;
+    auto func = found->get<ir::Function>();
+    if (func == nullptr || func->attrs.external)
+      return nullptr;
+    return func;
+  }
+
+
+  void Checker::answered_in(const ast::Call* expr, ir::Function* func, KeySet& into)
+  {
+    const ir::Type* ret = func->fty->ret;
+    if (! points_somewhere(ret))
+      return;
+    if (! (owned::points(ret) || holds_a_lambda(ret)) || func->made_in == std::vector<int>{ int(hands_at) }) {
+      for (auto one : expr->args)
+        collect_arenas(one, into);
+      return;
+    }
+    if (! func->made_in) {
+      into.insert(heap_key);
+      return;
+    }
+    auto written = written_for(expr, func);
+    for (int at : *func->made_in)
+      if (at == heap_at)
+        into.insert(heap_key);
+      else if (at == static_at) {
+        if (func->made_in->size() > 1)
+          into.insert(image_key);
+      } else if (auto given = written.get(at); given != nullptr)
+        collect_arenas(*given, into);
+      else
+        into.insert(out_of_arenas.begin(), out_of_arenas.end());
   }
 
 
@@ -606,8 +679,17 @@ namespace pl4g::sema {
         if (local == nullptr || is_arena(local) || ! points_somewhere(held_by(local)))
           continue;
         // An array whose elements the body writes may, at the top of a turn,
-        // hold what a later line of the body put in it.
-        local->arenas = unite(local->arenas, anything);
+        // hold what a later line of the body put in it -- but nothing that
+        // holds no view holds where an array's elements are.
+        if (may_hold_a_view(held_by(local)))
+          local->arenas = unite(local->arenas, anything);
+        else {
+          KeySet reach;
+          for (auto one : anything)
+            if (! array_frames.contains(one))
+              reach.insert(one);
+          local->arenas = unite(local->arenas, reach);
+        }
       }
     }
     before_a_turn(body);

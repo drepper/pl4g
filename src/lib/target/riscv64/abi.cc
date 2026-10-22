@@ -37,6 +37,10 @@ namespace pl4g::target::riscv64 {
         floats.push_back(n);
       for (int n : floats)
         made.float_allocation_order.push_back(regs.reg(std::format("f{}", n))->unit);
+      // A floating-point register is one no function hands back as it found it
+      // -- a prologue saves only the ordinary registers -- so a call whose
+      // callee has not said what it destroys destroys every one of them.
+      made.caller_saved.insert(made.float_allocation_order.begin(), made.float_allocation_order.end());
       for (auto name : callee_saved_names)
         made.callee_saved.insert(regs.reg(name)->unit);
       for (auto name : caller_saved_names)

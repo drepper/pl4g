@@ -40,6 +40,10 @@ namespace pl4g::target::aarch64 {
         made.float_allocation_order.push_back(reg("d" + std::to_string(n))->unit);
       for (int n = 8; n < 16; ++n)
         made.float_allocation_order.push_back(reg("d" + std::to_string(n))->unit);
+      // A floating-point register is one no function hands back as it found it
+      // -- a prologue saves only the ordinary registers -- so a call whose
+      // callee has not said what it destroys destroys every one of them.
+      made.caller_saved.insert(made.float_allocation_order.begin(), made.float_allocation_order.end());
       made.stack_align = 16;
       // The standard defines no area below the stack pointer that a leaf
       // function may use, unlike the one on x86-64.

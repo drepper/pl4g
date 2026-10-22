@@ -1,0 +1,78 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A number is kept as it was written where that can be done exactly**: a whole
+※ number -- no point, no exponent -- is an `integer` where it fits an `i64`, a
+※ `large` where it is above that and fits a `u64`, and the `f64` nearest it
+※ beyond; anything with a point or an exponent is a `number`, the nearest
+※ `f64`, a tie to the even one, by `std.string.parse_f64`.  So the edges of each
+※ are here: the smallest and the largest `i64`, the largest `u64` and one past
+※ it, a whole number of twenty digits and of thirty, nought with a sign, the
+※ smallest number above nought and the largest below infinity, and one beyond
+※ that, which is refused.  Each is written back as Python writes it -- whole
+※ numbers exactly, the others in `repr`'s form -- and read back the same.
+※
+※ Compare: **simdjson** and **serde_json**, which keep integers the same way, as
+※ `int64`, `uint64` and `double`; **Python**, whose integers have no limit;
+※ **JavaScript**, whose numbers are all `f64`, so that a document's 64-bit
+※ identifiers come back changed -- the reason Twitter's API writes them twice.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+let json := ⎕import("json")
+
+※ What kind of number `text` is read as -- 2 an integer, 3 a large, 4 a number,
+※ 0 refused -- and whether it is written back as `back`.
+fn kind_of(text: str, back: str) → u8:
+    let pool: mut arena = ⎕arena
+    match json.decode(⎕bytes(text), &mut pool):
+        json.Value(v):
+            if (⎕text(json.encode(v, &mut pool) ?? []) ?? "") ≠ back:
+                return 9u8
+            match v:
+                i64(_): 2u8
+                u64(_): 3u8
+                f64(_): 4u8
+                _: 8u8
+        ⊥(e):
+            if e.problem = json.Problem.out_of_range: 0u8 else: 7u8
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if kind_of("0", "0") ≠ 2u8 or kind_of("-0", "0") ≠ 2u8 or kind_of("7", "7") ≠ 2u8:
+        return 1u6
+    if kind_of("9223372036854775807", "9223372036854775807") ≠ 2u8:
+        return 2u6
+    if kind_of("-9223372036854775808", "-9223372036854775808") ≠ 2u8:
+        return 3u6
+    if kind_of("9223372036854775808", "9223372036854775808") ≠ 3u8:
+        return 4u6
+    if kind_of("18446744073709551615", "18446744073709551615") ≠ 3u8:
+        return 5u6
+    ※ beyond a u64, and below the smallest i64: the nearest f64
+    if kind_of("18446744073709551616", "1.8446744073709552e+19") ≠ 4u8:
+        return 6u6
+    if kind_of("-9223372036854775809", "-9.223372036854776e+18") ≠ 4u8:
+        return 7u6
+    if kind_of("123456789012345678901234567890", "1.2345678901234568e+29") ≠ 4u8:
+        return 8u6
+    ※ a point or an exponent makes a number, whatever its value
+    if kind_of("1.0", "1.0") ≠ 4u8 or kind_of("1e0", "1.0") ≠ 4u8 or kind_of("-0.0", "-0.0") ≠ 4u8:
+        return 9u6
+    if kind_of("1E2", "100.0") ≠ 4u8 or kind_of("2.5e-3", "0.0025") ≠ 4u8 or kind_of("1e-7", "1e-07") ≠ 4u8:
+        return 10u6
+    ※ the edges of f64, and past them
+    if kind_of("5e-324", "5e-324") ≠ 4u8 or kind_of("1.7976931348623157e308", "1.7976931348623157e+308") ≠ 4u8:
+        return 11u6
+    if kind_of("2.4703282292062328e-324", "5e-324") ≠ 4u8 or kind_of("1e-400", "0.0") ≠ 4u8:
+        return 12u6
+    if kind_of("1.7976931348623159e308", "") ≠ 0u8 or kind_of("-1e309", "") ≠ 0u8:
+        return 13u6
+    ※ correctly rounded, however many digits
+    if kind_of("0.30000000000000004", "0.30000000000000004") ≠ 4u8:
+        return 14u6
+    if kind_of("9007199254740993", "9007199254740993") ≠ 2u8 or kind_of("9007199254740993.0", "9007199254740992.0") ≠ 4u8:
+        return 15u6
+    if kind_of("2.22507385850720113605740979670913197593481954635164564e-308", "2.225073858507201e-308") ≠ 4u8:
+        return 16u6
+    0u6

@@ -1,0 +1,67 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A mask worked out on each side of an `if` is one value where the two
+※ meet**: the branches each compare a block with a byte and gather the lanes,
+※ one over the bytes as they are and one over a copy padded past their end,
+※ and what is after reads whichever was made.  The pass that turns runs of
+※ comparisons into vector instructions moves the gathering, and a branch hands
+※ what it gathered to the block it goes to as much as an instruction reads its
+※ operands: pointing the operands at what the gathering became and not the
+※ branch left the join reading a value no instruction made.  This is the
+※ shape of reading a string to its quote thirty-two bytes at a time, the last
+※ block padded with the quote.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+
+※ Where the first `quote`, backslash or control character in `text` at or
+※ after `from` is, padding the last block with the quote so that a string's end
+※ is found where the text ends too.
+fn stop_at(text: u8⟦⟧, from: u64 ¤idx, quote: u8) → u64 ¤idx:
+    let n: u64 ¤idx = #text
+    let at: mut u64 ¤idx = from
+    while at < n:
+        let stops: mut u32 = 0u32
+        if at + 32 ≤ n:
+            let block: u8⟦32⟧ = text⟦at…at + 32⟧
+            stops ← ⎕mask((block = quote) ∨ (block = 92u8) ∨ (block < 32u8))
+        else:
+            let padded: mut u8⟦32⟧ = 32 ⍴ quote
+            padded⟦0…n - at⟧ ← text⟦at…n⟧
+            stops ← ⎕mask((padded = quote) ∨ (padded = 92u8) ∨ (padded < 32u8))
+        if stops ≠ 0u32:
+            return (at + ⎕unit(⎕widen(⎕trail(stops), ⌜u64⌝), ⌜idx⌝)) ⌊ n
+        at ← at + 32
+    n
+
+※ The same, a byte at a time.
+fn by_hand(text: u8⟦⟧, from: u64 ¤idx, quote: u8) → u64 ¤idx:
+    let at: mut u64 ¤idx = from
+    let n: u64 ¤idx = #text
+    while at < n and text⟦at⟧ ≠ quote and text⟦at⟧ ≠ 92u8 and text⟦at⟧ ≥ 32u8:
+        at ← at + 1
+    at
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ※ a quote, a backslash and a line's end now and then, in a run of letters
+    let text: mut [u8] = []
+    let i: mut u64 = 0u64
+    while i < 100u64:
+        if i = 36u64 or i = 73u64:
+            text ⧺← ⟦34u8⟧
+        elif i = 50u64:
+            text ⧺← ⟦92u8⟧
+        elif i = 90u64:
+            text ⧺← ⟦10u8⟧
+        else:
+            text ⧺← ⟦120u8⟧
+        i ← i + 1u64
+    let n: u64 ¤idx = #text
+    let from: mut u64 ¤idx = 0
+    while from ≤ n:
+        if stop_at(text, from, 34u8) ≠ by_hand(text, from, 34u8):
+            return 1u6
+        from ← from + 1
+    0u6

@@ -1,0 +1,1446 @@
+@[system]
+
+※※ JSON read out of bytes and written onto them.
+※
+※ Imported as `⎕import("json")`.  `decode` reads a document -- RFC 8259's, and
+※ what `Extensions` adds to it -- into a `Value` made in an arena the caller
+※ hands over, and `encode` writes a `Value` back as UTF-8, on one line or
+※ pretty-printed over several, into an arena as well.  `equal` says whether two
+※ values are one, and `finite` whether a value can be written as JSON.
+※
+※ Reading is simdjson's two stages, written in the language.  The first finds
+※ every character that matters -- the brackets, the commas and colons, where a
+※ string or another value begins -- sixty-four bytes at a time: the block is
+※ compared with each class of byte at once, the comparisons are gathered into
+※ the bits of a `u64` by `⎕mask`, and the strings are found by arithmetic on
+※ those bits -- the quotes a backslash escapes taken out, and what lies between
+※ two quotes by a prefix exclusive or.  The places are walked off the bits with
+※ `⎕trail` into a list.  The second stage reads the values from those places in
+※ one loop, with a stack of its own for what is open, so that how deep a
+※ document goes is not how deep the machine's stack does.  A string is read
+※ thirty-two bytes at a time to its first quote, backslash or control
+※ character, and copied out in one move.
+※
+※ What is read is put in the arena the caller names, and only there: every
+※ list and string of the document is made there, so a value goes into the list
+※ holding it as it is, and the whole document is given back at once when the
+※ arena is -- what simdjson's and yyjson's documents do with a pool of their own.
+※ What is written is made in an arena too, the heap keeping what it is given
+※ for as long as the program runs.
+
+unit ¤size → ¤idx
+
+let string := ⎕import("string")
+
+※ -- the types -----------------------------------------------------------------
+
+※※ A JSON value: what a document is, and what each element and member of one is.
+※※
+※※ \details A number is kept as it was written where that can be done exactly:
+※※ an `integer` where the text has no point and no exponent and the number fits
+※※ an `i64`, `large` where it is above that and fits a `u64`, and a `number` --
+※※ the `f64` nearest it -- otherwise.  An object is its members in the order the
+※※ document wrote them, keys written twice among them unless `decode` was told
+※※ otherwise.
+@[export]
+type Value = null : void | boolean : bool | integer : i64 | large : u64 | number : f64 | text : str | array : [Value] | object : [Member]
+
+※※ One member of an object: a key and what it stands for.
+@[export]
+type Member = key : str ; value : Value
+
+※※ What `decode` reads besides RFC 8259.
+※※
+※※ \details Flags, combined with `|`; `strict` is none of them and the default.
+※※
+※※ - `comments`: `//` to the end of the line and `/*` to `*/`, where white space
+※※   may stand.
+※※ - `hash_comments`: `#` to the end of the line, as YAML and many configuration
+※※   formats have it.
+※※ - `trailing_commas`: a comma after the last element of an array or member of
+※※   an object.
+※※ - `single_quotes`: a string between `'` and `'`, in which `"` stands for itself
+※※   and `\'` for a `'`.
+※※ - `unquoted_keys`: a key written as an identifier -- a letter, `_` or `$`, then
+※※   letters, digits, `_` and `$`; a byte above ASCII counts as a letter, and the
+※※   key is checked as UTF-8 as any string is.
+※※ - `special_numbers`: `NaN`, `Infinity` and `-Infinity`, spelt so.
+※※ - `hex_numbers`: `0x` and hexadecimal digits, a whole number.
+※※ - `leading_plus`: a `+` in front of a number.
+※※ - `loose_points`: a point with digits on one side of it only, `.5` and `5.`.
+※※ - `byte_order_mark`: the three bytes `EF BB BF` in front of the document.
+※※ - `control_characters`: a control character in a string as it is.
+※※ - `several`: more than one value at the top level, one after another --
+※※   JSON Lines, and documents simply concatenated; the answer is then an array of
+※※   them, however many there are.
+※※ - `lone_surrogates`: a `\u` escape of half a surrogate pair with no other half
+※※   stands for U+FFFD, the replacement character, rather than being refused.
+※※ - `escapes`: JSON5's further escapes -- `\'`, `\v`, `\0`, `\x` and two digits,
+※※   a backslash before a line's end standing for nothing, and any other
+※※   character after a backslash for itself.
+※※ - `whitespace`: JSON5's further white space -- vertical tab, form feed, U+00A0,
+※※   U+FEFF, U+2028, U+2029 and the spaces of Unicode's `Zs`.
+※※ - `json5`: all that JSON5 adds: `comments`, `trailing_commas`, `single_quotes`,
+※※   `unquoted_keys`, `special_numbers`, `hex_numbers`, `leading_plus`,
+※※   `loose_points`, `escapes` and `whitespace`.
+@[export, flag]
+enum Extensions : u32:
+    strict = 0 ;
+    comments = 1 ;
+    hash_comments = 2 ;
+    trailing_commas = 4 ;
+    single_quotes = 8 ;
+    unquoted_keys = 16 ;
+    special_numbers = 32 ;
+    hex_numbers = 64 ;
+    leading_plus = 128 ;
+    loose_points = 256 ;
+    byte_order_mark = 512 ;
+    control_characters = 1024 ;
+    several = 2048 ;
+    lone_surrogates = 4096 ;
+    escapes = 8192 ;
+    whitespace = 16384 ;
+    json5 = 25085
+
+※※ What `decode` does with a key an object has already had.
+※※
+※※ \details `keep` keeps every member as written, which is the default and what
+※※ a list of members can hold; `first` keeps the first and drops the rest;
+※※ `last` keeps the first one's place with the last one's value, which is what
+※※ Python and JavaScript do; `refuse` refuses the document.
+@[export]
+enum Duplicates:
+    keep ;
+    first ;
+    last ;
+    refuse
+
+※※ Why a document was refused.
+※※
+※※ \details
+※※ - `truncated`: the bytes ended where more of the document was wanted.
+※※ - `unexpected`: a byte stands where nothing it could begin or end may.
+※※ - `malformed_number`: a number begun and broken off, or written as JSON does
+※※   not write one -- a nought in front of another digit, a point with no digits
+※※   after it.
+※※ - `out_of_range`: a number beyond the largest `f64`.
+※※ - `bad_escape`: a backslash and something that is not an escape.
+※※ - `lone_surrogate`: a `\u` escape of half a surrogate pair, the other half not
+※※   after it.
+※※ - `control_character`: a byte below U+0020 in a string, unescaped.
+※※ - `not_utf8`: bytes in a string that are not UTF-8.
+※※ - `trailing`: something after the value, where only white space may be.
+※※ - `too_deep`: arrays and objects nested deeper than `decode` was told to go.
+※※ - `duplicate_key`: a key an object already had, under `Duplicates.refuse`.
+※※ - `too_large`: a document of four gigabytes or more, whose places do not fit
+※※   the 32 bits they are kept in.
+@[export]
+enum Problem:
+    truncated ;
+    unexpected ;
+    malformed_number ;
+    out_of_range ;
+    bad_escape ;
+    lone_surrogate ;
+    control_character ;
+    not_utf8 ;
+    trailing ;
+    too_deep ;
+    duplicate_key ;
+    too_large
+
+※※ A document refused: why, and where.
+※※
+※※ \details `at` is the offset of the byte the problem was found at, from the
+※※ first byte of the input; `line` and `column` say the same counted from one,
+※※ a line ending at each line feed and a column being a character, as an
+※※ editor shows it.
+@[export]
+type Error = problem : Problem ; at : u64 ¤idx ; line : u64 ; column : u64
+
+※ What the second stage is told, once for the whole document.
+type How = allow : Extensions ; duplicates : Duplicates
+
+※ A value read, and the place in the list of structural characters after it.
+type Read = value : Value ; next : u64 ¤idx
+
+※ A number or a literal read, and the place of the byte after it.
+type Scalar = value : Value ; end : u64 ¤idx
+
+※ -- bytes ---------------------------------------------------------------------
+
+※ Whether `flag` is among `allow`.
+@[inline]
+fn allows(allow: Extensions, flag: Extensions) → bool:
+    (allow & flag) = flag
+
+※ Whether a byte is the white space RFC 8259 has: space, tab, line feed and
+※ carriage return.
+@[inline]
+fn is_space(c: u8) → bool:
+    c = 32u8 or c = 10u8 or c = 13u8 or c = 9u8
+
+※ Whether a byte is one of the six structural characters: `{` and `[` differ by
+※ one bit, as do `}` and `]`, so one `|` asks about each pair.
+@[inline]
+fn is_operator(c: u8) → bool:
+    let folded: u8 = c | 32u8
+    folded = 123u8 or folded = 125u8 or c = 58u8 or c = 44u8
+
+※ How many bytes of JSON5's further white space begin at `at`: nought where
+※ none does.
+fn more_space(input: u8⟦⟧, at: u64 ¤idx) → u64 ¤idx:
+    let n: u64 ¤idx = #input
+    let c: u8 = input⟦at⟧
+    if c = 11u8 or c = 12u8:
+        return 1
+    if c = 0xC2u8 and at + 1 < n and input⟦at + 1⟧ = 0xA0u8:
+        return 2
+    if at + 2 ≥ n:
+        return 0
+    let second: u8 = input⟦at + 1⟧
+    let third: u8 = input⟦at + 2⟧
+    ※ U+FEFF, U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F, U+205F, U+3000
+    if c = 0xEFu8 and second = 0xBBu8 and third = 0xBFu8:
+        return 3
+    if c = 0xE1u8 and second = 0x9Au8 and third = 0x80u8:
+        return 3
+    if c = 0xE2u8 and second = 0x80u8 and (third ≤ 0x8Au8 or third = 0xA8u8 or third = 0xA9u8
+                                           or third = 0xAFu8):
+        return 3
+    if c = 0xE2u8 and second = 0x81u8 and third = 0x9Fu8:
+        return 3
+    if c = 0xE3u8 and second = 0x80u8 and third = 0x80u8:
+        return 3
+    0
+
+※ How many bytes of white space or a comment begin at `at`, as `allow` has them
+※ besides RFC 8259's four: nought where none does.  A comment not closed runs
+※ to the end.
+fn skipped(input: u8⟦⟧, at: u64 ¤idx, allow: Extensions) → u64 ¤idx:
+    let n: u64 ¤idx = #input
+    let c: u8 = input⟦at⟧
+    if is_space(c):
+        return 1
+    if c = 47u8 and allows(allow, Extensions.comments) and at + 1 < n:
+        let next: u8 = input⟦at + 1⟧
+        if next = 47u8:
+            let end: mut u64 ¤idx = at + 2
+            while §line end < n and input⟦end⟧ ≠ 10u8:
+                end ← end + 1
+            return end - at
+        if next = 42u8:
+            let end: mut u64 ¤idx = at + 2
+            while §block end + 1 < n and ¬(input⟦end⟧ = 42u8 and input⟦end + 1⟧ = 47u8):
+                end ← end + 1
+            return if end + 1 < n: end + 2 - at else: n - at
+    if c = 35u8 and allows(allow, Extensions.hash_comments):
+        let end: mut u64 ¤idx = at + 1
+        while §hash end < n and input⟦end⟧ ≠ 10u8:
+            end ← end + 1
+        return end - at
+    if allows(allow, Extensions.whitespace):
+        return more_space(input, at)
+    0
+
+※ -- the first stage -----------------------------------------------------------
+※
+※ What it answers is the place of every byte the second stage begins something
+※ at: the six structural characters, the quote opening a string, and the first
+※ byte of every other run of bytes that is neither white space nor structural --
+※ a number, a literal, a key without quotes, and anything that is none of them
+※ and will be refused where it stands.  A byte inside a string is none of these.
+※ The last place is the length of the input, so that the second stage finds the
+※ end the way it finds anything else.
+
+※ The bits of the 64-bit arithmetic: every odd bit, and every bit.
+let ODD_BITS: u64 = 0xAAAAAAAAAAAAAAAA
+let ALL_BITS: u64 = 0xFFFFFFFFFFFFFFFF
+
+※ What one block hands the next: whether its first byte is escaped, whether it
+※ begins inside a string (every bit, or none), whether the byte before it was
+※ part of a run that is not a string -- and, of this block, the bits of the
+※ bytes something begins at.
+type Carry = escaped : u64 ; inside : u64 ; scalar : u64 ; starts : u64
+
+※ The bytes something begins at in a block of sixty-four, and what the block
+※ after it is to be told.
+※
+※ **Escaped**: a byte after an odd run of backslashes.  Backslashes that begin a
+※ run on an even place, minus that run, carry into the byte after it where the
+※ run is odd -- which subtraction does for every run at once, the odd places
+※ brought in first and taken out after (simdjson's `json_escape_scanner`).
+※ **In a string**: a quote not escaped flips it, which is a prefix exclusive or
+※ of the quotes -- `x ^= x « 1`, `« 2`, and so on to `« 32`, the ladder a
+※ carry-less multiplication by all ones would be on a machine that has one --
+※ continued from the block before.  **Begins something**: a structural
+※ character, or a byte that is neither white space nor structural after one
+※ that is either -- a quote counted as the end of a run, so that what follows
+※ the end of a string begins again -- and not inside a string, the quote that
+※ opens one excepted.
+@[inline]
+fn block_starts(block: u8⟦64⟧, before: Carry) → Carry:
+    let quote: u64 = ⎕mask(block = 34u8)
+    let backslash: u64 = ⎕mask(block = 92u8)
+    let folded: u8⟦64⟧ = block | 32u8
+    let operator: u64 = ⎕mask((folded = 123u8) ∨ (folded = 125u8) ∨ (block = 58u8) ∨ (block = 44u8))
+    let space: u64 = ⎕mask((block = 32u8) ∨ (block = 10u8) ∨ (block = 13u8) ∨ (block = 9u8))
+    let escaped: mut u64 = before.escaped
+    let carried: mut u64 = 0u64
+    if backslash ≠ 0u64:
+        let potential: u64 = backslash & ~before.escaped
+        let codes: u64 = ⎕wrap(((potential « 1u64) | ODD_BITS) - potential) ^ ODD_BITS
+        escaped ← codes ^ (backslash | before.escaped)
+        carried ← (codes & backslash) » 63u64
+    let real: u64 = quote & ~escaped
+    let flipped: mut u64 = real
+    flipped ← flipped ^ (flipped « 1u64)
+    flipped ← flipped ^ (flipped « 2u64)
+    flipped ← flipped ^ (flipped « 4u64)
+    flipped ← flipped ^ (flipped « 8u64)
+    flipped ← flipped ^ (flipped « 16u64)
+    flipped ← flipped ^ (flipped « 32u64)
+    let in_string: u64 = flipped ^ before.inside
+    let scalar: u64 = ~(operator | space)
+    let plain: u64 = scalar & ~real
+    let follows: u64 = (plain « 1u64) | before.scalar
+    let begins: u64 = scalar & ~follows
+    let tail: u64 = in_string ^ real
+    Carry(.escaped ← carried, .inside ← ⎕wrap(0u64 - (in_string » 63u64)),
+          .scalar ← plain » 63u64, .starts ← (operator | begins) & ~tail)
+
+※ Where everything begins in `input`, from `start` on, sixty-four bytes at a
+※ time: RFC 8259's way of writing strings and white space, which is every
+※ extension's but the four `slowly` reads.  Each block is copied into room of
+※ its own -- the last one, short, into room of spaces, which begin nothing, so
+※ that it is read as the others are -- and its bits walked off with `⎕trail`,
+※ the lowest first, into room of the frame's, which is joined onto `found` in
+※ one move: a join is a call or three, a place written in the frame is not.  The places are made in `s`, an arena `decode`
+※ gives back when it is done with them.
+fn quickly(input: u8⟦⟧, start: u64 ¤idx, s: &mut arena) → [u32] in s:
+    let n: u64 ¤idx = #input
+    let found: mut [u32] = [] in s
+    ⎕reserve(found, (n - start) ÷ 4 ?? 0)
+    let carry: mut Carry = Carry(.escaped ← 0u64, .inside ← 0u64, .scalar ← 0u64, .starts ← 0u64)
+    let places: mut u32⟦64⟧ = 64 ⍴ 0u32
+    let at: mut u64 ¤idx = start
+    while §blocks at < n:
+        if at + 64 ≤ n:
+            let block: u8⟦64⟧ = input⟦at…at + 64⟧
+            carry ← block_starts(block, carry)
+        else:
+            let last: mut u8⟦64⟧ = 64 ⍴ 32u8
+            last⟦0…n - at⟧ ← input⟦at…n⟧
+            carry ← block_starts(last, carry)
+        ※ the block's places into room of the frame's, and joined on in one move
+        let base: u32 = ⎕narrow(⎕drop(at), ⌜u32⌝) ?? 0u32
+        let bits: mut u64 = carry.starts
+        let count: mut u64 ¤idx = 0
+        while §bits bits ≠ 0u64:
+            places⟦count⟧ ← base + ⎕widen(⎕trail(bits), ⌜u32⌝)
+            count ← count + 1
+            bits ← bits & ⎕wrap(bits - 1u64)
+        found ⧺← places⟦0…count⟧
+        at ← at + 64
+    found ⧺← ⟦⎕narrow(⎕drop(n), ⌜u32⌝) ?? 0u32⟧
+    found
+
+※ Where everything begins in `input`, from `start` on, a byte at a time: what
+※ `quickly` answers, for the extensions that change where a string or white
+※ space is -- comments of either kind, single quotes and JSON5's white space.
+※ The same rules otherwise, a backslash outside a string escaping the byte
+※ after it as it does inside one.
+fn slowly(input: u8⟦⟧, start: u64 ¤idx, allow: Extensions, s: &mut arena) → [u32] in s:
+    let n: u64 ¤idx = #input
+    let single: bool = allows(allow, Extensions.single_quotes)
+    let found: mut [u32] = [] in s
+    let at: mut u64 ¤idx = start
+    ※ whether the byte before was part of a run that is not a string, and
+    ※ whether it was a backslash escaping this one
+    let in_run: mut bool = false
+    let escaped: mut bool = false
+    while §bytes at < n:
+        let c: u8 = input⟦at⟧
+        let gap: u64 ¤idx = if escaped: 0 else: skipped(input, at, allow)
+        if gap ≠ 0:
+            in_run ← false
+            at ← at + gap
+        elif is_operator(c):
+            found ⧺← ⟦⎕narrow(⎕drop(at), ⌜u32⌝) ?? 0u32⟧
+            in_run ← false
+            escaped ← false
+            at ← at + 1
+        elif ¬escaped and (c = 34u8 or (c = 39u8 and single)):
+            if ¬in_run:
+                found ⧺← ⟦⎕narrow(⎕drop(at), ⌜u32⌝) ?? 0u32⟧
+            ※ to the quote that closes it, a backslash taking the byte after it
+            at ← at + 1
+            while §string at < n and input⟦at⟧ ≠ c:
+                at ← at + (if input⟦at⟧ = 92u8: 2 else: 1)
+            at ← at + 1
+            in_run ← false
+        else:
+            if ¬in_run:
+                found ⧺← ⟦⎕narrow(⎕drop(at), ⌜u32⌝) ?? 0u32⟧
+            in_run ← true
+            escaped ← c = 92u8 and ¬escaped
+            at ← at + 1
+    found ⧺← ⟦⎕narrow(⎕drop(n), ⌜u32⌝) ?? 0u32⟧
+    found
+
+※ -- refusing ------------------------------------------------------------------
+
+※ Why and where, as the second stage hands it up: two words, which travel in
+※ registers.  The line and the column are worked out once, for the one problem
+※ a document is refused with.
+type Fault = problem : Problem ; at : u64 ¤idx
+
+※ The error a fault is, with the line and the column it is on: a walk of the
+※ bytes before it, a line ending at each line feed and a column being a
+※ character -- every byte that does not continue a UTF-8 sequence.
+fn failure(input: u8⟦⟧, fault: Fault) → Error:
+    let line: mut u64 = 1u64
+    let column: mut u64 = 1u64
+    let i: mut u64 ¤idx = 0
+    let stop: u64 ¤idx = fault.at ⌊ ⎕unit(⎕drop(#input), ⌜idx⌝)
+    while §bytes i < stop:
+        let c: u8 = input⟦i⟧
+        if c = 10u8:
+            line ← line + 1u64
+            column ← 1u64
+        elif c & 0xC0u8 ≠ 0x80u8:
+            column ← column + 1u64
+        i ← i + 1
+    Error(.problem ← fault.problem, .at ← fault.at, .line ← line, .column ← column)
+
+※ -- the second stage ----------------------------------------------------------
+※
+※ A value is read from the place of its first byte among those the first stage
+※ found, and answers the place after its last.  Arrays and objects are read
+※ without recursion, as simdjson's second stage reads them: what is open is a
+※ stack of its own, so how deep a document goes costs a record on that stack
+※ and not a frame of the machine's -- `depth` is a policy, not what keeps the
+※ program on its stack.  What has been read and not yet put in an array or an
+※ object is a list of its own, `pending`, which is reused as the document is
+※ read; an array or an object, once closed, is made of what is on the top of it
+※ in one list exactly as long as it has to be, and what it was made of is room
+※ for what comes next.
+
+※ The place of the `k`-th thing the first stage found.
+@[inline]
+fn place_of(index: u32⟦⟧, k: u64 ¤idx) → u64 ¤idx:
+    ⎕unit(⎕widen(index⟦k⟧, ⌜u64⌝), ⌜idx⌝)
+
+※ The byte at `at`, and nought at the end of the input -- which is never a
+※ place a value begins at, a nought byte outside a string being refused where
+※ it stands.
+@[inline]
+fn byte_at(input: u8⟦⟧, at: u64 ¤idx) → u8:
+    if at < ⎕unit(⎕drop(#input), ⌜idx⌝): input⟦at⟧ else: 0u8
+
+※ A byte at `at` that cannot stand there: `truncated` where it is the end.
+fn misplaced(input: u8⟦⟧, at: u64 ¤idx) → Fault:
+    let n: u64 ¤idx = #input
+    Fault(.problem ← if at ≥ n: Problem.truncated else: Problem.unexpected, .at ← at)
+
+※ Whether something that is not a string may end just before `at`: at the end,
+※ before white space, a structural character or a comment.
+fn ends_here(input: u8⟦⟧, at: u64 ¤idx, allow: Extensions) → bool:
+    let n: u64 ¤idx = #input
+    if at ≥ n:
+        return true
+    let c: u8 = input⟦at⟧
+    is_space(c) or is_operator(c) or (allow ≠ Extensions.strict and skipped(input, at, allow) ≠ 0)
+
+※ Whether a byte opens an array or an object.
+@[inline]
+fn opens(c: u8) → bool:
+    (c | 32u8) = 123u8
+
+※ A value that is neither an array nor an object, at the `k`-th place.
+※
+※ Kept a call of its own: put where `tree_at` calls it, its strings and numbers
+※ would make that frame larger than RISC-V reaches with an offset.
+@[inline(never)]
+fn leaf_at(input: u8⟦⟧, index: u32⟦⟧, k: u64 ¤idx, a: &mut arena, how: How) → Value ? Fault in a:
+    let at: u64 ¤idx = place_of(index, k)
+    let c: u8 = byte_at(input, at)
+    if c = 34u8 or (c = 39u8 and allows(how.allow, Extensions.single_quotes)):
+        return Value(.text ← string_at(input, at, a, how.allow)?)
+    let one: Scalar = scalar_at(input, at, how.allow)?
+    if ¬ends_here(input, one.end, how.allow):
+        return ⊥ Fault(.problem ← Problem.unexpected, .at ← one.end)
+    one.value
+
+※ An array or an object open: where in `pending` its values begin, where in
+※ the keys its keys do, and which of the two it is.
+type Open = values : u64 ¤idx ; keys : u64 ¤idx ; object : bool
+
+※ How many elements a list has, as a place among them.
+@[inline]
+fn held(l: [T']) → u64 ¤idx:
+    ⎕unit(⎕drop(#l), ⌜idx⌝)
+
+※ The key of a member at the `k`-th place, and the colon after it; the value
+※ begins two places on.
+fn member_at(input: u8⟦⟧, index: u32⟦⟧, k: u64 ¤idx, a: &mut arena, how: How) → str ? Fault in a:
+    let key: str = key_at(input, place_of(index, k), a, how.allow)?
+    let colon: u64 ¤idx = place_of(index, k + 1)
+    if byte_at(input, colon) ≠ 58u8:
+        return ⊥ misplaced(input, colon)
+    key
+
+※ The `count` values from `first` on, as a list exactly as long.
+fn elements_of(pending: [Value] in a, first: u64 ¤idx, count: u64 ¤idx, a: &mut arena) → [Value] in a:
+    let items: mut [Value] = [] in a
+    ⎕reserve(items, count)
+    let i: mut u64 ¤idx = 0
+    while §items i < count:
+        items ⧺← [pending⟦first + i⟧]
+        i ← i + 1
+    items
+
+※ The `count` members of the object `open` says, its keys among `keys` and its
+※ values among `pending`, as a list exactly as long.
+fn members_of(keys: [str] in a, pending: [Value] in a, open: Open, count: u64 ¤idx,
+              a: &mut arena) → [Member] in a:
+    let members: mut [Member] = [] in a
+    ⎕reserve(members, count)
+    let i: mut u64 ¤idx = 0
+    while §members i < count:
+        members ⧺← [Member(.key ← keys⟦open.keys + i⟧, .value ← pending⟦open.values + i⟧)]
+        i ← i + 1
+    members
+
+※ The value whose first byte is the `k`-th place, and the place after it.
+※
+※ One loop: a value is read where one begins, and after it what it ends is
+※ closed -- an array or an object made of what is on top of `pending`, put
+※ there in its stead -- until what comes next is a comma, and another value, or
+※ nothing is open any more.  `live` is how much of `pending` is in use; above
+※ it, elements already there are written over rather than joined on.
+fn tree_at(input: u8⟦⟧, index: u32⟦⟧, start: u64 ¤idx, depth: u64, a: &mut arena,
+           how: How) → Read ? Fault in a:
+    let trailing: bool = allows(how.allow, Extensions.trailing_commas)
+    let checked: bool = how.duplicates ≠ Duplicates.keep
+    let pending: mut [Value] = [] in a
+    let live: mut u64 ¤idx = 0
+    let keys: mut [str] = [] in a
+    let keys_live: mut u64 ¤idx = 0
+    ※ where each key was, beside it, for a policy that refuses one written twice
+    let spots: mut [u32] = [] in a
+    let open: mut [Open] = [] in a
+    let k: mut u64 ¤idx = start
+    while §values true:
+        let at: u64 ¤idx = place_of(index, k)
+        let c: u8 = byte_at(input, at)
+        if opens(c):
+            if ⎕drop(#open) ≥ depth:
+                return ⊥ Fault(.problem ← Problem.too_deep, .at ← at)
+            if byte_at(input, place_of(index, k + 1)) ≠ c + 2u8:
+                open ⧺← [Open(.values ← live, .keys ← keys_live, .object ← c = 123u8)]
+                k ← k + 1
+                if c = 123u8:
+                    let key: str = member_at(input, index, k, a, how)?
+                    if keys_live < held(keys):
+                        keys⟦keys_live⟧ ← key
+                        spots⟦keys_live⟧ ← index⟦k⟧
+                    else:
+                        keys ⧺← [key]
+                        spots ⧺← ⟦index⟦k⟧⟧
+                    keys_live ← keys_live + 1
+                    k ← k + 2
+                continue §values
+        ※ a value that is not open: a leaf, or empty and closed where it opened
+        let made: mut Value = if ¬opens(c):
+            k ← k + 1
+            leaf_at(input, index, k - 1, a, how)?
+        else:
+            k ← k + 2
+            if c = 91u8: Value(.array ← [] in a) else: Value(.object ← [] in a)
+        ※ the value read, on top of what is pending; and then what it ends
+        while §closing true:
+            if #open = 0:
+                return Read(.value ← made, .next ← k)
+            if live < held(pending):
+                pending⟦live⟧ ← made
+            else:
+                pending ⧺← [made]
+            live ← live + 1
+            let top: Open = open⟦#open - 1⟧
+            let closer: u8 = if top.object: 125u8 else: 93u8
+            let after: u64 ¤idx = place_of(index, k)
+            let next: u8 = byte_at(input, after)
+            k ← k + 1
+            if next = 44u8:
+                if ¬(trailing and byte_at(input, place_of(index, k)) = closer):
+                    if top.object:
+                        let key: str = member_at(input, index, k, a, how)?
+                        if keys_live < held(keys):
+                            keys⟦keys_live⟧ ← key
+                            spots⟦keys_live⟧ ← index⟦k⟧
+                        else:
+                            keys ⧺← [key]
+                            spots ⧺← ⟦index⟦k⟧⟧
+                        keys_live ← keys_live + 1
+                        k ← k + 2
+                    continue §values
+                k ← k + 1
+            elif next ≠ closer:
+                return ⊥ misplaced(input, after)
+            ※ closed: made of what is on top of `pending`, which is room again
+            let count: u64 ¤idx = live - top.values
+            if top.object:
+                let members: [Member] = members_of(keys, pending, top, count, a)
+                made ← if checked:
+                    Value(.object ← settled(members, spots⟦top.keys…top.keys + count⟧, a, how.duplicates)?)
+                else:
+                    Value(.object ← members)
+                keys_live ← top.keys
+            else:
+                made ← Value(.array ← elements_of(pending, top.values, count, a))
+            live ← top.values
+            †open⟦#open - 1⟧
+    ※ never reached: every way out of the loop is a `return`
+    ⊥ Fault(.problem ← Problem.truncated, .at ← place_of(index, k))
+
+※ The members of an object a key written twice is settled in as `duplicates`
+※ says: the first kept and the rest dropped, the first's place with the last's
+※ value, or the document refused at the second.  `keys` is where each key was.
+※
+※ A table says which keys there were and where each went in what is kept.
+fn settled(members: [Member] in a, keys: u32⟦⟧, a: &mut arena,
+           duplicates: Duplicates) → [Member] ? Fault in a:
+    let kept: mut [Member] = [] in a
+    let seen: mut ⸨str: u64⸩ = ⸨⸩ in a
+    let last: bool = duplicates = Duplicates.last
+    let i: mut u64 ¤idx = 0
+    let count: u64 ¤idx = #members
+    while §members i < count:
+        let key: str = members⟦i⟧.key
+        match seen⸨key⸩:
+            u64(earlier):
+                if duplicates = Duplicates.refuse:
+                    return ⊥ Fault(.problem ← Problem.duplicate_key, .at ← place_of(keys, i))
+                if last:
+                    kept⟦⎕unit(earlier, ⌜idx⌝)⟧.value ← members⟦i⟧.value
+            ⊥:
+                seen⸨key⸩ ← ⎕drop(#kept)
+                kept ⧺← [members⟦i⟧]
+        i ← i + 1
+    kept
+
+※ A key, at `at`: a string, or with `unquoted_keys` an identifier.
+fn key_at(input: u8⟦⟧, at: u64 ¤idx, a: &mut arena, allow: Extensions) → str ? Fault in a:
+    let c: u8 = byte_at(input, at)
+    if c = 34u8 or (c = 39u8 and allows(allow, Extensions.single_quotes)):
+        return string_at(input, at, a, allow)
+    if ¬allows(allow, Extensions.unquoted_keys) or ¬is_identifier(c, true):
+        return ⊥ misplaced(input, at)
+    let n: u64 ¤idx = #input
+    let end: mut u64 ¤idx = at + 1
+    while §letters end < n and is_identifier(input⟦end⟧, false):
+        end ← end + 1
+    if ¬ends_here(input, end, allow):
+        return ⊥ Fault(.problem ← Problem.unexpected, .at ← end)
+    match ⎕text(input⟦at…end⟧) in a:
+        str(key):
+            key
+        ⊥(bad):
+            ⊥ Fault(.problem ← Problem.not_utf8, .at ← at + ⎕unit(bad, ⌜idx⌝))
+
+※ Whether a byte may stand in an identifier, first or after: ASCII's letters,
+※ `_`, `$`, any byte above ASCII, and after the first the digits.
+fn is_identifier(c: u8, first: bool) → bool:
+    let letter: u8 = ⎕wrap((c | 32u8) - 97u8)
+    letter < 26u8 or c = 95u8 or c = 36u8 or c ≥ 0x80u8 or (¬first and ⎕wrap(c - 48u8) < 10u8)
+
+※ -- strings -------------------------------------------------------------------
+
+※ The string whose opening quote is at `at`, as text made in `a`.
+※
+※ Thirty-two bytes at a time, to the first byte that is a quote, a backslash or
+※ a control character (`stop_at`): where that is the closing quote, the bytes
+※ between are the string, checked and copied by `⎕text` in one move.  Where it
+※ is a backslash, the rest is read by `escaped`, which goes from one of them to
+※ the next the same way.
+fn string_at(input: u8⟦⟧, at: u64 ¤idx, a: &mut arena, allow: Extensions) → str ? Fault in a:
+    let n: u64 ¤idx = #input
+    let quote: u8 = input⟦at⟧
+    let begin: u64 ¤idx = at + 1
+    let end: mut u64 ¤idx = begin
+    let raw: bool = allows(allow, Extensions.control_characters)
+    while §scan true:
+        end ← stop_at(input, end, quote)
+        if end ≥ n:
+            return ⊥ Fault(.problem ← Problem.truncated, .at ← n)
+        let c: u8 = input⟦end⟧
+        if c = quote:
+            break §scan
+        if c = 92u8:
+            return escaped(input, begin, end, a, allow)
+        if ¬raw:
+            return ⊥ Fault(.problem ← Problem.control_character, .at ← end)
+        end ← end + 1
+    match ⎕text(input⟦begin…end⟧) in a:
+        str(text):
+            text
+        ⊥(bad):
+            ⊥ Fault(.problem ← Problem.not_utf8, .at ← begin + ⎕unit(bad, ⌜idx⌝))
+
+※ The place of the first quote, backslash or control character from `from` on,
+※ or the end: thirty-two bytes at a time, the last block copied into room of
+※ quotes, so that it is read as the others are and stops where the bytes do.
+@[inline]
+fn stop_at(input: u8⟦⟧, from: u64 ¤idx, quote: u8) → u64 ¤idx:
+    let n: u64 ¤idx = #input
+    let at: mut u64 ¤idx = from
+    while §blocks true:
+        let stops: mut u32 = 0u32
+        if at + 32 ≤ n:
+            let block: u8⟦32⟧ = input⟦at…at + 32⟧
+            stops ← ⎕mask((block = quote) ∨ (block = 92u8) ∨ (block < 32u8))
+        else:
+            let last: mut u8⟦32⟧ = 32 ⍴ quote
+            last⟦0…n - at⟧ ← input⟦at…n⟧
+            stops ← ⎕mask((last = quote) ∨ (last = 92u8) ∨ (last < 32u8))
+        if stops ≠ 0u32:
+            return (at + ⎕unit(⎕widen(⎕trail(stops), ⌜u64⌝), ⌜idx⌝)) ⌊ n
+        at ← at + 32
+    n
+
+※ The rest of a string with an escape in it: `begin` is its first byte and
+※ `from` the first backslash.  What it stands for is gathered in a list -- the
+※ runs between escapes in one move each -- and made text once it is all there.
+※ The list is the arena's, as the text is: one of the heap's would be the
+※ program's for as long as it runs, and the bytes it holds are no more than the
+※ string's.
+fn escaped(input: u8⟦⟧, begin: u64 ¤idx, from: u64 ¤idx, a: &mut arena,
+           allow: Extensions) → str ? Fault in a:
+    let n: u64 ¤idx = #input
+    let quote: u8 = input⟦begin - 1⟧
+    let raw: bool = allows(allow, Extensions.control_characters)
+    let more: bool = allows(allow, Extensions.escapes)
+    let out: mut [u8] = [] in a
+    out ⧺← input⟦begin…from⟧
+    let at: mut u64 ¤idx = from
+    while §runs true:
+        if at ≥ n:
+            return ⊥ Fault(.problem ← Problem.truncated, .at ← n)
+        let c: u8 = input⟦at⟧
+        if c = quote:
+            break §runs
+        if c = 92u8:
+            if at + 1 ≥ n:
+                return ⊥ Fault(.problem ← Problem.truncated, .at ← n)
+            let e: u8 = input⟦at + 1⟧
+            let simple: u8 = simple_escape(e, quote, more)
+            if simple ≠ 0u8:
+                out ⧺← ⟦simple⟧
+                at ← at + 2
+            elif e = 117u8:
+                let code: Code = unicode_escape(input, at, allow)?
+                out ← code_point(code.point, out, a)
+                at ← code.end
+            elif more:
+                let skip: u64 ¤idx = json5_escape(input, at)
+                if skip = 0:
+                    return ⊥ Fault(.problem ← Problem.bad_escape, .at ← at)
+                if e = 48u8:
+                    out ⧺← ⟦0u8⟧
+                elif e = 120u8:
+                    let high: u8 = string.digit_value(input⟦at + 2⟧) ?? 0u8
+                    let low: u8 = string.digit_value(input⟦at + 3⟧) ?? 0u8
+                    out ← code_point(⎕widen(high × 16u8 + low, ⌜u32⌝), out, a)
+                elif ¬line_end(input, at + 1):
+                    ※ any other character stands for itself, all its bytes; a line's
+                    ※ end after a backslash stands for nothing
+                    out ⧺← input⟦at + 1…at + skip⟧
+                at ← at + skip
+            else:
+                return ⊥ Fault(.problem ← Problem.bad_escape, .at ← at)
+        elif c < 32u8 and ¬raw:
+            return ⊥ Fault(.problem ← Problem.control_character, .at ← at)
+        else:
+            ※ a run of bytes that are none of the three, in one move
+            let run: u64 ¤idx = stop_at(input, at + 1, quote)
+            out ⧺← input⟦at…run⟧
+            at ← run
+    match ⎕text(out) in a:
+        str(text):
+            text
+        ⊥(_):
+            ⊥ Fault(.problem ← Problem.not_utf8, .at ← ill_formed(input, begin, at))
+
+※ A code point written onto `into` as UTF-8, one byte to four.
+fn code_point(n: u32, into: mut [u8] in a, a: &mut arena) → [u8] in a:
+    if n < 0x80u32:
+        into ⧺← ⟦low_byte(n)⟧
+    elif n < 0x800u32:
+        into ⧺← ⟦low_byte(0xC0u32 | (n » 6u32)), low_byte(0x80u32 | (n & 0x3Fu32))⟧
+    elif n < 0x10000u32:
+        into ⧺← ⟦low_byte(0xE0u32 | (n » 12u32)), low_byte(0x80u32 | ((n » 6u32) & 0x3Fu32)),
+                 low_byte(0x80u32 | (n & 0x3Fu32))⟧
+    else:
+        into ⧺← ⟦low_byte(0xF0u32 | (n » 18u32)), low_byte(0x80u32 | ((n » 12u32) & 0x3Fu32)),
+                 low_byte(0x80u32 | ((n » 6u32) & 0x3Fu32)), low_byte(0x80u32 | (n & 0x3Fu32))⟧
+    into
+
+※ The low byte of a number known to fit one.
+fn low_byte(n: u32) → u8:
+    ⎕narrow(n, ⌜u8⌝) ?? 0u8
+
+※ What a one-character escape stands for, the character after the backslash
+※ being `e`: nought where it is not one.  `\'` is one inside single quotes, and
+※ with JSON5's escapes; `\v` with them.
+fn simple_escape(e: u8, quote: u8, more: bool) → u8:
+    if e = 34u8 or e = 92u8 or e = 47u8:
+        e
+    elif e = 110u8:
+        10u8
+    elif e = 116u8:
+        9u8
+    elif e = 114u8:
+        13u8
+    elif e = 98u8:
+        8u8
+    elif e = 102u8:
+        12u8
+    elif e = 39u8 and (quote = 39u8 or more):
+        39u8
+    elif e = 118u8 and more:
+        11u8
+    else:
+        0u8
+
+※ How many bytes one of JSON5's further escapes takes, from its backslash at
+※ `at`: `\0` not before a digit, `\x` and two hexadecimal digits, a backslash
+※ before a line feed, a carriage return (and a line feed after it), U+2028 or
+※ U+2029 -- which stand for nothing -- and a backslash before any other
+※ character but a digit, which stands for that character.  Nought where it is
+※ none of them.
+fn json5_escape(input: u8⟦⟧, at: u64 ¤idx) → u64 ¤idx:
+    let n: u64 ¤idx = #input
+    let e: u8 = input⟦at + 1⟧
+    if e = 48u8:
+        return if at + 2 < n and ⎕wrap(input⟦at + 2⟧ - 48u8) < 10u8: 0 else: 2
+    if ⎕wrap(e - 49u8) < 9u8:
+        return 0
+    if e = 120u8:
+        if (at + 3 < n and (string.digit_value(input⟦at + 2⟧) ?? 99u8) < 16u8
+                and (string.digit_value(input⟦at + 3⟧) ?? 99u8) < 16u8):
+            return 4
+        return 0
+    if e = 10u8:
+        return 2
+    if e = 13u8:
+        return if at + 2 < n and input⟦at + 2⟧ = 10u8: 3 else: 2
+    if e = 0xE2u8 and at + 3 < n and input⟦at + 2⟧ = 0x80u8 and (input⟦at + 3⟧ = 0xA8u8
+                                                              or input⟦at + 3⟧ = 0xA9u8):
+        return 4
+    if e < 0x80u8:
+        return 2
+    ※ a character of more than one byte, which stands for itself whole -- as many
+    ※ bytes as its leading one says, which `⎕text` checks with the rest
+    let length: u64 ¤idx = if e ≥ 0xF0u8: 4 elif e ≥ 0xE0u8: 3 else: 2
+    if at + 1 + length > n:
+        return 0
+    1 + length
+
+※ Whether a line ends at `at`: a line feed, a carriage return, U+2028 or U+2029.
+fn line_end(input: u8⟦⟧, at: u64 ¤idx) → bool:
+    let c: u8 = input⟦at⟧
+    (c = 10u8 or c = 13u8
+        or (c = 0xE2u8 and at + 2 < ⎕unit(⎕drop(#input), ⌜idx⌝) and input⟦at + 1⟧ = 0x80u8
+            and (input⟦at + 2⟧ = 0xA8u8 or input⟦at + 2⟧ = 0xA9u8)))
+
+※ A code point a `\u` escape names, and the place after the escape.
+type Code = point : u32 ; end : u64 ¤idx
+
+※ The four hexadecimal digits at `at`, as a number: nothing where they are not
+※ four of them.
+fn four_digits(input: u8⟦⟧, at: u64 ¤idx) → u32?:
+    if at + 4 > ⎕unit(⎕drop(#input), ⌜idx⌝):
+        return ⊥
+    let value: mut u32 = 0u32
+    let i: mut u64 ¤idx = 0
+    while §digits i < 4:
+        let d: u8 = string.digit_value(input⟦at + i⟧) ?? 99u8
+        if d ≥ 16u8:
+            return ⊥
+        value ← (value « 4u32) | ⎕widen(d, ⌜u32⌝)
+        i ← i + 1
+    value
+
+※ The code point of the `\u` escape whose backslash is at `at`: a pair of them
+※ where the first is the high half of a surrogate pair and the second the low,
+※ and U+FFFD for half a pair alone where `lone_surrogates` says so.
+fn unicode_escape(input: u8⟦⟧, at: u64 ¤idx, allow: Extensions) → Code ? Fault:
+    let first: u32 = four_digits(input, at + 2) ?? 0x110000u32
+    if first = 0x110000u32:
+        return ⊥ Fault(.problem ← Problem.bad_escape, .at ← at)
+    if first < 0xD800u32 or first > 0xDFFFu32:
+        return Code(.point ← first, .end ← at + 6)
+    let lone: bool = allows(allow, Extensions.lone_surrogates)
+    if first ≤ 0xDBFFu32 and byte_at(input, at + 6) = 92u8 and byte_at(input, at + 7) = 117u8:
+        let second: u32 = four_digits(input, at + 8) ?? 0x110000u32
+        if second = 0x110000u32:
+            return ⊥ Fault(.problem ← Problem.bad_escape, .at ← at + 6)
+        if second ≥ 0xDC00u32 and second ≤ 0xDFFFu32:
+            return Code(.point ← 0x10000u32 + ((first - 0xD800u32) « 10u32) + (second - 0xDC00u32),
+                        .end ← at + 12)
+    if lone:
+        return Code(.point ← 0xFFFDu32, .end ← at + 6)
+    ⊥ Fault(.problem ← Problem.lone_surrogate, .at ← at)
+
+※ Where the first byte that is not UTF-8 is in a string with escapes in it,
+※ from `begin` to `end`: the escapes stepped over, what is between read a
+※ character at a time.  Asked only once the string is known to hold one.
+fn ill_formed(input: u8⟦⟧, begin: u64 ¤idx, end: u64 ¤idx) → u64 ¤idx:
+    let at: mut u64 ¤idx = begin
+    while §characters at < end:
+        let c: u8 = input⟦at⟧
+        if c = 92u8:
+            at ← at + 2
+        elif c < 0x80u8:
+            at ← at + 1
+        else:
+            match string.decode_char(input⟦at…end⟧):
+                string.Parsed(char)(p):
+                    at ← at + p.end
+                ⊥:
+                    return at
+    ※ only an escape of JSON5's, a character after a backslash, is left
+    begin
+
+※ -- numbers and literals ------------------------------------------------------
+
+※ What `allow` asks of `std.string`'s readers.
+fn number_allow(allow: Extensions) → string.Allow:
+    let found: mut string.Allow = string.Allow.json
+    if allows(allow, Extensions.leading_plus):
+        found ← found | string.Allow.plus
+    if allows(allow, Extensions.hex_numbers):
+        found ← found | string.Allow.hex
+    if allows(allow, Extensions.loose_points):
+        found ← found | string.Allow.loose
+    found
+
+※ Whether the bytes at `at` are `word`.
+fn spelled(input: u8⟦⟧, at: u64 ¤idx, word: u8⟦⟧) → bool:
+    let length: u64 ¤idx = #word
+    if at + length > ⎕unit(⎕drop(#input), ⌜idx⌝):
+        return false
+    let i: mut u64 ¤idx = 0
+    while §letters i < length:
+        if input⟦at + i⟧ ≠ word⟦i⟧:
+            return false
+        i ← i + 1
+    true
+
+※ A literal or a number at `at`, and where it ends.
+fn scalar_at(input: u8⟦⟧, at: u64 ¤idx, allow: Extensions) → Scalar ? Fault in ⎕static:
+    let c: u8 = byte_at(input, at)
+    if c = 116u8:
+        if spelled(input, at, ⎕bytes("true")):
+            return Scalar(.value ← Value(.boolean ← true), .end ← at + 4)
+        return ⊥ Fault(.problem ← Problem.unexpected, .at ← at)
+    if c = 102u8:
+        if spelled(input, at, ⎕bytes("false")):
+            return Scalar(.value ← Value(.boolean ← false), .end ← at + 5)
+        return ⊥ Fault(.problem ← Problem.unexpected, .at ← at)
+    if c = 110u8:
+        if spelled(input, at, ⎕bytes("null")):
+            return Scalar(.value ← Value(.null ← true), .end ← at + 4)
+        return ⊥ Fault(.problem ← Problem.unexpected, .at ← at)
+    number_at(input, at, allow)
+
+※ A number at `at`, and where it ends.
+※
+※ Whole numbers of up to nineteen digits are read here, a load, a comparison and
+※ a multiplication a digit, and are an `integer` or a `large` as they fit.
+※ What has a point, an exponent or more digits is handed to `std.string`'s
+※ `parse_f64`, from the start again; a hexadecimal number to its `parse_int`.
+fn number_at(input: u8⟦⟧, at: u64 ¤idx, allow: Extensions) → Scalar ? Fault in ⎕static:
+    let n: u64 ¤idx = #input
+    let c: u8 = byte_at(input, at)
+    let negative: bool = c = 45u8
+    let signed: bool = negative or (c = 43u8 and allows(allow, Extensions.leading_plus))
+    let begin: u64 ¤idx = if signed: at + 1 else: at
+    let first: u8 = byte_at(input, begin)
+    if (first = 78u8 or first = 73u8) and allows(allow, Extensions.special_numbers):
+        return special_at(input, at, begin, negative)
+    let w: mut u64 = 0u64
+    let end: mut u64 ¤idx = begin
+    while §digits end < n:
+        let d: u8 = ⎕wrap(input⟦end⟧ - 48u8)
+        if d ≥ 10u8:
+            break §digits
+        w ← ⎕wrap(w × 10u64 + ⎕widen(d, ⌜u64⌝))
+        end ← end + 1
+    let digits: u64 ¤idx = end - begin
+    let next: u8 = byte_at(input, end)
+    let whole: bool = next ≠ 46u8 and (next | 32u8) ≠ 101u8 and (next | 32u8) ≠ 120u8
+    if digits ≥ 1 and digits ≤ 19 and whole:
+        if digits > 1 and first = 48u8:
+            return ⊥ Fault(.problem ← Problem.malformed_number, .at ← at)
+        if ¬negative:
+            if w ≤ 0x7FFFFFFFFFFFFFFFu64:
+                return Scalar(.value ← Value(.integer ← ⎕narrow(w, ⌜i64⌝) ?? 0i64), .end ← end)
+            return Scalar(.value ← Value(.large ← w), .end ← end)
+        if w ≤ 0x8000000000000000u64:
+            ※ -(w - 1) - 1, which the smallest i64 also fits
+            let below: i64 = ⁻1i64 - (⎕narrow(⎕wrap(w - 1u64), ⌜i64⌝) ?? 0i64)
+            return Scalar(.value ← Value(.integer ← if w = 0u64: 0i64 else: below), .end ← end)
+    if digits = 0 and first ≠ 46u8:
+        return ⊥ Fault(.problem ← if begin ≥ n: Problem.truncated else: Problem.unexpected, .at ← begin)
+    if digits > 1 and first = 48u8:
+        return ⊥ Fault(.problem ← Problem.malformed_number, .at ← at)
+    let numbers: string.Allow = number_allow(allow)
+    if (next | 32u8) = 120u8 and digits = 1 and first = 48u8 and allows(allow, Extensions.hex_numbers):
+        return hex_at(input, at, numbers)
+    if whole and digits ≥ 1:
+        ※ more than nineteen digits: a large one, if it fits
+        ※ too large for that too, it is the f64 nearest it, as any other is
+        if ¬negative:
+            match string.parse_int(input⟦at…n⟧, ⌜u64⌝, .allow ← numbers):
+                string.Parsed(u64)(p):
+                    return Scalar(.value ← Value(.large ← p.value), .end ← at + p.end)
+                ⊥(why):
+                    if why ≠ string.ParseError.out_of_range:
+                        return ⊥ Fault(.problem ← Problem.malformed_number, .at ← at)
+    match string.parse_f64(input⟦at…n⟧, numbers):
+        string.Parsed(f64)(p):
+            Scalar(.value ← Value(.number ← p.value), .end ← at + p.end)
+        ⊥(why):
+            ⊥ Fault(.problem ← if why = string.ParseError.out_of_range: Problem.out_of_range
+                             else: Problem.malformed_number, .at ← at)
+
+※ A hexadecimal whole number at `at`: an `integer` where it fits one, a `large`
+※ where it is positive and fits that.
+fn hex_at(input: u8⟦⟧, at: u64 ¤idx, numbers: string.Allow) → Scalar ? Fault in ⎕static:
+    let n: u64 ¤idx = #input
+    match string.parse_int(input⟦at…n⟧, ⌜i64⌝, .allow ← numbers):
+        string.Parsed(i64)(p):
+            return Scalar(.value ← Value(.integer ← p.value), .end ← at + p.end)
+        ⊥(why):
+            if why ≠ string.ParseError.out_of_range:
+                return ⊥ Fault(.problem ← Problem.malformed_number, .at ← at)
+    match string.parse_int(input⟦at…n⟧, ⌜u64⌝, .allow ← numbers):
+        string.Parsed(u64)(p):
+            Scalar(.value ← Value(.large ← p.value), .end ← at + p.end)
+        ⊥(why):
+            ⊥ Fault(.problem ← if why = string.ParseError.out_of_range: Problem.out_of_range
+                             else: Problem.malformed_number, .at ← at)
+
+※ `NaN` or `Infinity` at `begin`, after a sign at `at` where there is one.
+fn special_at(input: u8⟦⟧, at: u64 ¤idx, begin: u64 ¤idx, negative: bool) → Scalar ? Fault in ⎕static:
+    let sign: u64 = if negative: 0x8000000000000000u64 else: 0u64
+    if spelled(input, begin, ⎕bytes("NaN")):
+        return Scalar(.value ← Value(.number ← ⎕from_bits(0x7FF8000000000000u64 | sign, ⌜f64⌝)),
+                             .end ← begin + 3)
+    if spelled(input, begin, ⎕bytes("Infinity")):
+        return Scalar(.value ← Value(.number ← ⎕from_bits(0x7FF0000000000000u64 | sign, ⌜f64⌝)),
+                             .end ← begin + 8)
+    ⊥ Fault(.problem ← Problem.unexpected, .at ← at)
+
+※ -- decoding ------------------------------------------------------------------
+
+※※ A JSON document read out of bytes, into `a`.
+※※
+※※ \details The bytes are RFC 8259's JSON, and what *allow* adds to it; one value,
+※※ with white space around it, or with `Extensions.several` any number of them,
+※※ answered as an array.  The text is UTF-8, the strings are checked as such, and
+※※ an escape names a code point: a surrogate pair is the one character, and half
+※※ of one alone is refused unless `lone_surrogates` says otherwise.  *depth* is
+※※ how deeply arrays and objects may be nested, which bounds how much of the
+※※ stack reading one takes -- a hostile document of a million `[` is refused,
+※※ not a program run off its stack.  *duplicates* is what is done with a key an
+※※ object already had.
+※※
+※※ Everything the value holds is made in `a`, and lives as long as it does.
+※※
+※※ \param bytes the document
+※※ \param a where the value is made
+※※ \param allow what is read besides RFC 8259
+※※ \param depth how many arrays and objects deep the document may go
+※※ \param duplicates what is done with a key written twice in one object
+※※ \return the value
+※※ \raises the problem and where it is, the first one found
+@[export]
+fn decode(bytes: u8⟦⟧, a: &mut arena, allow: Extensions ← Extensions.strict,
+          depth: u64 ← 1024u64, duplicates: Duplicates ← Duplicates.keep) → Value ? Error in a:
+    let n: u64 ¤idx = #bytes
+    if n ≥ 0xFFFFFFFF:
+        return ⊥ Error(.problem ← Problem.too_large, .at ← 0, .line ← 1u64, .column ← 1u64)
+    let start: u64 ¤idx = if (allows(allow, Extensions.byte_order_mark) and n ≥ 3
+                              and bytes⟦0⟧ = 0xEFu8 and bytes⟦1⟧ = 0xBBu8 and bytes⟦2⟧ = 0xBFu8):
+        3
+    else:
+        0
+    let lexing: Extensions = (Extensions.comments | Extensions.hash_comments | Extensions.single_quotes
+                              | Extensions.whitespace)
+    ※ where everything begins, which is done with once the value is read
+    let scratch: mut arena = ⎕arena
+    let index: [u32] = if allow & lexing ≠ Extensions.strict:
+        slowly(bytes, start, allow, &mut scratch)
+    else:
+        quickly(bytes, start, &mut scratch)
+    match document(bytes, index, depth, a, How(.allow ← allow, .duplicates ← duplicates)):
+        Value(v):
+            v
+        ⊥(fault):
+            ⊥ failure(bytes, fault)
+
+※ The value the bytes are, the places of everything in them being `index`: one,
+※ with nothing after it, or with `several` all of them as an array.
+fn document(bytes: u8⟦⟧, index: u32⟦⟧, depth: u64, a: &mut arena, how: How) → Value ? Fault in a:
+    let n: u64 ¤idx = #bytes
+    if ¬allows(how.allow, Extensions.several):
+        let one: Read = tree_at(bytes, index, 0, depth, a, how)?
+        let after: u64 ¤idx = place_of(index, one.next)
+        if after < n:
+            return ⊥ Fault(.problem ← Problem.trailing, .at ← after)
+        return one.value
+    let all: mut [Value] = [] in a
+    let k: mut u64 ¤idx = 0
+    while §values place_of(index, k) < n:
+        let one: Read = tree_at(bytes, index, k, depth, a, how)?
+        all ⧺← [one.value]
+        k ← one.next
+    Value(.array ← all)
+
+※ -- encoding ------------------------------------------------------------------
+
+※ Sixty-four spaces, the indentation a line takes at most in one move.
+let SPACES: u8⟦64⟧ = spaces() in ⎕static
+
+fn spaces() → u8⟦64⟧:
+    ⟦32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8,
+     32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8,
+     32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8,
+     32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8⟧
+
+※ The hexadecimal digits, small, as Python's `json` writes them.
+let HEX: u8⟦16⟧ = hex_digits() in ⎕static
+
+fn hex_digits() → u8⟦16⟧:
+    ⟦48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8⟧
+
+※※ Whether every number a value holds is finite, which is what JSON can write.
+※※
+※※ \param v the value
+※※ \return false where a number in it is an infinity or not a number
+@[export]
+fn finite(v: Value) → bool:
+    finite_at(&v)
+
+※ Whether every number `v` names is finite, read where it is.
+fn finite_at(v: &Value) → bool:
+    match v⌖:
+        f64(x):
+            ⎕bits(x) & 0x7FF0000000000000u64 ≠ 0x7FF0000000000000u64
+        [Value](items):
+            foreach &e: Value = items:
+                if ¬finite_at(e):
+                    return false
+            true
+        [Member](members):
+            foreach &m: Member = members:
+                if ¬finite_at(&m⌖.value):
+                    return false
+            true
+        _:
+            true
+
+※※ A value written as JSON, UTF-8, into `a`.
+※※
+※※ \details Compact -- no white space at all -- or with *pretty* one element or
+※※ member a line, each *indent* spaces further in than what holds it, a space
+※※ after each colon, and an empty array or object as `[]` and `{}`: what Python's
+※※ `json.dumps` writes with `separators=(',', ':')` and with `indent=2`.  A string
+※※ is written with `"` and `\` escaped, the control characters as `\n`, `\t`,
+※※ `\r`, `\b`, `\f` or `\u` and four small hexadecimal digits, and everything else
+※※ as it is -- or with *ascii* DEL and every character above it as `\u` escapes,
+※※ a surrogate pair for one beyond U+FFFF.  An `integer` and a `large` are written
+※※ exactly; a `number` as the shortest text that reads back as it, by
+※※ `std.string.numeral_f64` in Python's form -- a point or an exponent always, so
+※※ that what is written is decoded as the same value, and what Python's `json`
+※※ writes byte for byte.  An infinity or a not-a-number is no JSON, and is
+※※ refused unless *special* asks for `Infinity`, `-Infinity` and `NaN`, which
+※※ `Extensions.special_numbers` reads.
+※※
+※※ The bytes are made in `a`, as `decode`'s value is, and go when it goes.
+※※
+※※ \param v the value
+※※ \param a where the bytes are made
+※※ \param pretty whether to write it over several lines
+※※ \param indent how many spaces each level is further in, where it is pretty
+※※ \param ascii whether to write every character above ASCII as an escape
+※※ \param special whether a number that is not finite is written rather than refused
+※※ \return the bytes
+※※ \raises where a number is not finite and *special* is false
+@[export]
+fn encode(v: Value, a: &mut arena, pretty: bool ← false, indent: u8 ← 2u8, ascii: bool ← false,
+          special: bool ← false) → [u8]? in a:
+    if ¬special and ¬finite_at(&v):
+        return ⊥
+    written(&v, [] in a, a, pretty, ⎕widen(indent, ⌜u64⌝), 0u64, ascii)
+
+※ A line's end and `count` spaces, onto `into`.
+fn new_line(into: mut [u8] in a, a: &mut arena, count: u64) → [u8] in a:
+    into ⧺← ⟦10u8⟧
+    let left: mut u64 = count
+    while §runs left > 64u64:
+        into ⧺← SPACES
+        left ← left - 64u64
+    into ⧺← SPACES⟦0…⎕unit(left, ⌜idx⌝)⟧
+    into
+
+※ `v` written onto `into`, `level` arrays and objects deep.
+※
+※ **Only arrays and objects are written here, everything else by `leaf_written`,**
+※ which is never inlined: this is the one function writing recurses through,
+※ once a level, and the room a numeral and a string's blocks take in a frame
+※ would otherwise be taken once for every level a document has.
+fn written(v: &Value, into: mut [u8] in a, a: &mut arena, pretty: bool, indent: u64, level: u64,
+           ascii: bool) → [u8] in a:
+    match v⌖:
+        [Value](items):
+            if #items = 0:
+                into ⧺← ⎕bytes("[]")
+            else:
+                into ⧺← ⟦91u8⟧
+                let first: mut bool = true
+                foreach &e: Value = items:
+                    if ¬first:
+                        into ⧺← ⟦44u8⟧
+                    first ← false
+                    if pretty:
+                        into ← new_line(into, a, (level + 1u64) × indent)
+                    into ← written(e, into, a, pretty, indent, level + 1u64, ascii)
+                if pretty:
+                    into ← new_line(into, a, level × indent)
+                into ⧺← ⟦93u8⟧
+        [Member](members):
+            if #members = 0:
+                into ⧺← ⎕bytes("{}")
+            else:
+                into ⧺← ⟦123u8⟧
+                let first: mut bool = true
+                foreach &m: Member = members:
+                    if ¬first:
+                        into ⧺← ⟦44u8⟧
+                    first ← false
+                    if pretty:
+                        into ← new_line(into, a, (level + 1u64) × indent)
+                    into ← quoted(⎕bytes(m⌖.key), into, a, ascii)
+                    into ⧺← ⟦58u8⟧
+                    if pretty:
+                        into ⧺← ⟦32u8⟧
+                    into ← written(&m⌖.value, into, a, pretty, indent, level + 1u64, ascii)
+                if pretty:
+                    into ← new_line(into, a, level × indent)
+                into ⧺← ⟦125u8⟧
+        _:
+            into ← leaf_written(v, into, a, ascii)
+    into
+
+※ A value that is neither an array nor an object written onto `into`.
+@[inline(never)]
+fn leaf_written(v: &Value, into: mut [u8] in a, a: &mut arena, ascii: bool) → [u8] in a:
+    match v⌖:
+        void:
+            into ⧺← ⎕bytes("null")
+        bool(b):
+            if b:
+                into ⧺← ⎕bytes("true")
+            else:
+                into ⧺← ⎕bytes("false")
+        i64(n):
+            let text: string.Numeral = string.numeral_int(n)
+            into ⧺← text.text⟦text.from…text.to⟧
+        u64(n):
+            let text: string.Numeral = string.numeral_int(n)
+            into ⧺← text.text⟦text.from…text.to⟧
+        f64(x):
+            into ← number(x, into, a)
+        str(s):
+            into ← quoted(⎕bytes(s), into, a, ascii)
+        _:
+            into ← into
+    into
+
+※ A number, as Python's `repr` lays it out: with a point or an exponent always,
+※ so that it is read back as a number and not as a whole one.
+fn number(x: f64, into: mut [u8] in a, a: &mut arena) → [u8] in a:
+    let text: string.Numeral = string.numeral_f64(x, string.Form.python)
+    into ⧺← text.text⟦text.from…text.to⟧
+    into
+
+※ A string's bytes written between quotes onto `into`, escaped as JSON needs.
+※
+※ Thirty-two bytes at a time to the first that wants an escape -- a control
+※ character, `"`, `\`, and with *ascii* DEL and anything above ASCII, as
+※ Python's `ensure_ascii` has it -- and what is before it in one move.
+fn quoted(text: u8⟦⟧, into: mut [u8] in a, a: &mut arena, ascii: bool) → [u8] in a:
+    let n: u64 ¤idx = #text
+    into ⧺← ⟦34u8⟧
+    ※ every bit where anything above ASCII is escaped too, and none where not
+    let high: u32 = if ascii: 0xFFFFFFFFu32 else: 0u32
+    let at: mut u64 ¤idx = 0
+    let from: mut u64 ¤idx = 0
+    while §runs at < n:
+        at ← wanted_at(text, at, high)
+        into ⧺← text⟦from…at⟧
+        if at < n:
+            let c: u8 = text⟦at⟧
+            if c < 0x7Fu8:
+                into ← escape(c, into, a)
+                at ← at + 1
+            elif c = 0x7Fu8:
+                into ← four(0x7Fu32, into, a)
+                at ← at + 1
+            else:
+                match string.decode_char(text⟦at…n⟧):
+                    string.Parsed(char)(p):
+                        into ← unicode(⎕ord(p.value), into, a)
+                        at ← at + p.end
+                    ⊥:
+                        ※ text is UTF-8, so this is never reached
+                        at ← at + 1
+            from ← at
+    into ⧺← ⟦34u8⟧
+    into
+
+※ The place of the first byte from `from` on that is written as an escape, or
+※ the end: thirty-two bytes at a time, the last block copied into room of
+※ quotes, which want one.  `high` is every bit where DEL and what is above ASCII
+※ want one too.
+@[inline]
+fn wanted_at(text: u8⟦⟧, from: u64 ¤idx, high: u32) → u64 ¤idx:
+    let n: u64 ¤idx = #text
+    let at: mut u64 ¤idx = from
+    while §blocks true:
+        let stops: mut u32 = 0u32
+        if at + 32 ≤ n:
+            let block: u8⟦32⟧ = text⟦at…at + 32⟧
+            stops ← (⎕mask((block < 32u8) ∨ (block = 34u8) ∨ (block = 92u8))
+                     | (⎕mask(block ≥ 127u8) & high))
+        else:
+            let last: mut u8⟦32⟧ = 32 ⍴ 34u8
+            last⟦0…n - at⟧ ← text⟦at…n⟧
+            stops ← (⎕mask((last < 32u8) ∨ (last = 34u8) ∨ (last = 92u8))
+                     | (⎕mask(last ≥ 127u8) & high))
+        if stops ≠ 0u32:
+            return (at + ⎕unit(⎕widen(⎕trail(stops), ⌜u64⌝), ⌜idx⌝)) ⌊ n
+        at ← at + 32
+    n
+
+※ An ASCII byte that wants an escape, escaped.
+fn escape(c: u8, into: mut [u8] in a, a: &mut arena) → [u8] in a:
+    let named: u8 = if c = 34u8 or c = 92u8:
+        c
+    elif c = 10u8:
+        110u8
+    elif c = 13u8:
+        114u8
+    elif c = 9u8:
+        116u8
+    elif c = 8u8:
+        98u8
+    elif c = 12u8:
+        102u8
+    else:
+        0u8
+    if named ≠ 0u8:
+        into ⧺← ⟦92u8, named⟧
+        return into
+    unicode(⎕widen(c, ⌜u32⌝), into, a)
+
+※ A code point as `\u` escapes: one, or a surrogate pair beyond U+FFFF.
+fn unicode(code: u32, into: mut [u8] in a, a: &mut arena) → [u8] in a:
+    if code ≥ 0x10000u32:
+        let rest: u32 = code - 0x10000u32
+        into ← four(0xD800u32 + (rest » 10u32), into, a)
+        return four(0xDC00u32 + (rest & 0x3FFu32), into, a)
+    four(code, into, a)
+
+※ `\u` and four small hexadecimal digits.
+fn four(code: u32, into: mut [u8] in a, a: &mut arena) → [u8] in a:
+    into ⧺← ⟦92u8, 117u8, HEX⟦digit(code » 12u32)⟧, HEX⟦digit(code » 8u32)⟧,
+             HEX⟦digit(code » 4u32)⟧, HEX⟦digit(code)⟧⟧
+    into
+
+※ The low four bits of a number, as a place in `HEX`.
+fn digit(n: u32) → u64 ¤idx:
+    ⎕unit(⎕widen(n & 15u32, ⌜u64⌝), ⌜idx⌝)
+
+※ -- comparing -----------------------------------------------------------------
+
+※※ Whether two values are one: of the same kind, and the same all the way down.
+※※
+※※ \details Numbers are the same where their bits are, so an `integer` is not the
+※※ `number` of the same value, a not-a-number is itself and the two noughts are
+※※ two; text is the same where its bytes are; arrays element by element and
+※※ objects member by member, in order, keys and values.
+※※
+※※ \param x one value
+※※ \param y the other
+※※ \return whether they are the same
+@[export]
+fn equal(x: Value, y: Value) → bool:
+    match x:
+        void:
+            match y:
+                void: true
+                _: false
+        bool(b):
+            match y:
+                bool(c): b = c
+                _: false
+        i64(n):
+            match y:
+                i64(m): n = m
+                _: false
+        u64(n):
+            match y:
+                u64(m): n = m
+                _: false
+        f64(p):
+            match y:
+                f64(q): ⎕bits(p) = ⎕bits(q)
+                _: false
+        str(s):
+            match y:
+                str(t): s = t
+                _: false
+        [Value](l):
+            match y:
+                [Value](m):
+                    if #l ≠ #m:
+                        return false
+                    let i: mut u64 ¤idx = 0
+                    let count: u64 ¤idx = #l
+                    while §elements i < count:
+                        if ¬equal(l⟦i⟧, m⟦i⟧):
+                            return false
+                        i ← i + 1
+                    true
+                _:
+                    false
+        [Member](l):
+            match y:
+                [Member](m):
+                    if #l ≠ #m:
+                        return false
+                    let i: mut u64 ¤idx = 0
+                    let count: u64 ¤idx = #l
+                    while §members i < count:
+                        if l⟦i⟧.key ≠ m⟦i⟧.key or ¬equal(l⟦i⟧.value, m⟦i⟧.value):
+                            return false
+                        i ← i + 1
+                    true
+                _:
+                    false

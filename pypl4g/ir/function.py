@@ -202,9 +202,12 @@ class ReturnStyle(Enum):
 
         A value held in memory never does, whatever its size: what a value of
         such a type *is*, is where its bytes are, and the bytes of one a
-        function made are in that function's own room.
+        function made are in that function's own room.  Nor does one with such a
+        value among its parts -- a result answering a sum -- for the same reason:
+        the part in a register would be where the bytes were, in room the call
+        has given up.
         """
-        if held_in_memory(ty):
+        if held_in_memory(ty) or any(held_in_memory(one) for one in leaves_of(ty)):
             return False
         match self:
             case ReturnStyle.TWO_IN_REGISTERS:

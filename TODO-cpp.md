@@ -23,3 +23,7 @@ pypl4g is [spec/cpp-implementation.md](spec/cpp-implementation.md).
     that shape, and wrote nothing between such a value's last use and the branch in any of them, which is all that kept the
     code right.  Now a branch before the end reads what its targets want, in pypl4g and in the C++ implementation alike;
     13 x86-64 images changed, in both.  test_regalloc.py holds it, and mc_agrees.py makes up branches inside blocks.
+
+[ ] `pl4g-repl --stack-size=4M` is a stack of four bytes.  The repl and `pl4g-checkdump` read the size with `strtoll`, where the
+    compiler's `size()` in `cli.cc` takes `k`, `M` and `G` as pypl4g does; `json-depth` writes its size in bytes for this.  One
+    parser, exported from the driver, for all three.

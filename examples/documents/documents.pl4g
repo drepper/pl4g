@@ -1,0 +1,85 @@
+※ A JSON document read and written over and over, to time the `json` module by.
+※
+※     bin/pl4g-run ./json MODE ROUNDS < document.json
+※
+※ MODE is what is done ROUNDS times over with what came in on the standard
+※ input: `r`, nothing -- what reading the input costs, which the others pay as
+※ well; `d`, decode it; `e`, decode it once and encode it compactly; `p`, the
+※ same pretty-printed.  So the time of `d 10` less that of `r 1`, over ten
+※ times the size of the input, is how fast this decodes, and the same for the
+※ other two.  `make data` writes three to try it on, of some megabytes
+※ each, with `generate.py`: objects like the ones Twitter's API answers with,
+※ an array of numbers, and an array of strings with escapes in them.
+※
+※ The status is nought where every round was answered, one where the input was
+※ refused, two where it could not be written; the first round's bytes are
+※ written to the standard output with `e` and `p`, to compare with what
+※ another implementation writes.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+let json := ⎕import("json")
+
+※ Everything the standard input holds.
+fn everything(from: &mut std.io.Reader) → [u8]:
+    let all: mut [u8] = []
+    let chunk: mut u8⟦2048⟧ = 2048 ⍴ 0u8
+    let more: mut bool = true
+    while more:
+        let got: u64 ¤size = std.read(from, chunk) ?? 0
+        if got = 0:
+            more ← false
+        else:
+            all ⧺← chunk⟦0…⎕unit(⎕drop(got), ⌜idx⌝)⟧
+    all
+
+※ Whether the input was decoded `rounds` times over, each in an arena of its own.
+fn decoded(input: u8⟦⟧, rounds: u64) → bool:
+    let round: mut u64 = 0u64
+    while round < rounds:
+        let pool: mut arena = ⎕arena
+        match json.decode(input, &mut pool):
+            json.Value(_):
+                round ← round + 1u64
+            ⊥(_):
+                return false
+    true
+
+※ Whether the value could be written `rounds` times over.
+fn encoded(v: json.Value, rounds: u64, pretty: bool) → bool:
+    let round: mut u64 = 0u64
+    while round < rounds:
+        let pool: mut arena = ⎕arena
+        match json.encode(v, &mut pool, .pretty ← pretty):
+            [u8](_):
+                round ← round + 1u64
+            ⊥:
+                return false
+    true
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let mode: u8 = if #init.args > 1: ⎕bytes(init.args⟦1⟧)⟦0⟧ else: 100u8
+    let rounds: u64 = if #init.args > 2:
+        (std.string.parse_int(⎕bytes(init.args⟦2⟧), ⌜u64⌝) ?? std.string.Parsed(.value ← 1u64, .end ← 0)).value
+    else:
+        1u64
+    let input: [u8] = everything(&mut init.io.input)
+    if mode = 114u8:
+        return 0u6
+    if mode = 100u8:
+        return if decoded(input, rounds): 0u6 else: 1u6
+    let pool: mut arena = ⎕arena
+    match json.decode(input, &mut pool):
+        json.Value(v):
+            if ¬encoded(v, rounds - 1u64, mode = 112u8):
+                return 2u6
+            match json.encode(v, &mut pool, .pretty ← mode = 112u8):
+                [u8](out):
+                    ⎕drop(std.Io.print(&mut init.io.output, out) ?? 0)
+                    0u6
+                ⊥:
+                    2u6
+        ⊥(_):
+            1u6

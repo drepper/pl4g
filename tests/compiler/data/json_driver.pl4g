@@ -1,0 +1,41 @@
+※ What `test_json_module.py` runs: the standard input read whole and decoded --
+※ every value of it, one after another, as an array -- and written back as the
+※ first word says: `c` compact, `p` pretty, `a` compact with every character
+※ above ASCII escaped; or with `s` read as one document, RFC 8259's, and written
+※ compactly.  Refused, it writes where, and stops with one.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+let json := ⎕import("json")
+
+※ Everything the standard input holds.
+fn everything(from: &mut std.io.Reader) → [u8]:
+    let all: mut [u8] = []
+    let chunk: mut u8⟦2048⟧ = 2048 ⍴ 0u8
+    let more: mut bool = true
+    while more:
+        let got: u64 ¤size = std.read(from, chunk) ?? 0
+        if got = 0:
+            more ← false
+        else:
+            all ⧺← chunk⟦0…⎕unit(⎕drop(got), ⌜idx⌝)⟧
+    all
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let mode: u8 = ⎕bytes(init.args⟦1⟧)⟦0⟧
+    let input: [u8] = everything(&mut init.io.input)
+    let pool: mut arena = ⎕arena
+    let allow: json.Extensions = if mode = 115u8: json.Extensions.strict else: json.Extensions.several
+    match json.decode(input, &mut pool, allow):
+        json.Value(v):
+            match json.encode(v, &mut pool, .pretty ← mode = 112u8, .ascii ← mode = 97u8):
+                [u8](out):
+                    ⎕drop(std.Io.print(&mut init.io.output, out) ?? 0)
+                    0u6
+                ⊥:
+                    2u6
+        ⊥(e):
+            ⎕drop(std.Io.print(&mut init.io.output, ⎕bytes(⍕⎕drop(e.at))) ?? 0)
+            1u6

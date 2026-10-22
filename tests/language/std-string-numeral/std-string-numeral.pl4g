@@ -1,0 +1,54 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A number written out as a value**: `std.string.numeral_int` and
+※ `std.string.numeral_f64` answer a `Numeral`, room of seventy-two bytes and
+※ where in it the text is -- what `format_int` and `format_f64` join onto their
+※ list, for a writer whose list is not one a call can hand back as it is: an
+※ arena's, which a `mut [u8]` parameter is answered as a copy of in the heap, or
+※ a buffer of its own.  The text is the same either way, so here it is held to
+※ what the two writers write, every base and every width, the sixty-four digits
+※ of the largest `u64` in base two among them, and the forms of an `f64`.
+
+unit ¤size → ¤idx
+
+let std := ⎕import("std")
+
+※ The text a numeral holds.
+fn text(n: std.string.Numeral) → str:
+    ⎕text(n.text⟦n.from…n.to⟧) ?? "?"
+
+※ Whether a whole number's numeral is `expected`, and what `format_int` writes.
+fn whole(n: i64, base: u8, digits: u8, expected: str) → bool:
+    let written: str = text(std.string.numeral_int(n, base, digits, true))
+    written = expected and (⎕text(std.string.format_int(n, [], base, digits, true)) ?? "") = expected
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if ¬whole(0i64, 10u8, 1u8, "0") or ¬whole(⁻42i64, 10u8, 1u8, "-42") or ¬whole(255i64, 16u8, 4u8, "00FF"):
+        return 1u6
+    if ¬whole(⁻9223372036854775807i64 - 1i64, 10u8, 1u8, "-9223372036854775808"):
+        return 2u6
+    if ¬whole(5i64, 2u8, 8u8, "00000101") or ¬whole(⁻35i64, 36u8, 1u8, "-Z"):
+        return 3u6
+    ※ the most a numeral holds: the largest u64 in base two, and a sign besides
+    if text(std.string.numeral_int(18446744073709551615u64, 2u8)) ≠ "1111111111111111111111111111111111111111111111111111111111111111":
+        return 4u6
+    if text(std.string.numeral_int(⁻1i64, 2u8, 64u8)) ≠ "-0000000000000000000000000000000000000000000000000000000000000001":
+        return 5u6
+    ※ an f64, in both forms, the same text format_f64 writes
+    let state: mut u64 = 88172645463325252u64
+    let i: mut u64 = 0u64
+    while i < 2000u64:
+        state ← state ^ (state » 12u64)
+        state ← state ^ (state « 25u64)
+        state ← state ^ (state » 27u64)
+        let x: f64 = ⎕from_bits(⎕wrap(state × 2685821657736338717u64), ⌜f64⌝)
+        if (text(std.string.numeral_f64(x)) ≠ (⎕text(std.string.format_f64(x, [])) ?? "")
+                or text(std.string.numeral_f64(x, std.string.Form.python))
+                   ≠ (⎕text(std.string.format_f64(x, [], std.string.Form.python)) ?? "")):
+            return 6u6
+        i ← i + 1u64
+    if (text(std.string.numeral_f64(⎕from_bits(0x8000000000000000u64, ⌜f64⌝), std.string.Form.python)) ≠ "-0.0"
+            or text(std.string.numeral_f64(0f64)) ≠ "0"):
+        return 7u6
+    0u6

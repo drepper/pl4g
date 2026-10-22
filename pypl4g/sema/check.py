@@ -54,7 +54,7 @@ from ..ir.layout import (DataLayout, member_offsets_of, offsets_of,
                          size_of, stride_of, tag_offset_of)
 from ..ir.inst import (AddressInst, BinaryInst, BinOp, CallInst, CastInst,
                        CastKind, CmpPred,
-                       ExtractInst, FrameInst, Instruction, LoadInst, RetInst,
+                       ExtractInst, FrameInst, Instruction, LoadInst, MemStartInst, RetInst,
                        Ordering, Terminator, TupleInst, UnOp)
 from ..target.registry import architecture_of, conventions_of
 from ..target.syscalls import KNOWN as SYSCALL_NAMES, number_of
@@ -2708,6 +2708,41 @@ def _holds_a_view(ty: Type) -> bool:
         case ResultType():
             return _holds_a_view(ty.ok)
     return False
+
+
+def _chain_start(builder: IRBuilder) -> Value:
+    """The token the memory chain began with, at the top of the entry block: what
+    a way that wrote nothing hands a join where the other way began the chain."""
+    first = builder.function.entry.insts[0]
+    assert isinstance(first, MemStartInst)
+    return first
+
+
+def _may_hold_a_view(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
+    """Whether a value of *ty* may reach where an array's elements are: a view, or
+    anything that may hold one, a reference and a lambda among them -- where text,
+    a list, a table, a number and whatever is made only of those never do, an
+    array's elements being copied into them and not pointed at."""
+    if id(ty) in seen:
+        return False
+    deeper = seen | {id(ty)}
+    match ty:
+        case ArrayType():
+            return not ty.fixed or _may_hold_a_view(ty.element, deeper)
+        case ListType():
+            return _may_hold_a_view(ty.element, deeper)
+        case TupleType():
+            return any(_may_hold_a_view(m, deeper) for m in ty.members)
+        case ResultType():
+            return _may_hold_a_view(ty.ok, deeper) or (
+                ty.err is not None and _may_hold_a_view(ty.err, deeper))
+        case ProductType():
+            return any(_may_hold_a_view(one, deeper) for _, one in ty.fields)
+        case SumType():
+            return any(_may_hold_a_view(one, deeper) for _, one in ty.variants)
+        case StrType() | SetType() | DictType():
+            return False
+    return _points_somewhere(ty)
 
 
 def _lets_go_of(found: ArrayType, wanted: ArrayType) -> bool:
@@ -7859,6 +7894,10 @@ class Checker:
                 if isinstance(root, ast.NameRef):
                     self._changed_here.add(root.name)
         if not (owned.points(func.ty.ret) or _holds_a_lambda(func.ty.ret)):
+            if not _points_somewhere(func.ty.ret):
+                # An answer that points nowhere was made in nothing, whatever the
+                # call was handed: a number read out of a view is not the view.
+                self._made_from[id(expr)] = (expr, frozenset())
             return
         if func.attrs.external is not None:
             # What the outside answers is the outside's, which nothing here gives
@@ -10107,6 +10146,23 @@ class Checker:
                 # Not lowered yet -- a body read ahead of time -- so what it will be
                 # made in is what one naming no arena is made in.
                 into.add(_HEAP)
+            case ast.SetLit() | ast.DictLit() if node.arena is not None:
+                # Made in the arena it names, which the walk below finds.
+                pass
+            case ast.Call() if (func := self._read_ahead_callee(node)) is not None:
+                # Not lowered yet: what the signature says it answers in, which
+                # is what lowering it will say.
+                self._answered_in(node, func, into)
+                return
+            case ast.JoinAssign() if isinstance(node.value, ast.ListLit) \
+                    and self._pool_joined_onto(node.target) is not None:
+                # A list written out and joined onto a pool's list is never
+                # made: its elements go in as they are, with what they were
+                # made in, and the list joined onto keeps what it had.
+                self._collect_arenas(node.target, into)
+                for one in node.value.elements:
+                    self._collect_arenas(one, into)
+                return
             case ast.ListLit() | ast.SetLit() | ast.DictLit():
                 into.add(_HEAP)
             case ast.Element():
@@ -10166,6 +10222,48 @@ class Checker:
                     for each in held:
                         if isinstance(each, ast.Node):
                             self._collect_arenas(each, into)
+
+    def _read_ahead_callee(self, expr: ast.Call) -> Function | None:
+        """The function a call names where its signature alone says what its
+        answer was made in: one of this file's top level, named by itself and
+        by nothing a body binds, and not defined somewhere else."""
+        if not isinstance(expr.callee, ast.NameRef) \
+                or self._find_local(expr.callee.name) is not None:
+            return None
+        func = self._top.get(expr.callee.name)
+        if not isinstance(func, Function) or func.attrs.external is not None:
+            return None
+        return func
+
+    def _answered_in(self, expr: ast.Call, func: Function, into: set[int]) -> None:
+        """What a call of *func* answers was made in, read off its signature as
+        `_where_made` reads it: nothing for an answer that points nowhere, the
+        heap for one whose signature names no allocator, and what was handed to
+        the parameters it names -- or the arena in force, for one left out.  An
+        answer the signature cannot speak for, a reference among it, was made in
+        anything the call was handed."""
+        ret = func.ty.ret
+        if not _points_somewhere(ret):
+            return
+        if not (owned.points(ret) or _holds_a_lambda(ret)) \
+                or func.made_in == (HANDS_AT,):
+            for one in expr.args:
+                self._collect_arenas(one, into)
+            return
+        if func.made_in is None:
+            into.add(_HEAP)
+            return
+        written = self._written_for(expr, func)
+        for at in func.made_in:
+            if at == HEAP_AT:
+                into.add(_HEAP)
+            elif at == STATIC_AT:
+                if len(func.made_in) > 1:
+                    into.add(_IMAGE)
+            elif at in written:
+                into.update(self._arenas_in(written[at]))
+            else:
+                into.update(self._out_of_arenas)
 
     def _array_frame_of(self, local: _Local) -> frozenset[int]:
         """The key for where an array a name holds has its elements, which a view
@@ -10466,8 +10564,12 @@ class Checker:
                         or not _points_somewhere(self._held_by(local)):
                     continue
                 # An array whose elements the body writes may, at the top of a
-                # turn, hold what a later line of the body put in it.
-                local.arenas = local.arenas | anything
+                # turn, hold what a later line of the body put in it -- but
+                # nothing that holds no view holds where an array's elements are.
+                held = self._held_by(local)
+                local.arenas = local.arenas | (
+                    anything if _may_hold_a_view(held)
+                    else anything - self._array_frames)
         self._before_a_turn(body)
         return self._provenance()
 
@@ -17462,12 +17564,33 @@ class Checker:
                             builder.binary(BinOp.WRAP_ADD, there, count, span),
                             span)
             return
+        pool = self._pool_joined_onto(stmt.target) \
+            if owned.points(ty.element) else None
         if isinstance(written, ast.ListLit) and written.elements \
-                and not owned.points(ty.element):
+                and (not owned.points(ty.element) or pool is not None):
             values = [self._lower_into(builder, one, ty.element, one.span)
                       for one in written.elements]
             if any(self._value_type_of(one) is ERROR for one in values):
                 return
+            if pool is not None:
+                # Into a pool, each element is put where the list's elements are
+                # as an element of a list written in the pool is: as it is where
+                # what it points into lasts as long as the list, and copied in
+                # where not -- and the list written out is never made.
+                holder, container = pool
+                kept: list[Value] = []
+                for one, value in zip(written.elements, values):
+                    stored, added, spare = self._stored(
+                        builder, one, value, ty.element, holder, container.depth,
+                        not container.is_parameter, one.span)
+                    if self._value_type_of(stored) is ERROR:
+                        return
+                    if spare is not None:
+                        owned.give_back(builder, spare, ty.element,
+                                        "heap" if self._freshly_heap(one) else None)
+                    container.arenas = container.arenas | added
+                    kept.append(stored)
+                values = kept
             made = self._room_made(builder, place, ty,
                                    builder.int_const(U64, len(values)), span)
             _, new, count, _, _ = made
@@ -17511,6 +17634,21 @@ class Checker:
                 builder, more, ty, "heap" if self._freshly_heap(written) else None)
         self._room_kept(builder, place, ty, made,
                         builder.binary(BinOp.WRAP_ADD, count, joined, span), span)
+
+    def _pool_joined_onto(self, target: ast.Expr) -> tuple[int, _Local] | None:
+        """The arena a list joined onto keeps its elements in, and the name it is,
+        where it is a name of this body's whose list is known to be the arena's:
+        made in it, and in nothing else.  A pool never gives one element back, so
+        what lasts as long as it may go in as it is."""
+        if not isinstance(target, ast.NameRef):
+            return None
+        local = self._find_local(target.name)
+        if local is None or local.is_parameter or self._is_arena(local):
+            return None
+        owner = self._owner_of(local.arenas)
+        if owner is None or owner == _HEAP:
+            return None
+        return owner, local
 
     def _may_be_an_array(self, written: ast.Expr) -> bool:
         """Whether what is joined onto a list is, by the look of it, an array
@@ -17646,6 +17784,24 @@ class Checker:
             builder.binary(BinOp.WRAP_MUL, at,
                            builder.int_const(U64, stride_of(ty.element, _LAYOUT)),
                            span), span)
+        pool = self._pool_joined_onto(stmt.base) \
+            if owned.points(ty.element) else None
+        if pool is not None:
+            # Into a pool, as an element joined on is put in: as it is where what
+            # it points into lasts as long as the list, copied in where not --
+            # and what it replaces stays where it is until the pool goes.
+            holder, container = pool
+            value, added, spare = self._stored(builder, stmt.value, value,
+                                               ty.element, holder, container.depth,
+                                               not container.is_parameter, span)
+            if self._value_type_of(value) is ERROR:
+                return
+            if spare is not None:
+                owned.give_back(builder, spare, ty.element,
+                                "heap" if self._freshly_heap(stmt.value) else None)
+            container.arenas = container.arenas | added
+            builder.store(where, value, span)
+            return
         if owned.points(ty.element) and owned.can_own(ty.element):
             replaced = builder.load(where, span)
             value = builder.call(owned.own_function(self._module, ty.element),
@@ -23466,7 +23622,7 @@ class Checker:
         builder.br(joined, (default, after), expr.span)
         builder.position_at(answered)
         builder.br(joined, (builder.unwrap(value, ty.ok, expr.span),
-                            before if before is not None else builder.memory()),
+                            before if before is not None else _chain_start(builder)),
                    expr.span)
         builder.position_at(joined)
         builder.set_memory(token)
@@ -23508,8 +23664,7 @@ class Checker:
         # The left side being what decides sends control straight to the answer.
         builder.condbr(left, decided if decides else rest,
                        rest if decides else decided, span=expr.span)
-        builder.position_at(decided)
-        builder.br(joined, (builder.bool_const(decides),), expr.span)
+        before = builder.memory_so_far()
         builder.position_at(rest)
         outer, self._operand_of = self._operand_of, expr.op.value
         try:
@@ -23521,8 +23676,25 @@ class Checker:
             # already there; giving the join something of the right type keeps
             # the representation well formed while the error is reported.
             right = UndefConst(BOOL)
-        builder.br(joined, (right,), expr.span)
+        after = builder.memory_so_far()
+        if after is before:
+            builder.br(joined, (right,), expr.span)
+            builder.position_at(decided)
+            builder.br(joined, (builder.bool_const(decides),), expr.span)
+            builder.position_at(joined)
+            return answer
+        # The right side wrote memory -- an answer put in room of its own, text
+        # made -- and what follows reads the memory of whichever way was taken,
+        # so the two tokens meet where the ways do, as they do after `??`.
+        assert after is not None
+        token = joined.add_param(MEM, "mem")
+        builder.br(joined, (right, after), expr.span)
+        builder.position_at(decided)
+        builder.br(joined, (builder.bool_const(decides),
+                            before if before is not None else _chain_start(builder)),
+                   expr.span)
         builder.position_at(joined)
+        builder.set_memory(token)
         return answer
 
     def _boolean(self, builder: IRBuilder, expr: ast.Expr,
@@ -26373,6 +26545,9 @@ class Checker:
             through = self._type_exported(expr.callee)
             if isinstance(through, ProductType):
                 return self._lower_record(builder, expr, through, expected)
+            if isinstance(through, SumType):
+                # And a sum, which is made the same way wherever it was defined.
+                return self._lower_sum(builder, expr, through, expected)
             written = self._through_a_value(builder, expr)
             if written is _REFUSED:
                 return UndefConst(ERROR)

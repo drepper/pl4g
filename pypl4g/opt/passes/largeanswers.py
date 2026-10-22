@@ -26,14 +26,14 @@ from ...ir.function import BasicBlock, Function, ReturnStyle
 from ...ir.inst import (BinOp, BinaryInst, CallInst, CastInst, CastKind,
                         ErrorInst, ExtractInst, FailedInst, FrameInst,
                         Instruction, LoadInst,
-                        MemStartInst, RetInst, StoreInst,
+                        MemStartInst, RetInst, SelectInst, StoreInst,
                         TupleInst, UnwrapInst, WrapInst)
 from ...ir.layout import (DataLayout, error_offset_of,
                           part_offsets_of, tag_offset_of)
 from ...ir.module import Module
 from ...ir.rewrite import stands_for
 from ...ir.layout import size_of
-from ...ir.types import (MEM, ProductType, ResultType, TupleType, Type, U8,
+from ...ir.types import (BOOL, MEM, ProductType, ResultType, TupleType, Type, U8,
                          U16, U32, U64,
                          VOID, held_in_memory, leaves_of, parts_of)
 from ...ir.value import Value
@@ -154,8 +154,23 @@ class LargeAnswers:
                     zip(parts_of(answer), _offsets(answer))):
                 taken = _part(value, index, part, answer, last.span)
                 made.append(taken)
-                token = StoreInst(token, _at(module, place, part, offset,
-                                             made, last.span), taken, last.span)
+                where = _at(module, place, part, offset, made, last.span)
+                if held_in_memory(part):
+                    # A part held in memory -- the sum a result answers -- is
+                    # where its bytes are, and it is the bytes that go.  An error
+                    # has no answer to be read, and where it is stands nothing:
+                    # the place is copied onto itself instead, which reads
+                    # nothing that is not there.
+                    bytes_ = module.types.ptr_type(U8, mutable=True)
+                    held = CastInst(CastKind.BITCAST, taken, bytes_, last.span)
+                    failed = FailedInst(value, BOOL, last.span)
+                    itself = CastInst(CastKind.BITCAST, where, bytes_, last.span)
+                    source = SelectInst(failed, itself, held, last.span)
+                    made.extend((held, failed, itself, source))
+                    token = _copied(module, where, source, size_of(part, LAYOUT),
+                                    token, made, last.span)
+                    continue
+                token = StoreInst(token, where, taken, last.span)
                 made.append(token)
             made.append(RetInst(None, last.span))
             _splice(block, at, made)
@@ -197,8 +212,13 @@ class LargeAnswers:
                 continue
             taken: list[Value] = []
             for part, offset in zip(parts_of(answer), _offsets(answer)):
-                read = LoadInst(part, (token, _at(module, slot, part, offset,
-                                                  made, span)), span)
+                where = _at(module, slot, part, offset, made, span)
+                if held_in_memory(part):
+                    # Where its bytes are in the room the caller made is the
+                    # part, as the whole is where the whole is held in memory.
+                    read: Instruction = CastInst(CastKind.BITCAST, where, part, span)
+                else:
+                    read = LoadInst(part, (token, where), span)
                 made.append(read)
                 taken.append(read)
             rebuilt = _whole(taken, answer, span)
@@ -211,7 +231,9 @@ class LargeAnswers:
 def _offsets(answer: Type) -> tuple[int, ...]:
     """Where each part of the answer goes in the place that holds it."""
     if isinstance(answer, ResultType):
-        assert answer.err is not None
+        if answer.err is None:
+            # Nothing carried with the error: the answer and the truth value.
+            return (0, tag_offset_of(answer, LAYOUT))
         return (0, tag_offset_of(answer, LAYOUT),
                 error_offset_of(answer, LAYOUT))
     if not isinstance(answer, TupleType | ProductType):
@@ -241,7 +263,8 @@ def _whole(taken: Sequence[Value], answer: Type,
     """The parts put back together into the one value they are."""
     if not isinstance(answer, ResultType):
         return TupleInst(list(taken), answer, span)
-    return WrapInst(taken[0], taken[1], answer, span, taken[2])
+    return WrapInst(taken[0], taken[1], answer, span,
+                    taken[2] if len(taken) > 2 else None)
 
 
 #: What the bytes of a value held in memory are copied in, largest first.  A

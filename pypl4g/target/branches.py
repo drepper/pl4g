@@ -125,6 +125,10 @@ def condition_used_once(func: Function, value: Instruction) -> bool:
     for block in func.blocks:
         for inst in block.insts:
             users += sum(1 for operand in inst.operands if operand is value)
+            # What a branch hands the block it goes to is read as much as an
+            # operand is, and wants the value in a register.
+            for edge in inst.successors() if isinstance(inst, Terminator) else ():
+                users += sum(1 for arg in edge.args if arg is value)
     return users == 1
 
 
