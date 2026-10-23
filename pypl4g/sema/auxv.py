@@ -57,8 +57,11 @@ def held_type(module: Module) -> ArrayType:
 def variable(module: Module) -> GlobalVar:
     """The variable the table waits in, made once for the program.
 
-    Writable in the image because the entry point fills it; nothing the program
-    writes names it, so nothing the program does writes it.
+    Writable in the image because the entry point fills it, and among the
+    `@[relro]` variables, which the entry point makes read-only once the
+    constructors have run: it is filled before the first of them, nothing the
+    program writes names it, and a write through `⎕at` of its address then
+    stops the program instead of changing what every question of it answers.
     """
     found = module.globals.get(SYMBOL)
     if isinstance(found, GlobalVar):
@@ -67,7 +70,7 @@ def variable(module: Module) -> GlobalVar:
     return module.add_global(GlobalVar(
         name=SYMBOL, value_type=ty,
         ptr_type=module.types.ptr_type(ty, mutable=True),
-        initializer=None), key=SYMBOL)
+        initializer=None, relro=True), key=SYMBOL)
 
 
 def words_of(builder: IRBuilder, table: GlobalVar) -> Value:
