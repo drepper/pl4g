@@ -33,6 +33,9 @@ SECTION = ".pl4g.relro"
 #: The header that says which pages are read-only once written.
 PT_GNU_RELRO = 0x6474E552
 
+#: What a position-independent image is, as a shared object is.
+ET_DYN = 3
+
 #: A constructor writes the variables and the startup function reads them.
 WRITTEN = "".join((
     "let std := ", QUAD, "import(\"std\")\n\n",
@@ -159,7 +162,12 @@ def test_the_pages_are_nothing_elses(triple: str, tmp_path) -> None:  # noqa: AN
     assert len(held) == 1
     own = held[0]
     assert own.p_flags == elfcheck.PF_R | elfcheck.PF_W
-    assert (own.p_vaddr, own.p_memsz) == (section.sh_addr, section.sh_size)
+    # Nothing else in it but what a position-independent image relocates and
+    # then protects with it: what was read-only but for that.
+    for other in image.sections:
+        if other is not section and other.sh_flags & elfcheck.SHF_ALLOC \
+                and own.p_vaddr <= other.sh_addr < own.p_vaddr + own.p_memsz:
+            assert other.name.startswith(".data.rel.ro") and image.e_type == ET_DYN, other
     for other in loads:
         if other is not own:
             assert not set(_pages(other)) & set(_pages(own)), (other, own)
@@ -170,10 +178,12 @@ def test_the_pages_are_nothing_elses(triple: str, tmp_path) -> None:  # noqa: AN
 
 def test_a_program_without_one_has_none(tmp_path) -> None:  # noqa: ANN001
     """No section, no segment, and no header: what costs a page is only there
-    where something asked for it."""
+    where something asked for it.  A position-independent image has the header
+    for what it relocates, which is another matter."""
     image = elfcheck.parse(_built(tmp_path, WRITTEN.replace("@[relro]\n", "")).read_bytes())
     assert image.section(SECTION) is None
-    assert not [one for one in image.segments if one.p_type == PT_GNU_RELRO]
+    if image.e_type != ET_DYN:
+        assert not [one for one in image.segments if one.p_type == PT_GNU_RELRO]
 
 
 SHARED = "".join((
