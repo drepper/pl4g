@@ -11833,9 +11833,11 @@ What the brief left open, settled the way the rest of the language does it, and 
   register; and the host stubs keep `x8` while they ask `dlsym`, as they keep every argument register.
 - **No new diagnostic.**  Everything the brief allowed compiles; nothing refused before is refused differently, and 5302 now
   admits a record laid out for C.
-- **What the interpreter does** for a host function: libffi is given the record as an `FFI_TYPE_STRUCT` of its leaves, which
-  is C's rule applied by the library that knows it on whatever machine the interpreter runs.  An interpreted function of the
-  system's convention answers its record as any other value -- there is no register for anything to read.
+- **What the interpreter does** for a host function: libffi is given the record as an `FFI_TYPE_STRUCT` of its fields, which
+  is C's rule applied by the library that knows it on whatever machine the interpreter runs, and what it answers is copied into
+  room the caller made -- the place handed over last, as the language's own convention has it, so that the interpreter reads the
+  record as it reads any other answer from storage.  An interpreted function of the system's convention answers its record as any
+  other value -- there is no register for anything to read.
 
 Compare: **C**, whose compilers this is, to the register; **Clang**, which lowers struct returns in its front end per target, as
 this does in a pass; **Rust**, whose `#[repr(C)]` struct is returned as C returns it from an `extern "C"` fn and however rustc

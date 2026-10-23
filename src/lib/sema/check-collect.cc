@@ -320,14 +320,14 @@ namespace pl4g::sema {
     check_host(node, func_attrs, params, ret);
     check_offered(node, func_attrs, linkage);
     // Wherever it stands and whoever wrote it: a record laid out for something
-    // else to read travels as a reference or not at all.
+    // else to read is handed to a function as a reference or not at all.  It
+    // may be answered whole, which way being the convention's to say
+    // (`largeanswers`).
     for (std::size_t at = 0; at < std::min(params.size(), node->params.size()); ++at) {
       not_by_value(params[at], node->params[at]->type->span);
       not_a_piece(params[at], node->params[at]->type->span, node->name);
     }
     not_a_piece(ret, node->ret_type != nullptr ? node->ret_type->span : node->name_span, node->name);
-    if (node->ret_type != nullptr)
-      not_by_value(ret, node->ret_type->span);
     module.add_function(std::move(made), key(whole));
     hand_over_text(func);
     if (! node->held)
@@ -607,9 +607,12 @@ namespace pl4g::sema {
         diags.emit(D::LANG_HOST_PARAMETER_TYPE, node->params[at]->type->span,
                    { { "type", ty->written() }, { "param", node->params[at]->name }, { "name", node->name } });
     }
+    // A record laid out for C comes back as C answers one, which is the
+    // system's convention and so the host's.
+    auto record = ir::as<ir::ProductType>(ret);
     if (ret != ir::error_type() && ret != ir::void_type() && ir::as<ir::IntType>(ret) == nullptr
         && ir::as<ir::FloatType>(ret) == nullptr && ir::as<ir::BoolType>(ret) == nullptr
-        && ir::as<ir::CharType>(ret) == nullptr)
+        && ir::as<ir::CharType>(ret) == nullptr && (record == nullptr || ! record->abi))
       diags.emit(D::LANG_HOST_RESULT_TYPE, node->ret_type != nullptr ? node->ret_type->span : node->name_span,
                  { { "name", node->name }, { "type", ret->written() } });
   }

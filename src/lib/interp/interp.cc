@@ -6,6 +6,7 @@
 #include <cmath>
 #include <csignal>
 #include <cstring>
+#include <deque>
 #include <format>
 #include <memory>
 #include <random>
@@ -240,6 +241,8 @@ namespace pl4g::interp {
         return {};
       if (auto c = as<CharType>(ty))
         return crossing_of(c->holder());
+      if (auto e = as<EnumType>(ty))
+        return crossing_of(e->holder);
       if (auto i = as<IntType>(ty)) {
         Scalar s{ Scalar::Kind::integer, i->bits, i->held(), i->is_signed };
         switch (i->held()) {
@@ -275,7 +278,41 @@ namespace pl4g::interp {
       // which the context is one of, so it is made once the function is found.
       void* context = nullptr;
       bool prepared = false;
+      // Where the answer is a record laid out for C: the `struct` libffi is
+      // told it is, which it answers into a buffer copied into the room the
+      // caller made, handed over last -- and the descriptions of the structs
+      // inside it, which have to stay where they are.
+      ::ffi_type* record = nullptr;
+      std::deque<::ffi_type> structs;
+      std::deque<std::vector<::ffi_type*>> elements;
     };
+
+    // The `struct` libffi is told a record laid out for C is: its fields in
+    // order, a record among them a `struct` of its own and an array a
+    // `struct` of its elements, which is how libffi is told of one.
+    ::ffi_type* ffi_type_of(const Type* ty, HostCall& host)
+    {
+      std::vector<::ffi_type*> members;
+      if (auto record = as<ProductType>(ty))
+        for (const auto& [_, field] : record->fields)
+          members.push_back(ffi_type_of(field, host));
+      else if (auto tuple = as<TupleType>(ty))
+        for (auto member : tuple->members)
+          members.push_back(ffi_type_of(member, host));
+      else if (auto array = as<ArrayType>(ty); array != nullptr && array->fixed()) {
+        auto element = ffi_type_of(array->element, host);
+        members.assign(array->count().value_or(0), element);
+      } else
+        return crossing_of(ty).type;
+      members.push_back(nullptr);
+      auto& kept = host.elements.emplace_back(std::move(members));
+      auto& made = host.structs.emplace_back();
+      made.size = 0;
+      made.alignment = 0;
+      made.type = FFI_TYPE_STRUCT;
+      made.elements = kept.data();
+      return &made;
+    }
 
     // Where in a cell are the `bytes` bytes a C value of that many bytes
     // takes: its low ones, wherever the machine keeps those.
@@ -1440,11 +1477,21 @@ namespace pl4g::interp {
       if (found != nullptr)
         return *found;
       auto made = std::make_unique<HostCall>();
-      for (auto ty : callee->fty->params) {
+      // A record laid out for C is answered into room the caller made, which
+      // `largeanswers` handed over last: what libffi is told is the rest, and
+      // a function answering the record.
+      std::span<const Type* const> given = callee->fty->params;
+      if (callee->attrs.answer_in_storage) {
+        given = given.first(given.size() - 1);
+        made->record = ffi_type_of(as<PtrType>(callee->fty->params.back())->pointee, *made);
+      }
+      for (auto ty : given) {
         made->params.push_back(crossing_of(ty));
         made->types.push_back(made->params.back().type);
       }
       made->answer = crossing_of(callee->fty->ret);
+      if (made->record != nullptr)
+        made->answer.type = made->record;
       found = std::move(made);
       return *found;
     }
@@ -1505,6 +1552,14 @@ namespace pl4g::interp {
         float single;
         double twice;
       } answer{};
+      if (host.record != nullptr) {
+        // What libffi answers, at least a word or two of it whatever the
+        // record's size, copied into the room: the bytes are C's either way.
+        std::vector<std::uint64_t> room(host.record->size / 8 + 2);
+        ::ffi_call(&host.cif, FFI_FN(host.address), room.data(), values.data());
+        std::memcpy(reinterpret_cast<void*>(given[host.params.size()]), room.data(), host.record->size);
+        return 0;
+      }
       ::ffi_call(&host.cif, FFI_FN(host.address), &answer, values.data());
       const Crossing& back = host.answer;
       if (back.type == &::ffi_type_void)

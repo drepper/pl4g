@@ -28,12 +28,15 @@ namespace pl4g::target::host {
       asm_.end_label(symbol);
     }
 
-    // The registers a function of `cconv` is handed its arguments in, the
-    // integers first.
+    // The registers a function of `cconv` is handed something in, the
+    // integers first: the argument registers, and the one where the room for
+    // an answer is handed over, where the convention keeps one apart.
     std::vector<mc::Reg> argument_regs(const CallConvDesc& cconv)
     {
       std::vector<mc::Reg> regs(cconv.int_arg_regs.begin(), cconv.int_arg_regs.end());
       regs.insert(regs.end(), cconv.float_arg_regs.begin(), cconv.float_arg_regs.end());
+      if (cconv.answer_reg != nullptr)
+        regs.push_back(cconv.answer_reg);
       return regs;
     }
 

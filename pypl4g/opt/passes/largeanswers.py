@@ -75,7 +75,8 @@ def answers_as_c(module: Module, func: Function) -> bool:
     Not in a program the interpreter runs.  Nothing there reads a register: a
     function it runs answers what it answers as it answers every value, and one
     the host defines is called through libffi, which is told the record's
-    members and applies C's rules itself.
+    members, applies C's rules itself and writes the answer into the room the
+    caller made.
     """
     ret = func.ty.ret
     return isinstance(ret, ProductType) and ret.abi \
@@ -101,16 +102,19 @@ def through_storage(module: Module, func: Function) -> bool:
     convention whatever its size, and a result or a tuple holding one in any:
     what is answered is bytes something else may be handed, and they are
     wanted where they will be read.  A record answered whole in the system's
-    convention is C's to say (`answers_as_c`), and in the interpreter one the
-    host answers is libffi's.
+    convention is C's to say (`answers_as_c`) -- but in the interpreter, where
+    one the host answers goes through the room too: the interpreter has libffi
+    call the host's function, which writes the `struct` C answered into it.
     """
     ret = func.ty.ret
     if ret is VOID:
         return False
     if isinstance(ret, ProductType) and ret.abi \
             and cabi.follows_system(module.triple, func.cconv):
-        if module.output is not Output.INTERPRETED or func.attrs.host is not None:
+        if module.output is not Output.INTERPRETED:
             return False
+        if func.attrs.host is not None:
+            return True
     elif holds_abi(ret):
         return True
     if func.answer_style.in_registers(ret):

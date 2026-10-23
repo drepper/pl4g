@@ -502,7 +502,7 @@ namespace pl4g::target::x86_64 {
         std::vector<const ir::Type*> types;
         for (const auto& param : entry->params)
           types.push_back(param->ty);
-        arriving = argument_places(cconv, types, func.attrs.chained);
+        arriving = argument_places(cconv, types, func.attrs.chained, func.attrs.answer_first);
       }
       // What each call passes where: the room the arguments that go on the
       // stack are written into is at the bottom of this function's frame,

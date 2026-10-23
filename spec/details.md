@@ -2558,10 +2558,12 @@ leave it unsaid.  The sweep finds the place first where the attribute says so.  
 `d0` to `d3`, which only a homogeneous aggregate of three or four members uses.
 
 **Not in a program the interpreter runs.**  Nothing there reads a register: a function it runs answers whatever it answers as one
-value of several cells, and a function the host defines is called through libffi, which is handed the record's members as a
-`struct` type and applies the system's rules itself.  So `_as_c` does nothing for `Output.INTERPRETED`, and `through_storage`
-leaves such a host function's answer alone.  The interpreter builds the `ffi_type` of the record from its leaves at the layout C
-gives them, has libffi write the answer into a buffer, and reads each leaf out of it at its offset.
+value of several cells, and a function the host defines is called through libffi, which is handed the record as a `struct`
+type and applies the system's rules itself.  So `_as_c` does nothing for `Output.INTERPRETED`, and `through_storage` sends such a
+host function's answer through the caller's room, the place last as in the language's own convention: the interpreter calls the
+host with every argument but that one, as a `struct`-returning function described to libffi by the record's fields -- a nested
+record a nested `struct`, an array a `struct` of its elements, which is how libffi is told of one -- and copies what libffi wrote
+into the room.  The record is laid out as C lays it out wherever it is, so the bytes need nothing done to them.
 
 Calling conventions
 -------------------

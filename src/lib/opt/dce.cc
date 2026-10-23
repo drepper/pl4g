@@ -48,7 +48,10 @@ namespace pl4g::opt {
     {
       if (inst->kind != InstKind::CallInst || ! writes_only_its_place(inst))
         return has_effects(inst);
-      const Value* place = inst->operands.empty() ? nullptr : inst->operands.back();
+      // Last, or first where the system's convention puts it there.
+      const Value* place = inst->operands.empty()          ? nullptr
+                           : inst->callee->attrs.answer_first ? inst->operands.front()
+                                                              : inst->operands.back();
       if (place == nullptr || place->vkind != ValueKind::instruction
           || static_cast<const Instruction*>(place)->kind != InstKind::FrameInst)
         // Room this function did not make, which something else may read.

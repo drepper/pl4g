@@ -105,7 +105,10 @@ removed or decided otherwise, which its last paragraph says.
     (8501, "a call answering with 'Big', which wants more registers than the convention answers in"): `largeanswers` rewrites
     calls to functions it knows, and a call through a value has no function to know.  It wants the same rewrite keyed by the
     value's type, the function and the lambda pointed at both answering through the room last.  Found on 2026-10-17; the same
-    with or without a shim.
+    with or without a shim.  Done on 2026-10-23 for one kind of answer: one holding an `@[abi]` record, which every function of
+    the language's own convention answers through the room whatever its size, so a call through a value answering one is
+    rewritten by its type (`holds_abi`).  The general case wants the same question -- "does this type go through the room?" --
+    answered from the type alone, which the style of the function pointed at makes impossible today.
 
 [x] hold a record or a tuple in memory, so that one may hold a sum.  Refused today (9902): both travel as the values they are
     made of, so one holding a sum would carry the address of the room the sum was made in, which dangles the moment it is answered
@@ -551,6 +554,12 @@ removed or decided otherwise, which its last paragraph says.
     to each pass and no diagnostics engine, so nothing in `pypl4g/opt/` can say anything about the language.  The smallest form is a
     list of "things to report" that the driver drains after the pipeline, which is also what value range propagation will want when
     it proves a check cannot hold.
+
+[ ] on x86-64 at `-O0`, `0i16 - 300i16` is worked out as `mov ecx, 0; sub cx, 300`, which leaves the register's upper half
+    nought rather than the value sign-extended, as every value in a register is meant to be; compared with an `i16` loaded by
+    `movsx`, the two differ.  `type Two = a : u64 ; d : i16`, a `@[cdecl] fn` answering `Two(.a ← n, .d ← 0i16 - 300i16)`, and
+    `two.d ≠ 0i16 - 300i16` in the caller is true.  Not at `-O1`, nor on the other two.  Found on 2026-10-23, while testing the
+    answers of `@[abi]` records; it is older than they are.
 
 Optimizations
 -------------

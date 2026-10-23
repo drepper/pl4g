@@ -110,6 +110,7 @@ set(PL4G_LIB_SOURCES
   src/lib/ir/printer.cc
   src/lib/ir/json.cc
   src/lib/ir/layout.cc
+  src/lib/ir/cabi.cc
   src/lib/ir/builder.cc
   src/lib/opt/passes.cc
   src/lib/opt/flow.cc

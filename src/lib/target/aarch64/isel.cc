@@ -2132,7 +2132,7 @@ namespace pl4g::target::aarch64 {
       std::vector<const ir::Type*> types;
       for (const auto& param : entry->params)
         types.push_back(param->ty);
-      arriving = argument_places(cconv, types, func.attrs.chained);
+      arriving = argument_places(cconv, types, func.attrs.chained, func.attrs.answer_first);
     }
     // The room for outgoing arguments, at offset nought and as large as the
     // largest call wants it.

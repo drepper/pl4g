@@ -197,6 +197,8 @@ namespace pl4g::ir {
         out += " opaque";
       if (func.attrs.answer_in_storage)
         out += " answer-in-storage";
+      if (func.attrs.answer_first)
+        out += " answer-first";
       if (func.attrs.chained)
         out += " chained";
       if (func.is_declaration()) {

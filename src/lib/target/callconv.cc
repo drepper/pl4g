@@ -70,8 +70,14 @@ namespace pl4g::target {
   }
 
 
-  Places argument_places(const CallConvDesc& cconv, std::span<const ir::Type* const> types, bool chained)
+  Places argument_places(const CallConvDesc& cconv, std::span<const ir::Type* const> types, bool chained,
+                         bool answer_first)
   {
+    if (answer_first && cconv.answer_reg != nullptr && ! types.empty()) {
+      auto found = places(cconv, cconv.int_arg_regs, cconv.float_arg_regs, types.subspan(1), true);
+      found.insert(found.begin(), { Place(cconv.answer_reg) });
+      return found;
+    }
     if (! chained || types.empty())
       return places(cconv, cconv.int_arg_regs, cconv.float_arg_regs, types, true);
     if (cconv.chain_reg == nullptr) [[unlikely]]
@@ -115,7 +121,8 @@ namespace pl4g::target {
         std::vector<const ir::Type*> types;
         for (auto one : inst->arguments())
           types.push_back(one->ty);
-        found.emplace(inst, std::pair{ &theirs, argument_places(theirs, types, through || inst->callee->attrs.chained) });
+        found.emplace(inst, std::pair{ &theirs, argument_places(theirs, types, through || inst->callee->attrs.chained,
+                                                                ! through && inst->callee->attrs.answer_first) });
       }
     return found;
   }

@@ -677,6 +677,7 @@ namespace pl4g::ir {
         func->attrs.io = bool_of(attrs["io"]);
         func->attrs.opaque = bool_of(attrs["opaque"]);
         func->attrs.answer_in_storage = bool_of(attrs["answer_in_storage"]);
+        func->attrs.answer_first = bool_of(attrs["answer_first"]);
         func->attrs.chained = bool_of(attrs["chained"]);
         func->attrs.listable = bool_of(attrs["listable"]);
         func->linkage = linkage_of(f["linkage"]);

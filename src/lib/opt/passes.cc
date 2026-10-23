@@ -8,6 +8,7 @@
 
 #include "diag/engine.hh"
 #include "ir/builder.hh"
+#include "ir/cabi.hh"
 #include "ir/layout.hh"
 #include "ir/verify.hh"
 #include "opt/flow.hh"
@@ -439,10 +440,49 @@ namespace pl4g::opt {
       return leaves_of(ty).size() <= (style == ReturnStyle::two_in_registers ? 2 : 3);
     }
 
-    bool through_storage(const Function& func)
+    // Whether a value of `ty` is a record laid out for C, or has one inside it
+    // by value: a result answering one, a tuple or a record holding one.
+    bool holds_abi(const Type* ty)
+    {
+      if (auto record = as<ProductType>(ty))
+        return record->abi || std::ranges::any_of(record->fields, [](const auto& one) { return holds_abi(one.second); });
+      if (auto tuple = as<TupleType>(ty))
+        return std::ranges::any_of(tuple->members, [](auto one) { return holds_abi(one); });
+      if (auto result = as<ResultType>(ty))
+        return holds_abi(result->ok) || (result->err != nullptr && holds_abi(result->err));
+      return false;
+    }
+
+    // Whether `func` answers a record laid out for C in the system's
+    // convention, which C's rules say how to answer -- except in a program the
+    // interpreter runs, where nothing reads a register and libffi calls the
+    // host's functions.
+    bool answers_as_c(const Module& module, const Function& func)
+    {
+      auto record = as<ProductType>(func.fty->ret);
+      return record != nullptr && record->abi && cabi::follows_system(module.triple, func.cconv)
+             && module.output != Output::interpreted;
+    }
+
+    // Whether the answer travels through the caller's storage: a record laid
+    // out for C, or anything holding one, in the language's own convention
+    // whatever its size, and anything holding one but the record itself in
+    // the system's.
+    bool through_storage(const Module& module, const Function& func)
     {
       const Type* ret = func.fty->ret;
-      if (is<VoidType>(ret) || in_registers(func.answer_style(), ret))
+      if (is<VoidType>(ret))
+        return false;
+      if (auto record = as<ProductType>(ret);
+          record != nullptr && record->abi && cabi::follows_system(module.triple, func.cconv)) {
+        // In the interpreter, libffi writes what the host answers into the room.
+        if (module.output != Output::interpreted)
+          return false;
+        if (func.attrs.host)
+          return true;
+      } else if (holds_abi(ret))
+        return true;
+      if (in_registers(func.answer_style(), ret))
         return false;
       if (held_in_memory(ret))
         return true;
@@ -648,6 +688,531 @@ namespace pl4g::opt {
       return true;
     }
 
+    // A cast of `value` to `ty`, of the kind given.
+    Instruction* cast_to(Function& func, CastKind kind, Value* value, const Type* ty, Span span)
+    {
+      auto inst = made(func, InstKind::CastInst, ty, { value }, span);
+      inst->cast = kind;
+      return inst;
+    }
+
+    // `a op b`, of `a`'s type.
+    Instruction* binary_of(Function& func, BinOp op, Value* a, Value* b, Span span)
+    {
+      auto inst = made(func, InstKind::BinaryInst, a->ty, { a, b }, span);
+      inst->bin = op;
+      return inst;
+    }
+
+    Value* u64_const(Module& module, std::uint64_t value)
+    {
+      return const_cast<IntConst*>(module.int_const(u64(), __int128(value)));
+    }
+
+    // Turn each `ret v` of `func` into writes of `answer` through `place` and a
+    // `ret` of `returned`: nothing, or -- where the system's convention says
+    // so -- the place itself.
+    void store_the_answer(Module& module, Function& func, const Type* answer, Value* place, Value* returned)
+    {
+      for (auto& block : func.blocks) {
+        auto last = block->terminator();
+        if (last == nullptr || last->kind != InstKind::RetInst || last->operands.empty())
+          continue;
+        std::vector<Instruction*> made_insts;
+        auto token = token_before(func, block.get(), block->insts.size() - 1);
+        auto at = index_of(block.get(), last);
+        auto value = last->operands[0];
+        if (held_in_memory(answer))
+          copied(func, module, place, value, size_of(answer, host()), token, made_insts, last->span);
+        else {
+          auto pieces = parts_of(answer);
+          auto offsets = answer_offsets(answer);
+          for (std::size_t i = 0; i < pieces.size(); ++i) {
+            auto taken = part_of(func, value, i, pieces[i], answer, last->span);
+            made_insts.push_back(taken);
+            auto where = at_in(func, place, pieces[i], offsets[i], made_insts, last->span, module);
+            if (held_in_memory(pieces[i])) {
+              // A part held in memory -- the sum a result answers -- is where its bytes are, and it is the
+              // bytes that go.  An error has no answer to be read, and where it is stands nothing: the place
+              // is copied onto itself instead, which reads nothing that is not there.
+              auto bytes = ptr_type(u8(), true);
+              auto held = bitcast(func, taken, bytes, last->span);
+              auto failed = made(func, InstKind::FailedInst, bool_type(), { value }, last->span);
+              auto itself = bitcast(func, where, bytes, last->span);
+              auto source = made(func, InstKind::SelectInst, bytes, { failed, itself, held }, last->span);
+              made_insts.insert(made_insts.end(), { held, failed, itself, source });
+              token = copied(func, module, where, source, size_of(pieces[i], host()), token, made_insts, last->span);
+              continue;
+            }
+            auto write = made(func, InstKind::StoreInst, mem_type(), { token, where, taken }, last->span);
+            made_insts.push_back(write);
+            token = write;
+          }
+        }
+        made_insts.push_back(made(func, InstKind::RetInst, void_type(),
+                                  returned == nullptr ? std::vector<Value*>{} : std::vector<Value*>{ returned },
+                                  last->span));
+        splice(block.get(), at, made_insts);
+      }
+    }
+
+    // Read the answer `inst` gave out of `slot`, put `made_insts` where `inst`
+    // stood with the reads after it, and answer where the walk goes on.
+    std::size_t read_back(Module& module, Function& func, BasicBlock* block, std::size_t index, Instruction* inst,
+                          const Type* answer, Value* slot, Value* token, std::vector<Instruction*>& made_insts)
+    {
+      auto span = inst->span;
+      Instruction* rebuilt;
+      if (held_in_memory(answer)) {
+        // Nothing to read back: the room the caller made *is* the answer.
+        rebuilt = bitcast(func, slot, answer, span);
+        made_insts.push_back(rebuilt);
+      } else {
+        std::vector<Value*> taken;
+        auto pieces = parts_of(answer);
+        auto offsets = answer_offsets(answer);
+        for (std::size_t i = 0; i < pieces.size(); ++i) {
+          auto where = at_in(func, slot, pieces[i], offsets[i], made_insts, span, module);
+          // A part held in memory -- the sum a result answers -- is where its bytes are in the
+          // room the caller made, as the whole is where the whole is held in memory.
+          auto read = held_in_memory(pieces[i]) ? bitcast(func, where, pieces[i], span)
+                                                : made(func, InstKind::LoadInst, pieces[i], { token, where }, span);
+          made_insts.push_back(read);
+          taken.push_back(read);
+        }
+        rebuilt = whole_of(func, taken, answer, span);
+        made_insts.push_back(rebuilt);
+      }
+      splice(block, index, made_insts);
+      stands_for(func, inst, rebuilt);
+      return index + made_insts.size();
+    }
+
+    // Whether any function calls through a value something holding a record
+    // laid out for C, which is answered through the caller's room.
+    bool calls_through_values(const std::vector<Function*>& every)
+    {
+      for (auto func : every)
+        for (const auto& block : func->blocks)
+          for (auto inst : block->insts)
+            if (inst->kind == InstKind::CallInst && inst->callee == nullptr && holds_abi(inst->ty))
+              return true;
+      return false;
+    }
+
+    // The functions answering through storage, and every call to them.
+    bool through_storage_rewrite(Module& module)
+    {
+      std::vector<Function*> every;
+      for (auto& [_, func] : module.functions)
+        every.push_back(func.get());
+      std::vector<Function*> wanted;
+      std::unordered_map<const Function*, const Type*> answers;
+      for (auto func : every)
+        if (through_storage(module, *func)) {
+          wanted.push_back(func);
+          answers[func] = func->fty->ret;
+        }
+      if (wanted.empty() && ! calls_through_values(every))
+        return false;
+      // What it answers goes where its last parameter, added here, says.
+      for (auto func : wanted) {
+        auto place = ptr_type(func->fty->ret, true);
+        auto params = func->fty->params;
+        params.push_back(place);
+        func->set_type(func_type(params, void_type()));
+        func->attrs.answer_in_storage = true;
+        if (! func->blocks.empty())
+          func->blocks[0]->add_param(place)->name_hint = "answer";
+      }
+      for (auto func : every)
+        for (auto& block : func->blocks) {
+          for (std::size_t index = 0; index < block->insts.size();) {
+            auto inst = block->insts[index];
+            auto callee = inst->callee;
+            // A call through a value answering something holding a record laid
+            // out for C is one too: whatever the value points at follows the
+            // language's own convention, which answers that through the room.
+            bool through = inst->kind == InstKind::CallInst && callee == nullptr && holds_abi(inst->ty);
+            if (inst->kind != InstKind::CallInst || is<VoidType>(inst->ty)
+                || ((callee == nullptr || ! answers.contains(callee)) && ! through)) {
+              ++index;
+              continue;
+            }
+            auto answer = through ? inst->ty : answers[callee];
+            auto span = inst->span;
+            auto token = token_before(*func, block.get(), index);
+            index = index_of(block.get(), inst);
+            std::vector<Instruction*> made_insts;
+            auto slot = made(*func, InstKind::FrameInst, ptr_type(answer, true), {}, span);
+            slot->held = answer;
+            made_insts.push_back(slot);
+            auto args = inst->operands;
+            args.push_back(slot);
+            auto call = made(*func, InstKind::CallInst, void_type(), args, span);
+            call->callee = through ? nullptr : callee;
+            made_insts.push_back(call);
+            index = read_back(module, *func, block.get(), index, inst, answer, slot, token, made_insts);
+          }
+        }
+      for (auto func : wanted)
+        if (! func->blocks.empty())
+          store_the_answer(module, *func, answers[func], func->blocks[0]->params.back().get(), nullptr);
+      for (auto func : wanted)
+        module.record("answer-in-storage", func->name,
+                      holds_abi(answers[func])
+                        ? "'" + answers[func]->written()
+                            + "' holds a record laid out for C, which the language's own convention answers in "
+                              "room the caller provides"
+                        : "'" + answers[func]->written()
+                            + "' is more values than the style answers in registers, so the caller provides the place",
+                      func->name_span.is_valid() ? func->name_span : func->span);
+      return true;
+    }
+
+
+    // -- answered as C answers ------------------------------------------------
+
+    using Pieces = std::optional<std::vector<cabi::Piece>>;
+
+    // What a function answering in `pieces` answers: nothing, the one word, or
+    // a tuple of them.
+    const Type* words_type(const std::vector<cabi::Piece>& pieces)
+    {
+      if (pieces.empty())
+        return void_type();
+      if (pieces.size() == 1)
+        return pieces[0].ty;
+      std::vector<const Type*> members;
+      for (const auto& one : pieces)
+        members.push_back(one.ty);
+      return tuple_type(std::move(members));
+    }
+
+    // Whether the words of `record` are put together in memory rather than
+    // with shifts: where it is bytes in a place, or holds something no register
+    // is read as a number.
+    bool by_memory(const ProductType* record)
+    {
+      return held_in_memory(record) || ! std::ranges::all_of(parts_of(record), [](auto one) { return cabi::plain(one); });
+    }
+
+    // Room for `record` that whole words may be read from and written to.
+    const Type* room_for(const ProductType* record)
+    {
+      auto words = (size_of(record, cabi::system_layout) + 7) / 8;
+      return tuple_type(std::vector<const Type*>(std::max<std::uint64_t>(words, 1), u64()));
+    }
+
+    // The bits of `value`, a member C holds, as a `u64` with nought above.
+    Value* wide_bits(Function& func, Value* value, std::vector<Instruction*>& out, Span span)
+    {
+      auto ty = value->ty;
+      if (auto f = as<FloatType>(ty)) {
+        auto bits = cast_to(func, CastKind::fbits, value, f->bits == 32 ? u32() : u64(), span);
+        out.push_back(bits);
+        value = bits;
+      } else if (is<PtrType>(ty)) {
+        auto bits = cast_to(func, CastKind::bitcast, value, u64(), span);
+        out.push_back(bits);
+        return bits;
+      }
+      if (value->ty == u64())
+        return value;
+      auto wide = cast_to(func, CastKind::zext, value, u64(), span);
+      out.push_back(wide);
+      return wide;
+    }
+
+    // The words `value` is answered in, one for each of `pieces`.
+    std::vector<Value*> packed(Module& module, Function& func, const ProductType* record,
+                               const std::vector<cabi::Piece>& pieces, Value* value, Value* token,
+                               std::vector<Instruction*>& out, Span span)
+    {
+      std::vector<Value*> words;
+      auto parts = parts_of(record);
+      auto offsets = part_offsets_of(record, cabi::system_layout);
+      if (by_memory(record)) {
+        auto room = room_for(record);
+        auto slot = made(func, InstKind::FrameInst, ptr_type(room, true), {}, span);
+        slot->held = room;
+        out.push_back(slot);
+        if (held_in_memory(record))
+          token = copied(func, module, slot, value, size_of(record, cabi::system_layout), token, out, span);
+        else
+          for (std::size_t i = 0; i < parts.size(); ++i) {
+            auto taken = extract(func, value, std::int64_t(i), parts[i], span);
+            out.push_back(taken);
+            auto where = at_in(func, slot, parts[i], offsets[i], out, span, module);
+            auto write = made(func, InstKind::StoreInst, mem_type(), { token, where, taken }, span);
+            out.push_back(write);
+            token = write;
+          }
+        for (const auto& piece : pieces) {
+          auto where = at_in(func, slot, piece.ty, piece.offset, out, span, module);
+          auto read = made(func, InstKind::LoadInst, piece.ty, { token, where }, span);
+          out.push_back(read);
+          words.push_back(read);
+        }
+        return words;
+      }
+      for (const auto& piece : pieces) {
+        std::vector<std::size_t> inside;
+        for (std::size_t i = 0; i < parts.size(); ++i)
+          if (piece.offset <= offsets[i] && offsets[i] < piece.offset + piece.size)
+            inside.push_back(i);
+        if (inside.size() == 1 && parts[inside[0]] == piece.ty) {
+          // The member is the word, as it is in most records.
+          auto taken = extract(func, value, std::int64_t(inside[0]), piece.ty, span);
+          out.push_back(taken);
+          words.push_back(taken);
+          continue;
+        }
+        Value* whole = nullptr;
+        for (auto i : inside) {
+          auto taken = extract(func, value, std::int64_t(i), parts[i], span);
+          out.push_back(taken);
+          auto bits = wide_bits(func, taken, out, span);
+          if (offsets[i] > piece.offset) {
+            auto moved = binary_of(func, BinOp::shl, bits, u64_const(module, 8 * (offsets[i] - piece.offset)), span);
+            out.push_back(moved);
+            bits = moved;
+          }
+          if (whole != nullptr) {
+            auto joined = binary_of(func, BinOp::or_, whole, bits, span);
+            out.push_back(joined);
+            bits = joined;
+          }
+          whole = bits;
+        }
+        if (whole == nullptr)
+          whole = u64_const(module, 0);
+        if (is<FloatType>(piece.ty)) {
+          // The two `float`s of one of x86-64's eightbytes, in one register of the other kind.
+          auto word = cast_to(func, CastKind::fbits, whole, f64(), span);
+          out.push_back(word);
+          whole = word;
+        }
+        words.push_back(whole);
+      }
+      return words;
+    }
+
+    // The member of type `part` in the low bits of the `u64` `word`.
+    Value* narrowed(Function& func, Value* word, const Type* part, std::vector<Instruction*>& out, Span span)
+    {
+      Instruction* value;
+      if (auto f = as<FloatType>(part)) {
+        if (f->bits == 32) {
+          auto low = cast_to(func, CastKind::trunc, word, u32(), span);
+          out.push_back(low);
+          word = low;
+        }
+        value = cast_to(func, CastKind::fbits, word, part, span);
+      } else if (is<PtrType>(part))
+        value = cast_to(func, CastKind::bitcast, word, part, span);
+      else if (part == u64())
+        return word;
+      else
+        value = cast_to(func, CastKind::trunc, word, part, span);
+      out.push_back(value);
+      return value;
+    }
+
+    // The record `words` are, taken apart into its members.
+    Instruction* unpacked(Module& module, Function& func, const ProductType* record,
+                          const std::vector<cabi::Piece>& pieces, const std::vector<Value*>& words, Value* token,
+                          std::vector<Instruction*>& out, Span span)
+    {
+      auto parts = parts_of(record);
+      auto offsets = part_offsets_of(record, cabi::system_layout);
+      std::vector<Value*> taken;
+      if (by_memory(record)) {
+        auto room = room_for(record);
+        auto slot = made(func, InstKind::FrameInst, ptr_type(room, true), {}, span);
+        slot->held = room;
+        out.push_back(slot);
+        for (std::size_t i = 0; i < pieces.size(); ++i) {
+          auto where = at_in(func, slot, pieces[i].ty, pieces[i].offset, out, span, module);
+          auto write = made(func, InstKind::StoreInst, mem_type(), { token, where, words[i] }, span);
+          out.push_back(write);
+          token = write;
+        }
+        if (held_in_memory(record)) {
+          auto rebuilt = bitcast(func, slot, record, span);
+          out.push_back(rebuilt);
+          return rebuilt;
+        }
+        for (std::size_t i = 0; i < parts.size(); ++i) {
+          auto where = at_in(func, slot, parts[i], offsets[i], out, span, module);
+          auto read = made(func, InstKind::LoadInst, parts[i], { token, where }, span);
+          out.push_back(read);
+          taken.push_back(read);
+        }
+        auto rebuilt = made(func, InstKind::TupleInst, record, taken, span);
+        out.push_back(rebuilt);
+        return rebuilt;
+      }
+      for (std::size_t i = 0; i < parts.size(); ++i) {
+        std::size_t at = 0;
+        while (! (pieces[at].offset <= offsets[i] && offsets[i] < pieces[at].offset + pieces[at].size))
+          ++at;
+        const auto& piece = pieces[at];
+        Value* word = words[at];
+        if (piece.ty == parts[i]) {
+          taken.push_back(word);
+          continue;
+        }
+        if (is<FloatType>(piece.ty)) {
+          auto bits = cast_to(func, CastKind::fbits, word, u64(), span);
+          out.push_back(bits);
+          word = bits;
+        }
+        if (offsets[i] > piece.offset) {
+          auto moved = binary_of(func, BinOp::lshr, word, u64_const(module, 8 * (offsets[i] - piece.offset)), span);
+          out.push_back(moved);
+          word = moved;
+        }
+        taken.push_back(narrowed(func, word, parts[i], out, span));
+      }
+      auto rebuilt = made(func, InstKind::TupleInst, record, taken, span);
+      out.push_back(rebuilt);
+      return rebuilt;
+    }
+
+    // The functions answering a record the way C does, and every call to them:
+    // in the words the system's convention answers, or through room the
+    // caller makes, handed over before every other argument.
+    bool as_c(Module& module)
+    {
+      std::vector<Function*> every;
+      for (auto& [_, func] : module.functions)
+        every.push_back(func.get());
+      std::vector<Function*> wanted;
+      std::unordered_map<const Function*, std::pair<const ProductType*, Pieces>> shapes;
+      for (auto func : every)
+        if (answers_as_c(module, *func)) {
+          wanted.push_back(func);
+          auto record = as<ProductType>(func->fty->ret);
+          shapes[func] = { record, cabi::answered_by_c(module.triple, record) };
+        }
+      if (wanted.empty())
+        return false;
+      bool back = cabi::answers_its_place(module.triple);
+      for (auto func : wanted) {
+        const auto& [record, pieces] = shapes[func];
+        if (pieces) {
+          func->set_type(func_type(func->fty->params, words_type(*pieces)));
+          continue;
+        }
+        // First, as C puts it: the first argument register, or AArch64's own
+        // for it, which `answer_first` asks for; on x86-64 answered back.
+        auto place = ptr_type(record, true);
+        std::vector<const Type*> params{ place };
+        params.insert(params.end(), func->fty->params.begin(), func->fty->params.end());
+        func->set_type(func_type(params, back ? static_cast<const Type*>(place) : void_type()));
+        func->attrs.answer_in_storage = true;
+        func->attrs.answer_first = true;
+        if (! func->blocks.empty()) {
+          auto& entry = *func->blocks[0];
+          entry.add_param(place)->name_hint = "answer";
+          std::rotate(entry.params.begin(), entry.params.end() - 1, entry.params.end());
+          for (std::size_t at = 0; at < entry.params.size(); ++at)
+            entry.params[at]->index = at;
+        }
+      }
+      for (auto func : every)
+        for (auto& block : func->blocks)
+          for (std::size_t index = 0; index < block->insts.size();) {
+            auto inst = block->insts[index];
+            auto callee = inst->callee;
+            // A call already rewritten answers something other than the record.
+            if (inst->kind != InstKind::CallInst || callee == nullptr || ! shapes.contains(callee)
+                || ! is<ProductType>(inst->ty)) {
+              ++index;
+              continue;
+            }
+            const auto& [record, pieces] = shapes[callee];
+            auto span = inst->span;
+            auto token = token_before(*func, block.get(), index);
+            index = index_of(block.get(), inst);
+            std::vector<Instruction*> made_insts;
+            if (! pieces) {
+              auto slot = made(*func, InstKind::FrameInst, ptr_type(record, true), {}, span);
+              slot->held = record;
+              made_insts.push_back(slot);
+              std::vector<Value*> args{ slot };
+              args.insert(args.end(), inst->operands.begin(), inst->operands.end());
+              auto call = made(*func, InstKind::CallInst, callee->fty->ret, args, span);
+              call->callee = callee;
+              made_insts.push_back(call);
+              index = read_back(module, *func, block.get(), index, inst, record, slot, token, made_insts);
+              continue;
+            }
+            auto call = made(*func, InstKind::CallInst, callee->fty->ret, inst->operands, span);
+            call->callee = callee;
+            made_insts.push_back(call);
+            std::vector<Value*> words;
+            if (pieces->size() == 1)
+              words.push_back(call);
+            else
+              for (std::size_t at = 0; at < pieces->size(); ++at) {
+                auto one = extract(*func, call, std::int64_t(at), (*pieces)[at].ty, span);
+                made_insts.push_back(one);
+                words.push_back(one);
+              }
+            auto rebuilt = unpacked(module, *func, record, *pieces, words, token, made_insts, span);
+            splice(block.get(), index, made_insts);
+            stands_for(*func, inst, rebuilt);
+            index += made_insts.size();
+          }
+      for (auto func : wanted) {
+        const auto& [record, pieces] = shapes[func];
+        if (func->blocks.empty())
+          continue;
+        if (! pieces) {
+          auto place = func->blocks[0]->params[0].get();
+          store_the_answer(module, *func, record, place, back ? place : nullptr);
+          continue;
+        }
+        for (auto& block : func->blocks) {
+          auto last = block->terminator();
+          if (last == nullptr || last->kind != InstKind::RetInst || last->operands.empty())
+            continue;
+          std::vector<Instruction*> made_insts;
+          auto token = token_before(*func, block.get(), block->insts.size() - 1);
+          auto at = index_of(block.get(), last);
+          auto words = packed(module, *func, record, *pieces, last->operands[0], token, made_insts, last->span);
+          std::vector<Value*> answer;
+          if (words.size() == 1)
+            answer.push_back(words[0]);
+          else if (words.size() > 1) {
+            auto whole = made(*func, InstKind::TupleInst, func->fty->ret, words, last->span);
+            made_insts.push_back(whole);
+            answer.push_back(whole);
+          }
+          made_insts.push_back(made(*func, InstKind::RetInst, void_type(), answer, last->span));
+          splice(block.get(), at, made_insts);
+        }
+      }
+      for (auto func : wanted) {
+        const auto& [record, pieces] = shapes[func];
+        std::string text = "'" + record->written() + "' is laid out for C, which answers it ";
+        if (! pieces)
+          text += "in room the caller provides, its address handed over first";
+        else {
+          text += "in registers as ";
+          std::string joined;
+          for (const auto& one : *pieces)
+            joined += (joined.empty() ? "" : ", ") + one.ty->written();
+          text += joined.empty() ? "nothing" : joined;
+        }
+        module.record(pieces ? "answer-as-c" : "answer-in-storage", func->name, text,
+                      func->name_span.is_valid() ? func->name_span : func->span);
+      }
+      return true;
+    }
+
   } // anonymous namespace
 
 
@@ -655,126 +1220,8 @@ namespace pl4g::opt {
   {
     laid_out = &module;
     bool thinned = thin_answers(module);
-    std::vector<Function*> every;
-    for (auto& [_, func] : module.functions)
-      every.push_back(func.get());
-    std::vector<Function*> wanted;
-    std::unordered_map<const Function*, const Type*> answers;
-    for (auto func : every)
-      if (through_storage(*func)) {
-        wanted.push_back(func);
-        answers[func] = func->fty->ret;
-      }
-    if (wanted.empty())
-      return thinned;
-    // What it answers goes where its last parameter, added here, says.
-    for (auto func : wanted) {
-      auto place = ptr_type(func->fty->ret, true);
-      auto params = func->fty->params;
-      params.push_back(place);
-      func->set_type(func_type(params, void_type()));
-      func->attrs.answer_in_storage = true;
-      if (! func->blocks.empty())
-        func->blocks[0]->add_param(place)->name_hint = "answer";
-    }
-    for (auto func : every)
-      for (auto& block : func->blocks) {
-        for (std::size_t index = 0; index < block->insts.size();) {
-          auto inst = block->insts[index];
-          auto callee = inst->callee;
-          if (inst->kind != InstKind::CallInst || callee == nullptr || ! answers.contains(callee)
-              || is<VoidType>(inst->ty)) {
-            ++index;
-            continue;
-          }
-          auto answer = answers[callee];
-          auto span = inst->span;
-          auto token = token_before(*func, block.get(), index);
-          index = index_of(block.get(), inst);
-          std::vector<Instruction*> made_insts;
-          auto slot = made(*func, InstKind::FrameInst, ptr_type(answer, true), {}, span);
-          slot->held = answer;
-          made_insts.push_back(slot);
-          auto args = inst->operands;
-          args.push_back(slot);
-          auto call = made(*func, InstKind::CallInst, void_type(), args, span);
-          call->callee = callee;
-          made_insts.push_back(call);
-          Instruction* rebuilt;
-          if (held_in_memory(answer)) {
-            rebuilt = bitcast(*func, slot, answer, span);
-            made_insts.push_back(rebuilt);
-          } else {
-            std::vector<Value*> taken;
-            auto pieces = parts_of(answer);
-            auto offsets = answer_offsets(answer);
-            for (std::size_t i = 0; i < pieces.size(); ++i) {
-              auto where = at_in(*func, slot, pieces[i], offsets[i], made_insts, span, module);
-              // A part held in memory -- the sum a result answers -- is where its bytes are in the
-              // room the caller made, as the whole is where the whole is held in memory.
-              auto read = held_in_memory(pieces[i]) ? bitcast(*func, where, pieces[i], span)
-                                                    : made(*func, InstKind::LoadInst, pieces[i], { token, where }, span);
-              made_insts.push_back(read);
-              taken.push_back(read);
-            }
-            rebuilt = whole_of(*func, taken, answer, span);
-            made_insts.push_back(rebuilt);
-          }
-          splice(block.get(), index, made_insts);
-          stands_for(*func, inst, rebuilt);
-          index += made_insts.size();
-        }
-      }
-    for (auto func : wanted) {
-      if (func->blocks.empty())
-        continue;
-      auto answer = answers[func];
-      auto place = func->blocks[0]->params.back().get();
-      for (auto& block : func->blocks) {
-        auto last = block->terminator();
-        if (last == nullptr || last->kind != InstKind::RetInst || last->operands.empty())
-          continue;
-        std::vector<Instruction*> made_insts;
-        auto token = token_before(*func, block.get(), block->insts.size() - 1);
-        auto at = index_of(block.get(), last);
-        auto value = last->operands[0];
-        if (held_in_memory(answer))
-          copied(*func, module, place, value, size_of(answer, host()), token, made_insts, last->span);
-        else {
-          auto pieces = parts_of(answer);
-          auto offsets = answer_offsets(answer);
-          for (std::size_t i = 0; i < pieces.size(); ++i) {
-            auto taken = part_of(*func, value, i, pieces[i], answer, last->span);
-            made_insts.push_back(taken);
-            auto where = at_in(*func, place, pieces[i], offsets[i], made_insts, last->span, module);
-            if (held_in_memory(pieces[i])) {
-              // A part held in memory -- the sum a result answers -- is where its bytes are, and it is the
-              // bytes that go.  An error has no answer to be read, and where it is stands nothing: the place
-              // is copied onto itself instead, which reads nothing that is not there.
-              auto bytes = ptr_type(u8(), true);
-              auto held = bitcast(*func, taken, bytes, last->span);
-              auto failed = made(*func, InstKind::FailedInst, bool_type(), { value }, last->span);
-              auto itself = bitcast(*func, where, bytes, last->span);
-              auto source = made(*func, InstKind::SelectInst, bytes, { failed, itself, held }, last->span);
-              made_insts.insert(made_insts.end(), { held, failed, itself, source });
-              token = copied(*func, module, where, source, size_of(pieces[i], host()), token, made_insts, last->span);
-              continue;
-            }
-            auto write = made(*func, InstKind::StoreInst, mem_type(), { token, where, taken }, last->span);
-            made_insts.push_back(write);
-            token = write;
-          }
-        }
-        made_insts.push_back(made(*func, InstKind::RetInst, void_type(), {}, last->span));
-        splice(block.get(), at, made_insts);
-      }
-    }
-    for (auto func : wanted)
-      module.record("answer-in-storage", func->name,
-                    "'" + answers[func]->written()
-                      + "' is more values than the style answers in registers, so the caller provides the place",
-                    func->name_span.is_valid() ? func->name_span : func->span);
-    return true;
+    bool stored = through_storage_rewrite(module);
+    return as_c(module) || stored || thinned;
   }
 
 

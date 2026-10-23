@@ -44,6 +44,10 @@ namespace pl4g::target {
     // left takes an ordinary one before it takes the stack, as RISC-V's
     // convention has it.
     bool floats_in_integers = false;
+    // Where a function answering through room its caller made is handed where
+    // that room is, where the convention keeps a register of its own for it
+    // rather than taking the first argument register: AArch64's `x8`.
+    const mc::PhysReg* answer_reg = nullptr;
 
     // The allocation orders by the name of the class each belongs to: one
     // entry where the target says nothing about floating point.
@@ -82,8 +86,11 @@ namespace pl4g::target {
 
   // Where each argument is passed, in order, one place per part: a register of
   // its kind while there is one, an eight-byte slot on the stack after that.
-  // `chained` passes the first in the chain register.
-  Places argument_places(const CallConvDesc& cconv, std::span<const ir::Type* const> types, bool chained = false);
+  // `chained` passes the first in the chain register, and `answer_first` --
+  // where the first is where the answer goes -- in the convention's
+  // `answer_reg` where it has one.
+  Places argument_places(const CallConvDesc& cconv, std::span<const ir::Type* const> types, bool chained = false,
+                         bool answer_first = false);
 
   // How much room the parts `places` puts on the stack take, rounded to sixteen.
   std::int64_t stack_bytes(const Places& places);

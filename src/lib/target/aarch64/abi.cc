@@ -84,9 +84,12 @@ namespace pl4g::target::aarch64 {
       for (int n = 0; n < 32; ++n)
         cc.caller_saved.insert(reg("d" + std::to_string(n))->unit);
       cc.int_ret_regs = { reg("x0"), reg("x1") };
-      // What the system answers a pair of `double`s in, the first two of the
-      // four a homogeneous aggregate may take.
-      cc.float_ret_regs = { reg("d0"), reg("d1") };
+      // What the system answers a homogeneous floating-point aggregate in: up
+      // to four of one kind, a member to a register.
+      cc.float_ret_regs = { reg("d0"), reg("d1"), reg("d2"), reg("d3") };
+      // Where a function answering a record through its caller's room is
+      // handed that room: a register of its own, so the arguments keep theirs.
+      cc.answer_reg = reg("x8");
       return cc;
     }();
     return made;

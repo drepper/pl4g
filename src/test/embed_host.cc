@@ -177,6 +177,45 @@ extern "C" {
     return p->second == 3.0;
   }
 
+  // Records answered by value, as C answers them: sixteen bytes in two
+  // registers of two kinds, twelve of three `float`s, thirty-two through room
+  // the caller made, and six of an array and a number.
+  Pair embed_pair(std::int64_t n, double x)
+  {
+    return { n + 1, x * 2 };
+  }
+
+  struct Floats {
+    float x, y, z;
+  };
+
+  Floats embed_floats(float x)
+  {
+    return { x, x + 1, x + 2 };
+  }
+
+  struct Quad {
+    std::int64_t a;
+    double b;
+    std::int32_t c;
+    double d;
+  };
+
+  Quad embed_quad(std::int64_t n)
+  {
+    return { n, 0.5, std::int32_t(n) - 1, 0.25 };
+  }
+
+  struct Bytes {
+    std::uint8_t v[3];
+    std::uint16_t tag;
+  };
+
+  Bytes embed_bytes(std::uint8_t n)
+  {
+    return { { n, std::uint8_t(n + 1), std::uint8_t(n + 2) }, 513 };
+  }
+
   // Record the two texts, which have to end in a nul; their lengths together.
   std::uint64_t embed_words(const char* a, const char* b)
   {
@@ -212,6 +251,14 @@ namespace {
     "type Pair =\n"
     "    first : i64 ; second : f64\n"
     "\n"
+    "@[abi]\ntype Floats = x : f32 ; y : f32 ; z : f32\n"
+    "@[abi]\ntype Quad = a : i64 ; b : f64 ; c : i32 ; d : f64\n"
+    "@[abi]\ntype Bytes = v : u8\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}3\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} ; tag : u16\n"
+    "\n"
+    "@[host(\"embed_pair\")]\nfn embed_pair(n: i64, x: f64) \N{RIGHTWARDS ARROW} Pair\n"
+    "@[host(\"embed_floats\")]\nfn embed_floats(x: f32) \N{RIGHTWARDS ARROW} Floats\n"
+    "@[host(\"embed_quad\")]\nfn embed_quad(n: i64) \N{RIGHTWARDS ARROW} Quad\n"
+    "@[host(\"embed_bytes\")]\nfn embed_bytes(n: u8) \N{RIGHTWARDS ARROW} Bytes\n"
     "@[host(\"embed_i8\")]\nfn embed_i8(v: i8) \N{RIGHTWARDS ARROW} i8\n"
     "@[host(\"embed_i16\")]\nfn embed_i16(v: i16) \N{RIGHTWARDS ARROW} i16\n"
     "@[host(\"embed_i32\")]\nfn embed_i32(v: i32) \N{RIGHTWARDS ARROW} i32\n"
@@ -261,6 +308,20 @@ namespace {
     "    @[ignore(4217)]\n"
     "    verdict(17u32, embed_many(1u8, \N{SUPERSCRIPT MINUS}2i16, 0.5f32, 4i64, 0.25f64, 6u32, \N{SUPERSCRIPT MINUS}7i8,"
     " 8f64, 9u64, 10f32, \N{SUPERSCRIPT MINUS}11i32, 12u16, 13f64) = 43.75f64)\n"
+    "    let pair: Pair = embed_pair(\N{SUPERSCRIPT MINUS}4i64, 1.25f64)\n"
+    "    @[ignore(4217)]\n"
+    "    verdict(18u32, pair.first = \N{SUPERSCRIPT MINUS}3i64 \N{LOGICAL AND} pair.second = 2.5f64)\n"
+    "    let floats: Floats = embed_floats(0.5f32)\n"
+    "    @[ignore(4217)]\n"
+    "    verdict(19u32, floats.x = 0.5f32 \N{LOGICAL AND} floats.y = 1.5f32 \N{LOGICAL AND} floats.z = 2.5f32)\n"
+    "    let quad: Quad = embed_quad(70i64)\n"
+    "    @[ignore(4217)]\n"
+    "    verdict(20u32, quad.a = 70i64 \N{LOGICAL AND} quad.b = 0.5f64 \N{LOGICAL AND} quad.c = 69i32"
+    " \N{LOGICAL AND} quad.d = 0.25f64)\n"
+    "    let bytes: Bytes = embed_bytes(30u8)\n"
+    "    verdict(21u32, bytes.v\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = 30u8"
+    " \N{LOGICAL AND} bytes.v\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}2\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = 32u8"
+    " \N{LOGICAL AND} bytes.tag = 513u16)\n"
     "    7u6\n";
 
   // A call of a function nobody defines.
@@ -406,7 +467,7 @@ int main()
     auto ended = interpreter.run_source(values, "embedded-values.pl4g");
     expect(ended.status == 7 && ended.signal == 0,
            std::format("the program of values ended with status {}, signal {}", ended.status, ended.signal));
-    expect(seen.verdicts.size() == 17, std::format("{} verdicts of 17", seen.verdicts.size()));
+    expect(seen.verdicts.size() == 21, std::format("{} verdicts of 21", seen.verdicts.size()));
     for (auto which : seen.failed)
       expect(false, std::format("comparison {} failed in the program", which));
     expect(seen.i8 == -100, std::format("i8 arrived as {}", seen.i8));
@@ -428,7 +489,7 @@ int main()
     // each function again.
     seen.verdicts.clear();
     ended = interpreter.run_source(values, "embedded-values.pl4g");
-    expect(ended.status == 7 && seen.verdicts.size() == 17 && seen.calls == 2,
+    expect(ended.status == 7 && seen.verdicts.size() == 21 && seen.calls == 2,
            std::format("the second run ended with status {}, {} verdicts, {} calls", ended.status,
                        seen.verdicts.size(), seen.calls));
   }

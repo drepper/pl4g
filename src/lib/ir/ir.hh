@@ -277,6 +277,11 @@ namespace pl4g::ir {
     bool io = false;
     bool opaque = false;
     bool answer_in_storage = false;
+    // Whether the place the answer is written into is the first parameter
+    // rather than the last, as the system's convention has it for a record laid
+    // out for C answered through the caller's room: in the first argument
+    // register, or in the one the convention keeps for it (AArch64's `x8`).
+    bool answer_first = false;
     bool chained = false;
     bool listable = false;
     // pypl4g's `extra`: what `@[cdecl]`/`@[abi]` say of variadic calls, and
