@@ -1,0 +1,22 @@
+※ pl4g-test: compile=error diag=4397
+※ pl4g-test: expect-diag 4397 LANG_CONSTINIT_READS_A_TABLE
+
+※ **An initializer reads no table built at start.**  A dictionary at the top
+※ level that is not `in ⎕static` is a table built by code the entry point
+※ runs with the constructors, and every `constinit` initializer has run by
+※ then: what one of them read there would be the nought standing in for the
+※ table until it is built.  A table such an initializer reads is put
+※ `in ⎕static`, where it is in the image from the start.
+
+let std := ⎕import("std")
+
+let names: ⸨str: u8⸩ = ⸨"a": 1u8, "b": 2u8⸩ in ⎕heap
+
+fn named(key: str) → u8:
+    names⟦key⟧ ?? 0u8
+
+constinit let picked: u8 = named("b") + ⎕narrow(⎕auxv(6) ?? 0u64, ⌜u8⌝) ?? 0u8
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ⎕narrow(picked, ⌜u6⌝) ?? 0u6

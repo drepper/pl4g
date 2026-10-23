@@ -40,7 +40,11 @@ def emit(asm: Assembler, module: Module, abi: host.HostABI, cconv: CallConvDesc,
          abort: str) -> None:
     """Emit the stubs for what the host defines, and the two tables."""
     host.emit(asm, module, abi, cconv, messages, sources, text_alignment, abort)
-    for name, sh_type, funcs in ((INIT_ARRAY, SHT_INIT_ARRAY, module.ctors),
+    # The loader runs the table in order: the `constinit` variables' initializers
+    # first, as the entry point of an executable calls them, then the
+    # constructors.
+    starts = [*(one.func for one in module.initializers), *module.ctors]
+    for name, sh_type, funcs in ((INIT_ARRAY, SHT_INIT_ARRAY, starts),
                                  (FINI_ARRAY, SHT_FINI_ARRAY, module.dtors[::-1])):
         if not funcs:
             continue

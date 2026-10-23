@@ -61,8 +61,9 @@ def emit_globals(asm: Assembler, module: Module, layout: DataLayout) -> None:
                 False, layout)
     _emit_group(asm, [v for v in variables if v.mutable and not v.relro],
                 DATA_SECTION, True, layout)
-    # What the constructors alone write: writable while they run, and in a
-    # section of its own so that the pages made read-only after them are
+    # What is written before the startup function alone -- the `constinit`
+    # variables, by their initializers -- writable while that runs, and in a
+    # section of its own so that the pages made read-only after it are
     # nothing else's.
     _emit_group(asm, [v for v in variables if v.mutable and v.relro],
                 relro.SECTION, True, layout)

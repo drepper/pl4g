@@ -19,8 +19,8 @@ from .token import (AWAIT_NAME, BLANK_LINE, COMMENT_GLYPH, HEAP_NAME, IMPORT_NAM
 
 #: Tokens at which error recovery stops, because a new definition can begin there.
 _RECOVERY: Final[frozenset[TokKind]] = frozenset(
-    (TokKind.KW_FN, TokKind.KW_LET, TokKind.KW_TYPE, TokKind.KW_UNIT,
-     TokKind.AT_LBRACKET, TokKind.EOF))
+    (TokKind.KW_FN, TokKind.KW_LET, TokKind.KW_CONSTINIT, TokKind.KW_TYPE,
+     TokKind.KW_UNIT, TokKind.AT_LBRACKET, TokKind.EOF))
 
 
 @dataclass(frozen=True, slots=True)
@@ -472,6 +472,9 @@ class Parser:
                                         at_compile_time=True)
         if self._check(TokKind.KW_LET):
             return self._parse_variable(attrs, doc, doc_lines)
+        if self._check(TokKind.KW_CONSTINIT):
+            return self._parse_variable(attrs, doc, doc_lines,
+                                        constinit=self._advance().span)
         if self._check(TokKind.KW_TYPE):
             return self._parse_type_definition(attrs, doc, doc_lines)
         if self._check(TokKind.KW_ENUM):
@@ -488,15 +491,20 @@ class Parser:
 
     def _parse_variable(self, attrs: tuple[ast.Attribute, ...] = (),
                         doc: str | None = None,
-                        doc_lines: tuple[Span, ...] = ()
+                        doc_lines: tuple[Span, ...] = (),
+                        constinit: Span | None = None
                         ) -> ast.VarDef | ast.ModuleImport:
-        """Parse ``let NAME ':' ['mut'] [TYPE] '=' VALUE``.
+        """Parse ``['constinit'] let NAME ':' ['mut'] [TYPE] '=' VALUE``.
 
         The colon is always there; what varies is what follows it.  Written with
         neither a qualifier nor a type, and without a space, the two characters
         read as ``:=``, but they are the same two tokens either way.
+        *constinit* is where `constinit` was written before the keyword, which
+        the caller has read.
         """
         start = self._expect(TokKind.KW_LET).span
+        if constinit is not None:
+            start = constinit.to(start)
         name_token = self._expect(TokKind.IDENT)
         # Names next to each other take a tuple apart, each name standing for
         # one of its members -- the same thing `auto[a, b]` does in C++ and with
@@ -528,13 +536,17 @@ class Parser:
             # matched by what it says.  It is read here and not by the checker
             # because what it makes is not a value: a module is a file that was
             # read, and there is nothing for an expression to come to.
-            return self._parse_import(start, name_token, mutable, declared, doc,
-                                      doc_lines, attrs)
+            # A module is not worked out by anything, before the program
+            # starts or after: `constinit` qualifies it as `mut` would.
+            return self._parse_import(start, name_token,
+                                      mutable or constinit is not None, declared,
+                                      doc, doc_lines, attrs)
         value = self._parse_expression()
         return ast.VarDef(span=start.to(value.span), name=name_token.text,
                           name_span=name_token.span, type=declared, value=value,
                           mutable=mutable, doc=doc, attrs=attrs,
-                          more=tuple(more), made_in=received)
+                          more=tuple(more), made_in=received,
+                          constinit=constinit is not None)
 
     def _parse_import(self, start: Span, name_token: Token, mutable: bool,
                       declared: ast.TypeExpr | None,
@@ -2011,7 +2023,15 @@ class Parser:
             # A unit introduced inside a body reaches as far as the body does,
             # which is what every other name written in one does.
             return self._parse_unit_definition()
-        if self._check(TokKind.KW_LET):
+        if self._check(TokKind.KW_LET) or self._check(TokKind.KW_CONSTINIT):
+            said = self._advance().span if self._check(TokKind.KW_CONSTINIT) \
+                else None
+            if said is not None:
+                # Worked out before the program starts is about the life of the
+                # program, and a variable here lives for one call.  Read as the
+                # `let` it stands before, which is what the rest of the body
+                # means by the name.
+                self._diags.emit(D.LANG_CONSTINIT_NOT_AT_TOP_LEVEL, said)
             found = self._parse_variable()
             if isinstance(found, ast.ModuleImport):
                 # A module is read while the program is compiled and what it

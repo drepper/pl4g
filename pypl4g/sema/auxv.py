@@ -57,9 +57,9 @@ def held_type(module: Module) -> ArrayType:
 def variable(module: Module) -> GlobalVar:
     """The variable the table waits in, made once for the program.
 
-    Writable in the image because the entry point fills it, and among the
-    `@[relro]` variables, which the entry point makes read-only once the
-    constructors have run: it is filled before the first of them, nothing the
+    Writable in the image because the entry point fills it, and in the section
+    of the `constinit` variables, which the entry point makes read-only once the
+    constructors have run: it is filled before anything else, nothing the
     program writes names it, and a write through `⎕at` of its address then
     stops the program instead of changing what every question of it answers.
     """

@@ -105,6 +105,11 @@ class Verifier:
                           if f.attrs.special is SpecialKind.CONSTRUCTOR]
         if set(map(id, expected_ctors)) != set(map(id, self._module.ctors)):
             self._fail("module", "the constructor cache disagrees with the attributes")
+        expected_inits = [f for f in self._module.functions.values()
+                          if f.attrs.special is SpecialKind.INITIALIZER]
+        if set(map(id, expected_inits)) != {id(one.func)
+                                            for one in self._module.initializers}:
+            self._fail("module", "the initializer cache disagrees with the attributes")
         expected_dtors = [f for f in self._module.functions.values()
                           if f.attrs.special is SpecialKind.DESTRUCTOR]
         if set(map(id, expected_dtors)) != set(map(id, self._module.dtors)):

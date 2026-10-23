@@ -38,6 +38,26 @@ let seen: mut u8 = 0u8
     value: (integer_literal)))
 
 ================================================================================
+A variable worked out before the program starts
+================================================================================
+
+@[export]
+constinit let page: u64 = size(4096u64)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (variable_definition
+    (attribute_list
+      (attribute
+        name: (identifier)))
+    name: (identifier)
+    type: (type (identifier))
+    value: (call_expression
+      function: (identifier)
+      argument: (integer_literal))))
+
+================================================================================
 A type left out, to be taken from the value
 ================================================================================
 

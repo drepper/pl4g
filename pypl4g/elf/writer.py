@@ -111,7 +111,8 @@ DYNSTR_SECTION: Final[str] = ".dynstr"
 RELA_SECTION: Final[str] = ".rela.dyn"
 DYNAMIC_SECTION: Final[str] = ".dynamic"
 
-#: The section of what the constructors alone write, and the two symbols the
+#: The section of what is written before the startup function alone -- the
+#: `constinit` variables and the auxiliary vector's table -- and the two symbols the
 #: entry point protects it from (target/relro.py, which the writer does not
 #: import: the image format sits below the targets).
 RELRO_SECTION: Final[str] = ".pl4g.relro"
@@ -157,11 +158,12 @@ class ElfWriter:
         if shared:
             self._collect_relocations()
         else:
-            # An executable's constructors are run by its own entry point, which
-            # makes these read-only once they have: a segment of their own,
-            # said with PT_GNU_RELRO as a loader would be told it.  A shared
-            # object's are run by the loader after it has acted on that header,
-            # so there they are writable data like any other.
+            # An executable's initializers and constructors are run by its own
+            # entry point, which makes these read-only once they have: a
+            # segment of their own, said with PT_GNU_RELRO as a loader would be
+            # told it.  A shared object's are run by the loader after it has
+            # acted on that header, so there they are writable data like any
+            # other.
             self._relro = [one for one in self._sections
                            if one.alloc and one.name == RELRO_SECTION]
 

@@ -1,0 +1,97 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `constinit let` at the top level: a variable its initializer gives its value
+※ before the program starts, and nothing writes after.
+※
+※ **Worked out once, before the program starts.**  What a program works out
+※ once and then only reads -- where something was found, what the system says,
+※ a table worked out from either -- is written as a variable whose value is
+※ that work.  The entry point runs the initializers before every constructor,
+※ after the auxiliary vector and the environment are read, so an initializer
+※ may ask either; then the variables are read-only, and a reader of them -- a
+※ pure function among them -- reads a constant.
+※
+※ **The order is what each one reads.**  An initializer that reads another
+※ `constinit` variable, itself or through a function it calls, runs after that
+※ one's: `twice` here is written first and runs after `base`, which runs after
+※ the module's `seed`.  Where nothing says otherwise, a module's run before the
+※ file importing it, and a file's in the order they are written.
+※
+※ **What the compiler can work out, it does.**  An initializer that is a
+※ constant -- a literal, or a number worked out from constants and pure
+※ functions -- makes an ordinary constant, with nothing run at start.
+※
+※ **What nothing reads is not run.**  `never`'s initializer reads memory that
+※ is not mapped and would stop the program; nothing kept reads `never`, so the
+※ variable is not in the image and its initializer is not run.
+※
+※ Compare: **C++**'s `constinit`, which asks for a constant initializer and
+※ refuses anything else, and its dynamic initialization, which runs anything,
+※ in an order across files nobody chooses; **Go**'s package variables, whose
+※ initializers run in the order they read one another; **Rust**'s
+※ `LazyLock`, worked out on first read and checked on every one; **D**'s
+※ `immutable` module variables, given a value in a module constructor.
+
+let std := ⎕import("std")
+
+let given := ⎕import("given")
+
+type Point = x : u64 ; y : u64
+
+let fallback: u64 = 5u64
+
+constinit let twice: u64 = base × 2u64
+
+constinit let base: u64 = given.seed + 1u64
+
+constinit let point: Point = Point(.x ← base, .y ← twice)
+
+constinit let squares: u32⟦4⟧ = powers(3u32)
+
+constinit let chosen: &static u64 = &fallback
+
+constinit let page: u64 = ⎕auxv(6) ?? 0u64
+
+constinit let folded: u64 = 6u64 × answer(7u64)
+
+constinit let never: u64 = ⎕at(8u64, ⌜&u64⌝)⌖
+
+fn answer(n: u64) → u64:
+    n
+
+fn powers(n: u32) → u32⟦4⟧:
+    ⟦n, n × n, n × n × n, n × n × n × n⟧
+
+※ A pure function reads one as it reads any constant.
+fn scaled(by: u64) → u64:
+    base × by
+
+let seen: mut u64 = 0u64
+
+@[constructor, impure]
+fn early():
+    ※ Every initializer has run before the first constructor does.
+    seen ← twice
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if base ≠ 8u64:
+        1u6
+    elif twice ≠ 16u64:
+        2u6
+    elif point.x ≠ 8u64 ∨ point.y ≠ 16u64:
+        3u6
+    elif squares⟦3⟧ ≠ 81u32 ∨ squares⟦1⟧ ≠ 9u32:
+        4u6
+    elif chosen⌖ ≠ 5u64:
+        5u6
+    elif scaled(3u64) ≠ 24u64:
+        6u6
+    elif seen ≠ 16u64:
+        7u6
+    elif page = 0u64 ∨ (page & (page - 1u64)) ≠ 0u64:
+        8u6
+    elif folded ≠ 42u64:
+        9u6
+    else:
+        0u6

@@ -44,6 +44,12 @@ of memory that would have faulted and a loop that would not have ended, which
 is what C and C++ assume of a loop with no effect too.  And where the reader of
 the auxiliary vector is left the only function naming its table, both go,
 along with the entry point's call of it.
+
+**Nor is what gives a `constinit` variable its value.**  The entry point calls
+it, but it is pure and writes the one variable, so it is kept exactly where
+something kept names that variable -- and what it reads is then named too,
+which keeps the initializers of the variables it reads.  A variable nothing
+kept names goes, with its initializer and the entry point's call of it.
 """
 
 from __future__ import annotations
@@ -101,6 +107,8 @@ class DropUnreached:
         changed = len(functions) != len(module.functions)
         if unread:
             module.ctors = [one for one in module.ctors if id(one) not in unread]
+        module.initializers = [one for one in module.initializers
+                               if id(one.func) in reachable]
         if module.auxv is not None and not table_read:
             # Nothing reads the table, so nothing fills it: not the reader, nor
             # the interpreter, which fills it itself.
@@ -196,9 +204,13 @@ class DropUnreached:
                          if id(func) in seen])
             wanted = [one for one in module.ctors if id(one) in unread
                       and any(id(var) in named for var in writes[id(one)])]
+            unread.difference_update(id(one) for one in wanted)
+            # And what gives a `constinit` variable its value, where something
+            # kept names the variable: it is no root, and goes with it.
+            wanted.extend(one.func for one in module.initializers
+                          if id(one.func) not in seen and id(one.var) in named)
             if not wanted:
                 break
-            unread.difference_update(id(one) for one in wanted)
             left = wanted
         table_read = module.auxv is not None and id(module.auxv) in named
         if table_read:

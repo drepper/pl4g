@@ -55,9 +55,10 @@ class GlobalVar(Value):
         #: otherwise, and a definition something outside the image reads gives
         #: that freedom up.
         self.system_layout = system_layout
-        #: Whether it is `@[relro]`: written by the constructors and read-only
-        #: from the startup function on, which is a section of its own -- the
-        #: one the entry point makes read-only once the constructors have run.
+        #: Whether it is in the section the entry point makes read-only once
+        #: the work before the startup function is done: a `constinit` variable
+        #: its initializer writes, and the table the auxiliary vector is read
+        #: into.  Writable while that work runs, and only then.
         self.relro = relro
 
     @property
@@ -91,6 +92,18 @@ class Output(Enum):
     def hosted(self) -> bool:
         """Whether there is a program this one is loaded into."""
         return self is not Output.EXECUTABLE
+
+
+@dataclass(slots=True, eq=False)
+class Initializer:
+    """A `constinit` variable and the function that gives it its value.
+
+    The function takes nothing and answers nothing; the entry point calls it
+    before the constructors, and it is kept exactly where the variable is.
+    """
+
+    var: GlobalVar
+    func: Function
 
 
 @dataclass(slots=True, eq=False)
@@ -133,6 +146,10 @@ class Module:
     #: in is settled when the record is laid out (`target/started.py`).
     ring_addresses: list[AddressConst] = field(default_factory=list)
 
+    #: The functions that give the `constinit` variables their values, in the
+    #: order the entry point calls them: before every constructor, an
+    #: initializer after those of the variables it reads.
+    initializers: list[Initializer] = field(default_factory=list)
     ctors: list[Function] = field(default_factory=list)
     dtors: list[Function] = field(default_factory=list)
     tests: list[Function] = field(default_factory=list)

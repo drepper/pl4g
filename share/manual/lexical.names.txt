@@ -9,9 +9,9 @@ not a name.  Case matters.  A definition's name may be a path into a type,
 
 **Keywords** cannot be names:
 
-    fn  return  yield  let  mut  singleton  unit  type  enum  bundle  macro
-    pre  post  if  elif  else  match  while  unless  foreach  break
-    continue  defer  comptime  in  true  false  and  or
+    fn  return  yield  let  constinit  mut  singleton  unit  type  enum
+    bundle  macro  pre  post  if  elif  else  match  while  unless  foreach
+    break  continue  defer  comptime  in  true  false  and  or
 
 **`_`** is the name that is not one: the wildcard arm of a `match`, a loop
 value that is not wanted, and the place `_ ← f()` drops a value into.

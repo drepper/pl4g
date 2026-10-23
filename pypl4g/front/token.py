@@ -610,6 +610,9 @@ class TokKind(StrEnum):
     KW_CONTINUE = "'continue'"
     KW_DEFER = "'defer'"
     KW_LET = "'let'"
+    #: Before `let` at the top level: a variable worked out once, before the
+    #: program starts, and read-only from then on.
+    KW_CONSTINIT = "'constinit'"
     KW_MUT = "'mut'"
     #: A member of a record's type that is one object for the whole program
     #: rather than a part of every value: `singleton NAME : TYPE = VALUE`.
@@ -815,6 +818,7 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "return": TokKind.KW_RETURN,
     "yield": TokKind.KW_YIELD,
     "let": TokKind.KW_LET,
+    "constinit": TokKind.KW_CONSTINIT,
     "mut": TokKind.KW_MUT,
     "singleton": TokKind.KW_SINGLETON,
     "unit": TokKind.KW_UNIT,

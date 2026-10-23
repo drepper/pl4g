@@ -938,6 +938,9 @@ class VarDef(Stmt):
     made_in: tuple[str, Span] | None = None
     #: The names after the first, where the definition takes a tuple apart.
     more: tuple[tuple[str, Span], ...] = ()
+    #: `constinit let`: at the top level, a variable its initializer gives its
+    #: value before the program starts, and nothing writes after.
+    constinit: bool = False
 
 
 @dataclass(slots=True, unsafe_hash=True)

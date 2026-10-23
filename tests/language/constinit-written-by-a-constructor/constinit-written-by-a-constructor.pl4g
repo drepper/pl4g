@@ -1,0 +1,27 @@
+※ pl4g-test: compile=error diag=4393
+※ pl4g-test: expect-diag 4393 LANG_CONSTINIT_WRITTEN
+
+※ **Not even a constructor writes one.**  The initializers have all run
+※ before the first constructor does, so a constructor writing a `constinit`
+※ variable would be the second thing to give it a value -- and a reader of the
+※ definition would be told one value while the program read another.  What a
+※ constructor works out for the rest of the program goes in an ordinary `mut`
+※ variable; what is worked out once and then only read is the initializer's.
+※
+※ Compare: **D**, whose module constructors may initialize an `immutable`
+※ variable, which is the one place it is written; **C++**, where a `constinit`
+※ variable that is not `const` may be written by anything at any time, and the
+※ word says only how it starts; **Go**, whose package `init` functions write
+※ variables nothing then stops anyone writing.
+
+let std := ⎕import("std")
+
+constinit let seed: u64 = ⎕auxv(6) ?? 1u64
+
+@[constructor, impure]
+fn prepare():
+    seed ← 7u64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ⎕narrow(seed, ⌜u6⌝) ?? 0u6

@@ -331,6 +331,10 @@ module.exports = grammar({
 
     variable_definition: $ => seq(
       optional($.attribute_list),
+      // `constinit`: worked out once, before the program starts, and read-only
+      // from then on.  The compiler refuses `mut` after it, which is about what
+      // the word means and not how it is written.
+      optional('constinit'),
       'let',
       field('name', $.identifier),
       repeat(seq(',', field('name', $.identifier))),
@@ -598,7 +602,7 @@ module.exports = grammar({
     // their own so that aliasing one keeps the shape it would have had: an
     // alias over an inline sequence flattens the fields inside it.
     _trailing_variable: $ => seq(
-      'let', field('name', $.identifier),
+      optional('constinit'), 'let', field('name', $.identifier),
       repeat(seq(',', field('name', $.identifier))), ':', optional($.mutable),
       optional(field('type', choice($.type, $.array_of_what_is_given))), '=', field('value', $._block_expression),
     ),
@@ -772,6 +776,9 @@ module.exports = grammar({
 
     // A `let` inside a block, whose terminator the block supplies.
     variable_statement: $ => seq(
+      // Read here as well, so that a body saying it is one the compiler refuses
+      // for what it says (4390) rather than one that cannot be read.
+      optional('constinit'),
       'let',
       field('name', $.identifier),
       // Names next to each other take a tuple apart, one name per member.

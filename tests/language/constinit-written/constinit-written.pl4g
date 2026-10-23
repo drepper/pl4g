@@ -1,0 +1,23 @@
+※ pl4g-test: compile=error diag=4393
+※ pl4g-test: expect-diag 4393 LANG_CONSTINIT_WRITTEN
+※ pl4g-test: expect-diag 4394 LANG_CONSTINIT_DEFINED_HERE
+
+※ Nothing writes a `constinit` variable but its initializer.  By the time the
+※ first constructor runs, the initializer has given it its value, and from
+※ the startup function on its pages are read-only, a write there stopping the
+※ program on a fault -- so it is refused here, where it is written, and the
+※ note says which definition made it so.
+※
+※ Every way of writing is a write: assigning it, a field or an element of it,
+※ handing it on as `&mut`, walking it with `&mut`, joining onto a list it is.
+※ Reading it, and taking a `&` of it, are what the rest of the program does.
+
+let std := ⎕import("std")
+
+constinit let seed: u64 = ⎕auxv(6) ?? 7u64
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let read: &u64 = &seed
+    seed ← read⌖ + 1u64
+    0u6

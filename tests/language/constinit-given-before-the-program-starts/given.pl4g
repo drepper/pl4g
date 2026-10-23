@@ -1,0 +1,13 @@
+※ pl4g-test: module
+※※ What the program beside this one reads before it starts.
+※
+※ Not a test of its own but a module the test beside it imports.  Its
+※ `constinit` variable is lowered only because the program names it, and its
+※ initializer runs before the program's own.
+
+※※ Seven, worked out at start: what the auxiliary vector says is no constant.
+@[export]
+constinit let seed: u64 = seven(⎕auxv(6) ?? 0u64)
+
+fn seven(page: u64) → u64:
+    if page = 0u64: 7u64 else: 7u64

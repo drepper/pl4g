@@ -1660,30 +1660,68 @@ One that is not cannot change while the program runs, so it goes in `.rodata`, w
 guarantee then holds against the program rather than only against the type checker, and a write that got past the front end faults
 instead of taking effect.  The two need different permissions, so they are in different sections and in different segments.
 
-**A `@[relro]` variable goes in `.pl4g.relro`**, writable while the constructors run and read-only from the startup function on
-(`target/relro.py`).  The section is named for what it is rather than `.data.rel.ro`, which is what the loader writes and
-`PT_GNU_RELRO` protects before any constructor runs: the two are different things in a shared object, where one is protected and
-the other is not, and a reader of the image is told which is which.  In an executable the writer puts it in a segment of its own,
-first of the writable ones -- the layout a shared object already has for what is read-only but for being relocated -- so that no
-page of it is a page of anything else, says it with `PT_GNU_RELRO`, and gives two symbols the bounds the entry point needs:
-`__pl4g_relro_start`, the first page of the segment (rounded down to the image's page, which the segment before ends short of),
-and `__pl4g_relro_end`, its end.  The entry point calls the constructors and then `mprotect(start, end - start, PROT_READ)`,
-before the tests it runs at start and the startup function; the kernel rounds the length up to the last page, which is the
-segment's own too.  What the call answers is not looked at: a page left writable is what there was before, and the checker's rule
--- a write only in a constructor's own body -- is what keeps the program from writing it.  Nothing of this is emitted where no
-variable asks for it, so every other image is as it was.
+**A `constinit` variable given its value at start goes in `.pl4g.relro`**, writable while the initializers and the constructors
+run and read-only from the startup function on (`target/relro.py`), and so does the auxiliary vector's table.  The section is named
+for what it is rather than `.data.rel.ro`, which is what the loader writes and `PT_GNU_RELRO` protects before any constructor
+runs: the two are different things in a shared object, where one is protected and the other is not, and a reader of the image is
+told which is which.  In an executable the writer puts it in a segment of its own, first of the writable ones -- the layout a
+shared object already has for what is read-only but for being relocated -- so that no page of it is a page of anything else, says
+it with `PT_GNU_RELRO`, and gives two symbols the bounds the entry point needs: `__pl4g_relro_start`, the first page of the
+segment (rounded down to the image's page, which the segment before ends short of), and `__pl4g_relro_end`, its end.  The entry
+point calls the initializers, then the constructors, and then `mprotect(start, end - start, PROT_READ)`, before the tests it runs
+at start and the startup function; the kernel rounds the length up to the last page, which is the segment's own too.  What the
+call answers is not looked at: a page left writable is what there was before, and the checker's rule -- nothing writes one but
+its initializer -- is what keeps the program from writing it.  Nothing of this is emitted where no variable asks for it, so every
+other image is as it was.  A `constinit` variable the compiler works out is an ordinary one, in `.rodata`, and not in the section.
 
 - **`-fpie` (the C++ compiler)**: the section joins what was read-only but for being relocated, in the same segment and the same
-  `PT_GNU_RELRO`, and the pages are made read-only once.  `__pl4g_relocate` makes them read-only itself where nothing is
-  `@[relro]`, as before; where something is, it leaves that to the entry point, after the constructors, since making them
-  read-only before would fault the first constructor that wrote one.
+  `PT_GNU_RELRO`, and the pages are made read-only once.  `__pl4g_relocate` makes them read-only itself where nothing is in the
+  section, as before; where something is, it leaves that to the entry point, after the constructors, since making them
+  read-only before would fault the first initializer that wrote one.
 - **A shared object** keeps the section writable data of its own, out of `PT_GNU_RELRO`: the loader acts on that header before
-  it runs the constructors, so anything in it would fault them.  Protecting the pages after them would take a function run last
-  of the object's constructors and a segment of its own, in a process whose host may write anything anyway; the checker's rule
-  is what holds there.
+  it runs what `.init_array` lists -- the initializers first, then the constructors -- so anything in it would fault them.
+  Protecting the pages after them would take a function run last and a segment of its own, in a process whose host may write
+  anything anyway; the checker's rule is what holds there.
 - **The interpreter** honours the rule by the checker alone.  It lays the program's variables out in memory of its own beside
   other things, so it could protect one only by giving each such variable pages to itself; a program the checker accepted never
-  writes one after its constructors, and one that writes through `⎕at` is doing what the interpreter cannot see in any case.
+  writes one after its initializer, and one that writes through `⎕at` is doing what the interpreter cannot see in any case.
+
+**What a `constinit` variable is made of** (`Checker._collect_global`, `_lower_initializer`, `_order_initializers`).  The parser
+reads `constinit` before `let` at the top level into `VarDef.constinit`; before one in a body it reports 4390 and reads the `let`.
+Collecting the variable, the checker refuses `mut` (4391, the variable read as not `mut`) and asks whether the value is one an
+ordinary variable at the top level could be given -- `_known_constant`: what `_known_while_compiling` says is written down, the
+address of a variable at the top level, a record written out field by field of such values, or a whole number `_constant` works
+out, asked quietly.  If it is, the variable is an ordinary one, its initializer the constant `_constant_value` makes.  If not, its
+type is held to 4392 as `@[relro]`'s was (`_changes_by_itself`, an arena too); the `GlobalVar` has a writable pointer type, no
+initializer (nought in the image) and `relro`; and the definition waits in `_constinit_waiting`.  `_sealed` is every such variable
+but the one whose value `_giving` is putting in place, which is what refuses every write (4393, with 4394), a constructor's too.
+
+**One function per variable gives it its value**, `__pl4g_constinit.NAME` (numbered where two files have one of a name, as
+`__pl4g_globals` is), of no parameters and no answer, `special(initializer)` and `impure` in the IR -- the store it makes is an
+effect.  `_lower_initializer` lowers it as `_lower_built_globals` lowers the tables' constructor, but pure: `_impure` and
+`_may_do_io` off, no marks, and `_constinit_of` naming the variable, which `_an_effect` turns into 4395 wherever an effect is met
+-- a call of something `@[impure]` or through an impure value, `⎕syscall`, a write of a variable or of memory not made there, I/O.
+The value is stored as an assignment to a variable at the top level stores one (`_give_initial`): an array's elements copied into
+the image under `_giving`, a sum's bytes, anything else whole.  `Module.initializers` holds `(variable, function)` pairs; the IR
+reader rebuilds them from `special(initializer)` and the store in the body, and the verifier holds the list to the attribute.
+
+**Lowered where named.**  A file lowered whole lowers its initializers after its functions.  A module lowered as far as it is
+named does not count a `constinit` variable's initializer among its roots; `want(names)` takes a waiting initializer whose name is
+asked for, adds what it mentions to the names, and lowers it after the functions it took.  So `std.time`'s walk of the vDSO is
+neither checked nor lowered in a program that names no clock.
+
+**Ordered once the program is.**  `_order_initializers`, run by `_check_program`, sorts `Module.initializers` by where the
+variables are in the module -- the order they were collected in, an imported module's before the file importing it -- and then
+walks each, in that order, first walking the initializers of the `constinit` variables it reads (`_variables_reached`: every
+variable an operand of its function or of a function with a body it names, transitively; in its own function its own variable
+only where an instruction reads it, the store and a call answering into it naming it too).  A variable met again while its own
+walk is open closes a circle, reported at it with the names round it (4396); a variable the generated tables' constructor stores
+is a table built after every initializer (4397).  The entry point (`target/*/startup.py`) calls the initializers in that order
+after reading the auxiliary vector and the environment and before the first constructor; a shared object lists them first in
+`.init_array`; the interpreter calls them before the constructors.  `dropunreached` treats an initializer as no root: it is
+walked, with what it reaches, once what is kept names its variable, which is repeated until nothing more is added, and
+`Module.initializers` keeps those walked.  `_variable_uses` does not count an initializer's store as a write, so a `constinit`
+variable nothing reads is not reported as written and unread.
 
 Reading a variable is one instruction on x86-64, which can name a place in memory relative to the program counter and widen a
 narrow value as it reads it.  On the two fixed-width architectures no instruction can name an address outright, so one is built in
@@ -4777,9 +4815,8 @@ and what is left is two loads, a test and the result; a type written down outsid
 failed result with no table made.  The variable is `mut` in the image, which keeps the pass that works out pure calls from
 reading it while compiling -- it would read nought, the table being empty in the image.
 
-**Where it goes.**  The table is in the image's writable data, `.data`, as nought.  Its entries want to be in the section the entry
-point makes read-only after the constructors (`@[relro]`, a change of its own): moving it there is putting the variable
-`auxv.variable` makes in that section, and nothing else, the reader running before the constructors.
+**Where it goes.**  The table is in the section the entry point makes read-only after the constructors, `.pl4g.relro`, as nought:
+`auxv.variable` makes the variable `relro`, the reader running before the initializers and the constructors.
 
 **A shared object has the table and no reader**: it has no start of its own and is never handed the stack, so the table stays
 nought and every question answers nothing.  The reader is made only where `Module.output` is an executable.
@@ -5759,18 +5796,21 @@ starts from the roots without such constructors and without the reader of the au
 added, with all it reaches, as soon as what is reached names one of the variables it writes; that is repeated until none is added.
 The reader is added last, where what is reached names its table.  A constructor left out is taken off `module.ctors`, reported as a
 dropped function with a reason of its own, and its variables go with the rest nothing names; `module.auxv` is cleared where the
-reader went, so the entry point calls nothing and lays out no table.  It is what keeps `std.time`'s constructor, which every
-program that imports `std` has, out of every image but one that reads a clock: `exit0` is 12944 bytes on x86-64 with it left out,
-15544 with it in.
+reader went, so the entry point calls nothing and lays out no table.  It is what kept `std.time`'s constructor, which every
+program that imports `std` had, out of every image but one that reads a clock: `exit0` was 12944 bytes on x86-64 with it left out,
+15544 with it in.  The constructor has since become `constinit` variables, whose initializers are no roots at all and are not
+even lowered where nothing names them (below).
 
-**`std.time` is written in the language.**  Its constructor reads `⎕auxv(33)`, and from that image the first `PT_LOAD` (where it
+**`std.time` is written in the language.**  The initializer of `constinit let found` reads `⎕auxv(33)`, and from that image
+(`look`, which answers no functions for nought) the first `PT_LOAD` (where it
 was linked against where it is) and `PT_DYNAMIC`, from the dynamic section `DT_STRTAB`, `DT_SYMTAB` and `DT_HASH`, whose second
 word counts the symbols, and among the defined functions `__vdso_clock_gettime` and `__vdso_clock_getres`, or
 `__kernel_clock_gettime` and `__kernel_clock_getres` -- AArch64's names, taken on every architecture since no vDSO has both.  No
 GNU hash table is read: every Linux vDSO is linked with a SysV one (`--hash-style=sysv` on arm64, `both` on x86 and RISC-V).
 Every address is worked out under `⎕wrap` and nothing is indexed, so the walk carries no check and brings none of what stopping a
-program takes; at `-O1` it is 1.1 kB on x86-64, about what the C it replaced was.  The two functions it finds go to `@[relro]`
-variables of type `@[cdecl, impure] fn(i32, &mut Timespec) → i32`, which `clock_gettime` and `clock_getres` call, falling back to
+program takes; at `-O1` it is 1.1 kB on x86-64, about what the C it replaced was.  The two addresses it finds are a `Found`, and
+the initializers of `vdso_gettime` and `vdso_getres` make them values of type `@[cdecl, impure] fn(i32, &mut Timespec) → i32`
+with `⎕at`, after `found`'s, which `clock_gettime` and `clock_getres` call, falling back to
 `⎕syscall(⎕sc@clock_gettime, …)` and `⎕sc@clock_getres` -- 228 and 229 on x86-64, 113 and 114 on the others, added to both
 compilers' tables -- where the variable is nought.  The clock crosses as its `i32`, read where it is held since an enumeration has
 no conversion to a number.  The runtime has no clocks any more, and the interpreter none either: its table of the auxiliary vector
@@ -5778,8 +5818,9 @@ is its own process's, and it calls the vDSO's functions it finds through libffi 
 
 **A module is lowered as far as it is named.**  A module read by something else (`run(…, whole_program=False)`) checks every
 definition's signature, as before, and lowers only its roots -- the constructors, destructors and tests, what the image offers
-outside, and whatever the initializers of its variables name -- keeping every other `_Collected` in `_waiting` and every generic in
-`_waiting_generics`.  `LoadedModule.want` is the module checker's `want(names)`: it takes every waiting function and generic whose
+outside, and whatever the initializers of its variables name, a `constinit` variable's apart -- keeping every other `_Collected` in
+`_waiting`, every generic in `_waiting_generics` and every `constinit` initializer in `_constinit_waiting`, which `want` lowers
+where its variable's name is asked for.  `LoadedModule.want` is the module checker's `want(names)`: it takes every waiting function and generic whose
 simple name is one of `names`, and every operator, adds what their definitions mention (`_mentioned`: bare names, the last part of
 a path, operator glyphs), repeats until nothing more is taken, asks the modules it reads in turn, and lowers what it took callees
 first.  A checker that lowers everything -- the program's own, one for the macros, one feeding the language server, or any when

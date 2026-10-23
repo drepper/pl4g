@@ -739,18 +739,19 @@ merged or moved.
         ⊥(error): ...
 
 **A program reads the clocks without entering the kernel**, through the functions the kernel maps into every process, the vDSO.
-The module is written in the language and nothing else: a constructor asks `⎕auxv(33)` where the vDSO is, finds the two
-functions among its dynamic symbols, and keeps them in two `@[relro]` variables of type `@[cdecl, impure] fn(i32, &mut
-Timespec) → i32`, read-only once the constructors have run; each function is a call through one of them and the check of what
-it answered.  Where there is no vDSO, or no such function in it, the call is the system call, `⎕syscall(⎕sc@clock_gettime, …)` --
-as in a shared object always, which never sees the auxiliary vector.  The constructor only fills in those two variables, so a
-program that reads no clock does not run it and its image does not hold it (Special Functions).  The interpreter runs
-the same module: its auxiliary vector is its own process's, and it calls the vDSO's functions through libffi.
+The module is written in the language and nothing else: the initializer of a `constinit` variable asks `⎕auxv(33)` where the
+vDSO is and finds the two functions among its dynamic symbols, and two more `constinit` variables of type `@[cdecl, impure]
+fn(i32, &mut Timespec) → i32` are those addresses, all three given their values before the program starts and read-only after
+(Variable Definition); each function is a call through one of them and the check of what it answered.  Where there is no vDSO,
+or no such function in it, the call is the system call, `⎕syscall(⎕sc@clock_gettime, …)` -- as in a shared object always, which
+never sees the auxiliary vector.  Nothing but the two functions reads those variables, so a program that reads no clock neither
+runs the walk nor holds it, and the compiler does not even check it.  The interpreter runs the same module: its auxiliary vector
+is its own process's, and it calls the vDSO's functions through libffi.
 
 Compare: **C**'s `clock_gettime`, which this is but for the answer, which C writes into a place the caller hands it; **Rust**'s
 `Instant` and `SystemTime` and **Go**'s `time.Now`, which wrap the same call in values of their own; **Python**'s
 `time.clock_gettime_ns`, which takes the same clock numbers.  glibc finds the vDSO's functions when the dynamic loader starts, as
-this does in a constructor, and musl on the first call.
+this does before the program starts, and musl on the first call.
 
 #### `json`
 
@@ -6996,50 +6997,84 @@ it undefined, Go and Java fill it with zeroes, and both answers are ones a reade
 The same form defines a variable at the top level and inside a function.  A variable at the top level exists for as long as the
 program does and lives in the image; one inside a function exists while the function does.  Naming either yields its value.
 
-##### Variables only constructors write
+##### Variables initialized before the program starts
 
-**A variable at the top level marked `@[relro]` is written by the constructors and read-only from the startup function on.**
-What a program works out once and then only reads -- a table filled in from what the system says, where something was found, a
-seed -- is a variable a constructor writes and everything else reads, and saying so is what lets the image keep it where nothing
-can change it after:
+**A variable at the top level written `constinit let` is given its value before the program starts, and is read-only from then
+on.**  What a program works out once and then only reads -- where something was found, what the system says, a table worked out
+from either -- is a variable whose initializer is that work.  The initializer may be any pure expression: one that reads memory,
+asks `⎕auxv` or `⎕environ`, calls pure functions.  The entry point runs it before every constructor, and from then on the
+variable is a constant to everything that reads it -- a pure function among them, with no attribute anywhere:
 
 ```
-@[relro]
-let page_size: mut u64 = 0u64
+let std := ⎕import("std")
 
-@[constructor, impure]
-fn learn():
-    page_size ← 4096u64
+fn walk(image: u64) → u64:
+    …                                        ※ reads the image, writes nothing outside itself
+
+constinit let page: u64 = ⎕auxv(6) ?? 4096u64
+constinit let found: u64 = walk(⎕auxv(33) ?? 0u64)
+
+fn pages(bytes: u64) → u64:                  ※ pure, and reads a constant
+    (bytes + page - 1u64) ÷ page ?? 0u64
 
 @[startup]
 fn main(init: std.Init) → u6:
-    …                            ※ reads page_size, and cannot write it
+    …                                        ※ reads page and found, and cannot write them
 ```
 
-- **Only on a variable at the top level defined `mut`.**  One without `mut` is written by nothing and is read-only from the start,
-  so the attribute would say less than the definition does (4370); one inside a function lives for one call, and what the
-  attribute promises is about the life of the program (4371).
-- **It is written only in the body of a constructor** (4373), and every other function -- one a constructor calls, a lambda
-  written in one, a test, the startup function -- only reads it.  A function a constructor calls may be called from anywhere, now
-  or after the next change, and a rule that let it write would have to follow every call through every function value and every
-  module to know it ran before the startup function; the body itself is what the reader sees and the checker can be sure of.
-  What a helper works out it answers with, and the constructor writes it.  Every way of writing counts: assigning the variable, a
-  field or an element of it, joining onto it, lending it `&mut`, walking it with `&mut`, binding a view of it that may write.
-  Reading it and taking a `&` of it are what the rest of the program does, at the top level as well.
-- **It holds nothing that changes without it being written** (4372): a set or a dictionary whose entries may change is changed
+`constinit` is a keyword, written before `let` and after the attributes: `@[export] constinit let seed: u64 = …`.
+
+- **Only at the top level** (4390).  What it says is about the life of the program, and a variable inside a function is made by
+  every call and gone at its end, with no moment before the program starts to be worked out in; the rest of the body reads it as
+  the `let` it stands before.
+- **Never `mut`** (4391).  The initializer is the one thing that writes the variable; `mut` would say that anything may.
+- **Nothing writes it but its initializer** (4393, with a note at the definition, 4394) -- not the startup function, not a test,
+  and not a constructor either, every initializer having run before the first constructor does.  Every way of writing counts:
+  assigning the variable, a field or an element of it, joining onto it, lending it `&mut`, walking it with `&mut`, binding a view
+  of it that may write.  Reading it and taking a `&` of it are what the rest of the program does.
+- **It holds nothing that changes without it being written** (4392): a set or a dictionary whose entries may change is changed
   through its type, and a field written `mut` through its own mark, and neither asks whether the variable may be written.
+- **The initializer is pure** (4395).  It runs before the program does, at a moment the program does not choose, and only where
+  the variable is read (below), so it does nothing a reader could see happen: no call of an `@[impure]` function or through an
+  impure function value, no `⎕syscall`, no write of a variable at the top level or of memory it did not make, no input or output.
+  It may stop the program as any pure expression may -- an arithmetic check, an index out of bounds -- and it may read memory that
+  is not there, which stops it the way such a read always does.
+- **The order is what the initializers read.**  An initializer that reads another `constinit` variable, itself or through a
+  function it calls, runs after that variable's; where nothing orders two, a module's run before the file importing it, and a
+  file's in the order they are written.  Where the reading goes round -- `a` reads `b` and `b` reads `a`, or one reads itself -- no
+  order gives each a value already worked out, and the definition the circle comes back to is refused, with the circle (4396).  A
+  call through a function value names no function, so what such a call reads orders nothing.  An initializer reads no table at
+  the top level built at start (4397): that table is built with the constructors, after every initializer.
+- **What the compiler can work out, it does.**  An initializer the compiler works out as it does any constant at the top level --
+  a literal, a number from constants and calls of pure functions, the address of a variable, a record written out of such values,
+  a container `in ⎕static` -- makes the variable an ordinary one, read-only from the start and usable wherever a constant is,
+  with nothing run at start.  `constinit` then says only that it is never written.
+- **What nothing reads is not there.**  A `constinit` variable that nothing the program keeps names is left out of the image with
+  its initializer, which is then not run; and in a module, its initializer is not even checked until something names the variable,
+  as a function's body is not ("A module is lowered as far as it is named").  This is what lets a library find something once for
+  its functions without every program that imports it paying for the finding.
 - **The image makes it so.**  The variables are in a section of their own that the entry point makes read-only once the
   constructors have run and before the tests it runs at start and the startup function, so a write the checker cannot see --
   through `⎕at` of its address -- stops the program on the fault.  The checker's rule is what makes a program never meet that
-  fault.  In a shared object the loader runs the constructors, after it has made read-only what it was told to, and the variables
-  stay writable data of the object: the rule is the checker's alone there, as it is in the interpreter.
+  fault.  In a shared object the loader runs the initializers, first of what the object's `.init_array` lists and before its
+  constructors, after it has made read-only what it was told to; the variables stay writable data of the object, and the rule is
+  the checker's alone there, as it is in the interpreter.
 
-Compare **C** with GCC and Clang, where a section attribute and a call to `mprotect` from the last constructor get the same image
-and nothing checks that the rest of the program keeps to it; the linker's **RELRO**, which is this for what the dynamic loader
-writes and only that; **D**, whose `immutable` module variables are given their value in a module constructor's body and nowhere
-else -- this rule, checked the same way, and not protected; **Java**'s `final` fields and **C++**'s `const` members, assigned in a
-constructor's own body or initializer list and not in a method it calls; **Rust**'s `OnceLock` and **Go**'s package `init`
-functions, which write once at run time and protect nothing, Rust checking every read instead.
+Compare: **C++**'s `constinit`, whose name this is: there it asks only that a variable be initialized as a constant while
+compiling, refusing anything else, and says nothing of whether it is written later; what C++ runs at start is its dynamic
+initialization, which allows anything, in an order within a file and none across files ("the static initialization order
+fiasco").  **D**, whose `immutable` module variables are given their value in a module constructor's body, modules ordered by
+their imports -- this rule, checked the same way, and not protected.  **Rust**'s `static`, which is a constant expression, and
+`OnceLock` and `LazyLock`, which work a value out at run time on first read and check on every read that it was.  **Go**'s
+package variables, whose initializers run before `init` in the order they read one another, refusing an initialization cycle --
+the order here, and Go's refusal.  **Zig**'s `comptime`, which works everything out while compiling and has nothing to run at
+start.  **Odin**, whose `@(init)` procedures run before `main` and whose globals are otherwise constants.  **C**, where a section
+attribute, a constructor and a call to `mprotect` get the same image, and nothing checks the rest of the program keeps to it; the
+linker's **RELRO**, which is this for what the dynamic loader writes, and only that.
+
+(This replaces `@[relro]`, an attribute on a `mut` variable that only a constructor's body could write -- diagnostics 4370 to
+4374, retired and not reused -- with the user's decision of 2026-10-23: "constinit let variable should automatically be in a
+section that gets read-protected before the startup function is called.  relro shouldn't be needed.")
 
 #### Assignment
 
@@ -8588,7 +8623,8 @@ Some functions have to be treated special.  The attribute syntax denotes this st
 Some special functions:
 - the startup function.  This is the function control is transferred to after the startup phase is completed.  Exactly one function can
   be marked this way.  If no function is marked as such compilation fails.
-- constructor function.  These are functions that run before control is transferred to the startup function.
+- constructor function.  These are functions that run before control is transferred to the startup function, after every
+  `constinit` variable has been given its value (Variable Definition).
 - destructor function.  Similar, just that they are called when control is handed back by returning from the startup function.
 - test function.  This is a function run as part of the testing.  Multiple functions can be marked as such.  Different attributes
   indicate which of the three types of tests this is.
@@ -8613,8 +8649,9 @@ calls, does nothing but work out values, read, and write its own locals and vari
 kernel, no call of code whose body is elsewhere or through a value, no check that could stop the program -- changes nothing a
 program can observe but those variables.  Where nothing else the program keeps names any of them, running it and not running it
 are the same program, and the compiler leaves it out along with them; a constructor that some kept one's variables are read by is
-kept with it.  This is what lets a library prepare a table for its functions in a constructor without every program carrying it:
-`std.time`'s finds the kernel's clocks, and is in the image of a program that reads a clock and of no other.  A read of memory that
+kept with it.  This is what lets a library prepare a table for its functions in a constructor without every program carrying it, as the
+initializer of a `constinit` variable is left out where nothing reads the variable (Variable Definition), which is how `std.time`
+finds the kernel's clocks.  A read of memory that
 would have faulted, and a loop that would never have ended, go with it; a constructor meant to do either says `@[opaque]` on a
 function it calls, or does something else that counts.
 

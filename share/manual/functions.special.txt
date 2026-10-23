@@ -22,10 +22,11 @@ a `u6`: 0 to 63, the range below the ones `sysexits.h` and the runtime have
 nothing; constructors run before the startup function and destructors after it
 returns, `@[constructor(priority)]` ordering them.  The tables written at the
 top level are made before them, and `⎕environ` is read before them.  What is
-still being written when the program ends is waited for after them.  A `mut`
-variable at the top level marked `@[relro]` is written in a constructor's own
-body and nowhere else (4373); the entry point makes it read-only once they
-have run, so a write through its address after that faults.  **A constructor
+still being written when the program ends is waited for after them.  Every
+`constinit` variable has been given its value before the first of them runs,
+and none of them may write one (4393, [[statements.let]]); the entry point
+makes those read-only once they have run, so a write through an address after
+that faults.  **A constructor
 that only fills in variables nothing reads is left out**: one that, with all
 it calls, only works out values, reads, and writes its locals and variables at
 the top level -- no `⎕syscall`, no call of foreign code, through a value or of

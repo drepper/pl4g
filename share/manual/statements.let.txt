@@ -27,6 +27,16 @@ A container that never changes says `in ⎕static` (4638).  A variable at the
 top level holding a whole number and not `mut` is a constant, usable in a type
 and above where it is defined: `let ROWS: u64 = 3` and `u8⟦ROWS⟧`.
 
+**`constinit let` at the top level** is given what any pure expression comes
+to -- a read of memory, `⎕auxv`, a call -- before the program starts, and is
+read-only after: the entry point runs the initializers before the
+constructors, each after those of the variables it reads (4396 where they go
+round), and nothing writes one (4393), a constructor neither.  It is never
+`mut` (4391) and holds nothing that changes by itself (4392); it is only at the
+top level (4390); its initializer has no effect (4395) and reads no table made
+at start (4397).  One the compiler can work out is an ordinary constant, and
+one nothing reads is not run: `constinit let page: u64 = ⎕auxv(6) ?? 4096u64`.
+
 **`in NAME` after the value** says which arena what it makes comes from:
 `let s: str = a ⧺ b in scratch` ([[memory.arenas]]); after the type, it
 receives an arena a call hands out ([[memory.answers]]).

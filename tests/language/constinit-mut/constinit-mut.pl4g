@@ -1,0 +1,21 @@
+※ pl4g-test: compile=error diag=4391
+※ pl4g-test: expect-diag 4391 LANG_CONSTINIT_MUT
+
+※ A `constinit` variable is not `mut`.  Its initializer is the one thing that
+※ writes it, before the program starts, and the pages it is in are read-only
+※ once it has; `mut` says anything may write it at any time, which is the one
+※ thing it cannot allow.  A variable the program goes on to change is an
+※ ordinary `mut` one, which a constructor gives its first value where that has
+※ to be worked out.
+※
+※ Compare: **C++**, where `constinit` says only how a variable is first given
+※ its value and `const` beside it is a second, separate word; **D**, where
+※ `immutable` alone is the rule and there is no second word to get wrong.
+
+let std := ⎕import("std")
+
+constinit let limit: mut u32 = ⎕narrow(⎕auxv(6) ?? 10u64, ⌜u32⌝) ?? 10u32
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ⎕narrow(limit, ⌜u6⌝) ?? 0u6

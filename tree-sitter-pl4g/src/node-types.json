@@ -12396,6 +12396,10 @@
     "named": false
   },
   {
+    "type": "constinit",
+    "named": false
+  },
+  {
     "type": "continue",
     "named": false
   },

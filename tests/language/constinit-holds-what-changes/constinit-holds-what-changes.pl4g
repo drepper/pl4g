@@ -1,0 +1,22 @@
+※ pl4g-test: compile=error diag=4392
+※ pl4g-test: expect-diag 4392 LANG_CONSTINIT_HOLDS_WHAT_CHANGES
+
+※ A `constinit` variable holds nothing that can change without the variable
+※ being written.  A field written `mut` is changed through its own mark and
+※ not through the variable -- assigning it asks the field, not the name -- so
+※ a change after the initializer would be refused by nothing and would write
+※ what the entry point had made read-only.  A set or a dictionary whose
+※ entries may change is the same, changed through its type.
+
+let std := ⎕import("std")
+
+type Counter = mut n : u32
+
+fn counter(from: u64) → Counter:
+    Counter(.n ← ⎕narrow(from, ⌜u32⌝) ?? 0u32)
+
+constinit let counted: Counter = counter(⎕auxv(6) ?? 0u64)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ⎕narrow(counted.n, ⌜u6⌝) ?? 0u6

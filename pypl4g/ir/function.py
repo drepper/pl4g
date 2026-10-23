@@ -44,6 +44,9 @@ class SpecialKind(StrEnum):
     #: gets compiled.
     BUILD = "build"
     CONSTRUCTOR = "constructor"
+    #: What gives a `constinit` variable its value: generated, called by the
+    #: entry point before every constructor, and kept where the variable is.
+    INITIALIZER = "initializer"
     DESTRUCTOR = "destructor"
     TEST_ALWAYS = "test_always"
     TEST_BUILD = "test_build"

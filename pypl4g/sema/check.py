@@ -56,7 +56,7 @@ from ..ir.layout import (DataLayout, member_offsets_of, offsets_of,
 from ..ir.inst import (AddressInst, BinaryInst, BinOp, CallInst, CastInst,
                        CastKind, CmpPred,
                        ExtractInst, FrameInst, Instruction, LoadInst, MemStartInst, RetInst,
-                       Ordering, Terminator, TupleInst, UnOp)
+                       Ordering, StoreInst, Terminator, TupleInst, UnOp)
 from ..target.registry import architecture_of, conventions_of
 from ..target.syscalls import KNOWN as SYSCALL_NAMES, number_of
 from ..runtime import names as runtime_names
@@ -66,7 +66,7 @@ from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
                            FuncType, Function,
                            InlineHint,
                            Linkage, SpecialKind)
-from ..ir.module import GlobalVar, Module, Output
+from ..ir.module import GlobalVar, Initializer, Module, Output
 from ..ir.types import (ARENA, ARENA_NAME, StrType, ArrayType, BOOL, BoolType, BUILTIN_TYPES, CharType,
                         SYNTAX, SyntaxType, I64,
                         CursorType,
@@ -1673,6 +1673,35 @@ def _mentioned(node: object, into: set[str]) -> None:
                 into.add(one.glyph)
             case ast.ForEach() | ast.Yield() | ast.Call():
                 into.add(EACH_NAME)
+
+
+def _variables_reached(init: Initializer) -> list[GlobalVar]:
+    """Every variable at the top level the initializer *init* reads, itself or
+    through a function with a body it names, in the order first met.
+
+    Its own variable is named by its own body wherever the value is put
+    together in place -- the store, a call answering into it -- so there it
+    counts only where it is read; a function it calls names it only by reading
+    it.
+    """
+    found: dict[int, GlobalVar] = {}
+    seen: set[int] = set()
+    queue = [init.func]
+    while queue:
+        one = queue.pop(0)
+        if id(one) in seen:
+            continue
+        seen.add(id(one))
+        for block in one.blocks:
+            for inst in block.insts:
+                for named in (*inst.operands, *inst.references()):
+                    if isinstance(named, GlobalVar):
+                        if named is not init.var or one is not init.func \
+                                or named in inst.reads():
+                            found.setdefault(id(named), named)
+                    elif isinstance(named, Function) and not named.is_declaration:
+                        queue.append(named)
+    return list(found.values())
 
 
 def _called_in(node: object) -> list[str]:
@@ -3338,6 +3367,11 @@ HEAP_SYMBOL: Final[str] = "__pl4g_heap"
 #: called.  One per file that has any, numbered where two files do.
 GLOBALS_SYMBOL: Final[str] = "__pl4g_globals"
 
+#: What the generated function that gives a `constinit` variable its value is
+#: called, the variable's name after it, and numbered where two files have one
+#: of that name.
+INITIALIZER_SYMBOL: Final[str] = "__pl4g_constinit."
+
 #: What the bytes of a string written down are filed under, numbered from zero
 #: as they are met.  A program cannot name one: what it wrote is the string, and
 #: where the bytes went is the compiler's business.
@@ -4212,6 +4246,11 @@ class Checker:
         #: yet, by name: what each is and what it is defined as, worked out where
         #: a name for it is asked for, as a body is lowered.
         self._waiting_images: dict[str, tuple[GlobalVar, ast.VarDef, Type]] = {}
+        #: The `constinit` variables whose initializers are not lowered yet, by
+        #: name, in the order they are written.  Lowered where the variable is
+        #: named, as a function is -- in a module, where something asks for the
+        #: name; in a file lowered whole, after its functions.
+        self._constinit_waiting: dict[str, tuple[GlobalVar, ast.VarDef]] = {}
         #: Whether the variables are worked out where they are defined, which is
         #: where everything here is lowered: a program's own file, every file of
         #: the test that checks `std` whole, what the macros and an editor read.
@@ -4242,10 +4281,12 @@ class Checker:
         #: compiler-provided function may be called from is that and nothing
         #: else, and this is how the check knows where it is.
         self._in_build_function: Function | None = None
-        #: Whether the body being checked is a constructor's own, which is
-        #: where a `@[relro]` variable may be written and nowhere else: what
-        #: runs after the constructors finds it read-only.
-        self._seals_open = False
+        #: The `constinit` variable whose initializer is being lowered, which
+        #: is pure: what it may not do is reported as about the variable.
+        self._constinit_of: GlobalVar | None = None
+        #: And the one it is being given, while what it came to is copied in:
+        #: that write is the initializer's, and nothing else is let make it.
+        self._giving: GlobalVar | None = None
         self._defined: dict[str, tuple[Span, str]] = {}
         #: The variables at the top level whose value is a table rather than
         #: bytes: what they are given is built by running code, so they are
@@ -4819,6 +4860,8 @@ class Checker:
                 self._lower_function(entry)
             for one in self._generics_here:
                 self._check_generic(one)
+            # After the functions, which they call as any caller does.
+            self._lower_initializers(list(self._constinit_waiting))
             if (whole_program or self._whole_modules) \
                     and self._diags.error_count == 0:
                 # Only of a program that is otherwise right: a body an error
@@ -4835,9 +4878,11 @@ class Checker:
             self._waiting_generics = list(self._generics_here)
             roots: set[str] = set()
             for item in self._top_written.values():
-                if _in_the_image(item.value):
+                if _in_the_image(item.value) or item.name in self._constinit_waiting:
                     # Worked out while compiling: what it calls is run there,
-                    # and nothing of it is in the program.
+                    # and nothing of it is in the program.  Or a `constinit`
+                    # one's, which is lowered where the variable is named: a
+                    # program reading no clock carries nothing of finding one.
                     continue
                 _mentioned(item.value, roots)
             for entry in collected:
@@ -4870,8 +4915,15 @@ class Checker:
         names = set(names)
         chosen: list[_Collected] = []
         generics: list[_Generic] = []
+        initialized: list[str] = []
         while True:
             grew = False
+            for name in [one for one in self._constinit_waiting
+                         if one in names and one not in initialized]:
+                # What the initializer names is wanted with it.
+                initialized.append(name)
+                _mentioned(self._constinit_waiting[name][1].value, names)
+                grew = True
             for entry in list(self._waiting):
                 if entry.node.name in names or not entry.node.name.isidentifier():
                     self._waiting.remove(entry)
@@ -4890,7 +4942,7 @@ class Checker:
                 break
         for name in [one for one in self._waiting_images if one in names]:
             self._image_now(name)
-        if not chosen and not generics:
+        if not chosen and not generics and not initialized:
             for name in self._exported_imports:
                 held = self._top.get(name)
                 if isinstance(held, LoadedModule) and held.want is not None:
@@ -4901,6 +4953,7 @@ class Checker:
             self._lower_function(entry)
         for one in generics:
             self._check_generic(one)
+        self._lower_initializers(initialized)
 
     def _image_now(self, name: str) -> None:
         """Work out the variable *name* in the image whose value is a call, where
@@ -5009,6 +5062,89 @@ class Checker:
         # constructor may read is every table, whichever file it was written in.
         self._module.ctors.insert(0, made)
 
+    def _lower_initializers(self, names: Sequence[str]) -> None:
+        """Lower the initializers of the waiting `constinit` variables *names*,
+        each into a function of its own."""
+        for name in names:
+            found = self._constinit_waiting.pop(name, None)
+            if found is not None:
+                self._lower_initializer(*found)
+
+    def _lower_initializer(self, var: GlobalVar, node: ast.VarDef) -> None:
+        """Generate the function that gives the `constinit` variable *var* its
+        value, called by the entry point before the constructors.
+
+        **One function per variable**, so that each is kept exactly where its
+        variable is and the entry point can call them in the order they read
+        one another, which is settled once the whole program is
+        (`_order_initializers`).  The initializer is lowered as a definition
+        inside a function is, and **checked as a pure function's body is**: an
+        effect is reported as one of the initializer's (4395).  What it writes
+        is the variable, by a store of its own -- the only one there is, every
+        other being refused (`_sealed`).  The function is marked impure in the
+        IR, for that store.
+        """
+        made = self._module.add_function(Function(
+            self._unused_name("".join((INITIALIZER_SYMBOL, var.name))),
+            self._module.types.func_type((), VOID),
+            FuncAttrs(special=SpecialKind.INITIALIZER, impure=True),
+            linkage=Linkage.INTERNAL, span=node.span, name_span=node.name_span))
+        made.add_block()
+        builder = IRBuilder(self._module, made)
+        self._borrows = []
+        self._places = {}
+        outer_answer, self._answering = self._answering, VOID
+        outer_impure, self._impure = self._impure, False
+        outer_io, self._may_do_io = self._may_do_io, False
+        outer_did, self._did_io = self._did_io, False
+        outer_marking, self._marking = self._marking, None
+        outer_of, self._constinit_of = self._constinit_of, var
+        self._push_scope()
+        try:
+            self._give_initial(builder, var, node)
+        finally:
+            self._pop_scope()
+            self._answering = outer_answer
+            self._impure = outer_impure
+            self._may_do_io = outer_io
+            self._did_io = outer_did
+            self._marking = outer_marking
+            self._constinit_of = outer_of
+        if not builder.is_terminated:
+            builder.ret()
+        self._module.initializers.append(Initializer(var, made))
+
+    def _give_initial(self, builder: IRBuilder, var: GlobalVar,
+                      node: ast.VarDef) -> None:
+        """Store what the initializer of *var* comes to in it, as an assignment
+        to a variable at the top level stores: an array's elements copied into
+        the image, a sum's bytes, anything else whole."""
+        self._stored_into[id(node.value)] = "a variable at the top level"
+        if isinstance(var.value_type, ArrayType):
+            # Its elements are in the image, and what is given is copied there:
+            # the one write of them there is, and no effect of the initializer's.
+            value = self._lower_expr(builder, node.value, var.value_type if isinstance(
+                node.value, ast.ArrayLit) else None)
+            self._giving = var
+            try:
+                self._copy_elements(builder,
+                                    self._read_global(builder, var, node.span),
+                                    var.value_type, value,
+                                    self._value_type_of(value), node.span)
+            finally:
+                self._giving = None
+            return
+        value = self._checked_value(builder, ast.AssignStmt(
+            span=node.span, name=node.name, name_span=node.name_span,
+            value=node.value), var.value_type)
+        if self._value_type_of(value) is ERROR or builder.is_terminated:
+            return
+        if isinstance(var.value_type, SumType):
+            self._copy_bytes(builder, builder.address(var, node.span), value,
+                             size_of(var.value_type, _LAYOUT), node.span)
+        else:
+            builder.store(var, value, node.span)
+
     def _unused_name(self, wanted: str) -> str:
         """*wanted*, or *wanted* and a number where a file already took it."""
         if wanted not in self._module.functions:
@@ -5100,7 +5236,13 @@ class Checker:
         self._not_the_images(node.name, node.name_span)
         attrs = self._bind_attributes(node.attrs, AttrTarget.VARIABLE)
         linkage = self._linkage_of(attrs)
-        relro = self._relro_of(node, attrs)
+        # Said once: a `constinit` variable written `mut` is read as the
+        # read-only one it can only be, and its type is not then refused a
+        # second time for what `mut` made of it.
+        said_mut = node.constinit and node.mutable
+        if said_mut:
+            self._diags.emit(D.LANG_CONSTINIT_MUT, node.name_span, name=node.name)
+            node = replace(node, mutable=False)
         pairs = self._expected_numbers(attrs)
         expectation = self._begin_expecting(pairs)
         try:
@@ -5131,11 +5273,16 @@ class Checker:
             static = _in_the_image(node.value)
             if ty is not None and not self._image_definition(node, ty):
                 ty = ERROR
+            # A `constinit` variable is an ordinary constant where the compiler
+            # works its value out as it does a constant's, and otherwise one its
+            # initializer gives a value at start.
+            at_start = node.constinit and ty is not None and ty is not ERROR \
+                and not static and not self._folds_while_compiling(node, ty)
             # An empty one in the heap costs nothing until something is put in
             # it: its table is laid out in the image, empty, with the heap to
             # grow from, and no constructor runs for it.
             unbuilt = ty is not None and _is_a_table(ty) and not static \
-                and _empty_in_the_heap(node.value)
+                and not at_start and _empty_in_the_heap(node.value)
             # A call laid out in the image, in a module lowered as far as it is
             # named, is worked out where something names it: a table a library
             # holds is not made for a program that never reads it.
@@ -5146,7 +5293,7 @@ class Checker:
             outer, self._for_the_image = self._for_the_image, static
             try:
                 initializer = (self._empty_table_constant(ty) if unbuilt
-                               else None if ty is None or later
+                               else None if ty is None or later or at_start
                                or (_is_a_table(ty) and not static)
                                else self._constant_value(node, ty))
             finally:
@@ -5165,24 +5312,31 @@ class Checker:
             ty = ERROR
         if ty is None:
             ty = ERROR
-        if relro is not None and ty is not ERROR and _changes_by_itself(ty):
-            self._diags.emit(D.LANG_RELRO_HOLDS_WHAT_CHANGES, relro.node.span,
-                             name=node.name, found=ty.written())
-            relro = None
+        if at_start and (_changes_by_itself(ty) or ty is ARENA):
+            # Changed without the variable being written, which nothing would
+            # refuse and the pages would fault.
+            if not said_mut:
+                self._diags.emit(D.LANG_CONSTINIT_HOLDS_WHAT_CHANGES,
+                                 node.name_span, name=node.name,
+                                 found=ty.written())
+            ty = ERROR
+            at_start = False
         var = self._module.add_global(GlobalVar(
             name=node.name, value_type=ty,
             # A table's handle is written by the constructor whatever the
             # program may do with it, so the place it waits in is one that may
             # be written.  What the *program* may do is the type's business, and
             # a collection without `mut` is refused an assignment there.
+            # A `constinit` one is written by its initializer, and the checker
+            # refuses every other write (`_sealed`).
             ptr_type=self._module.types.ptr_type(
                 ty, mutable=node.mutable or (_is_a_table(ty) and not static)
-                or _has_mutable_field(ty)),
+                or _has_mutable_field(ty) or at_start),
             initializer=initializer, linkage=linkage, span=node.span,
             name_span=node.name_span,
             exported=self._is_export(attrs),
             system_layout=any(a.name == "cdecl" for a in attrs),
-            relro=relro is not None),
+            relro=at_start),
             key=self._key(node.name))
         self._top[node.name] = var
         self._owned.append(var)
@@ -5195,24 +5349,68 @@ class Checker:
         self._top_level.append(_Global(var=var, span=node.name_span,
                                        expectation=expectation,
                                        expected_pairs=list(pairs)))
-        if _is_a_table(ty) and not static and initializer is None:
+        if _is_a_table(ty) and not static and initializer is None \
+                and not at_start:
             self._built_globals.append((var, node))
         if later and ty is not ERROR:
             self._waiting_images[node.name] = (var, node, ty)
+        if at_start:
+            self._constinit_waiting[node.name] = (var, node)
+
+    def _folds_while_compiling(self, node: ast.VarDef, ty: Type) -> bool:
+        """Whether the value of the `constinit` variable *node* is one the
+        compiler works out as it does an ordinary variable's at the top level,
+        which then makes it one."""
+        return self._known_constant(node.value, ty)
+
+    def _known_constant(self, expr: ast.Expr, ty: Type) -> bool:
+        """Whether *expr*, given where a *ty* is wanted, is a value the compiler
+        knows, read off what is written and asked quietly.
+
+        What is written down is (`_known_while_compiling`); so is a number
+        worked out from constants and calls of pure functions (`_constant`),
+        the address of a variable at the top level, and a record written out
+        field by field of such values.  Anything else -- a read of memory, a
+        record answered by a call, `⎕auxv` -- is worked out at start.
+        """
+        if _known_while_compiling(expr, self._names_an_enum):
+            return True
+        match expr:
+            case ast.AddressOf() if isinstance(ty, PtrType):
+                place = expr.operand
+                while isinstance(place, ast.Member):
+                    place = place.base
+                return isinstance(place, ast.NameRef) \
+                    and self._find_local(place.name) is None \
+                    and isinstance(self._top.get(place.name), GlobalVar)
+            case ast.Call() if isinstance(ty, ProductType) \
+                    and self._is_record_literal(expr, ty):
+                fields = dict(ty.fields)
+                return all(isinstance(one, ast.Named) and one.name in fields
+                           and self._known_constant(one.value, fields[one.name])
+                           for one in expr.args)
+        if not isinstance(ty, IntType):
+            return False
+        found = self._welcome_constant(expr)
+        return found is not None and not found.failed \
+            and (found.ty is None or found.ty is ty) and ty.holds(found.value)
 
     def _sealed(self, found: object) -> bool:
-        """Whether *found* is a `@[relro]` variable this body may not write --
-        which is every body but a constructor's own."""
-        return isinstance(found, GlobalVar) and found.relro and not self._seals_open
+        """Whether *found* is a `constinit` variable, which no body writes: its
+        initializer is lowered as a store of its own, and nothing else may."""
+        return isinstance(found, GlobalVar) and found.relro \
+            and found is not self._giving
 
     def _writable_global(self, var: GlobalVar) -> bool:
         """Whether this body may write the variable at the top level *var*: it
-        is `mut`, and not `@[relro]` where the body is not a constructor's."""
+        is `mut`, and is not one of the `constinit` ones, which are written by
+        their initializers and held where a write lands only before the
+        startup function runs."""
         return var.mutable and not self._sealed(var)
 
     def _sealed_root(self, expr: ast.Expr) -> GlobalVar | None:
-        """The `@[relro]` variable this body may not write that *expr* names a
-        part of, by a field, an element or the variable itself."""
+        """The `constinit` variable that *expr* names a part of, by a field, an
+        element or the variable itself."""
         match expr:
             case ast.Member():
                 shared = self._exported_variable(expr)
@@ -5230,8 +5428,8 @@ class Checker:
         return None
 
     def _said_sealed(self, expr: ast.Expr, where: Span) -> bool:
-        """Report a write to a part of a `@[relro]` variable outside a
-        constructor's body, where *expr* names one; and say whether it did."""
+        """Report a write to a part of a `constinit` variable, where *expr*
+        names one; and say whether it did."""
         found = self._sealed_root(expr)
         if found is None:
             return False
@@ -5240,24 +5438,10 @@ class Checker:
         return True
 
     def _refuse_sealed(self, var: GlobalVar, name: str, where: Span) -> None:
-        """Report that *var*, `@[relro]`, is written outside a constructor."""
-        self._diags.emit(D.LANG_RELRO_WRITTEN_AFTER_STARTUP, where,
-                         name=name).note(D.LANG_RELRO_DEFINED_HERE,
+        """Report that *var*, `constinit`, is written (4393, with 4394)."""
+        self._diags.emit(D.LANG_CONSTINIT_WRITTEN, where,
+                         name=name).note(D.LANG_CONSTINIT_DEFINED_HERE,
                                          var.name_span, name=var.name)
-
-    def _relro_of(self, node: ast.VarDef, attrs: Sequence[BoundAttr]
-                  ) -> BoundAttr | None:
-        """The `@[relro]` said of a variable at the top level, where it may be.
-
-        Only on one defined `mut`: without it the variable is in the read-only
-        data from the start, and the attribute would say less than the
-        definition does (4370).
-        """
-        said = next((one for one in attrs if one.name == "relro"), None)
-        if said is not None and not node.mutable:
-            self._diags.emit(D.LANG_RELRO_NOT_MUT, said.node.span, name=node.name)
-            return None
-        return said
 
     def _mark_system(self, unit: ast.SourceUnit) -> None:
         """Bind what was said of the file itself, and note a system file.
@@ -8481,12 +8665,6 @@ class Checker:
                 self._diags.emit(D.LANG_ATTR_DUPLICATE, node.name_span, name=node.name)
                 continue
             seen[node.name] = node
-            if target is AttrTarget.STATEMENT and node.name == "relro":
-                # A variable defined inside a function is a statement, and what
-                # the attribute promises is about the life of the program: there
-                # is no moment in one call's that it is about.
-                self._diags.emit(D.LANG_RELRO_NOT_AT_TOP_LEVEL, node.name_span)
-                continue
             if target not in spec.targets:
                 self._diags.emit(D.LANG_ATTR_NOT_APPLICABLE, node.name_span,
                                  name=node.name, target=TARGET_NAMES[target])
@@ -11520,8 +11698,6 @@ class Checker:
         was_building = self._in_build_function
         self._in_build_function = func \
             if func.attrs.special is SpecialKind.BUILD else None
-        was_open = self._seals_open
-        self._seals_open = func.attrs.special is SpecialKind.CONSTRUCTOR
         if entry.expectation is not None:
             self._diags.resume(entry.expectation)
         try:
@@ -11536,7 +11712,6 @@ class Checker:
                 self._discard(func)
             self._discard_function = previous
             self._in_build_function = was_building
-            self._seals_open = was_open
 
     def _report_scopes(self, node: ast.FuncDef) -> None:
         """Log where each of *node*'s variables' scopes ends, once however many
@@ -15140,15 +15315,11 @@ class Checker:
         try:
             adopting, self._adopting = self._adopting, frozenset(
                 pair for one in (adopted or {}).values() for pair in one.outer)
-            # A lambda's body is a function of its own and not the body it is
-            # written in, so not a constructor's either.
-            was_open, self._seals_open = self._seals_open, False
             try:
                 func = self._function_of_a_lambda(expr, params, answer, held,
                                                   offsets, taken, name, borrows)
             finally:
                 self._adopting = adopting
-                self._seals_open = was_open
             if adopted is not None and self._lambda_notes is not None \
                     and self._handing_over is not None:
                 # What the call is held to: what it brought in that its answer may
@@ -31114,6 +31285,16 @@ class Checker:
         if self._observing is not None:
             self._observing[0] = True
             return
+        if self._giving is not None:
+            # The copy into the variable the initializer gives a value.
+            return
+        if self._constinit_of is not None and self._demanding[1] is None:
+            # The initializer of a `constinit` variable, which is pure however
+            # the effect came about: there is no function to mark, and the
+            # variable is what the reader looks at.
+            self._diags.emit(D.LANG_CONSTINIT_HAS_AN_EFFECT, span,
+                             name=self._constinit_of.name)
+            return
         held = self._demanding[0] if self._demanding is not None else None
         name = getattr(held, "name", "")
         told = self._diags.emit(which, span, caller=name, **args) \
@@ -31336,6 +31517,7 @@ class Checker:
             # A file with a build function in it describes a build rather than
             # being a program, so nothing of it is ever started.
             self._diags.emit(D.LANG_FUNCDEF_SPECIAL_NO_STARTUP)
+        self._order_initializers()
         self._report_unread_variables()
 
     def _report_unread_variables(self) -> None:
@@ -31376,6 +31558,64 @@ class Checker:
         self._settle_expecting(entry.expectation, entry.expected_pairs)
         entry.expectation = None
 
+    def _order_initializers(self) -> None:
+        """Put the initializers in the order the entry point calls them, and
+        refuse what no order can satisfy (4396, 4397).
+
+        Where nothing else decides, the order the variables were defined in --
+        a module's before the file importing it, a file's in the order written
+        -- which is the order they are in the module.  An initializer reading
+        another `constinit` variable, itself or through a function it calls,
+        comes after that variable's: a walk from each in that order, the ones it
+        reads first.  What it reads is read off the IR, every variable its
+        function and the functions those name name, and a call through a value
+        is no name, so what such a call reads does not order anything.
+        """
+        initializers = self._module.initializers
+        if not initializers:
+            return
+        rank = {id(var): at for at, var in enumerate(self._module.globals.values())}
+        initializers.sort(key=lambda one: rank.get(id(one.var), len(rank)))
+        of_var = {id(one.var): one for one in initializers}
+        # A table the generated constructor builds is nought until it has run,
+        # which is after every initializer.
+        built = {id(place) for func in self._module.ctors
+                 if func.name.startswith(GLOBALS_SYMBOL)
+                 for block in func.blocks for inst in block.insts
+                 if isinstance(inst, StoreInst)
+                 and isinstance(place := inst.operands[1], GlobalVar)}
+        ordered: list[Initializer] = []
+        done: set[int] = set()
+        path: list[Initializer] = []
+
+        def visit(one: Initializer) -> None:
+            path.append(one)
+            for var in _variables_reached(one):
+                if id(var) in built:
+                    self._diags.emit(D.LANG_CONSTINIT_READS_A_TABLE,
+                                     one.var.name_span, name=one.var.name,
+                                     table=var.name)
+                    continue
+                read = of_var.get(id(var))
+                if read is None or id(read) in done:
+                    continue
+                if read in path:
+                    circle = [*path[path.index(read):], read]
+                    self._diags.emit(D.LANG_CONSTINIT_READS_ITSELF,
+                                     read.var.name_span, name=read.var.name,
+                                     cycle=" \N{RIGHTWARDS ARROW} ".join(
+                                         step.var.name for step in circle))
+                    continue
+                visit(read)
+            path.pop()
+            done.add(id(one))
+            ordered.append(one)
+
+        for one in initializers:
+            if id(one) not in done:
+                visit(one)
+        self._module.initializers = ordered
+
     def _variable_uses(self) -> tuple[set[int], dict[int, int]]:
         """Which variables the program reads, and how often it writes each.
 
@@ -31386,6 +31626,10 @@ class Checker:
         reads: set[int] = set()
         writes: dict[int, int] = {}
         for func in self._module.functions.values():
+            if func.attrs.special is SpecialKind.INITIALIZER:
+                # Giving a `constinit` variable its value is what defining one
+                # does, and no more a write than an ordinary initializer is.
+                continue
             for block in func.blocks:
                 for inst in block.insts:
                     for place in inst.reads():

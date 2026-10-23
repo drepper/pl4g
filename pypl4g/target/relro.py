@@ -1,12 +1,14 @@
-"""Making the `@[relro]` variables read-only once the constructors have run.
+"""Making the `constinit` variables read-only once the constructors have run.
 
-A variable marked `@[relro]` is written by the constructors and by nothing that
-runs after them, which the checker sees to; the entry point then makes it
-read-only, so that what the checker cannot see -- a write through `⎕at` of its
-address -- stops the program on a fault rather than changing what every part of
-it reads.  The variables are in a section of their own, `.pl4g.relro`, which the
-writer puts in a segment of its own: no page of it is a page of anything else,
-so taking the right to write away from it takes it from nothing else.
+A `constinit` variable is written by its initializer, which the entry point
+calls before the constructors, and by nothing else, which the checker sees to;
+the entry point then makes it read-only, so that what the checker cannot see --
+a write through `⎕at` of its address -- stops the program on a fault rather
+than changing what every part of it reads.  The table the auxiliary vector is
+read into is kept the same way.  The variables are in a section of their own,
+`.pl4g.relro`, which the writer puts in a segment of its own: no page of it is a
+page of anything else, so taking the right to write away from it takes it from
+nothing else.
 
 **One system call, from two symbols the writer defines.**  Where the pages begin
 and where they end is known once the image is laid out, so the writer gives the
@@ -34,7 +36,7 @@ from ..mc.asmbuilder import Assembler
 from ..mc.operand import MCReg
 from .allocator import SyscallABI
 
-#: Where the variables the constructors alone write are put.  Not
+#: Where the variables written before the startup function alone are put.  Not
 #: `.data.rel.ro`, which is what the loader writes and `PT_GNU_RELRO` protects
 #: before any constructor runs: a shared object keeps these out of that, and
 #: a reader seeing the name knows which of the two it is looking at.
@@ -49,7 +51,8 @@ PROT_READ: Final[int] = 1
 
 
 def wanted(module: Module) -> bool:
-    """Whether *module* has a `@[relro]` variable, which is what asks for this."""
+    """Whether *module* has a variable in the section, which is what asks for
+    this: a `constinit` one or the auxiliary vector's table."""
     return any(var.relro for var in module.globals.values())
 
 

@@ -2,8 +2,8 @@ title: Statements
 
 Part of [[language]].  What a body is made of.
 
-  [[statements.let]]         -- `let NAME: TYPE = VALUE`, `mut`, and names
-                                taking a tuple apart
+  [[statements.let]]         -- `let NAME: TYPE = VALUE`, `mut`, names taking
+                                a tuple apart, and `constinit let`
   [[statements.assignment]]  -- `←` to a name, a field, an element or an
                                 entry; `⧺←`; `_ ←`
   [[statements.if]]          -- `if`, `elif`, `else`, as a statement and as

@@ -12095,6 +12095,76 @@ with no life before `main`, filling such a table on first use through `OnceLock`
 **Go** and **D**, whose package `init` and module constructors always run.  glibc finds the vDSO's functions when the dynamic
 loader starts, as this does; musl on the first call, as the C runtime here did.
 
+## 2026-10-23T21:00+02:00 — language and compiler
+
+### `constinit let`: variables given their value before the program starts, replacing `@[relro]`
+
+The user asked: "variables like the function pointers into the vdso should be constant initialized, like constinit in C++.  with
+that in place, they become constants afterwards and do not require @[impure] or any other attribute.  if necessary, introduce the
+use of "constinit let"".  Asked how far it goes, the user decided:
+
+- **The initializer is pure only.**  It may compute, read memory (`⎕at`, `⎕span`, `⎕auxv`) and call pure functions; anything
+  with an effect -- a call of an `@[impure]` function, `⎕syscall`, a write of a variable at the top level, I/O -- is refused
+  (4395).  A `constinit` variable nothing reads is dropped together with its initializer, and an initializer the compiler can
+  work out while compiling makes an ordinary constant, with no code at start.
+- **The order is the dependencies.**  An initializer that reads another `constinit` variable runs after it, and a cycle is
+  refused (4396); otherwise imported modules first, then the order of definition.  Every initializer runs before every
+  constructor, and after the auxiliary vector's table and `⎕environ` are filled, so an initializer may read them.
+- **"constinit let variable should automatically be in a section that gets read-protected before the startup function is
+  called.  relro shouldn't be needed"**: a `constinit` variable goes into `.pl4g.relro`, the section the entry point makes
+  read-only after the constructors, and nothing is written on it to say so.  "relro shouldn't be needed" is read as **the
+  `@[relro]` attribute goes**: its registration, its checker rule, its five diagnostics -- 4370 to 4374, retired and not reused,
+  as 3002 and 3008 were -- its tests, its manual line and its section of the specification, which is now `constinit`'s.  The
+  machinery under it stays: the section, its segment, `__pl4g_relro_start` and `__pl4g_relro_end`, the `mprotect`, the `-fpie`
+  handling, `relro` on a variable of the IR (which now says only "in that section"), and the auxiliary vector's table living there.
+  The entry of 2026-10-23T14:00 above is kept as what was decided then.
+
+The syntax is `constinit let NAME: T = EXPR`, at the top level only (4390 elsewhere), never `mut` (4391), with attributes before it
+as before any `let`; `constinit` is a keyword.  A read of one is a read of a constant, from a pure function as from anything.  A
+write anywhere is refused (4393, with 4394 at the definition), a constructor's included; a type that can change without the
+variable being written is refused as `@[relro]`'s was (4392).  `std.time` is rewritten with it: one `constinit let found: Found =
+look(⎕auxv(33) ?? 0u64)` walks the vDSO for both functions, `vdso_gettime` and `vdso_getres` are `constinit` values `⎕at` those
+addresses, and the module has no constructor and nothing `@[impure]` but the two functions that call through the values.
+
+What the decision left open, and how it was settled:
+
+- **What "can be worked out while compiling" means** is what an ordinary variable at the top level may be given: a literal, a
+  value of an enumeration, a container `in ⎕static`, the address of a variable, a record written out of such values, and a whole
+  number the compiler works out from constants and calls of pure functions (`_constant`, asked quietly).  That one is an ordinary
+  read-only variable in `.rodata`, usable wherever a constant is, `constinit` then saying only that it is never written.  Anything
+  else runs at start.  A wider rule -- run any initializer in the compile-time evaluator and keep what it answers -- would make
+  whether a variable is a constant depend on how far the evaluator gets, and an evaluator reading memory reads the compiler's.
+- **One function per variable**, `__pl4g_constinit.NAME`, marked `special(initializer)` in the IR, which the entry point calls in
+  order before the constructors.  One per variable is what lets each be kept exactly where its variable is (`dropunreached` keeps
+  an initializer where something kept names its variable, and the variables it reads are then named too), and lets the order be
+  any order the reading asks for, across files and modules.
+- **The order is read off the IR** once the whole program is lowered: what an initializer's function and every function it
+  names reach.  A call through a function value names nothing, so what it reads orders nothing -- as Go, which orders by the
+  references it can see.  The order is otherwise that of definition, which is the order the variables are in the module: a
+  module's before the file that imports it, a file's as written.  The circle is reported at the variable it comes back to, with
+  the names round it.
+- **A table at the top level built at start is refused to an initializer** (4397).  Such a table is built by the generated
+  constructor, after every initializer; one reading it would read the nought standing in for it.  Running the tables' builder
+  first instead would have been the other order to get wrong, its expressions being allowed to call what reads a `constinit`
+  variable.  A table an initializer reads is `in ⎕static`, or is itself a `constinit` variable's value.
+- **Not even a constructor writes one.**  "Nothing writes it after" is the point, and the initializers have all run before the
+  first constructor; a constructor's write would be a second value the definition does not show.
+- **The pages are still made read-only after the constructors**, where the `mprotect` was: the checker keeps every constructor
+  from writing one, and the auxiliary vector's table is filled before either.
+- **An initializer is lowered where its variable is named**, as a function's body is in a module lowered as far as it is named:
+  it is no root of that, so a program reading no clock never checks or lowers `std.time`'s walk.  An initializer nothing names in
+  a module is therefore not checked, like a body nothing calls; `tests/compiler/test_std_whole.py` checks `std` whole.
+- **Giving the value is no write**: the warning about a variable written and never read does not count it, as it does not count
+  an ordinary initializer.
+- **`constinit` before `⎕import`** is a qualified import (3012), a module being no value to work out.
+
+Compare: **C++**'s `constinit`, which asks only for a constant initializer and says nothing of later writes, its dynamic
+initialization running anything in an order nobody chooses across files; **D**'s `immutable` module variables, given their value
+in module constructors ordered by imports; **Rust**'s `static` (a constant expression) and `OnceLock`/`LazyLock` (worked out on
+first read, checked on every read); **Go**'s package variables, initialized in dependency order with an initialization cycle
+refused -- the order chosen here; **Zig**'s `comptime`, with nothing to run at start; **Odin**'s `@(init)` procedures; **C**, with
+a section attribute, a constructor and an `mprotect`, nothing checking the rest.
+
 Open questions
 --------------
 

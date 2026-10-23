@@ -7,11 +7,11 @@
 ※ or the system's error number, and `Timespec` is C's `struct timespec`:
 ※ seconds, and nanoseconds within the second.  A program reads the clocks
 ※ through the functions the kernel maps into every process, the vDSO, which
-※ answer without entering the kernel: a constructor finds them once, through
-※ the auxiliary vector, and keeps where they are in variables nothing may
-※ write after it -- in a program that reads a clock, and in no other.  Where
-※ there is no vDSO -- a shared object, which never sees the vector -- the
-※ kernel is asked.
+※ answer without entering the kernel: where they are is found once, through
+※ the auxiliary vector, by the initializers of `constinit` variables, which run
+※ before the program does and leave them read-only -- in a program that reads
+※ a clock, and in no other.  Where there is no vDSO -- a shared object, which
+※ never sees the vector -- the kernel is asked.
 
 ※※ A time, as C's `struct timespec` holds one.
 ※※
@@ -43,19 +43,22 @@ enum Clock : i32:
     boottime = 7 ;
     tai = 11
 
-※ The vDSO's two functions, which take and answer what the system calls do:
-※ nought, or the error negated.  Nought until the constructor finds them, and
-※ nought after it where it found none.
-@[relro]
-let vdso_gettime: mut @[cdecl, impure] fn(i32, &mut Timespec) → i32 = (
-    ⎕at(0u64, ⌜@[cdecl, impure] fn(i32, &mut Timespec) → i32⌝))
-
-@[relro]
-let vdso_getres: mut @[cdecl, impure] fn(i32, &mut Timespec) → i32 = (
-    ⎕at(0u64, ⌜@[cdecl, impure] fn(i32, &mut Timespec) → i32⌝))
-
 ※ Where the two are in the vDSO, nought for one not there.
 type Found = gettime : u64 ; getres : u64
+
+※ Where the vDSO's two functions are, found before the program starts by a
+※ walk of a few dozen symbols, once for both.  Its initializer runs only where
+※ something kept reads one of the two below, so a program reading no clock
+※ neither runs it nor holds it.
+constinit let found: Found = look(⎕auxv(33) ?? 0u64)
+
+※ The vDSO's two functions, which take and answer what the system calls do:
+※ nought, or the error negated.  Nought where there is none.
+constinit let vdso_gettime: @[cdecl, impure] fn(i32, &mut Timespec) → i32 = (
+    ⎕at(found.gettime, ⌜@[cdecl, impure] fn(i32, &mut Timespec) → i32⌝))
+
+constinit let vdso_getres: @[cdecl, impure] fn(i32, &mut Timespec) → i32 = (
+    ⎕at(found.getres, ⌜@[cdecl, impure] fn(i32, &mut Timespec) → i32⌝))
 
 ※ What an image of 64 bits says, read where it lies.  Every address below is
 ※ worked out wrapping: it is one the kernel mapped, and a check that could
@@ -79,7 +82,8 @@ fn named(at: u64, name: str) → bool:
         here ← ⎕wrap(here + 1u64)
     ⎕at(here, ⌜&u8⌝)⌖ = 0u8
 
-※ The two functions in the dynamic symbols of the vDSO at `image`.  The kernel
+※ The two functions in the dynamic symbols of the vDSO at `image`, none where
+※ `image` is nought, as it is where the vector names no vDSO.  The kernel
 ※ names them `__vdso_…` on x86-64 and RISC-V and `__kernel_…` on AArch64, and
 ※ no image has both, so either name is taken.  How many symbols there are is
 ※ read from the SysV hash table, which the kernel links every vDSO with
@@ -87,6 +91,8 @@ fn named(at: u64, name: str) → bool:
 ※ taken to have none of the two.
 fn look(image: u64) → Found:
     let none: Found = Found(.gettime ← 0u64, .getres ← 0u64)
+    if image = 0u64:
+        return none
     let phoff: u64 = u64_at(⎕wrap(image + 32u64))
     let phentsize: u64 = u16_at(⎕wrap(image + 54u64))
     let bias: mut u64 = 0u64
@@ -132,17 +138,6 @@ fn look(image: u64) → Found:
             elif named(name, "__vdso_clock_getres") ∨ named(name, "__kernel_clock_getres"):
                 found.getres ← address
     found
-
-※ Find the vDSO's two before the program starts, a walk of a few dozen
-※ symbols.  It only fills in the two variables, so a program reading no clock
-※ does not run it and its image does not hold it.
-@[constructor, impure]
-fn find():
-    let image: u64 = ⎕auxv(33) ?? 0u64
-    if image ≠ 0u64:
-        let found: Found = look(image)
-        vdso_gettime ← ⎕at(found.gettime, ⌜@[cdecl, impure] fn(i32, &mut Timespec) → i32⌝)
-        vdso_getres ← ⎕at(found.getres, ⌜@[cdecl, impure] fn(i32, &mut Timespec) → i32⌝)
 
 ※ The number the kernel gives `clock`, which is how a `Clock` is held.
 fn number(clock: Clock) → i32:

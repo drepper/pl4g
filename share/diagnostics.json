@@ -3381,118 +3381,6 @@
       "option": null
     },
     {
-      "number": 4370,
-      "name": "LANG_RELRO_NOT_MUT",
-      "severity": "error",
-      "message": "'@[relro]' on '{name}', which is not 'mut': it is read-only already",
-      "args": [
-        {
-          "name": "name",
-          "type": "string",
-          "description": "the variable"
-        }
-      ],
-      "cause": "`@[relro]` says that the constructors write a variable and nothing after them does.  A variable without `mut` is written by nothing at all, in a section the image maps read-only from the start, so the attribute would say less than the definition does -- and a word that says nothing is a word a reader has to work out says nothing.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / File Structure / Variable Definition / Variables only constructors write",
-        "requirement": "`@[relro]` stands on a variable at the top level defined with `mut`."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
-      "number": 4371,
-      "name": "LANG_RELRO_NOT_AT_TOP_LEVEL",
-      "severity": "error",
-      "message": "'@[relro]' stands only on a variable at the top level",
-      "args": [],
-      "cause": "What `@[relro]` promises is about the life of the program: the constructors run, the pages are made read-only, the startup function runs.  A variable inside a function is made and gone within one call, and there is no moment in its life the promise is about.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / File Structure / Variable Definition / Variables only constructors write",
-        "requirement": "`@[relro]` stands on a variable at the top level defined with `mut`."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
-      "number": 4372,
-      "name": "LANG_RELRO_HOLDS_WHAT_CHANGES",
-      "severity": "error",
-      "message": "'{name}' holds '{found}', part of which may be changed where the variable may not; it cannot be '@[relro]'",
-      "args": [
-        {
-          "name": "name",
-          "type": "string",
-          "description": "the variable"
-        },
-        {
-          "name": "found",
-          "type": "string",
-          "description": "its type"
-        }
-      ],
-      "cause": "A set or a dictionary whose entries may change is changed through its type, and a field written `mut` through its own mark, and neither asks whether the variable holding it may be written.  So a change after the startup function would be refused by nothing and would write what the entry point had made read-only.  Such a value is held where it may be written, or made one whose parts change only with the whole.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / File Structure / Variable Definition / Variables only constructors write",
-        "requirement": "A `@[relro]` variable holds nothing that can change without the variable being written."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
-      "number": 4373,
-      "name": "LANG_RELRO_WRITTEN_AFTER_STARTUP",
-      "severity": "error",
-      "message": "'{name}' is '@[relro]' and only a constructor's own body may change it",
-      "args": [
-        {
-          "name": "name",
-          "type": "string",
-          "description": "the variable"
-        }
-      ],
-      "cause": "The entry point makes a `@[relro]` variable read-only once the constructors have run, before the startup function does, and a write after that would stop the program on a fault.  What can run before then is a constructor; so a constructor's body writes one, and every other function, a lambda among them, only reads it.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / File Structure / Variable Definition / Variables only constructors write",
-        "requirement": "A `@[relro]` variable is written only in the body of a constructor."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null,
-      "notes": [
-        "LANG_RELRO_DEFINED_HERE"
-      ]
-    },
-    {
-      "number": 4374,
-      "name": "LANG_RELRO_DEFINED_HERE",
-      "severity": "note",
-      "message": "'{name}' is defined '@[relro]' here",
-      "args": [
-        {
-          "name": "name",
-          "type": "string",
-          "description": "the variable"
-        }
-      ],
-      "cause": "Attached to the report of a write to a `@[relro]` variable outside a constructor, to point at the attribute that makes it read-only before the startup function runs.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / File Structure / Variable Definition / Variables only constructors write",
-        "requirement": "A `@[relro]` variable is written only in the body of a constructor."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 4380,
       "name": "LANG_AUXV_NOT_AN_INTEGER",
       "severity": "error",
@@ -3534,6 +3422,194 @@
       "since": "0.1",
       "default_enabled": true,
       "option": "always-fails"
+    },
+    {
+      "number": 4390,
+      "name": "LANG_CONSTINIT_NOT_AT_TOP_LEVEL",
+      "severity": "error",
+      "message": "'constinit' stands only before a variable at the top level",
+      "args": [],
+      "cause": "A `constinit` variable is worked out once, before the program starts, and is read-only from then on: what it says is about the life of the program.  A variable inside a function is made by every call and gone at its end, and there is no moment before the program starts for it to be worked out in.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition / Variables initialized before the program starts",
+        "requirement": "`constinit` stands before a `let` at the top level."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4391,
+      "name": "LANG_CONSTINIT_MUT",
+      "severity": "error",
+      "message": "'{name}' is 'constinit', which nothing writes after its initializer; it cannot be 'mut'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        }
+      ],
+      "cause": "`constinit` says that the initializer is the one thing that writes the variable, before the program starts, and that the pages it is in are read-only once it has.  `mut` says that anything may write it at any time, which is the one thing the variable cannot allow.  A variable the program goes on to change is an ordinary `mut` one, given its first value by a constructor where that value has to be worked out.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition / Variables initialized before the program starts",
+        "requirement": "A `constinit` variable is not `mut`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4392,
+      "name": "LANG_CONSTINIT_HOLDS_WHAT_CHANGES",
+      "severity": "error",
+      "message": "'{name}' holds '{found}', part of which may be changed where the variable may not; it cannot be 'constinit'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "its type"
+        }
+      ],
+      "cause": "A set or a dictionary whose entries may change is changed through its type, and a field written `mut` through its own mark, and neither asks whether the variable holding it may be written.  So a change after the initializer would be refused by nothing and would write what the entry point had made read-only.  Such a value is held where it may be written, or made one whose parts change only with the whole.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition / Variables initialized before the program starts",
+        "requirement": "A `constinit` variable holds nothing that can change without the variable being written."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4393,
+      "name": "LANG_CONSTINIT_WRITTEN",
+      "severity": "error",
+      "message": "'{name}' is 'constinit': its initializer gives it its value, and nothing changes it after",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        }
+      ],
+      "cause": "A `constinit` variable is written by its initializer, before the program starts, and is in pages the entry point makes read-only before the first constructor runs; a write after that would stop the program on a fault.  So nothing writes one -- not a constructor, not the startup function -- in any of the ways a variable is written: assigning it, a field or an element of it, joining onto it, lending it `&mut`, walking it with `&mut`, binding a view of it that may write.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition / Variables initialized before the program starts",
+        "requirement": "Nothing writes a `constinit` variable but its initializer."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null,
+      "notes": [
+        "LANG_CONSTINIT_DEFINED_HERE"
+      ]
+    },
+    {
+      "number": 4394,
+      "name": "LANG_CONSTINIT_DEFINED_HERE",
+      "severity": "note",
+      "message": "'{name}' is defined 'constinit' here",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        }
+      ],
+      "cause": "Attached to the report of a write to a `constinit` variable, to point at the definition that makes it read-only once its initializer has run.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition / Variables initialized before the program starts",
+        "requirement": "Nothing writes a `constinit` variable but its initializer."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4395,
+      "name": "LANG_CONSTINIT_HAS_AN_EFFECT",
+      "severity": "error",
+      "message": "this may change what outlives it, and the initializer of '{name}', which is 'constinit', changes nothing",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        }
+      ],
+      "cause": "The initializer of a `constinit` variable runs before the program does, at a moment the program does not choose, and only where something kept reads the variable; one that nothing reads is not run at all.  So it is pure, as a function without `@[impure]` is: it works out a value, reads memory and calls pure functions, and does nothing a reader could see happen -- no call of an `@[impure]` function, no system call, no write of a variable at the top level or of memory it did not make, no input or output.  What has to be done for its effect is a constructor's work.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition / Variables initialized before the program starts",
+        "requirement": "The initializer of a `constinit` variable is pure."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4396,
+      "name": "LANG_CONSTINIT_READS_ITSELF",
+      "severity": "error",
+      "message": "the initializer of '{name}' needs the value it is to give: {cycle}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        },
+        {
+          "name": "cycle",
+          "type": "string",
+          "description": "the variables whose initializers read one another, in that order"
+        }
+      ],
+      "cause": "An initializer that reads another `constinit` variable, itself or through a function it calls, is run after that variable's.  Where the reading goes round -- `a` reads `b` and `b` reads `a` -- there is no order in which each reads a value already given, and what one of them read would be the nought the variable held before.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition / Variables initialized before the program starts",
+        "requirement": "The initializers of `constinit` variables do not read one another in a circle."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4397,
+      "name": "LANG_CONSTINIT_READS_A_TABLE",
+      "severity": "error",
+      "message": "the initializer of '{name}' reads '{table}', which is built only after the initializers have run",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        },
+        {
+          "name": "table",
+          "type": "string",
+          "description": "the variable at the top level holding a table"
+        }
+      ],
+      "cause": "A set or a dictionary at the top level that is not `in ⎕static` is built by code the entry point runs with the constructors, after every `constinit` initializer has run, so an initializer reading one -- itself or through a function it calls -- would find nothing there yet.  A table such an initializer reads is put `in ⎕static`, where it is in the image from the start, or is itself the value of a `constinit` variable.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition / Variables initialized before the program starts",
+        "requirement": "The initializer of a `constinit` variable reads no table built at start."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
     },
     {
       "number": 4401,

@@ -1,0 +1,41 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none host=host.c
+※ pl4g-test: args -shared
+
+※ `constinit` in a shared object: the initializers give the variables their
+※ values when the object is loaded, before its constructors, and what the
+※ object offers reads them -- under the same rule the checker holds an
+※ executable to.
+※
+※ **The loader runs what an object's `.init_array` lists, after it has acted
+※ on `PT_GNU_RELRO`**, so the pages that header names are read-only before
+※ any of it runs, and what the initializers write cannot be there.  The
+※ variables stay in a section of their own, `.pl4g.relro`, which is writable
+※ data of the object and not in that header: nothing makes them read-only
+※ once the initializers have run.  Doing it would take a function of the
+※ object's own run last and a segment of its own for the pages, in a process
+※ whose other code -- the host's, written in anything -- may write anything
+※ anyway; what keeps the object's own code from writing them is the checker,
+※ which is the same as in an executable.  The initializers are listed first,
+※ the constructors after them, so a constructor reads them given.
+
+let base: i64 = 2i64
+
+fn ten(from: &static i64) → i64:
+    from⌖ × 5i64
+
+constinit let chosen: &static i64 = pick()
+
+constinit let scale: i64 = ten(chosen) × 2i64
+
+fn pick() → &static i64:
+    &base
+
+let started: mut i64 = 0i64
+
+@[constructor, impure]
+fn begin():
+    started ← scale
+
+@[visible, cdecl]
+fn run(n: i64) → i64:
+    n × scale + chosen⌖ + started - 20i64

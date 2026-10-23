@@ -83,7 +83,7 @@
 (hole) @variable.parameter
 ; What a signature requires of its types and demands of its values.
 ["pre" "post"] @keyword
-"comptime" @keyword.modifier
+["comptime" "constinit"] @keyword.modifier
 ; `static` is the whole of what one node is, and `mut` of another.
 (lasting) @keyword.modifier
 (mutable) @keyword.modifier

@@ -19,7 +19,7 @@ from .inst import (AddressInst, SyscallInst, SelectInst, AnyLaneInst, BinaryInst
                    CmpInst, CmpPred, CondBrInst, LoadInst, MemStartInst,
                    Ordering, RetInst,
                    StoreInst, UnaryInst, UnOp, UnreachableInst)
-from .module import GlobalVar, Module
+from .module import GlobalVar, Initializer, Module
 from .printer import IR_VERSION
 from .types import (BOOL, BUILTIN_TYPES, MEM, PtrType, TupleType, Type,
                     TypeContext, U64, VecType, VOID)
@@ -431,7 +431,8 @@ def _read_global(module: Module, line: str, number: int) -> None:
         words = words[1:]
     ty = _parse_type(words[0], module.types, number)
     linkage = Linkage(words[1]) if len(words) > 1 else Linkage.INTERNAL
-    # What the constructors alone write, said after the linkage.
+    # In the section made read-only before the startup function, said after
+    # the linkage.
     relro = len(words) > 2 and words[2] == "relro"
     from .types import IntType
 
@@ -450,6 +451,14 @@ def _rebuild_caches(module: Module) -> None:
                 module.startup = func
             case SpecialKind.CONSTRUCTOR:
                 module.ctors.append(func)
+            case SpecialKind.INITIALIZER:
+                # The variable it gives a value is the one it writes.
+                written = next((inst.operands[1] for block in func.blocks
+                                for inst in block.insts
+                                if isinstance(inst, StoreInst)
+                                and isinstance(inst.operands[1], GlobalVar)), None)
+                if written is not None:
+                    module.initializers.append(Initializer(written, func))
             case SpecialKind.DESTRUCTOR:
                 module.dtors.append(func)
             case SpecialKind.TEST_ALWAYS | SpecialKind.TEST_BUILD | SpecialKind.TEST_SUITE:

@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4390
+※ pl4g-test: expect-diag 4390 LANG_CONSTINIT_NOT_AT_TOP_LEVEL
+
+※ `constinit` stands only before a variable at the top level.  What it says is
+※ about the life of the program -- the initializer runs before the program
+※ does, and the variable is read-only from then on -- and a variable inside a
+※ function is made by every call and gone at its end, with no moment before
+※ the program starts for it to be worked out in.  The rest of the body reads
+※ the name as the `let` it stands before.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    constinit let count: u8 = 1u8
+    ⎕narrow(count, ⌜u6⌝) ?? 0u6

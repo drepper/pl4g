@@ -1,0 +1,34 @@
+※ pl4g-test: compile=error diag=4395
+※ pl4g-test: expect-diag 4395 LANG_CONSTINIT_HAS_AN_EFFECT
+
+※ **The initializer of a `constinit` variable is pure.**  It runs before the
+※ program does, at a moment the program does not choose, and only where
+※ something kept reads the variable -- one nothing reads is not run at all --
+※ so what it does cannot be anything a reader would see happen.  It works out
+※ a value, reads memory and calls pure functions; a call of an `@[impure]`
+※ function, a system call, a write of a variable at the top level are each
+※ refused, where they are written.  What has to be done for its effect is a
+※ constructor's work.
+※
+※ Compare: **C++**'s `constinit`, which allows only a constant initializer and
+※ so nothing with an effect, where its dynamic initialization allows anything,
+※ in an order nobody chooses; **Zig**, whose `comptime` values are pure because
+※ there is nothing at compile time to have an effect on; **Rust**'s
+※ `LazyLock`, which runs anything on first read.
+
+let std := ⎕import("std")
+
+let counted: mut u64 = 0u64
+
+@[impure]
+fn count() → u64:
+    counted ← counted + 1u64
+    counted
+
+constinit let first: u64 = count()
+
+constinit let pid: i64 = ⎕syscall(⎕sc@getpid)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    ⎕narrow(first + ⎕narrow(pid, ⌜u64⌝) ?? 0u64, ⌜u6⌝) ?? 0u6

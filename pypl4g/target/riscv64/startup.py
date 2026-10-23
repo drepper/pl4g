@@ -64,10 +64,15 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
     asm.loadreg(RA, asm.reg(ZERO))
     _read_auxv(asm, module, cconv)
     _read_environment(asm, module, cconv)
+    # The `constinit` variables first, in the order they read one another, so
+    # that a constructor finds them given; then the constructors.
+    for one in module.initializers:
+        asm.call(symbol_name(one.func))
     for ctor in module.ctors:
         asm.call(symbol_name(ctor))
     if relro.wanted(module):
-        # What the constructors wrote is read-only from here on.
+        # What the initializers and the constructors wrote is read-only from
+        # here on.
         relro.emit_protect(asm, SYSCALLS, STACK_ABI.mprotect)
     _run_tests(asm, module, cconv, failures or {})
     if module.test_plan:
