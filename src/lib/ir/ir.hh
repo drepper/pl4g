@@ -437,6 +437,9 @@ namespace pl4g::ir {
     Function* startup = nullptr;
     Function* build = nullptr;
     GlobalVar* environ = nullptr;
+    // The table the auxiliary vector is read into, where the program asks
+    // `⎕auxv` anything.
+    GlobalVar* auxv = nullptr;
     std::vector<const Value*> ring_addresses;
     std::vector<Function*> ctors;
     std::vector<Function*> dtors;

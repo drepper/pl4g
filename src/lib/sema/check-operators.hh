@@ -170,6 +170,8 @@
     ir::Value* loaded_or_in_place(ir::Builder& builder, ir::Value* address, const ast::Expr* expr, Span span);  // check.py:25722
     // Lower `⎕syscall(NUMBER, ARG...)`: what the kernel answered.
     ir::Value* lower_syscall(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:25739
+    // Lower `⎕auxv(TYPE)`: what the auxiliary vector says of TYPE, a `u64?`.
+    ir::Value* lower_auxv(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);
     // Lower `⎕at(ADDRESS, ⌜TYPE⌝)` and `⎕span(ADDRESS, COUNT, ⌜TYPE⌝)`.
     ir::Value* lower_place_at(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:25779
     // Lower `⎕bytes(TEXT)`: what a string is made of.

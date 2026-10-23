@@ -178,6 +178,7 @@ set(PL4G_LIB_SOURCES
   src/lib/sema/check-operators.cc
   src/lib/sema/check-builtins.cc
   src/lib/sema/clauses.cc
+  src/lib/sema/auxv.cc
   src/lib/sema/environ.cc
   src/lib/sema/lastuse.cc
   src/lib/sema/lists.cc

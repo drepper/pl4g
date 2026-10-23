@@ -55,6 +55,7 @@ namespace pl4g::names {
   inline constexpr std::string_view widen_name = "\N{APL FUNCTIONAL SYMBOL QUAD}widen";
   inline constexpr std::string_view import_name = "\N{APL FUNCTIONAL SYMBOL QUAD}import";
   inline constexpr std::string_view syscall_name = "\N{APL FUNCTIONAL SYMBOL QUAD}syscall";
+  inline constexpr std::string_view auxv_name = "\N{APL FUNCTIONAL SYMBOL QUAD}auxv";
   inline constexpr std::string_view acquire_name = "\N{APL FUNCTIONAL SYMBOL QUAD}acquire";
   inline constexpr std::string_view release_name = "\N{APL FUNCTIONAL SYMBOL QUAD}release";
   inline constexpr std::string_view at_name = "\N{APL FUNCTIONAL SYMBOL QUAD}at";

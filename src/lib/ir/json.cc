@@ -735,6 +735,8 @@ namespace pl4g::ir {
       out->build = function_named(doc["build"]);
       if (! is_null(doc["environ"]))
         out->environ = named(globals, string_of(doc["environ"]), "global");
+      if (! is_null(doc["auxv"]))
+        out->auxv = named(globals, string_of(doc["auxv"]), "global");
       for (Element f : doc["ctors"].get_array())
         out->ctors.push_back(function_named(f));
       for (Element f : doc["dtors"].get_array())

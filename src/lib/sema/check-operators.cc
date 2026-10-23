@@ -8,6 +8,7 @@
 
 #include "ir/printer.hh"
 #include "sema/check.hh"
+#include "sema/auxv.hh"
 #include "sema/lists.hh"
 #include "sema/owned.hh"
 #include "sema/strings.hh"
@@ -1660,6 +1661,8 @@ namespace pl4g::sema {
         return lower_widen(builder, expr, expected);
       if (given == syscall_name)
         return lower_syscall(builder, expr, expected);
+      if (given == names::auxv_name)
+        return lower_auxv(builder, expr, expected);
       if (given == acquire_name || given == release_name)
         return lower_ordered(builder, expr, expected);
       if (given == at_name || given == span_name)
@@ -2738,6 +2741,56 @@ namespace pl4g::sema {
       return error_value(module);
     }
     return answer;
+  }
+
+
+  ir::Value* Checker::lower_auxv(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected)
+  {
+    if (expr->args.size() != 1) [[unlikely]] {
+      diags.emit(D::LANG_CALL_WRONG_ARGUMENT_COUNT, expr->span,
+                 { { "name", names::auxv_name }, { "expected", 1 }, { "found", expr->args.size() } });
+      return error_value(module);
+    }
+    auto written = expr->args[0];
+    auto literal = ast::as<ast::IntLit>(written);
+    // One written with no suffix is the `u64` the vector holds a type as.
+    bool bare = literal != nullptr && ! literal->type_name;
+    auto given = lower_expr(builder, written, bare ? ir::u64() : nullptr);
+    auto found = value_type_of(given);
+    if (found == ir::error_type()) [[unlikely]]
+      return error_value(module);
+    auto integer = ir::as<ir::IntType>(found);
+    if (integer == nullptr) [[unlikely]] {
+      diags.emit(D::LANG_AUXV_NOT_AN_INTEGER, written->span, { { "found", found->written() } });
+      return error_value(module);
+    }
+    auto answer = ir::result_type(ir::u64());
+    if (! accepts(expected, answer)) [[unlikely]] {
+      report_mismatch(expr->span, answer, expected);
+      return error_value(module);
+    }
+    auto span = expr->span;
+    if (is_int_const(given))
+      if (auto known = static_cast<const ir::IntConst*>(given)->value; known <= 0 || known >= sema::auxv::slots) {
+        // A type the table never holds, answered here: no table is made for it.
+        diags.emit(D::LANG_AUXV_NO_SUCH_TYPE, span, { { "value", ir::decimal(known) } });
+        return builder.wrap(builder.int_const(ir::u64(), 0), builder.bool_const(true), answer, span);
+      }
+    // A word by the type's own signedness, and the same bits read as the
+    // unsigned one a word of the vector is.
+    auto word = found == ir::u64() ? given
+      : builder.cast(integer->bits == 64 ? ir::CastKind::trunc : integer->is_signed ? ir::CastKind::sext : ir::CastKind::zext,
+                     given, ir::u64(), span);
+    auto first = sema::auxv::words_of(builder, auxv());
+    auto inside = builder.compare(ir::CmpPred::ult, word, builder.int_const(ir::u64(), sema::auxv::slots), span);
+    auto index = builder.select(inside, word, builder.int_const(ir::u64(), 0), span);
+    auto bits = builder.load(first, span);
+    auto moved = builder.binary(ir::BinOp::wrap_lshr, bits, index, span);
+    auto bit = builder.binary(ir::BinOp::and_, moved, builder.int_const(ir::u64(), 1), span);
+    auto offset = builder.binary(ir::BinOp::wrap_mul, index, builder.int_const(ir::u64(), sema::auxv::word), span);
+    auto value = builder.load(builder.binary(ir::BinOp::add, first, offset, span), span);
+    auto absent = builder.compare(ir::CmpPred::eq, bit, builder.int_const(ir::u64(), 0), span);
+    return builder.wrap(value, absent, answer, span);
   }
 
 

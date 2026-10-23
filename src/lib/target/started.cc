@@ -54,6 +54,12 @@ namespace pl4g::target {
   }
 
 
+  bool holds_stack(const ir::Module& module, const ir::DataLayout& layout)
+  {
+    return arguments_at(module, layout) || module.environ != nullptr || module.auxv != nullptr;
+  }
+
+
   bool entry_wants_runtime(const ir::Module& module)
   {
     return wanted_by(module) != nullptr || module.environ != nullptr;
