@@ -1035,6 +1035,31 @@ namespace pl4g::sema {
     }
   }
 
+  bool changes_by_itself(const ir::Type* ty, const KeySet& seen)
+  {
+    if (seen.contains(id_of(ty)))
+      return false;
+    auto deeper = deeper_than(seen, ty);
+    switch (ty->kind) {
+    case ir::TypeKind::set:
+      return ir::as<ir::SetType>(ty)->is_mutable;
+    case ir::TypeKind::dict:
+      return ir::as<ir::DictType>(ty)->is_mutable;
+    case ir::TypeKind::product: {
+      auto product = ir::as<ir::ProductType>(ty);
+      return ! product->mutable_fields.empty()
+        || std::ranges::any_of(product->fields, [&](const auto& f) { return changes_by_itself(f.second, deeper); });
+    }
+    case ir::TypeKind::tuple:
+      return std::ranges::any_of(ir::as<ir::TupleType>(ty)->members,
+                                 [&](auto m) { return changes_by_itself(m, deeper); });
+    case ir::TypeKind::array:
+      return changes_by_itself(ir::as<ir::ArrayType>(ty)->element, deeper);
+    default:
+      return false;
+    }
+  }
+
   std::string path_of(const ast::Expr* expr)
   {
     if (auto member = ast::as<ast::Member>(expr))

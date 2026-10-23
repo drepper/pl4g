@@ -950,6 +950,10 @@ namespace pl4g::sema {
       // A path that names a variable at the top level itself -- another
       // module's, or a singleton -- is as mutable as that variable.
       if (auto named = exported_variable(member); named != nullptr) {
+        if (sealed(named)) [[unlikely]] {
+          refuse_sealed(named, path_text(expr), where);
+          return false;
+        }
         if (named->is_mutable())
           return true;
         diags.emit(D::LANG_VARDEF_NOT_MUTABLE, where, { { "name", path_text(expr) } });
@@ -985,6 +989,10 @@ namespace pl4g::sema {
         return false;
       }
       auto found = provided(name->name).get<ir::GlobalVar>();
+      if (sealed(found)) [[unlikely]] {
+        refuse_sealed(found, name->name, where);
+        return false;
+      }
       if (found != nullptr && ! found->is_mutable()) {
         diags.emit(D::LANG_VARDEF_NOT_MUTABLE, where, { { "name", name->name } });
         return false;
@@ -2243,6 +2251,10 @@ namespace pl4g::sema {
             for (const auto& pair : one.outer)
               adopting.insert(std::tuple{ pair.first, pair.second });
         Finally put_back_adopting([&] { adopting = std::move(outer_adopting); });
+        // A lambda's body is a function of its own and not the body it is
+        // written in, so not a constructor's either.
+        bool was_open = std::exchange(seals_open, false);
+        Finally reopen([&] { seals_open = was_open; });
         func = function_of_a_lambda(expr, params, answer, held, offsets, taken, name, borrows_said);
       }
       if (adopted && lambda_notes && handing_over) {
@@ -3306,7 +3318,8 @@ namespace pl4g::sema {
       return error_value(module);
     }
     if (writes && ! found->may_change) {
-      diags.emit(D::LANG_REF_PLACE_NOT_MUTABLE, expr->span, { { "name", found->what } });
+      if (! said_sealed(expr->operand, expr->span))
+        diags.emit(D::LANG_REF_PLACE_NOT_MUTABLE, expr->span, { { "name", found->what } });
       return error_value(module);
     }
     auto ty = ir::ptr_type(found->held, writes, found->lasting);

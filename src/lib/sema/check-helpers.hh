@@ -117,6 +117,9 @@ namespace pl4g::sema {
   // Whether a value of `ty` holds a field written `mut` anywhere inside it -- which a variable at the
   // top level holding one has to be written where it may be changed for.
   bool has_mutable_field(const ir::Type* ty, const KeySet& seen = {});  // check.py:1122
+  // Whether part of a value of `ty` may be changed where the variable holding it may not: a table whose
+  // entries may change, or a field written `mut`.  Only what is in the variable's own bytes counts.
+  bool changes_by_itself(const ir::Type* ty, const KeySet& seen = {});  // check.py:1297
   // A field written as the path to it, `init.io.output`, for a message.
   std::string path_of(const ast::Expr* expr);  // check.py:1140
   // Whether a loop over `iterable` takes one turn and no more, which a range from a number written down

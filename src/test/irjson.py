@@ -415,7 +415,8 @@ class Writer:
     def global_var(self, var: GlobalVar) -> dict[str, Any]:
         return {"name": var.name, "t": self.type(var.value_type), "pt": self.type(var.ty),
                 "linkage": var.linkage.value, "init": self.const(var.initializer) if var.initializer is not None
-                else None, "module": var.module, "exported": var.exported, "system_layout": var.system_layout}
+                else None, "module": var.module, "exported": var.exported, "system_layout": var.system_layout,
+                "relro": var.relro}
 
     def run(self) -> dict[str, Any]:
         module = self.module

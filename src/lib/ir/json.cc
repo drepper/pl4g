@@ -631,6 +631,7 @@ namespace pl4g::ir {
         var->module = string_of(g["module"]);
         var->exported = bool_of(g["exported"]);
         var->system_layout = bool_of(g["system_layout"]);
+        var->relro = bool_of(g["relro"]);
         globals[var->name] = var.get();
         out->add_global(std::move(var), std::string(string_of(keys.at(at++))));
       }

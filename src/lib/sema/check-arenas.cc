@@ -1374,6 +1374,7 @@ namespace pl4g::sema {
     // written rather than about what it calls.
     ir::Function* was_building = std::exchange(
       in_build_function, func->attrs.special == ir::SpecialKind::build ? func : nullptr);
+    bool was_open = std::exchange(seals_open, func->attrs.special == ir::SpecialKind::constructor);
     if (entry->expectation != nullptr)
       diags.resume(*entry->expectation);
     Finally restore([&] {
@@ -1387,6 +1388,7 @@ namespace pl4g::sema {
         discard(func);
       discard_function = previous;
       in_build_function = was_building;
+      seals_open = was_open;
     });
     lower_body(entry);
     report_scopes(node);
@@ -2819,7 +2821,8 @@ namespace pl4g::sema {
     }
     auto [start, lengths] = shape_of(builder, base, ty, stmt->span);
     if (read_only(start)) [[unlikely]] {
-      diags.emit(D::LANG_STATIC_CHANGES, stmt->base->span, { { "name", written_as(stmt->base) } });
+      if (! said_sealed(stmt->base, stmt->base->span))
+        diags.emit(D::LANG_STATIC_CHANGES, stmt->base->span, { { "name", written_as(stmt->base) } });
       return;
     }
     if (! made_here(start))

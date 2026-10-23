@@ -7,6 +7,7 @@
 #include "ir/builder.hh"
 #include "target/emit.hh"
 #include "target/relocate.hh"
+#include "target/relro.hh"
 #include "target/started.hh"
 #include "target/statuses.hh"
 #include "target/x86_64/abi.hh"
@@ -340,6 +341,9 @@ namespace pl4g::target::x86_64 {
     read_environment(asm_, module, cconv);
     for (auto ctor : module.ctors)
       asm_.call(ir::symbol_name(*ctor));
+    if (relro_wanted(module))
+      // What the constructors wrote is read-only from here on.
+      emit_protect_relro(asm_, syscalls());
     run_tests(asm_, module, cconv, failures);
     // Where the status waits: a register a call leaves alone where a
     // destructor is going to run, and the one the system call wants where none

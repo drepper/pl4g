@@ -5,6 +5,7 @@
 #include <algorithm>
 
 #include "ir/builder.hh"
+#include "target/relro.hh"
 #include "target/started.hh"
 
 
@@ -167,11 +168,15 @@ namespace pl4g::target {
       for (auto one : module.ring_addresses)
         const_cast<ir::AddressConst*>(static_cast<const ir::AddressConst*>(one))->offset = std::int64_t(*at);
     }
-    std::vector<const ir::GlobalVar*> constant, variable;
+    std::vector<const ir::GlobalVar*> constant, variable, sealed;
     for (const auto& [_, var] : module.globals)
-      (var->is_mutable() ? variable : constant).push_back(var.get());
+      (! var->is_mutable() ? constant : var->relro ? sealed : variable).push_back(var.get());
     emit_group(asm_, constant, rodata_section, false, layout);
     emit_group(asm_, variable, data_section, true, layout);
+    // What the constructors alone write: writable while they run, and in a
+    // section of its own so that the pages made read-only after them are
+    // nothing else's.
+    emit_group(asm_, sealed, relro_section, true, layout);
   }
 
 

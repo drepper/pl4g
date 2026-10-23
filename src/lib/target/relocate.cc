@@ -20,7 +20,7 @@ namespace pl4g::target {
   } // anonymous namespace
 
 
-  void emit_relocate(mc::Assembler& asm_, std::span<const mc::Reg> scratch, const SyscallABI& abi)
+  void emit_relocate(mc::Assembler& asm_, std::span<const mc::Reg> scratch, const SyscallABI& abi, bool protects)
   {
     // An even entry is the address of the next word to fix; an odd one is a
     // bitmap of the 63 words after the last address, its lowest bit the mark.
@@ -98,6 +98,11 @@ namespace pl4g::target {
     // kernel answers changes nothing -- a page left writable is what there
     // was before.
     asm_.block(done);
+    if (! protects) {
+      asm_.ret();
+      asm_.end_function();
+      return;
+    }
     auto protected_ = asm_.reserve_label("relro.done");
     auto protect = asm_.reserve_label("relro.protect");
     asm_.address(at, std::string(relro_start_symbol));

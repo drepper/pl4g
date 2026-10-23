@@ -190,7 +190,10 @@ table -- is a writable segment of its own, ahead of the data that stays writable
 `PT_GNU_RELRO` header names it.  Once the walk is done, `__pl4g_relocate` asks the kernel to make it read-only again,
 `mprotect(start, end - start, PROT_READ)`, from the first page of that segment to its end (`__pl4g_relro_start` and
 `__pl4g_relro_end`, which the writer defines); where there is nothing to protect the two are the same and nothing is asked.
-What a dynamic linker does for a shared object from the header, the image does for itself.
+What a dynamic linker does for a shared object from the header, the image does for itself.  **A `@[relro]` variable's section,
+`.pl4g.relro`, joins that segment** (details.md, Variables): the pages are made read-only once, and where anything is
+`@[relro]` it is the entry point that asks, after the constructors have written them, and `__pl4g_relocate` leaves them be --
+the same call, from the same symbols, that a fixed-address image with such a variable makes (`target/relro.cc`).
 
 The language server and the tree-sitter service
 -----------------------------------------------

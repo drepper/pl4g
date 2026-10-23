@@ -34,6 +34,21 @@
     bool declare(std::string_view name, Span span, std::string_view path = "");  // check.py:4582
     // Register one variable defined at the top level.
     void collect_global(const ast::VarDef* node);
+    // Whether `found` is a `@[relro]` variable this body may not write -- every body's but a
+    // constructor's own.
+    bool sealed(const ir::GlobalVar* found) const;  // check.py:5191
+    // Whether this body may write the variable at the top level `var`: `mut`, and not `@[relro]` where
+    // the body is not a constructor's.
+    bool writable_global(const ir::GlobalVar* var) const;  // check.py:5196
+    // The `@[relro]` variable this body may not write that `expr` names a part of.
+    ir::GlobalVar* sealed_root(const ast::Expr* expr);  // check.py:5201
+    // Report a write to a part of a `@[relro]` variable outside a constructor's body, where `expr`
+    // names one; and say whether it did.
+    bool said_sealed(const ast::Expr* expr, Span where);  // check.py:5220
+    // Report that `var`, `@[relro]`, is written outside a constructor.
+    void refuse_sealed(const ir::GlobalVar* var, std::string_view name, Span where);  // check.py:5230
+    // The `@[relro]` said of a variable at the top level, where it may be: only on one defined `mut`.
+    const BoundAttr* relro_of(const ast::VarDef* node, const std::vector<BoundAttr>& attrs);  // check.py:5236
     // A variable of the interactive session, declared where the session wrote it.
     void session_variable(const ast::VarDef* node);  // check.py:4600
     // Bind what was said of the file itself, and note a system file.

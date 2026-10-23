@@ -116,6 +116,8 @@ namespace pl4g::elf {
     // table that says so.
     void collect_relocations();
     std::uint64_t place_relocations(ImageLayout& layout, std::uint64_t offset, std::vector<SegmentPlan>& loads);
+    // Give the entry point the bounds of the pages it makes read-only.
+    void relro_bounds(std::span<const SegmentPlan> loads);
     void define(std::string_view name, std::uint64_t vaddr);
     // A shared object's tables: how many entries its dynamic section has,
     // where they all go, which tables index which, and their bytes.
