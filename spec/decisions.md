@@ -11847,6 +11847,65 @@ convention does; **Odin**, whose `"c"` convention and default `"odin"` one split
 a struct in registers by its own rules and whose cgo converts to C's; **Swift**, whose `@convention(c)` follows C and whose own is
 Swift's.  None of them refuses a C struct as a parameter: each classifies arguments as it classifies answers, which is the larger
 half of the rules and the one this leaves for when something wants it.
+## 2026-10-23T14:00+02:00 — language and compiler
+
+### `@[relro]`: variables the constructors write and nothing after them does
+
+`std.time` is to find the vDSO through the auxiliary vector in PL4G code, and what it finds -- where the functions are -- is
+worked out once, before the program starts, and then only read.  The user decided **an attribute `@[relro]` on a `mut` variable
+at the top level**: such a variable lives in a section of its own, which the entry point makes read-only (`mprotect`,
+`PROT_READ`) once the work before the startup function is done -- the auxiliary vector read, the constructors run -- and before
+the startup function runs; the checker refuses a write from anything that is not run before startup.  A write after that would
+fault, so the checker's rule is what makes a program never fault there.  What the user left to the implementation, and how it
+was settled:
+
+- **How far the rule reaches: the body of a constructor, and nothing it calls** (4373).  A function a constructor calls may be
+  called from anywhere, now or after the next change, and a rule that let it write would need the whole program's calls -- through
+  function values and across modules -- to know it ran only before startup, and would turn a change somewhere else into a refusal
+  here.  The body is what the reader sees and what the checker can be sure of.  A lambda written in a constructor is a function of
+  its own and is held to the same rule, which costs nothing: what it would write, the constructor writes with what it answers.
+  Every way of writing counts -- assigning, a field or an element, joining onto a list, lending `&mut`, walking with `&mut`, a view
+  that may write -- and each is refused where it is written, with a note at the definition (4374).  A `&` of it is allowed
+  everywhere, at the top level too.  Compare **D**, whose `immutable` module variables are initialized in a module constructor's
+  body and nowhere else -- this rule exactly, and not protected; **Java**'s `final` fields and **C++**'s `const` members, assigned
+  in a constructor's body or initializer list and not in a method it calls; **Rust**'s `OnceLock` and **Go**'s `init` functions,
+  which write once at run time and protect nothing; **C** with GCC or Clang, where a section attribute and an `mprotect` in the
+  last constructor give the same image and nothing checks the rest.
+- **What else is refused.**  `@[relro]` on a variable without `mut` says less than the definition (4370); inside a function,
+  where the variable lives one call, it promises nothing (4371, said in place of the general 3204 for a statement).  **A value
+  part of which changes without the variable being written** -- a set or dictionary whose entries may change, which is changed
+  through its type, and a record with a field written `mut`, changed through its own mark -- is refused (4372): neither asks
+  whether the variable may be written, so the rule would not reach them and the pages would.
+- **The section is `.pl4g.relro`**, not `.data.rel.ro`.  The latter is what the loader writes and `PT_GNU_RELRO` protects
+  before any constructor runs; in a shared object the two are different things, one protected and the other not, and a reader
+  of the image is told which is which.  Compare `.pl4g.notes` beside it, named the same way for the same reason.
+- **The fixed-address executable**: a segment of its own, first of the writable ones -- the layout the shared object's writer
+  already had for what is read-only but for being relocated -- said with `PT_GNU_RELRO` as a loader would be told it, and two
+  symbols the writer defines, `__pl4g_relro_start` (the segment's first page) and `__pl4g_relro_end`, which the entry point
+  hands to `mprotect` after the constructors and before the tests it runs at start.  What the kernel answers is not looked at:
+  a page left writable is what there was before.  Compare **glibc**'s static start-up, which protects `PT_GNU_RELRO` itself where
+  no loader does.
+- **`-fpie` (C++)**: the same pages as the relocated read-only data -- the section joins that segment -- made read-only once,
+  after the constructors: `__pl4g_relocate` leaves it to the entry point where something is `@[relro]`, and does it itself as
+  before where nothing is.
+- **A shared object keeps the variables writable.**  The loader runs its constructors after acting on `PT_GNU_RELRO`, so the
+  section stays out of that header, as writable data of the object.  The alternative -- leaving it out of the header and having a
+  function run last of the object's constructors protect it -- costs a segment and a function in a process whose host, written in
+  anything, may write anything anyway; the checker's rule holds the object's own code there as it does an executable's.
+- **The interpreter honours the rule by the checker alone.**  It lays variables out in memory of its own beside other things and
+  could protect one only by giving each its own pages; a program the checker accepted never writes one after its constructors.
+
+Open questions
+--------------
+
+Questions that are open, and tasks not yet done, are kept in the to-do lists rather than here:
+[TODO-language.md](../TODO-language.md) for the language, [TODO-pypl4g.md](../TODO-pypl4g.md) for the compiler and
+[TODO-editors.md](../TODO-editors.md) for what an editor reads and [TODO-cpp.md](../TODO-cpp.md) for the C++ implementation, with
+a list of its own for each further tool as one is needed.
+
+This file records decisions that were made.  A decision that leaves something open says so in its own entry, and the thing left
+open belongs in a list.
+
 ## 2026-10-23T16:00+02:00 — language and runtime
 
 ### `⎕auxv(TYPE)`: the auxiliary vector, read by the program's own code
@@ -11901,14 +11960,3 @@ with the table chosen by the runtime instead of indexed by the type; **Rust**, w
 (for the processor's features, in `std_detect`) and offers nothing of its own; **Zig**, whose start code keeps where the vector is
 and whose `std.os.linux.getauxval` walks it at each question; **D**, whose `core.sys.linux.sys.auxv` binds the C function;
 **Python**, which has none, `os.sysconf("SC_PAGESIZE")` answering one of the questions through the C library.
-
-Open questions
---------------
-
-Questions that are open, and tasks not yet done, are kept in the to-do lists rather than here:
-[TODO-language.md](../TODO-language.md) for the language, [TODO-pypl4g.md](../TODO-pypl4g.md) for the compiler and
-[TODO-editors.md](../TODO-editors.md) for what an editor reads and [TODO-cpp.md](../TODO-cpp.md) for the C++ implementation, with
-a list of its own for each further tool as one is needed.
-
-This file records decisions that were made.  A decision that leaves something open says so in its own entry, and the thing left
-open belongs in a list.

@@ -708,7 +708,7 @@ namespace pl4g::sema {
       if (var->value_type == ir::error_type())
         return std::nullopt;
       // A variable at the top level is there for as long as the program is.
-      return PlaceTaken{ builder.address(var, expr->span), var->value_type, var->is_mutable(),
+      return PlaceTaken{ builder.address(var, expr->span), var->value_type, writable_global(var),
                          std::string(expr->name), true };
     }
     diags.emit(D::LANG_FILESTRUCT_UNDEFINED_NAME, expr->span, { { "name", expr->name } });
@@ -734,7 +734,7 @@ namespace pl4g::sema {
   {
     if (ir::GlobalVar* shared = exported_variable(expr); shared != nullptr)
       // The variable itself and not a field of one.
-      return PlaceTaken{ builder.address(shared, expr->span), shared->value_type, shared->is_mutable(),
+      return PlaceTaken{ builder.address(shared, expr->span), shared->value_type, writable_global(shared),
                          std::string(expr->name), true };
     auto found = record_at(builder, expr->base, writing);
     if (! found) [[unlikely]] {
@@ -861,7 +861,7 @@ namespace pl4g::sema {
   {
     if (auto member = ast::as<ast::Member>(expr)) {
       if (ir::GlobalVar* shared = exported_variable(member); shared != nullptr)
-        return exported_variable(member)->is_mutable();
+        return writable_global(shared);
       return may_write(member->base);
     }
     if (auto element = ast::as<ast::Element>(expr))
@@ -879,7 +879,7 @@ namespace pl4g::sema {
       if (Local* local = find_local(name->name); local != nullptr)
         return local->is_mutable;
       auto var = provided(name->name).get<ir::GlobalVar>();
-      return var == nullptr || var->is_mutable();
+      return var == nullptr || writable_global(var);
     }
     if (ast::is<ast::ArrayLit>(expr))
       return true;
@@ -892,7 +892,7 @@ namespace pl4g::sema {
     ir::Value* seen = value;
     while (true) {
       if (auto var = global_of(seen))
-        return ! var->is_mutable();
+        return ! writable_global(var);
       if (auto inst = inst_of(seen, ir::InstKind::AddressInst)) {
         seen = inst->operands[0];
         continue;
@@ -1339,7 +1339,8 @@ namespace pl4g::sema {
       return std::nullopt;
     }
     if (! may_change) [[unlikely]] {
-      diags.emit(D::LANG_VARDEF_NOT_MUTABLE, span, { { "name", what } });
+      if (! said_sealed(expr, span))
+        diags.emit(D::LANG_VARDEF_NOT_MUTABLE, span, { { "name", what } });
       return std::nullopt;
     }
     // A view of its elements may be out, which changing it in place could
@@ -2044,7 +2045,8 @@ namespace pl4g::sema {
       return undef_error(module);
     }
     if (! may_change) [[unlikely]] {
-      diags.emit(D::LANG_VARDEF_NOT_MUTABLE, expr->args[0]->span, { { "name", what } });
+      if (! said_sealed(expr->args[0], expr->args[0]->span))
+        diags.emit(D::LANG_VARDEF_NOT_MUTABLE, expr->args[0]->span, { { "name", what } });
       return undef_error(module);
     }
     const ir::CursorType* ty = ir::cursor_type(list->element);
@@ -3149,10 +3151,13 @@ namespace pl4g::sema {
                        { "what", "what a turn gives it is made for the turn, not somewhere a reference could name" } });
         else if (! can_be_referred_to(ty))
           diags.emit(D::LANG_REF_TYPE_NOT_ALLOWED, span, { { "found", ty->written() } });
-        else if (mark == "&mut" && ! walked_may_change(walked))
-          diags.emit(D::LANG_REF_PLACE_NOT_MUTABLE, span,
-                     { { "name", ast::is<ast::NameRef>(walked) || ast::is<ast::Member>(walked) ? path_text(walked)
-                                                                                                : "what the loop walks" } });
+        else if (mark == "&mut" && ! walked_may_change(walked)) {
+          if (! said_sealed(walked, span))
+            diags.emit(D::LANG_REF_PLACE_NOT_MUTABLE, span,
+                       { { "name", ast::is<ast::NameRef>(walked) || ast::is<ast::Member>(walked)
+                                     ? path_text(walked)
+                                     : "what the loop walks" } });
+        }
         else {
           writes = writes || mark == "&mut";
           ir::Value* place = where(builder, state);
@@ -3212,7 +3217,7 @@ namespace pl4g::sema {
       if (Local* local = find_local(name->name); local != nullptr)
         return local->is_mutable;
       auto var = provided(name->name).get<ir::GlobalVar>();
-      return var != nullptr && var->is_mutable();
+      return var != nullptr && writable_global(var);
     }
     return false;
   }

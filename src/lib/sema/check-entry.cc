@@ -523,6 +523,7 @@ namespace pl4g::sema {
       return;
     }
     auto linkage = linkage_of(attrs);
+    const BoundAttr* relro = relro_of(node, attrs);
     auto pairs = expected_numbers(attrs);
     auto expectation = begin_expecting(pairs);
     const ir::Type* ty = nullptr;
@@ -584,6 +585,11 @@ namespace pl4g::sema {
     }
     if (ty == nullptr)
       ty = ir::error_type();
+    if (relro != nullptr && ty != ir::error_type() && changes_by_itself(ty)) [[unlikely]] {
+      diags.emit(D::LANG_RELRO_HOLDS_WHAT_CHANGES, relro->node->span,
+                 { { "name", node->name }, { "found", ty->written() } });
+      relro = nullptr;
+    }
     // A table's handle is written by the constructor whatever the program may
     // do with it, so the place it waits in is one that may be written.
     bool writable = node->mutable_ || (is_a_table(ty) && ! is_static) || has_mutable_field(ty);
@@ -594,6 +600,7 @@ namespace pl4g::sema {
     made->name_span = node->name_span;
     made->exported = is_export(attrs);
     made->system_layout = std::ranges::any_of(attrs, [](const BoundAttr& a) { return a.name() == "cdecl"; });
+    made->relro = relro != nullptr;
     auto var = module.add_global(std::move(made), key(node->name));
     (*top)[std::string(node->name)] = Held(static_cast<ir::Value*>(var));
     owned.push_back(Held(static_cast<ir::Value*>(var)));
@@ -631,6 +638,69 @@ namespace pl4g::sema {
     auto var = module.add_global(std::move(made), key(node->name));
     (*top)[std::string(node->name)] = Held(static_cast<ir::Value*>(var));
     owned.push_back(Held(static_cast<ir::Value*>(var)));
+  }
+
+
+  bool Checker::sealed(const ir::GlobalVar* found) const
+  {
+    return found != nullptr && found->relro && ! seals_open;
+  }
+
+
+  bool Checker::writable_global(const ir::GlobalVar* var) const
+  {
+    return var->is_mutable() && ! sealed(var);
+  }
+
+
+  ir::GlobalVar* Checker::sealed_root(const ast::Expr* expr)
+  {
+    if (auto member = ast::as<ast::Member>(expr)) {
+      if (auto shared = exported_variable(member); shared != nullptr)
+        return sealed(shared) ? shared : nullptr;
+      return sealed_root(member->base);
+    }
+    if (auto element = ast::as<ast::Element>(expr))
+      return sealed_root(element->base);
+    if (auto name = ast::as<ast::NameRef>(expr)) {
+      if (find_local(name->name) != nullptr)
+        return nullptr;
+      auto found = provided(name->name).get<ir::GlobalVar>();
+      return sealed(found) ? found : nullptr;
+    }
+    return nullptr;
+  }
+
+
+  bool Checker::said_sealed(const ast::Expr* expr, Span where)
+  {
+    auto found = sealed_root(expr);
+    if (found == nullptr)
+      return false;
+    refuse_sealed(found, ast::is<ast::NameRef>(expr) || ast::is<ast::Member>(expr) ? written_as(expr) : found->name,
+                  where);
+    return true;
+  }
+
+
+  void Checker::refuse_sealed(const ir::GlobalVar* var, std::string_view name, Span where)
+  {
+    diags.emit(D::LANG_RELRO_WRITTEN_AFTER_STARTUP, where, { { "name", name } })
+      .note(D::LANG_RELRO_DEFINED_HERE, var->name_span, { { "name", var->name } });
+  }
+
+
+  const BoundAttr* Checker::relro_of(const ast::VarDef* node, const std::vector<BoundAttr>& attrs)
+  {
+    auto said = std::ranges::find_if(attrs, [](const BoundAttr& a) { return a.name() == "relro"; });
+    if (said == attrs.end())
+      return nullptr;
+    if (! node->mutable_) [[unlikely]] {
+      // Without it the variable is in the read-only data from the start.
+      diags.emit(D::LANG_RELRO_NOT_MUT, said->node->span, { { "name", node->name } });
+      return nullptr;
+    }
+    return &*said;
   }
 
 
@@ -1897,7 +1967,8 @@ namespace pl4g::sema {
       return nullptr;
     }
     if ((expr->mutable_ || ty->is_mutable) && ! writable) {
-      diags.emit(D::LANG_REF_PLACE_NOT_MUTABLE, expr->span, { { "name", what } });
+      if (! said_sealed(expr->operand, expr->span))
+        diags.emit(D::LANG_REF_PLACE_NOT_MUTABLE, expr->span, { { "name", what } });
       return nullptr;
     }
     if (held != ty->pointee) {
@@ -1915,7 +1986,7 @@ namespace pl4g::sema {
       auto var = provided(ref->name).get<ir::GlobalVar>();
       if (var == nullptr || var->value_type == ir::error_type())
         return std::nullopt;
-      return std::tuple{ var, var->value_type, std::int64_t(0), var->is_mutable(), std::string(ref->name) };
+      return std::tuple{ var, var->value_type, std::int64_t(0), writable_global(var), std::string(ref->name) };
     }
     if (auto member = ast::as<ast::Member>(expr)) {
       auto base = place_in_the_image(member->base);

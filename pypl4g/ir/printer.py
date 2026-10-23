@@ -222,7 +222,8 @@ def render_global(var: object, out: list[str]) -> None:
     assert isinstance(var, GlobalVar)
     text = _rendered_constant(var.initializer)
     out.append("".join(("let @", var.name, ": ", "mut " if var.mutable else "",
-                        var.value_type.render(), " ", var.linkage.value, " = ", text)))
+                        var.value_type.render(), " ", var.linkage.value,
+                        " relro" if var.relro else "", " = ", text)))
 
 
 def render_module(module: Module) -> str:

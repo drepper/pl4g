@@ -6923,6 +6923,51 @@ it undefined, Go and Java fill it with zeroes, and both answers are ones a reade
 The same form defines a variable at the top level and inside a function.  A variable at the top level exists for as long as the
 program does and lives in the image; one inside a function exists while the function does.  Naming either yields its value.
 
+##### Variables only constructors write
+
+**A variable at the top level marked `@[relro]` is written by the constructors and read-only from the startup function on.**
+What a program works out once and then only reads -- a table filled in from what the system says, where something was found, a
+seed -- is a variable a constructor writes and everything else reads, and saying so is what lets the image keep it where nothing
+can change it after:
+
+```
+@[relro]
+let page_size: mut u64 = 0u64
+
+@[constructor, impure]
+fn learn():
+    page_size ← 4096u64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    …                            ※ reads page_size, and cannot write it
+```
+
+- **Only on a variable at the top level defined `mut`.**  One without `mut` is written by nothing and is read-only from the start,
+  so the attribute would say less than the definition does (4370); one inside a function lives for one call, and what the
+  attribute promises is about the life of the program (4371).
+- **It is written only in the body of a constructor** (4373), and every other function -- one a constructor calls, a lambda
+  written in one, a test, the startup function -- only reads it.  A function a constructor calls may be called from anywhere, now
+  or after the next change, and a rule that let it write would have to follow every call through every function value and every
+  module to know it ran before the startup function; the body itself is what the reader sees and the checker can be sure of.
+  What a helper works out it answers with, and the constructor writes it.  Every way of writing counts: assigning the variable, a
+  field or an element of it, joining onto it, lending it `&mut`, walking it with `&mut`, binding a view of it that may write.
+  Reading it and taking a `&` of it are what the rest of the program does, at the top level as well.
+- **It holds nothing that changes without it being written** (4372): a set or a dictionary whose entries may change is changed
+  through its type, and a field written `mut` through its own mark, and neither asks whether the variable may be written.
+- **The image makes it so.**  The variables are in a section of their own that the entry point makes read-only once the
+  constructors have run and before the tests it runs at start and the startup function, so a write the checker cannot see --
+  through `⎕at` of its address -- stops the program on the fault.  The checker's rule is what makes a program never meet that
+  fault.  In a shared object the loader runs the constructors, after it has made read-only what it was told to, and the variables
+  stay writable data of the object: the rule is the checker's alone there, as it is in the interpreter.
+
+Compare **C** with GCC and Clang, where a section attribute and a call to `mprotect` from the last constructor get the same image
+and nothing checks that the rest of the program keeps to it; the linker's **RELRO**, which is this for what the dynamic loader
+writes and only that; **D**, whose `immutable` module variables are given their value in a module constructor's body and nowhere
+else -- this rule, checked the same way, and not protected; **Java**'s `final` fields and **C++**'s `const` members, assigned in a
+constructor's own body or initializer list and not in a method it calls; **Rust**'s `OnceLock` and **Go**'s package `init`
+functions, which write once at run time and protect nothing, Rust checking every read instead.
+
 #### Assignment
 
 A variable that was defined with `mut` is changed by an assignment:

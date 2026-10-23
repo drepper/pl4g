@@ -956,6 +956,10 @@ namespace pl4g::sema {
       return nullptr;
     }
     stored_into[id_of(node->value)] = "a variable at the top level";
+    if (sealed(target)) [[unlikely]] {
+      refuse_sealed(target, node->name, node->name_span);
+      return nullptr;
+    }
     if (! check_mutable(node, target->is_mutable(), target->span))
       return nullptr;
     if (read_only_table(target->value_type)) [[unlikely]] {
@@ -1072,6 +1076,10 @@ namespace pl4g::sema {
     auto target = provided(node->name).get<ir::GlobalVar>();
     if (target == nullptr) [[unlikely]] {
       diags.emit(D::LANG_FILESTRUCT_UNDEFINED_NAME, node->name_span, { { "name", node->name } });
+      return;
+    }
+    if (sealed(target)) [[unlikely]] {
+      refuse_sealed(target, node->name, node->name_span);
       return;
     }
     if (! check_mutable(node, target->is_mutable(), target->span))

@@ -239,7 +239,8 @@ namespace pl4g::ir {
       out += "\n";
       for (const auto& [_, var] : module.globals)
         out += "let @" + var->name + ": " + (var->is_mutable() ? "mut " : "") + var->value_type->render() + " "
-               + std::string(enum_name(var->linkage)) + " = " + constant(var->initializer) + "\n";
+               + std::string(enum_name(var->linkage)) + (var->relro ? " relro" : "") + " = "
+               + constant(var->initializer) + "\n";
     }
     for (const auto& [_, func] : module.functions) {
       out += "\n";

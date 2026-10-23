@@ -1054,7 +1054,8 @@ namespace pl4g::sema {
         return undef(module, ir::error_type());
       }
       if (node->mutable_ && ! writable) [[unlikely]] {
-        diags.emit(D::LANG_ARRAY_VIEW_NOT_WRITABLE, node->value->span, { { "name", node->name } });
+        if (! said_sealed(node->value, node->value->span))
+          diags.emit(D::LANG_ARRAY_VIEW_NOT_WRITABLE, node->value->span, { { "name", node->name } });
         return undef(module, ir::error_type());
       }
       return value;

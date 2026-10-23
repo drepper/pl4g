@@ -14,6 +14,7 @@
 #include "rt/blob.hh"
 #include "target/allocator.hh"
 #include "target/relocate.hh"
+#include "target/relro.hh"
 #include "target/backtrace.hh"
 #include "target/emit.hh"
 #include "target/faults.hh"
@@ -364,7 +365,9 @@ namespace pl4g::target {
           // No entry point for a shared object: the program that loads it
           // calls what it offers.
           if (pie)
-            emit_relocate(asm_, relocate_regs(), syscalls());
+            // Where something is `@[relro]`, the entry point makes the pages
+            // read-only after the constructors, and the relocation leaves them.
+            emit_relocate(asm_, relocate_regs(), syscalls(), ! relro_wanted(module));
           emit_start(asm_, module, lookup_cconv(module.startup->cconv), failures, layout, pie);
         }
         runtime.emit(asm_, by_name());

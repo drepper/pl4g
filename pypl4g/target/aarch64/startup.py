@@ -23,7 +23,7 @@ from .. import backtrace, statuses
 from ..callconv import CallConvDesc
 from ..host import HostABI
 from .abi import lookup as lookup_cconv
-from .. import started
+from .. import relro, started
 from ..tests import Failure, run_by
 from . import ops as a64ops
 from ..allocator import AllocatorRegs, SyscallABI
@@ -73,6 +73,9 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
     _read_environment(asm, module, cconv)
     for ctor in module.ctors:
         asm.call(symbol_name(ctor))
+    if relro.wanted(module):
+        # What the constructors wrote is read-only from here on.
+        relro.emit_protect(asm, SYSCALLS, STACK_ABI.mprotect)
     _run_tests(asm, module, cconv, failures or {})
     if module.test_plan:
         # A binary built to run tests and nothing else: every one of them

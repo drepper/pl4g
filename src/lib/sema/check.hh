@@ -158,6 +158,9 @@ namespace pl4g::sema {
     // compiler-provided function may be called from is that and nothing
     // else, and this is how the check knows where it is.
     ir::Function* in_build_function = nullptr;  // check.py:3809
+    // Whether the body being checked is a constructor's own, which is where a
+    // `@[relro]` variable may be written and nowhere else.
+    bool seals_open = false;
     Dict<std::string, std::tuple<Span, std::string>> defined;  // check.py:3810
     // The variables at the top level whose value is a table rather than
     // bytes: what they are given is built by running code, so they are

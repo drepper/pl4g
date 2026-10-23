@@ -378,6 +378,9 @@ namespace pl4g::ir {
     std::string module;
     bool exported = false;
     bool system_layout = false;
+    // Whether it is `@[relro]`: written by the constructors and read-only from
+    // the startup function on, in the section the entry point protects.
+    bool relro = false;
 
     GlobalVar(std::string name, const Type* value_type, const Type* ptr)
       : Value(ValueKind::global, ptr), name(std::move(name)), value_type(value_type) {}

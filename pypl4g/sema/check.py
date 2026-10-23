@@ -1294,6 +1294,28 @@ def _has_mutable_field(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
     return False
 
 
+def _changes_by_itself(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
+    """Whether part of a value of *ty* may be changed where the variable holding
+    it may not: a table whose entries may change, which its type says, or a
+    field written `mut`, which its own mark does.  Only what is in the
+    variable's own bytes counts -- what a list holds is elsewhere, and changing
+    it asks the variable."""
+    if id(ty) in seen:
+        return False
+    deeper = seen | {id(ty)}
+    match ty:
+        case SetType() | DictType():
+            return ty.mutable
+        case ProductType():
+            return bool(ty.mutable_fields) or any(
+                _changes_by_itself(one, deeper) for _, one in ty.fields)
+        case TupleType():
+            return any(_changes_by_itself(one, deeper) for one in ty.members)
+        case ArrayType():
+            return _changes_by_itself(ty.element, deeper)
+    return False
+
+
 def _path_of(expr: ast.Expr) -> str:
     """A field written as the path to it, `init.io.output`, for a message."""
     if isinstance(expr, ast.Member):
@@ -4208,6 +4230,10 @@ class Checker:
         #: compiler-provided function may be called from is that and nothing
         #: else, and this is how the check knows where it is.
         self._in_build_function: Function | None = None
+        #: Whether the body being checked is a constructor's own, which is
+        #: where a `@[relro]` variable may be written and nowhere else: what
+        #: runs after the constructors finds it read-only.
+        self._seals_open = False
         self._defined: dict[str, tuple[Span, str]] = {}
         #: The variables at the top level whose value is a table rather than
         #: bytes: what they are given is built by running code, so they are
@@ -5062,6 +5088,7 @@ class Checker:
         self._not_the_images(node.name, node.name_span)
         attrs = self._bind_attributes(node.attrs, AttrTarget.VARIABLE)
         linkage = self._linkage_of(attrs)
+        relro = self._relro_of(node, attrs)
         pairs = self._expected_numbers(attrs)
         expectation = self._begin_expecting(pairs)
         try:
@@ -5126,6 +5153,10 @@ class Checker:
             ty = ERROR
         if ty is None:
             ty = ERROR
+        if relro is not None and ty is not ERROR and _changes_by_itself(ty):
+            self._diags.emit(D.LANG_RELRO_HOLDS_WHAT_CHANGES, relro.node.span,
+                             name=node.name, found=ty.written())
+            relro = None
         var = self._module.add_global(GlobalVar(
             name=node.name, value_type=ty,
             # A table's handle is written by the constructor whatever the
@@ -5138,7 +5169,8 @@ class Checker:
             initializer=initializer, linkage=linkage, span=node.span,
             name_span=node.name_span,
             exported=self._is_export(attrs),
-            system_layout=any(a.name == "cdecl" for a in attrs)),
+            system_layout=any(a.name == "cdecl" for a in attrs),
+            relro=relro is not None),
             key=self._key(node.name))
         self._top[node.name] = var
         self._owned.append(var)
@@ -5155,6 +5187,65 @@ class Checker:
             self._built_globals.append((var, node))
         if later and ty is not ERROR:
             self._waiting_images[node.name] = (var, node, ty)
+
+    def _sealed(self, found: object) -> bool:
+        """Whether *found* is a `@[relro]` variable this body may not write --
+        which is every body but a constructor's own."""
+        return isinstance(found, GlobalVar) and found.relro and not self._seals_open
+
+    def _writable_global(self, var: GlobalVar) -> bool:
+        """Whether this body may write the variable at the top level *var*: it
+        is `mut`, and not `@[relro]` where the body is not a constructor's."""
+        return var.mutable and not self._sealed(var)
+
+    def _sealed_root(self, expr: ast.Expr) -> GlobalVar | None:
+        """The `@[relro]` variable this body may not write that *expr* names a
+        part of, by a field, an element or the variable itself."""
+        match expr:
+            case ast.Member():
+                shared = self._exported_variable(expr)
+                if shared is not None:
+                    return shared if self._sealed(shared) else None
+                return self._sealed_root(expr.base)
+            case ast.Element():
+                return self._sealed_root(expr.base)
+            case ast.NameRef():
+                if self._find_local(expr.name) is not None:
+                    return None
+                found = self._provided(expr.name)
+                return found if isinstance(found, GlobalVar) \
+                    and self._sealed(found) else None
+        return None
+
+    def _said_sealed(self, expr: ast.Expr, where: Span) -> bool:
+        """Report a write to a part of a `@[relro]` variable outside a
+        constructor's body, where *expr* names one; and say whether it did."""
+        found = self._sealed_root(expr)
+        if found is None:
+            return False
+        self._refuse_sealed(found, _written_as(expr) if isinstance(
+            expr, (ast.NameRef, ast.Member)) else found.name, where)
+        return True
+
+    def _refuse_sealed(self, var: GlobalVar, name: str, where: Span) -> None:
+        """Report that *var*, `@[relro]`, is written outside a constructor."""
+        self._diags.emit(D.LANG_RELRO_WRITTEN_AFTER_STARTUP, where,
+                         name=name).note(D.LANG_RELRO_DEFINED_HERE,
+                                         var.name_span, name=var.name)
+
+    def _relro_of(self, node: ast.VarDef, attrs: Sequence[BoundAttr]
+                  ) -> BoundAttr | None:
+        """The `@[relro]` said of a variable at the top level, where it may be.
+
+        Only on one defined `mut`: without it the variable is in the read-only
+        data from the start, and the attribute would say less than the
+        definition does (4370).
+        """
+        said = next((one for one in attrs if one.name == "relro"), None)
+        if said is not None and not node.mutable:
+            self._diags.emit(D.LANG_RELRO_NOT_MUT, said.node.span, name=node.name)
+            return None
+        return said
 
     def _mark_system(self, unit: ast.SourceUnit) -> None:
         """Bind what was said of the file itself, and note a system file.
@@ -6290,7 +6381,9 @@ class Checker:
                              found=held.written())
             return None
         if (expr.mutable or ty.mutable) and not writable:
-            self._diags.emit(D.LANG_REF_PLACE_NOT_MUTABLE, expr.span, name=what)
+            if not self._said_sealed(expr.operand, expr.span):
+                self._diags.emit(D.LANG_REF_PLACE_NOT_MUTABLE, expr.span,
+                                 name=what)
             return None
         if held is not ty.pointee:
             self._report_mismatch(expr.span, self._module.types.ptr_type(
@@ -6308,7 +6401,8 @@ class Checker:
                 var = self._provided(expr.name)
                 if not isinstance(var, GlobalVar) or var.value_type is ERROR:
                     return None
-                return var, var.value_type, 0, var.mutable, expr.name
+                return (var, var.value_type, 0, self._writable_global(var),
+                        expr.name)
             case ast.Member():
                 base = self._place_in_the_image(expr.base)
                 if base is None or not isinstance(base[1], ProductType):
@@ -7949,9 +8043,10 @@ class Checker:
                 self._diags.emit(D.LANG_LIST_VIEW_WRITTEN, written[at].span,
                                  found=self._list_views[id(written[at])].written())
             elif at in written and not self._may_write(written[at]):
-                self._diags.emit(D.LANG_ARRAY_HANDED_NOT_WRITABLE,
-                                 written[at].span, param=func.param_names[at],
-                                 func=func.name)
+                if not self._said_sealed(written[at], written[at].span):
+                    self._diags.emit(D.LANG_ARRAY_HANDED_NOT_WRITABLE,
+                                     written[at].span,
+                                     param=func.param_names[at], func=func.name)
             elif at in written and self._changed_here is not None:
                 # Its elements are written by the callee: that is a change.
                 root: ast.Expr = written[at]
@@ -8335,6 +8430,12 @@ class Checker:
                 self._diags.emit(D.LANG_ATTR_DUPLICATE, node.name_span, name=node.name)
                 continue
             seen[node.name] = node
+            if target is AttrTarget.STATEMENT and node.name == "relro":
+                # A variable defined inside a function is a statement, and what
+                # the attribute promises is about the life of the program: there
+                # is no moment in one call's that it is about.
+                self._diags.emit(D.LANG_RELRO_NOT_AT_TOP_LEVEL, node.name_span)
+                continue
             if target not in spec.targets:
                 self._diags.emit(D.LANG_ATTR_NOT_APPLICABLE, node.name_span,
                                  name=node.name, target=TARGET_NAMES[target])
@@ -11363,6 +11464,8 @@ class Checker:
         was_building = self._in_build_function
         self._in_build_function = func \
             if func.attrs.special is SpecialKind.BUILD else None
+        was_open = self._seals_open
+        self._seals_open = func.attrs.special is SpecialKind.CONSTRUCTOR
         if entry.expectation is not None:
             self._diags.resume(entry.expectation)
         try:
@@ -11377,6 +11480,7 @@ class Checker:
                 self._discard(func)
             self._discard_function = previous
             self._in_build_function = was_building
+            self._seals_open = was_open
 
     def _report_scopes(self, node: ast.FuncDef) -> None:
         """Log where each of *node*'s variables' scopes ends, once however many
@@ -12829,8 +12933,9 @@ class Checker:
             return
         start, lengths = self._shape_of(builder, base, ty, stmt.span)
         if self._read_only(start):
-            self._diags.emit(D.LANG_STATIC_CHANGES, stmt.base.span,
-                             name=_written_as(stmt.base))
+            if not self._said_sealed(stmt.base, stmt.base.span):
+                self._diags.emit(D.LANG_STATIC_CHANGES, stmt.base.span,
+                                 name=_written_as(stmt.base))
             return
         if not self._made_here(start):
             self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
@@ -13729,6 +13834,9 @@ class Checker:
                 # module's, or a singleton -- is as mutable as that variable.
                 named = self._exported_variable(expr)
                 if named is not None:
+                    if self._sealed(named):
+                        self._refuse_sealed(named, _path_text(expr), where)
+                        return False
                     if named.mutable:
                         return True
                     self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, where,
@@ -13764,6 +13872,10 @@ class Checker:
                         D.LANG_VARDEF_DEFINED_HERE, local.span, name=expr.name)
                     return False
                 found = self._provided(expr.name)
+                if self._sealed(found):
+                    assert isinstance(found, GlobalVar)
+                    self._refuse_sealed(found, expr.name, where)
+                    return False
                 if isinstance(found, GlobalVar) and not found.mutable:
                     self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, where,
                                      name=expr.name)
@@ -14882,11 +14994,15 @@ class Checker:
         try:
             adopting, self._adopting = self._adopting, frozenset(
                 pair for one in (adopted or {}).values() for pair in one.outer)
+            # A lambda's body is a function of its own and not the body it is
+            # written in, so not a constructor's either.
+            was_open, self._seals_open = self._seals_open, False
             try:
                 func = self._function_of_a_lambda(expr, params, answer, held,
                                                   offsets, taken, name, borrows)
             finally:
                 self._adopting = adopting
+                self._seals_open = was_open
             if adopted is not None and self._lambda_notes is not None \
                     and self._handing_over is not None:
                 # What the call is held to: what it brought in that its answer may
@@ -15949,7 +16065,9 @@ class Checker:
                              found=held.written())
             return UndefConst(ERROR)
         if writes and not may_change:
-            self._diags.emit(D.LANG_REF_PLACE_NOT_MUTABLE, expr.span, name=what)
+            if not self._said_sealed(expr.operand, expr.span):
+                self._diags.emit(D.LANG_REF_PLACE_NOT_MUTABLE, expr.span,
+                                 name=what)
             return UndefConst(ERROR)
         ty = self._module.types.ptr_type(held, writes, lasting)
         answer = (address if address.ty is ty
@@ -16583,7 +16701,7 @@ class Checker:
             # is, so a reference to it is too -- which is the one place a
             # lasting reference comes from.
             return (builder.address(found, expr.span), found.value_type,
-                    found.mutable, expr.name, True)
+                    self._writable_global(found), expr.name, True)
         self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, expr.span,
                          name=expr.name)
         return None
@@ -16618,7 +16736,7 @@ class Checker:
             # a module names the variable, and a reference to it is a reference to
             # that place.  It lasts as long as the program does.
             return (builder.address(shared, expr.span), shared.value_type,
-                    shared.mutable, expr.name, True)
+                    self._writable_global(shared), expr.name, True)
         found = self._record_at(builder, expr.base, writing=writing)
         if found is None:
             self._diags.emit(D.LANG_REF_NOT_A_PLACE, expr.span)
@@ -16748,7 +16866,7 @@ class Checker:
             case ast.Member() if self._exported_variable(expr) is not None:
                 shared = self._exported_variable(expr)
                 assert shared is not None
-                return shared.mutable
+                return self._writable_global(shared)
             case ast.Member() | ast.Element():
                 return self._may_write(expr.base)
             case ast.Deref():
@@ -16763,7 +16881,8 @@ class Checker:
                 if local is not None:
                     return local.mutable
                 found = self._provided(expr.name)
-                return not isinstance(found, GlobalVar) or found.mutable
+                return not isinstance(found, GlobalVar) \
+                    or self._writable_global(found)
             case ast.ArrayLit():
                 return True
         return not _in_the_image(expr)
@@ -16774,7 +16893,7 @@ class Checker:
         seen = value
         while True:
             if isinstance(seen, GlobalVar):
-                return not seen.mutable
+                return not self._writable_global(seen)
             if isinstance(seen, AddressInst):
                 seen = seen.operands[0]
                 continue
@@ -17289,7 +17408,8 @@ class Checker:
                                  what=changing, found=held.written())
             return None
         if not may_change:
-            self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, span, name=what)
+            if not self._said_sealed(expr, span):
+                self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, span, name=what)
             return None
         # A view of its elements may be out, which changing it in place could
         # leave pointing at room given back: the list is lent for as long as
@@ -18046,8 +18166,9 @@ class Checker:
                              found=held.written())
             return UndefConst(ERROR)
         if not may_change:
-            self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, expr.args[0].span,
-                             name=what)
+            if not self._said_sealed(expr.args[0], expr.args[0].span):
+                self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, expr.args[0].span,
+                                 name=what)
             return UndefConst(ERROR)
         ty = self._module.types.cursor_type(held.element)
         if not self._accepts(expected, ty):
@@ -19181,10 +19302,12 @@ class Checker:
                     self._diags.emit(D.LANG_REF_TYPE_NOT_ALLOWED, span,
                                      found=ty.written())
                 elif mark == "&mut" and not self._walked_may_change(walked):
-                    self._diags.emit(D.LANG_REF_PLACE_NOT_MUTABLE, span,
-                                     name=_path_text(walked)
-                                     if isinstance(walked, (ast.NameRef, ast.Member))
-                                     else "what the loop walks")
+                    if not self._said_sealed(walked, span):
+                        self._diags.emit(
+                            D.LANG_REF_PLACE_NOT_MUTABLE, span,
+                            name=_path_text(walked)
+                            if isinstance(walked, (ast.NameRef, ast.Member))
+                            else "what the loop walks")
                 else:
                     writes = writes or mark == "&mut"
                     bound = builder.cast(
@@ -19234,7 +19357,7 @@ class Checker:
             if local is not None:
                 return local.mutable
             found = self._provided(expr.name)
-            return isinstance(found, GlobalVar) and found.mutable
+            return isinstance(found, GlobalVar) and self._writable_global(found)
         return False
 
     # -- what a loop can take its values from ----------------------------------
@@ -20141,8 +20264,9 @@ class Checker:
                                  found=self._list_views[id(node.value)].written())
                 return UndefConst(ERROR)
             if node.mutable and not writable:
-                self._diags.emit(D.LANG_ARRAY_VIEW_NOT_WRITABLE, node.value.span,
-                                 name=node.name)
+                if not self._said_sealed(node.value, node.value.span):
+                    self._diags.emit(D.LANG_ARRAY_VIEW_NOT_WRITABLE,
+                                     node.value.span, name=node.name)
                 return UndefConst(ERROR)
             return value
         if not node.mutable and not writable:
@@ -22849,6 +22973,9 @@ class Checker:
                              name=node.name)
             return None
         self._stored_into[id(node.value)] = "a variable at the top level"
+        if self._sealed(target):
+            self._refuse_sealed(target, node.name, node.name_span)
+            return None
         if not self._check_mutable(node, target.mutable, target.span):
             return None
         if _read_only_table(target.value_type):
@@ -22979,6 +23106,9 @@ class Checker:
         if not isinstance(target, GlobalVar):
             self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, node.name_span,
                              name=node.name)
+            return
+        if self._sealed(target):
+            self._refuse_sealed(target, node.name, node.name_span)
             return
         if not self._check_mutable(node, target.mutable, target.span):
             return

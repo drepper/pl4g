@@ -1660,6 +1660,31 @@ One that is not cannot change while the program runs, so it goes in `.rodata`, w
 guarantee then holds against the program rather than only against the type checker, and a write that got past the front end faults
 instead of taking effect.  The two need different permissions, so they are in different sections and in different segments.
 
+**A `@[relro]` variable goes in `.pl4g.relro`**, writable while the constructors run and read-only from the startup function on
+(`target/relro.py`).  The section is named for what it is rather than `.data.rel.ro`, which is what the loader writes and
+`PT_GNU_RELRO` protects before any constructor runs: the two are different things in a shared object, where one is protected and
+the other is not, and a reader of the image is told which is which.  In an executable the writer puts it in a segment of its own,
+first of the writable ones -- the layout a shared object already has for what is read-only but for being relocated -- so that no
+page of it is a page of anything else, says it with `PT_GNU_RELRO`, and gives two symbols the bounds the entry point needs:
+`__pl4g_relro_start`, the first page of the segment (rounded down to the image's page, which the segment before ends short of),
+and `__pl4g_relro_end`, its end.  The entry point calls the constructors and then `mprotect(start, end - start, PROT_READ)`,
+before the tests it runs at start and the startup function; the kernel rounds the length up to the last page, which is the
+segment's own too.  What the call answers is not looked at: a page left writable is what there was before, and the checker's rule
+-- a write only in a constructor's own body -- is what keeps the program from writing it.  Nothing of this is emitted where no
+variable asks for it, so every other image is as it was.
+
+- **`-fpie` (the C++ compiler)**: the section joins what was read-only but for being relocated, in the same segment and the same
+  `PT_GNU_RELRO`, and the pages are made read-only once.  `__pl4g_relocate` makes them read-only itself where nothing is
+  `@[relro]`, as before; where something is, it leaves that to the entry point, after the constructors, since making them
+  read-only before would fault the first constructor that wrote one.
+- **A shared object** keeps the section writable data of its own, out of `PT_GNU_RELRO`: the loader acts on that header before
+  it runs the constructors, so anything in it would fault them.  Protecting the pages after them would take a function run last
+  of the object's constructors and a segment of its own, in a process whose host may write anything anyway; the checker's rule
+  is what holds there.
+- **The interpreter** honours the rule by the checker alone.  It lays the program's variables out in memory of its own beside
+  other things, so it could protect one only by giving each such variable pages to itself; a program the checker accepted never
+  writes one after its constructors, and one that writes through `⎕at` is doing what the interpreter cannot see in any case.
+
 Reading a variable is one instruction on x86-64, which can name a place in memory relative to the program counter and widen a
 narrow value as it reads it.  On the two fixed-width architectures no instruction can name an address outright, so one is built in
 two steps and then read through.  The two differ in how: one computes the page the address lies in and then adds the offset within

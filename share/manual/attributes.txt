@@ -32,6 +32,8 @@ Before a statement, the list stands on its own line above it.
     closed_by(f)      a value of the type has to be given back by T.f
     flag              an enumeration whose values combine      [[types.enums]]
     align(bytes)      asks for at least this alignment
+    relro             a `mut` variable only constructors write: read-only after
+                      them (4373)                              [[functions.special]]
     section(name)     asks for the object to go in this section of the image
     packed            asks for a record laid out with no padding
     ignore(n)         diagnostic n is not reported here        [[running.diagnostics]]

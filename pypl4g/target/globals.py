@@ -50,7 +50,7 @@ def emit_globals(asm: Assembler, module: Module, layout: DataLayout) -> None:
     answers holds -- points into the record the entry point lays out, and how
     far in is known only now that the layout is.
     """
-    from . import started
+    from . import relro, started
     if module.ring_addresses:
         at = started.ring_at(module, layout)
         assert at is not None, "an address of the ring, and no record to hold one"
@@ -59,7 +59,13 @@ def emit_globals(asm: Assembler, module: Module, layout: DataLayout) -> None:
     variables = list(module.globals.values())
     _emit_group(asm, [v for v in variables if not v.mutable], RODATA_SECTION,
                 False, layout)
-    _emit_group(asm, [v for v in variables if v.mutable], DATA_SECTION, True, layout)
+    _emit_group(asm, [v for v in variables if v.mutable and not v.relro],
+                DATA_SECTION, True, layout)
+    # What the constructors alone write: writable while they run, and in a
+    # section of its own so that the pages made read-only after them are
+    # nothing else's.
+    _emit_group(asm, [v for v in variables if v.mutable and v.relro],
+                relro.SECTION, True, layout)
 
 
 def layout_for(var: GlobalVar, layout: DataLayout) -> DataLayout:

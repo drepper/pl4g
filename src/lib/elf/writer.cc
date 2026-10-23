@@ -24,6 +24,8 @@ namespace pl4g::elf {
     constexpr std::string_view target_relr_end = "__pl4g_relr_end";
     constexpr std::string_view target_relro_start = "__pl4g_relro_start";
     constexpr std::string_view target_relro_end = "__pl4g_relro_end";
+    // And the section of what the constructors alone write (target/relro.hh).
+    constexpr std::string_view target_relro_section = ".pl4g.relro";
 
     std::uint8_t binding_of(mc::SymBinding binding) noexcept
     {
@@ -95,6 +97,15 @@ namespace pl4g::elf {
     bool shared = settings.kind == ImageKind::shared;
     if (pie || shared)
       collect_relocations();
+    if (! shared)
+      // An executable's constructors are run by its own entry point, which
+      // makes these read-only once they have: with what is read-only but for
+      // being relocated where there is any, in a segment of their own.  A
+      // shared object's are run by the loader after it has acted on
+      // PT_GNU_RELRO, so there they are writable data like any other.
+      for (auto section : sections)
+        if (section->alloc && section->name == target_relro_section)
+          relro.push_back(section);
 
     // Mapped sections are grouped by the permissions they need, since a
     // segment carries one set of permissions for all of it; a group that
@@ -149,6 +160,8 @@ namespace pl4g::elf {
       if (! relro.empty() && group == relro)
         relro_at = loads.size() - 1;
     }
+    if (! shared)
+      relro_bounds(loads);
     if (pie)
       offset = place_relocations(layout, offset, loads);
     std::optional<SegmentPlan> dynamic;
@@ -249,17 +262,6 @@ namespace pl4g::elf {
   {
     // The image is linked at nought: its first byte is where it was loaded.
     define(target_image_start, settings.base_vaddr);
-    // The pages to make read-only once relocated, from the first page of
-    // their segment -- its own, the segment before ending on a page before --
-    // to their end; nothing where there are none.
-    if (relro.empty()) {
-      define(target_relro_start, 0);
-      define(target_relro_end, 0);
-    } else {
-      const auto& held = loads[relro_at];
-      define(target_relro_start, held.p_vaddr / settings.page_size * settings.page_size);
-      define(target_relro_end, held.p_vaddr + held.p_memsz);
-    }
     if (relocated.empty()) {
       relr.clear();
       define(target_relr_start, 0);
@@ -388,6 +390,22 @@ namespace pl4g::elf {
         // one.
         plan.sh_info = plan.name == dynsym_section ? 1 : 0;
       }
+  }
+
+
+  void ElfWriter::relro_bounds(std::span<const SegmentPlan> loads)
+  {
+    // The pages to make read-only, from the first page of their segment -- its
+    // own, the segment before ending on a page before -- to their end; nothing
+    // where there are none.
+    if (relro.empty()) {
+      define(target_relro_start, 0);
+      define(target_relro_end, 0);
+    } else {
+      const auto& held = loads[relro_at];
+      define(target_relro_start, held.p_vaddr / settings.page_size * settings.page_size);
+      define(target_relro_end, held.p_vaddr + held.p_memsz);
+    }
   }
 
 

@@ -3240,6 +3240,118 @@
       "option": null
     },
     {
+      "number": 4370,
+      "name": "LANG_RELRO_NOT_MUT",
+      "severity": "error",
+      "message": "'@[relro]' on '{name}', which is not 'mut': it is read-only already",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        }
+      ],
+      "cause": "`@[relro]` says that the constructors write a variable and nothing after them does.  A variable without `mut` is written by nothing at all, in a section the image maps read-only from the start, so the attribute would say less than the definition does -- and a word that says nothing is a word a reader has to work out says nothing.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition / Variables only constructors write",
+        "requirement": "`@[relro]` stands on a variable at the top level defined with `mut`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4371,
+      "name": "LANG_RELRO_NOT_AT_TOP_LEVEL",
+      "severity": "error",
+      "message": "'@[relro]' stands only on a variable at the top level",
+      "args": [],
+      "cause": "What `@[relro]` promises is about the life of the program: the constructors run, the pages are made read-only, the startup function runs.  A variable inside a function is made and gone within one call, and there is no moment in its life the promise is about.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition / Variables only constructors write",
+        "requirement": "`@[relro]` stands on a variable at the top level defined with `mut`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4372,
+      "name": "LANG_RELRO_HOLDS_WHAT_CHANGES",
+      "severity": "error",
+      "message": "'{name}' holds '{found}', part of which may be changed where the variable may not; it cannot be '@[relro]'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "its type"
+        }
+      ],
+      "cause": "A set or a dictionary whose entries may change is changed through its type, and a field written `mut` through its own mark, and neither asks whether the variable holding it may be written.  So a change after the startup function would be refused by nothing and would write what the entry point had made read-only.  Such a value is held where it may be written, or made one whose parts change only with the whole.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition / Variables only constructors write",
+        "requirement": "A `@[relro]` variable holds nothing that can change without the variable being written."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4373,
+      "name": "LANG_RELRO_WRITTEN_AFTER_STARTUP",
+      "severity": "error",
+      "message": "'{name}' is '@[relro]' and only a constructor's own body may change it",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        }
+      ],
+      "cause": "The entry point makes a `@[relro]` variable read-only once the constructors have run, before the startup function does, and a write after that would stop the program on a fault.  What can run before then is a constructor; so a constructor's body writes one, and every other function, a lambda among them, only reads it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition / Variables only constructors write",
+        "requirement": "A `@[relro]` variable is written only in the body of a constructor."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null,
+      "notes": [
+        "LANG_RELRO_DEFINED_HERE"
+      ]
+    },
+    {
+      "number": 4374,
+      "name": "LANG_RELRO_DEFINED_HERE",
+      "severity": "note",
+      "message": "'{name}' is defined '@[relro]' here",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        }
+      ],
+      "cause": "Attached to the report of a write to a `@[relro]` variable outside a constructor, to point at the attribute that makes it read-only before the startup function runs.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition / Variables only constructors write",
+        "requirement": "A `@[relro]` variable is written only in the body of a constructor."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4380,
       "name": "LANG_AUXV_NOT_AN_INTEGER",
       "severity": "error",

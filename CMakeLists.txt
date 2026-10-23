@@ -205,6 +205,7 @@ set(PL4G_LIB_SOURCES
   src/lib/target/host.cc
   src/lib/target/narrow.cc
   src/lib/target/relocate.cc
+  src/lib/target/relro.cc
   src/lib/target/ordering.cc
   src/lib/target/pool.cc
   src/lib/target/registry.cc

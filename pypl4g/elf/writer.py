@@ -111,6 +111,13 @@ DYNSTR_SECTION: Final[str] = ".dynstr"
 RELA_SECTION: Final[str] = ".rela.dyn"
 DYNAMIC_SECTION: Final[str] = ".dynamic"
 
+#: The section of what the constructors alone write, and the two symbols the
+#: entry point protects it from (target/relro.py, which the writer does not
+#: import: the image format sits below the targets).
+RELRO_SECTION: Final[str] = ".pl4g.relro"
+TARGET_RELRO_START: Final[str] = "__pl4g_relro_start"
+TARGET_RELRO_END: Final[str] = "__pl4g_relro_end"
+
 
 class ElfWriter:
     """Turns the assembled sections into an ELF executable."""
@@ -149,6 +156,14 @@ class ElfWriter:
         shared = settings.kind is ImageKind.SHARED
         if shared:
             self._collect_relocations()
+        else:
+            # An executable's constructors are run by its own entry point, which
+            # makes these read-only once they have: a segment of their own,
+            # said with PT_GNU_RELRO as a loader would be told it.  A shared
+            # object's are run by the loader after it has acted on that header,
+            # so there they are writable data like any other.
+            self._relro = [one for one in self._sections
+                           if one.alloc and one.name == RELRO_SECTION]
 
         # Sections that are mapped are grouped by the permissions they need,
         # because a segment carries one set of permissions for all of it.  A
@@ -197,6 +212,8 @@ class ElfWriter:
                                        page, loads)
             if self._relro and sections is self._relro:
                 self._relro_at = len(loads) - 1
+        if not shared:
+            self._relro_bounds(loads)
         dynamic: SegmentPlan | None = None
         if shared:
             offset, dynamic = self._place_dynamic(layout, offset, loads)
@@ -297,6 +314,28 @@ class ElfWriter:
                     if section.name == ".rodata" or section.name.startswith(".rodata."):
                         section.name = "".join((".data.rel.ro",
                                                 section.name[len(".rodata"):]))
+
+    def _relro_bounds(self, loads: Sequence[SegmentPlan]) -> None:
+        """Give the entry point the bounds of the pages it makes read-only.
+
+        From the first page of their segment -- its own, the segment before it
+        ending on a page before -- to their end; nothing where there are none.
+        """
+        if not self._relro:
+            self._define(TARGET_RELRO_START, 0)
+            self._define(TARGET_RELRO_END, 0)
+            return
+        held = loads[self._relro_at]
+        page = self._settings.page_size
+        self._define(TARGET_RELRO_START, held.p_vaddr // page * page)
+        self._define(TARGET_RELRO_END, held.p_vaddr + held.p_memsz)
+
+    def _define(self, name: str, vaddr: int) -> None:
+        """Give the symbol *name* the entry point names, and nothing defines,
+        its address."""
+        for symbol in self._symbols:
+            if symbol.name == name and not symbol.defined:
+                symbol.vaddr = vaddr
 
     def _dynamic_entries(self) -> int:
         """How many entries the dynamic section has, its terminator among them."""

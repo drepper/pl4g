@@ -1032,9 +1032,11 @@ namespace pl4g::sema {
         continue;
       if (auto list = given != nullptr ? list_views.get(id_of(*given)) : nullptr; list != nullptr) [[unlikely]]
         diags.emit(D::LANG_LIST_VIEW_WRITTEN, (*given)->span, { { "found", (*list)->written() } });
-      else if (given != nullptr && ! may_write(*given))
-        diags.emit(D::LANG_ARRAY_HANDED_NOT_WRITABLE, (*given)->span,
-                   { { "param", func->param_names[std::size_t(at)] }, { "func", func->name } });
+      else if (given != nullptr && ! may_write(*given)) {
+        if (! said_sealed(*given, (*given)->span))
+          diags.emit(D::LANG_ARRAY_HANDED_NOT_WRITABLE, (*given)->span,
+                     { { "param", func->param_names[std::size_t(at)] }, { "func", func->name } });
+      }
       else if (given != nullptr && changed_here) {
         // Its elements are written by the callee: that is a change.
         const ast::Expr* root = *given;
@@ -1424,6 +1426,12 @@ namespace pl4g::sema {
         continue;
       }
       seen.emplace(node->name);
+      if (target == AttrTarget::statement && node->name == "relro") [[unlikely]] {
+        // A variable defined inside a function is a statement, and what the
+        // attribute promises is about the life of the program.
+        diags.emit(D::LANG_RELRO_NOT_AT_TOP_LEVEL, node->name_span);
+        continue;
+      }
       if (! among(target, spec->targets)) {
         diags.emit(D::LANG_ATTR_NOT_APPLICABLE, node->name_span,
                    { { "name", node->name }, { "target", target_name(target) } });

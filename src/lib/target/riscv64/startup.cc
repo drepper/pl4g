@@ -11,6 +11,7 @@
 #include "target/riscv64/opcodes.hh"
 #include "target/riscv64/regs.hh"
 #include "target/relocate.hh"
+#include "target/relro.hh"
 #include "target/started.hh"
 #include "target/statuses.hh"
 
@@ -270,6 +271,9 @@ namespace pl4g::target::riscv64 {
     read_environment(asm_, module, cconv);
     for (auto ctor : module.ctors)
       asm_.call(ir::symbol_name(*ctor));
+    if (relro_wanted(module))
+      // What the constructors wrote is read-only from here on.
+      emit_protect_relro(asm_, syscalls());
     run_tests(asm_, module, cconv, failures);
     if (! module.test_plan.empty())
       // A binary built to run tests and nothing else: every one passed.

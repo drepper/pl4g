@@ -34,10 +34,13 @@ namespace pl4g::target {
   inline constexpr std::size_t relocate_scratch = 7;
 
   // Emit the function that walks the table and adds the load address to each
-  // word it names, and then asks the kernel, through `abi`, to make what was
-  // read-only but for that read-only again.  What it works in is the
+  // word it names, and then, where `protects` says, asks the kernel, through
+  // `abi`, to make what was read-only but for that read-only again -- which
+  // the entry point does instead, after the constructors, where the same
+  // pages hold what they write (target/relro.hh).  What it works in is the
   // allocator's, the width of the first of `scratch`, which are the registers
   // it may have.
-  void emit_relocate(mc::Assembler& asm_, std::span<const mc::Reg> scratch, const SyscallABI& abi);
+  void emit_relocate(mc::Assembler& asm_, std::span<const mc::Reg> scratch, const SyscallABI& abi,
+                     bool protects = true);
 
 } // namespace pl4g::target
