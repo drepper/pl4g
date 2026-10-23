@@ -320,6 +320,10 @@ namespace pl4g::ir {
   std::string FuncType::said(bool glyphs) const
   {
     std::vector<std::string> words;
+    // The convention first, where it is not the language's own: it says what
+    // kind of thing the value is before the rest says what it does.
+    if (system())
+      words.push_back(cconv);
     if (listable)
       words.emplace_back("listable");
     if (impure)
@@ -334,7 +338,8 @@ namespace pl4g::ir {
   std::string FuncType::render() const
   {
     return said(false) + "fn(" + each_type(params, ", ", [](auto t) { return t->render(); }) + ")"
-           + (lasting ? " lasting" : "") + " \N{RIGHTWARDS ARROW} " + ret->render() + (hands_out ? " in arena" : "");
+           + (lasting && ! system() ? " lasting" : "") + " \N{RIGHTWARDS ARROW} " + ret->render()
+           + (hands_out ? " in arena" : "");
   }
 
   std::string FuncType::written() const
@@ -363,14 +368,17 @@ namespace pl4g::ir {
     std::vector<std::string> inner;
     for (std::size_t i = 0; i < params.size(); ++i)
       inner.push_back(marked(params[i], given[i]));
-    return said(true) + "fn(" + joined(inner, ", ") + ")" + (lasting ? " in \N{APL FUNCTIONAL SYMBOL QUAD}heap" : "")
+    // One of the system's convention lasts by being one, and saying so would be
+    // noise.
+    return said(true) + "fn(" + joined(inner, ", ") + ")"
+           + (lasting && ! system() ? " in \N{APL FUNCTIONAL SYMBOL QUAD}heap" : "")
            + " \N{RIGHTWARDS ARROW} " + marked(ret, answered) + (hands_out ? " in its own arena" : "");
   }
 
   std::string FuncType::mangled() const
   {
     std::string out = said(false) + "fn(" + each_type(params, ",", [](auto t) { return t->mangled(); }) + ")"
-                      + (lasting ? " lasting" : "") + ret->mangled() + (hands_out ? " in" : "");
+                      + (lasting && ! system() ? " lasting" : "") + ret->mangled() + (hands_out ? " in" : "");
     for (const auto& [leaf, borrowed] : borrows) {
       out += " from" + std::to_string(leaf) + ":";
       for (std::size_t i = 0; i < borrowed.params.size(); ++i)
@@ -629,7 +637,8 @@ namespace pl4g::ir {
       auto f = static_cast<const FuncType*>(ty);
       for (auto p : f->params)
         h = mix(h, structural_hash(p));
-      return mix(mix(h, structural_hash(f->ret)), f->listable + 2 * f->hands_out + 4 * f->lasting + 8 * f->impure);
+      return mix(mix(mix(h, structural_hash(f->ret)), f->listable + 2 * f->hands_out + 4 * f->lasting + 8 * f->impure),
+                 std::hash<std::string>()(f->cconv));
     }
     case TypeKind::result: {
       auto r = static_cast<const ResultType*>(ty);
@@ -708,7 +717,7 @@ namespace pl4g::ir {
              && std::ranges::equal(x->params, y->params, [](auto p, auto q) { return same(p, q); })
              && same(x->ret, y->ret) && x->listable == y->listable && x->hands_out == y->hands_out
              && x->lasting == y->lasting && x->impure == y->impure && x->can_ignore == y->can_ignore
-             && x->borrows == y->borrows;
+             && x->borrows == y->borrows && x->cconv == y->cconv;
     }
     case TypeKind::result: {
       auto x = static_cast<const ResultType*>(a), y = static_cast<const ResultType*>(b);
@@ -841,6 +850,11 @@ namespace pl4g::ir {
       made->impure = shape.impure;
       made->can_ignore = shape.can_ignore;
       made->borrows = shape.borrows;
+      made->cconv = shape.cconv;
+      // One of the system's convention always lasts: what it is, is where the
+      // code is, and code lasts as long as the program.
+      if (made->system())
+        made->lasting = true;
       return made;
     }
 
@@ -1127,6 +1141,10 @@ namespace pl4g::ir {
       return { element_pointer(u8()), element_pointer(u8()), u64() };
     if (is<RunningType>(ty))
       return { element_pointer(u8()), element_pointer(u8()), element_pointer(u64()), element_pointer(u8()) };
+    if (auto f = as<FuncType>(ty); f != nullptr && f->system())
+      // The address of the code and nothing else, as C's pointer to a
+      // function: what calls it knows of no environment.
+      return { element_pointer(u8()) };
     if (is<FuncType>(ty))
       return { element_pointer(u8()), element_pointer(u8()), element_pointer(arena_type()) };
     if (is<StrType>(ty))

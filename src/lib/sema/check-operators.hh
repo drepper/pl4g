@@ -172,6 +172,10 @@
     ir::Value* lower_syscall(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:25739
     // Lower `⎕at(ADDRESS, ⌜TYPE⌝)` and `⎕span(ADDRESS, COUNT, ⌜TYPE⌝)`.
     ir::Value* lower_place_at(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:25779
+    // `⎕at(ADDRESS, ⌜@[cdecl] fn(…) → T⌝)`: code at an address the program worked out, as a function of the
+    // system's convention, its type believed as a reference's is.  One of the language's own is refused (4365).
+    ir::Value* function_at(ir::Builder& builder, const ast::Call* expr, const ir::FuncType* answer,
+                           const ir::Type* expected);
     // Lower `⎕bytes(TEXT)`: what a string is made of.
     ir::Value* lower_bytes(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:25865
     /// Lower `⎕text(BYTES)`: text from bytes, where they are UTF-8 -- a copy of them in the arena in

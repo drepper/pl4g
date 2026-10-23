@@ -53,6 +53,7 @@ namespace pl4g::opt {
       made->ordering = one->ordering;
       made->index = one->index;
       made->callee = one->callee;
+      made->cconv = one->cconv;
       made->held = one->held;
       made->what = one->what;
       made->status = one->status;

@@ -64,7 +64,7 @@ namespace pl4g::sema::owned {
       case ir::TypeKind::set:
       case ir::TypeKind::dict:
       case ir::TypeKind::cursor: return true;
-      case ir::TypeKind::func: return lambdas;
+      case ir::TypeKind::func: return lambdas && ! static_cast<const ir::FuncType*>(ty)->system();
       case ir::TypeKind::array: {
         auto array = static_cast<const ir::ArrayType*>(ty);
         return ! array->fixed() || deeper(array->element);

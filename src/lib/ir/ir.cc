@@ -22,7 +22,7 @@ namespace pl4g::ir {
     case InstKind::ErrorInst: return "error";
     case InstKind::FailedInst: return "failed";
     case InstKind::CastInst: return std::string(enum_name(cast));
-    case InstKind::CallInst: return "call";
+    case InstKind::CallInst: return cconv == "pl4g" ? "call" : "call." + cconv;
     case InstKind::SyscallInst: return "syscall";
     case InstKind::AddressInst: return "address";
     case InstKind::CodeInst: return "code";

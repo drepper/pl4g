@@ -1732,6 +1732,8 @@ namespace pl4g::sema {
     }
     if (auto held = callee_value(expr->callee); held != nullptr)
       return lower_indirect(builder, expr, held, expected);
+    if (global_callee(expr->callee) != nullptr)
+      return lower_through_global(builder, expr, expected);
     // A function whose types this call settles, which is not a function yet.
     if (auto generator = generator_named(expr->callee); generator != nullptr)
       return lower_generator_call(builder, expr, generator, expected);
@@ -2772,7 +2774,9 @@ namespace pl4g::sema {
         return error_value(module);
       }
       place_ty = ir::ptr_type(list != nullptr ? list->element : array->element, true);
-    } else {
+    } else if (auto func = ir::as<ir::FuncType>(answer); func != nullptr)
+      return function_at(builder, expr, func, expected);
+    else {
       if (! ir::is<ir::PtrType>(answer)) [[unlikely]] {
         diags.emit(D::LANG_AT_NOT_A_REFERENCE, written->span, { { "found", answer->written() } });
         return error_value(module);
@@ -3548,6 +3552,27 @@ namespace pl4g::sema {
   }
 
 
+  ir::Value* Checker::function_at(ir::Builder& builder, const ast::Call* expr, const ir::FuncType* answer,
+                                  const ir::Type* expected)
+  {
+    if (! answer->system()) [[unlikely]] {
+      diags.emit(D::LANG_AT_FUNCTION_OF_THE_LANGUAGE, expr->args.back()->span, { { "found", answer->written() } });
+      return error_value(module);
+    }
+    auto address = as_an_address(builder, expr->args[0], at_name);
+    if (address == nullptr) [[unlikely]]
+      return error_value(module);
+    auto made = builder.make_tuple(
+      std::vector<ir::Value*>{ builder.cast(ir::CastKind::bitcast, address, environment_type(), expr->span) }, answer,
+      expr->span);
+    if (! accepts(expected, answer)) [[unlikely]] {
+      report_mismatch(expr->span, answer, expected);
+      return error_value(module);
+    }
+    return made;
+  }
+
+
   ir::Value* Checker::lower_address_of(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected)
   {
     if (expr->args.size() != 1) [[unlikely]] {
@@ -3559,7 +3584,16 @@ namespace pl4g::sema {
     auto ty = value_type_of(place);
     if (ty == ir::error_type()) [[unlikely]]
       return error_value(module);
-    if (! ir::is<ir::PtrType>(ty)) [[unlikely]] {
+    if (auto func = ir::as<ir::FuncType>(ty); func != nullptr) {
+      // Where the code of a function of the system's convention is, which is
+      // all of it.  One of the language's own is its code and what it brought
+      // in, and the code alone is nothing anything else could call (4366).
+      if (! func->system()) [[unlikely]] {
+        diags.emit(D::LANG_ADDRESS_OF_A_FUNCTION_OF_THE_LANGUAGE, expr->args[0]->span, { { "found", ty->written() } });
+        return error_value(module);
+      }
+      place = builder.extract(place, 0, environment_type(), expr->span);
+    } else if (! ir::is<ir::PtrType>(ty)) [[unlikely]] {
       diags.emit(D::LANG_ADDRESS_OF_NOT_A_REFERENCE, expr->args[0]->span, { { "found", ty->written() } });
       return error_value(module);
     }

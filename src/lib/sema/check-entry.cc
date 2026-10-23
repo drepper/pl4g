@@ -1370,6 +1370,38 @@ namespace pl4g::sema {
   }
 
 
+  ir::Value* Checker::function_constant(const ast::VarDef* node, const ir::FuncType* ty)
+  {
+    auto value = ast::as<ast::Call>(node->value);
+    auto callee = value != nullptr ? ast::as<ast::NameRef>(value->callee) : nullptr;
+    if (callee == nullptr || callee->name != "\N{APL FUNCTIONAL SYMBOL QUAD}at" || value->args.size() != 2)
+      return nullptr;
+    auto lifted = ast::as<ast::Lifted>(value->args[1]);
+    if (lifted == nullptr)
+      return nullptr;
+    auto written = ir::as<ir::FuncType>(lifted_type(lifted));
+    if (written == nullptr)
+      return nullptr;
+    if (! written->system()) [[unlikely]] {
+      diags.emit(D::LANG_AT_FUNCTION_OF_THE_LANGUAGE, value->args[1]->span, { { "found", written->written() } });
+      return undef_error(module);
+    }
+    auto folded = constant(value->args[0]);
+    if (is_refused(folded)) [[unlikely]]
+      return undef_error(module);
+    // Code is where the loader put it, so no other address is known while
+    // compiling.
+    if (! folded || folded->failed || folded->value != 0 || folded->ty == nullptr || folded->ty->bits != 64)
+      return nullptr;
+    if (! promises_as_much(ty, written) && written != ty) [[unlikely]] {
+      report_mismatch(value->span, written, ty);
+      return undef_error(module);
+    }
+    auto nothing = module.constant<ir::AddressConst>(ir::parts_of(ty)[0], nullptr, 0);
+    return mut(module.constant<ir::PartsConst>(ty, std::vector<const ir::Value*>{ nothing }));
+  }
+
+
   ir::Value* Checker::constant_value(const ast::VarDef* node, const ir::Type* ty)
   {
     // The definition with another value, as Python's `replace(node, value=…)`.
@@ -1389,6 +1421,9 @@ namespace pl4g::sema {
     if (ty == ir::error_type())
       // The type was already reported.
       return nullptr;
+    if (auto func = ir::as<ir::FuncType>(ty); func != nullptr && func->system())
+      if (auto found = function_constant(node, func); found != nullptr)
+        return found;
     if (auto result = ir::as<ir::ResultType>(ty)) {
       // The only constant of a result type a program can write is the
       // successful one.

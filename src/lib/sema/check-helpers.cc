@@ -872,8 +872,10 @@ namespace pl4g::sema {
 
   bool holds_a_lambda(const ir::Type* ty, const KeySet& seen)
   {
-    if (ir::is<ir::FuncType>(ty))
-      return true;
+    // Not one of the system's convention: that is the address of code, which
+    // brought nothing in and is a word the image can hold.
+    if (auto func = ir::as<ir::FuncType>(ty))
+      return ! func->system();
     if (seen.contains(id_of(ty)))
       return false;
     auto deeper = deeper_than(seen, ty);
@@ -1172,8 +1174,11 @@ namespace pl4g::sema {
       return dict_f->is_mutable && ! dict_e->is_mutable && dict_f->key == dict_e->key && dict_f->value == dict_e->value;
     auto func_e = ir::as<ir::FuncType>(expected);
     auto func_f = ir::as<ir::FuncType>(found);
+    // Neither convention stands for the other: one is three words called with
+    // what it brought in first, the other one word called as C calls.
     if (func_e != nullptr && func_f != nullptr)
-      return (func_f->listable || ! func_e->listable) && (func_f->lasting || ! func_e->lasting)
+      return func_f->cconv == func_e->cconv && (func_f->listable || ! func_e->listable)
+             && (func_f->lasting || ! func_e->lasting)
         && (! func_f->impure || func_e->impure) && (func_f->can_ignore || ! func_e->can_ignore)
         && func_f->hands_out == func_e->hands_out && same_types(func_f->params, func_e->params)
         && func_f->ret == func_e->ret && borrows_as_much(func_e, func_f, free);
@@ -2324,7 +2329,8 @@ namespace pl4g::sema {
       auto inst = static_cast<const ir::Instruction*>(code);
       if (inst->kind == ir::InstKind::ExtractInst)
         if (auto ty = ir::as<ir::FuncType>(inst->operands[0]->ty)) {
-          if (! given.empty())
+          // What it brought in goes first, where the value has an environment.
+          if (! given.empty() && ! ty->system())
             given.erase(given.begin());
           return { given, table(ty) };
         }
@@ -2412,7 +2418,9 @@ namespace pl4g::sema {
     case ir::TypeKind::cursor:
       return true;
     case ir::TypeKind::func:
-      return lambdas;
+      // One of the system's convention points at code, which nothing holds
+      // and nothing gives back.
+      return lambdas && ! static_cast<const ir::FuncType*>(ty)->system();
     case ir::TypeKind::array: {
       auto array = ir::as<ir::ArrayType>(ty);
       return ! array->fixed() || points_somewhere(array->element, deeper, lambdas, references);

@@ -241,8 +241,16 @@ namespace pl4g::ir {
     bool impure = false;
     bool can_ignore = false;
     std::vector<std::pair<int, Borrowed>> borrows;
+    // The convention a value of this type is called by: the language's own,
+    // "pl4g", three words called with what was brought in first, or the
+    // system's, "cdecl", one word -- the address of code -- called as C calls.
+    // The two types do not convert.
+    std::string cconv = "pl4g";
 
     FuncType() : Type(kind_of) {}
+    // Whether a value of this type is called the way the system calls: one
+    // word, the address of the code, and no environment.
+    bool system() const { return cconv != "pl4g"; }
     std::string render() const override;
     std::string written() const override;
     std::string mangled() const override;

@@ -110,12 +110,16 @@ namespace pl4g::target {
       for (const ir::Instruction* inst : block->insts) {
         if (inst->kind != ir::InstKind::CallInst)
           continue;
+        // A call through a value is placed by the convention it carries, which
+        // the value's type said: the language's own, the environment in the
+        // chain register, or the system's, with none.
         bool through = inst->callee == nullptr;
-        const auto& theirs = conventions(through ? ir::default_cconv : std::string_view(inst->callee->cconv));
+        const auto& theirs = conventions(through ? std::string_view(inst->cconv) : std::string_view(inst->callee->cconv));
         std::vector<const ir::Type*> types;
         for (auto one : inst->arguments())
           types.push_back(one->ty);
-        found.emplace(inst, std::pair{ &theirs, argument_places(theirs, types, through || inst->callee->attrs.chained) });
+        bool chained = through ? inst->cconv == ir::default_cconv : inst->callee->attrs.chained;
+        found.emplace(inst, std::pair{ &theirs, argument_places(theirs, types, chained) });
       }
     return found;
   }

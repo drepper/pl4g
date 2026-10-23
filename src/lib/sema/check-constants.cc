@@ -73,6 +73,7 @@ namespace pl4g::sema {
       bool impure = false;
       bool can_ignore = false;
       std::vector<std::pair<int, ir::Borrowed>> borrows;
+      std::string_view cconv = ir::default_cconv;
     };
 
     // Python's `module.types.func_type(params, ret, listable, hands_out, …)`.
@@ -85,6 +86,7 @@ namespace pl4g::sema {
       shape.impure = flags.impure;
       shape.can_ignore = flags.can_ignore;
       shape.borrows = std::move(flags.borrows);
+      shape.cconv = flags.cconv;
       return ir::func_type(std::move(params), ret, shape);
     }
 
@@ -1027,11 +1029,49 @@ namespace pl4g::sema {
     auto ty = ir::as<ir::FuncType>(held_by(local));
     contract_assert(ty != nullptr);
     auto held = read_capture(builder, local, expr->span);
+    auto key = slot_of_local.get(id_of(local));
+    return call_through(builder, expr, held, ty, local->name, key == nullptr ? Held() : Held(*key), expected);
+  }
+
+
+  ir::GlobalVar* Checker::global_callee(const ast::Expr* expr)
+  {
+    auto name = ast::as<ast::NameRef>(expr);
+    if (name == nullptr || find_local(name->name) != nullptr)
+      return nullptr;
+    auto found = top->get(std::string(name->name));
+    if (found == nullptr)
+      return nullptr;
+    auto var = found->get<ir::GlobalVar>();
+    if (var == nullptr || ! ir::is<ir::FuncType>(var->value_type))
+      return nullptr;
+    return var;
+  }
+
+
+  ir::Value* Checker::lower_through_global(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected)
+  {
+    auto name = ast::as<ast::NameRef>(expr->callee);
+    contract_assert(name != nullptr);
+    auto held = lower_expr(builder, expr->callee, nullptr);
+    auto ty = value_type_of(held);
+    if (is_error(ty))
+      return error_value(module);
+    auto fty = ir::as<ir::FuncType>(ty);
+    contract_assert(fty != nullptr);
+    return call_through(builder, expr, held, fty, name->name, Held(), expected);
+  }
+
+
+  ir::Value* Checker::call_through(ir::Builder& builder, const ast::Call* expr, ir::Value* held,
+                                   const ir::FuncType* ty, std::string_view name, Held key,
+                                   const ir::Type* expected)
+  {
     auto outer_listing = listing;
     listing = ty->listable;
     std::optional<std::vector<ir::Value*>> found_args;
     try {
-      found_args = one_by_one(builder, expr->args, std::span<const ir::Type* const>(ty->params), local->name);
+      found_args = one_by_one(builder, expr->args, std::span<const ir::Type* const>(ty->params), std::string(name));
     } catch (...) {
       listing = outer_listing;
       throw;
@@ -1042,29 +1082,37 @@ namespace pl4g::sema {
     auto& args = *found_args;
     if (args.size() != ty->params.size()) {
       diags.emit(D::LANG_CALL_WRONG_ARGUMENT_COUNT, expr->span,
-                 { { "name", local->name }, { "expected", ty->params.size() }, { "found", args.size() } });
+                 { { "name", name }, { "expected", ty->params.size() }, { "found", args.size() } });
       return error_value(module);
     }
     if (std::ranges::any_of(args, [](auto one) { return is_error(one->ty); }))
       return error_value(module);
-    if (ty->impure) {
+    if (ty->impure)
       // What its type promises is what is known of it.  Whether it is needed
       // is the slot's question, where the name has one: Python's
       // `("slot", key)`, its parts joined as a slot key's are.
-      auto key = slot_of_local.get(id_of(local));
-      an_effect(D::LANG_PURE_CALLS_IMPURE, expr->span,
-                key == nullptr ? Held() : Held(*key), { { "name", local->name } });
-    }
-    tables_handed(ty->params, args, local->name, expr->span);
+      an_effect(D::LANG_PURE_CALLS_IMPURE, expr->span, key, { { "name", name } });
+    tables_handed(ty->params, args, name, expr->span);
     // Both halves are read once, before any call is made: a walk makes one
     // call per element and they all go to the same code with the same
     // environment.
     auto code = builder.extract(held, 0, environment_type(), expr->span);
+    if (ty->system()) {
+      // The address and nothing else, called as C calls it: there is no
+      // environment to hand over, and no arena a type of this convention could
+      // say it hands out.
+      auto direct = [&builder, code, ty](std::span<ir::Value* const> given, Span span) {
+        std::vector<ir::Value*> all{ code };
+        all.insert(all.end(), given.begin(), given.end());
+        return builder.call_through(all, ty->ret, ty->cconv, span);
+      };
+      return answered_through(builder, ty, name, direct, args, expr, expected);
+    }
     auto environment = builder.extract(held, 1, environment_type(), expr->span);
 
     std::vector<ir::Value*> handing;
     if (ty->hands_out) {
-      auto place = arena_for(expr, local->name);
+      auto place = arena_for(expr, name);
       if (place == nullptr)
         return error_value(module);
       handing.push_back(place);
@@ -1076,7 +1124,15 @@ namespace pl4g::sema {
       all.insert(all.end(), handing.begin(), handing.end());
       return builder.call(nullptr, all, ty->ret, span);
     };
+    return answered_through(builder, ty, name, make, args, expr, expected);
+  }
 
+
+  ir::Value* Checker::answered_through(ir::Builder& builder, const ir::FuncType* ty, std::string_view name,
+                                       std::function<ir::Value*(std::span<ir::Value* const>, Span)> make,
+                                       std::span<ir::Value* const> args, const ast::Call* expr,
+                                       const ir::Type* expected)
+  {
     bool walks = false;
     for (std::size_t i = 0; i < args.size(); ++i)
       if (args[i]->ty != ty->params[i])
@@ -1084,9 +1140,9 @@ namespace pl4g::sema {
     if (ty->listable && walks)
       return walked(builder, ty, make, args, expr, expected);
     auto called = make(args, expr->span);
-    auto answer = lasting_as_given(builder, local->name, {}, borrowed_of(ty), args, called, expr->span);
+    auto answer = lasting_as_given(builder, name, {}, borrowed_of(ty), args, called, expr->span);
     if (ty->ret == ir::void_type() && expected != nullptr) {
-      diags.emit(D::LANG_CALL_HAS_NO_VALUE, expr->span, { { "name", local->name } });
+      diags.emit(D::LANG_CALL_HAS_NO_VALUE, expr->span, { { "name", name } });
       return error_value(module);
     }
     if (! accepts(expected, answer->ty)) {
@@ -2099,6 +2155,28 @@ namespace pl4g::sema {
   }
 
 
+  std::optional<bool> Checker::system_convention_of(std::span<const BoundAttr> bound, const ast::FuncTypeRef* ref)
+  {
+    auto found = std::ranges::find_if(bound, [](const auto& one) { return one.name() == "cdecl"; });
+    if (found == bound.end())
+      return false;
+    if (found->as_bool("variadic")) [[unlikely]] {
+      diags.emit(D::LANG_CDECL_TYPE_VARIADIC, found->node->span);
+      return std::nullopt;
+    }
+    if (ref->kept_in) [[unlikely]] {
+      diags.emit(D::LANG_CDECL_TYPE_ENVIRONMENT, ref->kept_in->span, { { "what", "in " + std::string(ref->kept_in->name) } });
+      return std::nullopt;
+    }
+    if (ref->made_in) [[unlikely]] {
+      diags.emit(D::LANG_CDECL_TYPE_ENVIRONMENT, ref->made_in->span,
+                 { { "what", "\N{RIGHTWARDS ARROW} \N{HORIZONTAL ELLIPSIS} in " + std::string(ref->made_in->name) } });
+      return std::nullopt;
+    }
+    return true;
+  }
+
+
   NameSet Checker::promised(std::span<const ast::Attribute* const> attrs)
   {
     NameSet said;
@@ -2161,6 +2239,12 @@ namespace pl4g::sema {
     }
     auto said = promised(expr->attrs);
     bool walks = said.contains("listable");
+    if (said.contains("cdecl")) [[unlikely]] {
+      // What it is, is its code and what it brought in, and the system's
+      // convention has nowhere to hand the second over.
+      diags.emit(D::LANG_CDECL_LAMBDA, expr->span);
+      return error_value(module);
+    }
     if (said.contains("impure"))
       // What a lambda's body does is what its type says.
       diags.emit(D::LANG_ATTR_NOT_APPLICABLE, expr->span,
@@ -2403,10 +2487,13 @@ namespace pl4g::sema {
       diags.emit(D::LANG_HANDED_OUT_UNBOUND, ref->span, { { "name", func->name } });
       return error_value(module);
     }
+    if (func->cconv == ir::system_cconv)
+      return system_function_value(builder, func, ref, expected);
     // A call through a value passes the environment in the chain register,
     // which a function of the language's own convention never reads: the value
-    // points at the function itself.  One of another convention is called the
-    // way the system calls, so something has to stand between.
+    // points at the function itself.  One of a convention named by an
+    // architecture's name is called the way that convention calls, so
+    // something has to stand between.
     auto shim = func->cconv == ir::default_cconv && ! func->attrs.chained && func->takes_owned.empty()
                   ? func
                   : shim_for(func, ref->span);
@@ -2421,6 +2508,31 @@ namespace pl4g::sema {
     auto nothing = builder.cast(ir::CastKind::bitcast, builder.int_const(ir::u64(), 0), environment_type(), ref->span);
     auto no_allocator = tables::no_allocator(builder);
     auto made = builder.make_tuple(std::vector<ir::Value*>{ code, nothing, no_allocator }, ty, ref->span);
+    if (! accepts(expected, ty)) {
+      report_mismatch(ref->span, ty, expected);
+      return error_value(module);
+    }
+    return made;
+  }
+
+
+  ir::Value* Checker::system_function_value(ir::Builder& builder, ir::Function* func, const ast::NameRef* ref,
+                                             const ir::Type* expected)
+  {
+    if (func->attrs.variadic) [[unlikely]] {
+      // It takes more than its type says, so no type could place a call of it.
+      diags.emit(D::LANG_CALL_NOT_A_FUNCTION, ref->span, { { "name", func->name } });
+      return error_value(module);
+    }
+    if (! func->takes_owned.empty()) [[unlikely]] {
+      // A call of an address has nothing to stand between and make the copy.
+      diags.emit(D::LANG_CDECL_VALUE_TAKES_OWNED, ref->span, { { "name", func->name } });
+      return error_value(module);
+    }
+    auto ty = function_type(func->fty->params, func->fty->ret,
+                            { .listable = func->fty->listable, .impure = func->attrs.impure,
+                              .can_ignore = func->attrs.can_ignore, .borrows = {}, .cconv = ir::system_cconv });
+    auto made = builder.make_tuple(std::vector<ir::Value*>{ builder.code_address(func, ref->span) }, ty, ref->span);
     if (! accepts(expected, ty)) {
       report_mismatch(ref->span, ty, expected);
       return error_value(module);

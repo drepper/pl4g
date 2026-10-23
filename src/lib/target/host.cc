@@ -120,7 +120,10 @@ namespace pl4g::target::host {
     for (const auto& [_, func] : module.functions)
       for (const auto& block : func->blocks)
         for (const auto* inst : block->insts)
-          if (inst->kind == ir::InstKind::CallInst && inst->callee != nullptr && inst->callee->attrs.host)
+          // Called, or named as a value of the system's convention, whose
+          // code is the stub.
+          if ((inst->kind == ir::InstKind::CallInst || inst->kind == ir::InstKind::CodeInst) && inst->callee != nullptr
+              && inst->callee->attrs.host)
             called.insert(*inst->callee->attrs.host);
     std::vector<const ir::Function*> found;
     std::set<std::string> seen;

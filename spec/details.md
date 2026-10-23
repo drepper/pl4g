@@ -3206,6 +3206,25 @@ rewrites a call of a named function of that convention**: an answer the system's
 (`answers_through_storage(ty, TWO_IN_REGISTERS)`) goes through a place in the caller's frame handed over last, which is what a
 `@[cdecl]` function answering three values was widened to take.
 
+**The interpreter calls code it did not make through libffi, and hands out code a host can call.**  A value of the language's
+convention holds the `Function*` itself, as before.  One of the system's convention made of a function of the program holds,
+where every type of the function is one C has (`crosses`), the address of a libffi closure made for it on its first `code`
+(`Machine::code_value`) -- `ffi_closure_alloc`, `ffi_prep_closure_loc`, kept for the run and freed with the machine -- whose
+handler (`closed_call`) makes cells of what C handed over, as a load makes them, runs the function with `Machine::call`, and
+hands its answer back as libffi wants it, an integer widened to a word.  So `⎕address` of such a function is a number a host
+can call.  A call through a value of the system's convention looks its target up among the closures first and runs the
+function in the interpreter where it is one -- or is a `Function*`, for a function whose types C does not have -- with no
+environment to skip; anything else is code nothing here made, called with `ffi_call` by a description made from the call's
+own argument types and answer the first time that call reaches one (`Machine::foreign_call`, kept by the instruction), the
+argument cells and the answer crossing as a host function's do (`crossed_call`, which `host_call` now shares).  A target of
+nought stops the run as `SIGSEGV`, as the compiled program would.  **A host function may now call back into the program**,
+through a closure, so whatever a call into the host leaves behind re-reads the frame afterwards: the cells may have moved.
+A function the host defines named as a value is a closure of the declaration, whose handler makes the host call; the
+compiled image's `hosted` counts a `code` of one as it counts a call, so that it has a stub to point at, in pypl4g and the
+C++ port alike.  `src/examples/embed/callbacks.cc` runs both directions under ctest's `embed-callbacks`: the host hands the
+program two of its functions as numbers, one of twenty arguments, and the program hands the host `⎕address` of a `@[cdecl]`
+function of its own, which the host calls twice from within a call the program made.
+
 Compare GCC's nested functions and LLVM's `nest`, the same register for the same reason; Rust tells the two apart in the type
 system, `fn` for the bare address and `Fn` for the pair, and C has nothing to carry, which is why a C callback needs a `void *`
 written out beside it.  A tag in the value would have cost a branch at every indirect call to save one call at some of them.

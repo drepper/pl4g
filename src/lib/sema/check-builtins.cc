@@ -2091,6 +2091,16 @@ namespace pl4g::sema {
   {
     if (found == ir::error_type() || expected == ir::error_type())
       return;
+    auto func_f = ir::as<ir::FuncType>(found);
+    auto func_e = ir::as<ir::FuncType>(expected);
+    if (func_f != nullptr && func_e != nullptr && func_f->cconv != func_e->cconv) {
+      // Said for what it is wherever it happens: the two are different kinds
+      // of thing, and a message about an argument or a field would read as
+      // though the parameters were what differed.
+      diags.emit(D::LANG_CONVENTIONS_DO_NOT_CONVERT, span,
+                 { { "found", found->written() }, { "expected", expected->written() } });
+      return;
+    }
     if (leaving) {
       diags.emit(D::LANG_LOOP_VALUE_MISMATCH, span, { { "found", found->written() }, { "expected", expected->written() } });
       return;

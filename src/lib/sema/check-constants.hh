@@ -68,6 +68,20 @@
     Local* callee_value(const ast::Expr* expr);  // check.py:12937
     // Lower a call through a function held in a name.
     ir::Value* lower_indirect(ir::Builder& builder, const ast::Call* expr, Local* local, const ir::Type* expected);  // check.py:12951
+    // The variable at the top level a call names, where it holds a function -- which only one of the
+    // system's convention may (4550).
+    ir::GlobalVar* global_callee(const ast::Expr* expr);
+    // Lower a call through a function held in a variable at the top level, read as any variable is.
+    ir::Value* lower_through_global(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);
+    // A call of `held`, a function of type `ty` a program reached as `name`: the arguments checked against
+    // what the type says, and the call made by the convention it says.
+    ir::Value* call_through(ir::Builder& builder, const ast::Call* expr, ir::Value* held, const ir::FuncType* ty,
+                            std::string_view name, Held key, const ir::Type* expected);
+    // What a call through a value comes to, `make` being how one call of it is made: walked where the type
+    // says so, and held to what the type says the answer lives as long as.
+    ir::Value* answered_through(ir::Builder& builder, const ir::FuncType* ty, std::string_view name,
+                                std::function<ir::Value*(std::span<ir::Value* const>, Span)> make,
+                                std::span<ir::Value* const> args, const ast::Call* expr, const ir::Type* expected);
 
     // -- lambdas -----------------------------------------------------------------
 
@@ -115,6 +129,10 @@
     // `listable`, `impure` and `can_ignore`. Anything else written there is reported as an attribute that
     // does not apply.
     NameSet promised(std::span<const ast::Attribute* const> attrs);  // check.py:13871
+    // Whether a function type says its values follow the system's convention, `@[cdecl] fn(…)`, and nothing
+    // where it says so with something that cannot go with it: `variadic` (4362), `in ⎕heap` or an arena
+    // handed out (4363).
+    std::optional<bool> system_convention_of(std::span<const BoundAttr> bound, const ast::FuncTypeRef* ref);
     // Whether what is written before a lambda or a function type says `listable`.
     bool walks_what_it_is_given(std::span<const ast::Attribute* const> attrs);  // check.py:13878
     // Lower `λ …`: a function written where a value is wanted.
@@ -134,6 +152,10 @@
     ir::Value* function_as_a_value(ir::Builder& builder, Held func, const ast::NameRef* ref, const ir::Type* expected);  // check.py:14173
     // The function that stands between an indirect call and `func`.
     ir::Function* shim_for(ir::Function* func, Span span);  // check.py:14234
+    // A named function of the system's convention where a value is wanted: the address of its code, of the type
+    // `@[cdecl] fn(…)`, nothing standing between.
+    ir::Value* system_function_value(ir::Builder& builder, ir::Function* func, const ast::NameRef* ref,
+                                     const ir::Type* expected);
     // What the lambda brings in, looked up where the lambda is written.
     std::optional<std::vector<Taken>> captures_of(const ast::Lambda* expr, std::string_view name);  // check.py:14279
     // What `[=]` or `[&]` brings in: everything the body reaches outside.

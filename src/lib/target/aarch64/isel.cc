@@ -2045,7 +2045,8 @@ namespace pl4g::target::aarch64 {
       const ir::Type* ty = inst->ty;
       ir::Function* callee = inst->callee;
       // A call through a value: what is called is whatever the register holds,
-      // so the convention is the one every function of this language follows.
+      // so the convention is the one the call carries, which the value's type
+      // said.
       ir::Value* through = callee == nullptr ? inst->operands[0] : nullptr;
       auto given = inst->arguments();
       const auto& [placed_by, going] = placed.at(inst);

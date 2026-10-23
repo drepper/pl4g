@@ -7248,6 +7248,9 @@ are about a body, and a body is not what a name holds.  Three things are about a
 - **`can_ignore`**, that a caller may let the answer go nowhere.  Without it, what a call through a value answers is taken, as
   for a call by name (4474).
 
+And one more before a function type and never before a lambda: **`cdecl`**, that a value of it is the address of code called as
+C calls it, a type of its own (Values of the system's convention, under Attributes; a lambda 4361).
+
 ```
 fn apply(f: fn(u8) → u8, x: u8) → u8:          ※ pure: what it calls is too
     f(x)

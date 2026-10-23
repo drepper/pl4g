@@ -73,7 +73,8 @@ namespace pl4g::sema {
     // A function type with these flags, as pypl4g's `func_type` takes them.
     const ir::FuncType* function_type(std::vector<const ir::Type*> params, const ir::Type* ret, bool listable = false,
                                   bool hands_out = false, bool lasting = false, bool impure = false,
-                                  bool can_ignore = false, std::vector<std::pair<int, ir::Borrowed>> borrows = {})
+                                  bool can_ignore = false, std::vector<std::pair<int, ir::Borrowed>> borrows = {},
+                                  std::string_view cconv = ir::default_cconv)
     {
       ir::FuncType shape;
       shape.listable = listable;
@@ -82,6 +83,7 @@ namespace pl4g::sema {
       shape.impure = impure;
       shape.can_ignore = can_ignore;
       shape.borrows = std::move(borrows);
+      shape.cconv = cconv;
       return ir::func_type(std::move(params), ret, shape);
     }
 
@@ -2167,14 +2169,20 @@ namespace pl4g::sema {
         diags.emit(D::LANG_KEPT_IN_NOT_HEAP, func->kept_in->span, { { "name", func->kept_in->name } });
         return ir::error_type();
       }
-      auto said_ = promised(func->attrs);
+      auto bound = bind_attributes(func->attrs, AttrTarget::callable);
+      NameSet said_;
+      for (const auto& one : bound)
+        said_.emplace(one.name());
+      auto system = system_convention_of(bound, func);
+      if (! system)
+        return ir::error_type();
       // A value of it is called with nothing but the type in hand, so the
       // type says how long a reference it answers with lives.
       auto borrows_ = borrows_written(func->params, params, func->ret, ret,
                                       func->ret != nullptr ? func->ret->span : ref->span, true);
       return function_type(params, ret, said_.contains("listable"), func->made_in.has_value(),
                                    func->kept_in.has_value(), said_.contains("impure"), said_.contains("can_ignore"),
-                                   sorted_borrows(borrows_));
+                                   sorted_borrows(borrows_), *system ? ir::system_cconv : ir::default_cconv);
     }
     return named_type(ast::as<ast::TypeRef>(ref));
   }

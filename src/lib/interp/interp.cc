@@ -285,6 +285,66 @@ namespace pl4g::interp {
       return std::endian::native == std::endian::big ? at + (sizeof(Cell) - bytes) : at;
     }
 
+    // Whether a value of `ty` is one C has, which `crossing_of` describes.
+    bool crosses(const Type* ty)
+    {
+      if (auto c = as<CharType>(ty))
+        return crosses(c->holder());
+      if (auto f = as<FloatType>(ty))
+        return f->bits == 32 || f->bits == 64;
+      return is<VoidType>(ty) || is<IntType>(ty) || is<BoolType>(ty) || is<PtrType>(ty);
+    }
+
+    // Call the code at `address` as C calls it, with `given`, one cell an
+    // argument, its description in `host` prepared.  Each argument is a cell
+    // of its own, of which C reads the low bytes its type has; a context goes
+    // first where there is one.  What comes back is at least a word: libffi
+    // widens a narrow integer to one, as its type says.
+    Cell crossed_call(HostCall& host, void* address, const Cell* given)
+    {
+      std::vector<Cell> words(given, given + host.params.size());
+      std::vector<void*> values;
+      values.reserve(words.size() + 1);
+      if (host.context != nullptr)
+        values.push_back(&host.context);
+      for (std::size_t i = 0; i < words.size(); ++i)
+        values.push_back(low_bytes(words[i], host.params[i].bytes));
+      union {
+        ::ffi_arg word;
+        float single;
+        double twice;
+      } answer{};
+      ::ffi_call(&host.cif, FFI_FN(address), &answer, values.data());
+      const Crossing& back = host.answer;
+      if (back.type == &::ffi_type_void)
+        return 0;
+      if (back.type == &::ffi_type_float)
+        return Cell(std::bit_cast<std::uint32_t>(answer.single));
+      if (back.type == &::ffi_type_double)
+        return std::bit_cast<Cell>(answer.twice);
+      if (back.type == &::ffi_type_pointer)
+        return Cell(answer.word);
+      // What the register holds at the width the type is held at, read as a
+      // load from memory reads it: whatever C left above that is not looked at.
+      return extend(Cell(answer.word), back.scalar.held, back.scalar.is_signed);
+    }
+
+    class Machine;
+
+    // A function of the program of the system's convention, as code something
+    // compiled by anything else can call: a libffi closure, whose handler
+    // makes cells of what C handed over and runs the function in the
+    // interpreter.  What a value of `@[cdecl] fn(…)` holds where the
+    // function's address is taken, so that the number `⎕address` answers is
+    // one a host can call.
+    struct Closure {
+      ::ffi_closure* closure = nullptr;
+      void* code = nullptr;
+      HostCall call;
+      Machine* machine = nullptr;
+      const Function* func = nullptr;
+    };
+
 
     // -- the machine ----------------------------------------------------------
 
@@ -293,7 +353,12 @@ namespace pl4g::interp {
       Machine(const Module& module, const Options& options);
       Machine(const Machine&) = delete;
       Machine& operator=(const Machine&) = delete;
-      ~Machine() { ::munmap(stack, stack_size + 4096); }
+      ~Machine()
+      {
+        for (auto& [_, one] : closures)
+          ::ffi_closure_free(one->closure);
+        ::munmap(stack, stack_size + 4096);
+      }
       Outcome start();
       // Where a variable was placed.
       std::byte* place_of(const GlobalVar* var) const
@@ -305,6 +370,8 @@ namespace pl4g::interp {
       // What a native callee needs.
       [[noreturn]] void fault(std::string_view message, int status);
       const Options& options;
+      // Run `func` with `args`, answering its cells.
+      std::vector<Cell> call(const Function* func, std::span<const Cell> args);
 
     private:
       friend Cell native_alloc(Machine&, const Cell*);
@@ -332,14 +399,19 @@ namespace pl4g::interp {
       void place_globals();
       void encode(std::byte* at, const Value* init, const Type* ty, const DataLayout& layout);
 
-      // Run `func` with `args`, answering its cells.
-      std::vector<Cell> call(const Function* func, std::span<const Cell> args);
       void execute(std::size_t depth);
       void binary(const Op& op, Cell* dst, const Cell* a, const Cell* b);
       Cell binary_int(const Op& op, const Scalar& s, Cell a, Cell b);
       Cell native_call(const Function* callee, const Cell* args);
       Cell host_call(const Function* callee, const Cell* args);
       HostCall& host_call_of(const Function* callee);
+      // What a value of a function of the program holds: the address of a
+      // closure for one of the system's convention whose types C has, which a
+      // host can call, and the function itself otherwise.
+      Cell code_value(const Function* func);
+      // Call code at an address nothing here made, as C calls it, for the
+      // call through a value `call`.
+      Cell foreign_call(const Instruction* call, void* address, const Cell* args);
 
       const Cell* read(const Activation& a, In in) const
       {
@@ -378,7 +450,43 @@ namespace pl4g::interp {
       // it is called, and where each symbol was found, asked once.
       std::unordered_map<const Function*, std::unique_ptr<HostCall>> host_calls;
       std::unordered_map<std::string, HostFunction> host_symbols;
+      // The closures handed out for the program's functions, by function and
+      // by the address of their code; and each call through a value that
+      // reached code nothing here made, with its description.
+      std::unordered_map<const Function*, std::unique_ptr<Closure>> closures;
+      std::unordered_map<Cell, const Function*> closed;
+      std::unordered_map<const Instruction*, std::unique_ptr<HostCall>> foreign_calls;
     };
+
+
+    // What a closure does when C calls it: the arguments made cells as a load
+    // from memory makes them, the function run, and its answer handed back as
+    // C reads one -- an integer widened to a word, as libffi wants it.
+    void closed_call(::ffi_cif*, void* ret, void** args, void* user)
+    {
+      auto& closure = *static_cast<Closure*>(user);
+      std::vector<Cell> given;
+      given.reserve(closure.call.params.size());
+      for (std::size_t i = 0; i < closure.call.params.size(); ++i) {
+        const Crossing& one = closure.call.params[i];
+        Cell cell = 0;
+        std::memcpy(low_bytes(cell, one.bytes), args[i], one.bytes);
+        if (one.type != &::ffi_type_float && one.type != &::ffi_type_double && one.type != &::ffi_type_pointer)
+          cell = extend(cell, one.bytes * 8, one.scalar.is_signed);
+        given.push_back(cell);
+      }
+      auto answer = closure.machine->call(closure.func, given);
+      const Crossing& back = closure.call.answer;
+      if (back.type == &::ffi_type_void)
+        return;
+      Cell first = answer.empty() ? 0 : answer[0];
+      if (back.type == &::ffi_type_float)
+        *static_cast<float*>(ret) = std::bit_cast<float>(std::uint32_t(first));
+      else if (back.type == &::ffi_type_double)
+        *static_cast<double*>(ret) = std::bit_cast<double>(first);
+      else
+        *static_cast<::ffi_arg*>(ret) = ::ffi_arg(first);
+    }
 
 
     // Where in a record the field called `name` is, and what it is.
@@ -821,7 +929,7 @@ namespace pl4g::interp {
             op.value = address_of(inst->operands[0]);
             break;
           case InstKind::CodeInst:
-            op.value = reinterpret_cast<Cell>(inst->callee);
+            op.value = code_value(inst->callee);
             break;
           case InstKind::CallInst:
             op.callee = inst->callee;
@@ -1303,23 +1411,46 @@ namespace pl4g::interp {
         case InstKind::CallInst: {
           const Function* callee = op.callee;
           std::size_t first = 0;
+          bool system = op.inst->cconv != default_cconv;
           if (callee == nullptr) {
-            // Through a value: the code is where its first part says.
-            callee = reinterpret_cast<const Function*>(in(0)[0]);
+            // Through a value: the code is where its first part says -- a
+            // function of the program, or for one of the system's
+            // convention a closure of one, or code nothing here made, which
+            // is called as C calls it.
+            Cell target = in(0)[0];
+            callee = reinterpret_cast<const Function*>(target);
             first = 1;
-            if (! known.contains(callee)) [[unlikely]]
-              throw Signal{ SIGSEGV };
+            if (system)
+              if (auto found = closed.find(target); found != closed.end())
+                callee = found->second;
+            if (! known.contains(callee)) [[unlikely]] {
+              if (! system || target == 0)
+                throw Signal{ SIGSEGV };
+              std::vector<Cell> args;
+              for (std::size_t i = 1; i < op.in.size(); ++i)
+                args.insert(args.end(), in(i), in(i) + op.in[i].count);
+              Cell answer = foreign_call(op.inst, reinterpret_cast<void*>(target), args.data());
+              // What it called may have called back into the program, and
+              // the cells may have moved.
+              if (op.count > 0)
+                cells[activations.back().base + op.dst] = answer;
+              break;
+            }
           }
-          // A call through a value hands the environment first, in the chain
-          // register; a callee that has none never reads it, and its own
-          // parameters are the arguments after it.
-          if (first == 1 && ! callee->attrs.chained && op.in.size() > 1)
+          // A call through a value of the language's convention hands the
+          // environment first, in the chain register; a callee that has none
+          // never reads it, and its own parameters are the arguments after
+          // it.  One of the system's has none to hand.
+          if (first == 1 && ! system && ! callee->attrs.chained && op.in.size() > 1)
             first = 2;
           std::vector<Cell> args;
           for (std::size_t i = first; i < op.in.size(); ++i)
             args.insert(args.end(), in(i), in(i) + op.in[i].count);
           if (callee->is_declaration()) {
             Cell answer = native_call(callee, args.data());
+            // A host function may have called back into the program through
+            // a closure, and the cells may have moved.
+            frame = cells.data() + activations.back().base;
             if (options.trace >= 0) [[unlikely]] {
               std::string said = std::format("{:{}}{}(", "", activations.size(), callee->name);
               for (std::size_t i = 0; i < args.size(); ++i)
@@ -1490,34 +1621,61 @@ namespace pl4g::interp {
           throw InternalError(std::format("libffi cannot describe a call of '{}'", callee->name));
         host.prepared = true;
       }
-      // Each argument is a cell of its own, of which C reads the low bytes
-      // its type has.  What comes back is at least a word: libffi widens a
-      // narrow integer to one, as its type says.
-      std::vector<Cell> words(given, given + host.params.size());
-      std::vector<void*> values;
-      values.reserve(words.size() + 1);
-      if (host.context != nullptr)
-        values.push_back(&host.context);
-      for (std::size_t i = 0; i < words.size(); ++i)
-        values.push_back(low_bytes(words[i], host.params[i].bytes));
-      union {
-        ::ffi_arg word;
-        float single;
-        double twice;
-      } answer{};
-      ::ffi_call(&host.cif, FFI_FN(host.address), &answer, values.data());
-      const Crossing& back = host.answer;
-      if (back.type == &::ffi_type_void)
-        return 0;
-      if (back.type == &::ffi_type_float)
-        return Cell(std::bit_cast<std::uint32_t>(answer.single));
-      if (back.type == &::ffi_type_double)
-        return std::bit_cast<Cell>(answer.twice);
-      if (back.type == &::ffi_type_pointer)
-        return Cell(answer.word);
-      // What the register holds at the width the type is held at, read as a
-      // load from memory reads it: whatever C left above that is not looked at.
-      return extend(Cell(answer.word), back.scalar.held, back.scalar.is_signed);
+      return crossed_call(host, host.address, given);
+    }
+
+
+    Cell Machine::code_value(const Function* func)
+    {
+      if (func->cconv != system_cconv || ! crosses(func->fty->ret)
+          || ! std::ranges::all_of(func->fty->params, crosses))
+        return reinterpret_cast<Cell>(func);
+      auto& found = closures[func];
+      if (found == nullptr) {
+        auto made = std::make_unique<Closure>();
+        made->machine = this;
+        made->func = func;
+        for (auto ty : func->fty->params) {
+          made->call.params.push_back(crossing_of(ty));
+          made->call.types.push_back(made->call.params.back().type);
+        }
+        made->call.answer = crossing_of(func->fty->ret);
+        made->closure = static_cast<::ffi_closure*>(::ffi_closure_alloc(sizeof(::ffi_closure), &made->code));
+        if (made->closure == nullptr
+            || ::ffi_prep_cif(&made->call.cif, FFI_DEFAULT_ABI, unsigned(made->call.types.size()),
+                              made->call.answer.type, made->call.types.data())
+                 != FFI_OK
+            || ::ffi_prep_closure_loc(made->closure, &made->call.cif, closed_call, made.get(), made->code)
+                 != FFI_OK) [[unlikely]] {
+          if (made->closure != nullptr)
+            ::ffi_closure_free(made->closure);
+          throw InternalError(std::format("libffi cannot make code of '{}' a host can call", func->name));
+        }
+        closed[reinterpret_cast<Cell>(made->code)] = func;
+        found = std::move(made);
+      }
+      return reinterpret_cast<Cell>(found->code);
+    }
+
+
+    Cell Machine::foreign_call(const Instruction* call, void* address, const Cell* given)
+    {
+      auto& found = foreign_calls[call];
+      if (found == nullptr) {
+        auto made = std::make_unique<HostCall>();
+        for (auto one : call->arguments()) {
+          made->params.push_back(crossing_of(one->ty));
+          made->types.push_back(made->params.back().type);
+        }
+        made->answer = crossing_of(call->ty);
+        if (::ffi_prep_cif(&made->cif, FFI_DEFAULT_ABI, unsigned(made->types.size()), made->answer.type,
+                           made->types.data())
+            != FFI_OK) [[unlikely]]
+          throw InternalError("libffi cannot describe a call through a value");
+        made->prepared = true;
+        found = std::move(made);
+      }
+      return crossed_call(*found, address, given);
     }
 
 

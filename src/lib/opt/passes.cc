@@ -439,14 +439,30 @@ namespace pl4g::opt {
       return leaves_of(ty).size() <= (style == ReturnStyle::two_in_registers ? 2 : 3);
     }
 
-    bool through_storage(const Function& func)
+    // Whether an answer of *ret*, handed back in *style*, travels through
+    // storage the caller provides.
+    bool answers_through_storage(const Type* ret, ReturnStyle style)
     {
-      const Type* ret = func.fty->ret;
-      if (is<VoidType>(ret) || in_registers(func.answer_style(), ret))
+      if (is<VoidType>(ret) || in_registers(style, ret))
         return false;
       if (held_in_memory(ret))
         return true;
       return std::ranges::all_of(leaves_of(ret), [](auto leaf) { return parts_of(leaf).size() == 1; });
+    }
+
+    bool through_storage(const Function& func)
+    {
+      return answers_through_storage(func.fty->ret, func.answer_style());
+    }
+
+    // Whether *inst* is a call through a value of the system's convention
+    // whose answer travels through storage: such a call reaches code that
+    // answers as a function of that convention does, whatever compiled it, so
+    // it is rewritten as a call of a named one would be.
+    bool through_storage_by_value(const Instruction* inst)
+    {
+      return inst->kind == InstKind::CallInst && inst->callee == nullptr && inst->cconv != default_cconv
+             && answers_through_storage(inst->ty, ReturnStyle::two_in_registers);
     }
 
     // The memory token in force before `at`, starting the chain at the top
@@ -665,7 +681,12 @@ namespace pl4g::opt {
         wanted.push_back(func);
         answers[func] = func->fty->ret;
       }
-    if (wanted.empty())
+    if (wanted.empty()
+        && std::ranges::none_of(every, [](auto func) {
+             return std::ranges::any_of(func->blocks, [](const auto& block) {
+               return std::ranges::any_of(block->insts, through_storage_by_value);
+             });
+           }))
       return thinned;
     // What it answers goes where its last parameter, added here, says.
     for (auto func : wanted) {
@@ -682,12 +703,13 @@ namespace pl4g::opt {
         for (std::size_t index = 0; index < block->insts.size();) {
           auto inst = block->insts[index];
           auto callee = inst->callee;
-          if (inst->kind != InstKind::CallInst || callee == nullptr || ! answers.contains(callee)
+          bool by_value = through_storage_by_value(inst);
+          if (inst->kind != InstKind::CallInst || ((callee == nullptr || ! answers.contains(callee)) && ! by_value)
               || is<VoidType>(inst->ty)) {
             ++index;
             continue;
           }
-          auto answer = answers[callee];
+          auto answer = by_value ? inst->ty : answers[callee];
           auto span = inst->span;
           auto token = token_before(*func, block.get(), index);
           index = index_of(block.get(), inst);
@@ -699,6 +721,7 @@ namespace pl4g::opt {
           args.push_back(slot);
           auto call = made(*func, InstKind::CallInst, void_type(), args, span);
           call->callee = callee;
+          call->cconv = inst->cconv;
           made_insts.push_back(call);
           Instruction* rebuilt;
           if (held_in_memory(answer)) {

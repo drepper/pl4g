@@ -173,6 +173,15 @@ namespace pl4g::ir {
   }
 
 
+  Value* Builder::call_through(std::span<Value* const> args, const Type* result, std::string_view cconv, Span span)
+  {
+    auto inst = make(InstKind::CallInst, result, {}, span);
+    inst->operands.assign(args.begin(), args.end());
+    inst->cconv = cconv;
+    return append(inst);
+  }
+
+
   Value* Builder::cast(CastKind kind, Value* value, const Type* target, Span span)
   {
     auto inst = make(InstKind::CastInst, target, { value }, span);
