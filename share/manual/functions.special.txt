@@ -22,7 +22,10 @@ a `u6`: 0 to 63, the range below the ones `sysexits.h` and the runtime have
 nothing; constructors run before the startup function and destructors after it
 returns, `@[constructor(priority)]` ordering them.  The tables written at the
 top level are made before them, and `⎕environ` is read before them.  What is
-still being written when the program ends is waited for after them.
+still being written when the program ends is waited for after them.  A `mut`
+variable at the top level marked `@[relro]` is written in a constructor's own
+body and nowhere else (4373); the entry point makes it read-only once they
+have run, so a write through its address after that faults.
 
 **`@[test]`** marks a test: a function taking nothing and answering whether it
 passed, a `bool` (4407).  `@[test(always)]` runs every time the program starts,

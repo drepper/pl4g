@@ -428,13 +428,15 @@ def _read_global(module: Module, line: str, number: int) -> None:
         words = words[1:]
     ty = _parse_type(words[0], module.types, number)
     linkage = Linkage(words[1]) if len(words) > 1 else Linkage.INTERNAL
+    # What the constructors alone write, said after the linkage.
+    relro = len(words) > 2 and words[2] == "relro"
     from .types import IntType
 
     text = initializer.strip()
     value = module.int_const(ty, int(text, 0)) if isinstance(ty, IntType) else None
     module.add_global(GlobalVar(name.strip(), ty,
                                 module.types.ptr_type(ty, mutable=mutable), value,
-                                linkage))
+                                linkage, relro=relro))
 
 
 def _rebuild_caches(module: Module) -> None:

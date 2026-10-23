@@ -27,14 +27,14 @@ class GlobalVar(Value):
     """
 
     __slots__ = ("name", "value_type", "linkage", "initializer", "span", "module",
-                 "exported", "system_layout")
+                 "exported", "system_layout", "relro")
 
     def __init__(self, name: str, value_type: Type, ptr_type: Type,
                  initializer: Value | None = None,
                  linkage: Linkage = Linkage.INTERNAL,
                  span: Span = INVALID_SPAN, module: str = "",
                  exported: bool = False, system_layout: bool = False,
-                 name_span: Span = INVALID_SPAN) -> None:
+                 name_span: Span = INVALID_SPAN, relro: bool = False) -> None:
         super().__init__(ptr_type, name)
         self.name = name
         #: The type of what the variable holds, not of the variable itself.
@@ -55,6 +55,10 @@ class GlobalVar(Value):
         #: otherwise, and a definition something outside the image reads gives
         #: that freedom up.
         self.system_layout = system_layout
+        #: Whether it is `@[relro]`: written by the constructors and read-only
+        #: from the startup function on, which is a section of its own -- the
+        #: one the entry point makes read-only once the constructors have run.
+        self.relro = relro
 
     @property
     def mutable(self) -> bool:

@@ -197,6 +197,10 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
         AttrSpec("align", AttrTarget.TYPE | AttrTarget.VARIABLE | AttrTarget.FUNCTION,
                  (_param("bytes", "integer"),),
                  doc="requests a minimum alignment"),
+        AttrSpec("relro", AttrTarget.VARIABLE,
+                 doc="a 'mut' variable at the top level that only constructors "
+                     "write: it is made read-only once they have run, before "
+                     "the startup function"),
         AttrSpec("section", AttrTarget.FUNCTION | AttrTarget.VARIABLE,
                  (_param("name", "string"),),
                  doc="places the object in the named section of the image"),
