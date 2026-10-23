@@ -354,10 +354,15 @@ namespace pl4g::target::x86_64 {
       check_level(asm_, level, *refused, turned_off);
     read_auxv(asm_, module, cconv);
     read_environment(asm_, module, cconv);
+    // The `constinit` variables first, in the order they read one another, so
+    // that a constructor finds them given; then the constructors.
+    for (const auto& one : module.initializers)
+      asm_.call(ir::symbol_name(*one.func));
     for (auto ctor : module.ctors)
       asm_.call(ir::symbol_name(*ctor));
     if (relro_wanted(module))
-      // What the constructors wrote is read-only from here on.
+      // What the initializers and the constructors wrote is read-only from
+      // here on.
       emit_protect_relro(asm_, syscalls());
     run_tests(asm_, module, cconv, failures);
     // Where the status waits: a register a call leaves alone where a

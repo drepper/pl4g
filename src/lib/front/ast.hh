@@ -578,6 +578,9 @@ namespace pl4g::ast {
     List<Span> doc_lines;
     std::optional<NameAt> made_in;
     List<NameAt> more;
+    // `constinit let`: at the top level, a variable its initializer gives its
+    // value before the program starts, and nothing writes after.
+    bool constinit_ = false;
   };
 
   struct Pattern : Node {

@@ -24,7 +24,8 @@ namespace pl4g::elf {
     constexpr std::string_view target_relr_end = "__pl4g_relr_end";
     constexpr std::string_view target_relro_start = "__pl4g_relro_start";
     constexpr std::string_view target_relro_end = "__pl4g_relro_end";
-    // And the section of what the constructors alone write (target/relro.hh).
+    // And the section of what is written before the startup function alone, the
+    // `constinit` variables and the auxiliary vector's table (target/relro.hh).
     constexpr std::string_view target_relro_section = ".pl4g.relro";
 
     std::uint8_t binding_of(mc::SymBinding binding) noexcept

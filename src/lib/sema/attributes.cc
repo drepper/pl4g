@@ -108,9 +108,6 @@ namespace pl4g::sema {
       { .name = "flag", .targets = T::type, .doc = "an enumeration whose values are meant to be combined" },
       { .name = "align", .targets = T::type | T::variable | T::function, .params = bytes,
         .doc = "requests a minimum alignment" },
-      { .name = "relro", .targets = T::variable,
-        .doc = "a 'mut' variable at the top level that only constructors write: it is made read-only once they have "
-               "run, before the startup function" },
       { .name = "section", .targets = T::function | T::variable, .params = section_name,
         .doc = "places the object in the named section of the image" },
       { .name = "packed", .targets = T::type, .doc = "requests a layout without padding between fields" },

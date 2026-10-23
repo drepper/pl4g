@@ -173,8 +173,9 @@ namespace pl4g::target {
       (! var->is_mutable() ? constant : var->relro ? sealed : variable).push_back(var.get());
     emit_group(asm_, constant, rodata_section, false, layout);
     emit_group(asm_, variable, data_section, true, layout);
-    // What the constructors alone write: writable while they run, and in a
-    // section of its own so that the pages made read-only after them are
+    // What is written before the startup function alone -- the `constinit`
+    // variables, by their initializers -- writable while that runs, and in a
+    // section of its own so that the pages made read-only after it are
     // nothing else's.
     emit_group(asm_, sealed, relro_section, true, layout);
   }

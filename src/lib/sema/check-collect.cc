@@ -1428,12 +1428,6 @@ namespace pl4g::sema {
         continue;
       }
       seen.emplace(node->name);
-      if (target == AttrTarget::statement && node->name == "relro") [[unlikely]] {
-        // A variable defined inside a function is a statement, and what the
-        // attribute promises is about the life of the program.
-        diags.emit(D::LANG_RELRO_NOT_AT_TOP_LEVEL, node->name_span);
-        continue;
-      }
       if (! among(target, spec->targets)) {
         diags.emit(D::LANG_ATTR_NOT_APPLICABLE, node->name_span,
                    { { "name", node->name }, { "target", target_name(target) } });

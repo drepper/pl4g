@@ -30,7 +30,14 @@ namespace pl4g::target::shared {
         asm_.bytes(mc::Bytes(8), { std::move(fixup) });
       }
     };
-    table(init_array, elf::sht_init_array, module.ctors);
+    // The loader runs the table in order: the `constinit` variables'
+    // initializers first, as the entry point of an executable calls them, then
+    // the constructors.
+    std::vector<ir::Function*> starts;
+    for (const auto& one : module.initializers)
+      starts.push_back(one.func);
+    starts.insert(starts.end(), module.ctors.begin(), module.ctors.end());
+    table(init_array, elf::sht_init_array, starts);
     table(fini_array, elf::sht_fini_array, module.dtors | std::views::reverse);
     // And back to the code, which is where what comes after expects to be.
     asm_.section(".text", placed(false, text_alignment, true));

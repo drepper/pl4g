@@ -269,10 +269,15 @@ namespace pl4g::target::riscv64 {
     asm_.loadreg(regs.ra, asm_.reg(regs.zero));
     read_auxv(asm_, module, cconv);
     read_environment(asm_, module, cconv);
+    // The `constinit` variables first, in the order they read one another, so
+    // that a constructor finds them given; then the constructors.
+    for (const auto& one : module.initializers)
+      asm_.call(ir::symbol_name(*one.func));
     for (auto ctor : module.ctors)
       asm_.call(ir::symbol_name(*ctor));
     if (relro_wanted(module))
-      // What the constructors wrote is read-only from here on.
+      // What the initializers and the constructors wrote is read-only from
+      // here on.
       emit_protect_relro(asm_, syscalls());
     run_tests(asm_, module, cconv, failures);
     if (! module.test_plan.empty())

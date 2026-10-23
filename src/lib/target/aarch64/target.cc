@@ -199,8 +199,9 @@ namespace pl4g::target {
           // No entry point for a shared object: the program that loads it
           // calls what it offers.
           if (pie)
-            // Where something is `@[relro]`, the entry point makes the pages
-            // read-only after the constructors, and the relocation leaves them.
+            // Where something is in the section of the `constinit` variables,
+            // the entry point makes the pages read-only after the constructors,
+            // and the relocation leaves them.
             emit_relocate(asm_, relocate_regs(), syscalls(), ! relro_wanted(module));
           emit_start(asm_, module, lookup_cconv(module.startup->cconv), failures, layout, pie);
         }

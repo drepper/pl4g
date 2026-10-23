@@ -1,4 +1,4 @@
-// Making the `@[relro]` variables read-only once the constructors have run.
+// Making the `constinit` variables read-only once the constructors have run.
 #include "target/relro.hh"
 
 #include <algorithm>

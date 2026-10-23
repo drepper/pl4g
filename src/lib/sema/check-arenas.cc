@@ -1374,7 +1374,6 @@ namespace pl4g::sema {
     // written rather than about what it calls.
     ir::Function* was_building = std::exchange(
       in_build_function, func->attrs.special == ir::SpecialKind::build ? func : nullptr);
-    bool was_open = std::exchange(seals_open, func->attrs.special == ir::SpecialKind::constructor);
     if (entry->expectation != nullptr)
       diags.resume(*entry->expectation);
     Finally restore([&] {
@@ -1388,7 +1387,6 @@ namespace pl4g::sema {
         discard(func);
       discard_function = previous;
       in_build_function = was_building;
-      seals_open = was_open;
     });
     lower_body(entry);
     report_scopes(node);

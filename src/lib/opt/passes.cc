@@ -304,8 +304,9 @@ namespace pl4g::opt {
   bool drop_unreached(Module& module)
   {
     // The roots: what the entry point calls, and what is exported -- but a
-    // constructor writing only what nothing kept reads, and the reader of the
-    // auxiliary vector where nothing kept reads its table, as pypl4g has it.
+    // constructor writing only what nothing kept reads, the reader of the
+    // auxiliary vector where nothing kept reads its table, and what gives a
+    // `constinit` variable its value, as pypl4g has it.
     std::unordered_map<const Function*, std::vector<const GlobalVar*>> writes;
     for (auto one : module.ctors)
       if (auto found = only_writes(one))
@@ -329,10 +330,15 @@ namespace pl4g::opt {
         if (unread.contains(one)
             && std::ranges::any_of(writes[one], [&](auto var) { return read.contains(var); }))
           left.push_back(one);
-      if (left.empty())
-        break;
       for (auto one : left)
         unread.erase(one);
+      // And an initializer, where something kept names its variable: it is no
+      // root, and goes with it.
+      for (const auto& one : module.initializers)
+        if (! seen.contains(one.func) && read.contains(one.var))
+          left.push_back(one.func);
+      if (left.empty())
+        break;
     }
     if (module.auxv != nullptr && read.contains(module.auxv)) {
       if (auxv_make != nullptr)
@@ -343,6 +349,7 @@ namespace pl4g::opt {
       module.auxv = nullptr;
     if (! unread.empty())
       std::erase_if(module.ctors, [&](auto one) { return unread.contains(one); });
+    std::erase_if(module.initializers, [&](const auto& one) { return ! seen.contains(one.func); });
     bool changed = false;
     std::vector<std::pair<std::string, std::unique_ptr<Function>>> kept;
     for (auto& [key, func] : module.functions)

@@ -7,6 +7,7 @@
 #include "sema/check.hh"
 
 #include <algorithm>
+#include <deque>
 #include <format>
 
 #include "diag/ids.hh"
@@ -1939,6 +1940,15 @@ namespace pl4g::sema {
       (*observing)[0] = true;
       return;
     }
+    if (giving != nullptr)
+      // The copy into the variable the initializer gives a value.
+      return;
+    if (constinit_of != nullptr && std::get<1>(demanding) == nullptr) {
+      // The initializer of a `constinit` variable, which is pure however the
+      // effect came about: there is no function to mark.
+      diags.emit(D::LANG_CONSTINIT_HAS_AN_EFFECT, span, { { "name", constinit_of->name } });
+      return;
+    }
     auto held = std::get<0>(demanding);
     std::string_view name = held != nullptr ? held->name : std::string_view();
     DiagArgs said;
@@ -2153,7 +2163,113 @@ namespace pl4g::sema {
       // a program, so nothing of it is ever started; a shared object is called
       // by the program that loads it, and has no start of its own.
       diags.emit(D::LANG_FUNCDEF_SPECIAL_NO_STARTUP);
+    order_initializers();
     report_unread_variables();
+  }
+
+
+  namespace {
+
+    // Every variable at the top level the initializer `init` reads, itself or
+    // through a function with a body it names, in the order first met: its own
+    // variable only where an instruction of its own function reads it, the
+    // store and a call answering into it naming it too (check.py:_variables_reached).
+    std::vector<ir::GlobalVar*> variables_reached(const ir::Initializer& init)
+    {
+      std::vector<ir::GlobalVar*> found;
+      std::unordered_set<const ir::GlobalVar*> met;
+      std::unordered_set<const ir::Function*> seen;
+      std::deque<ir::Function*> queue{ init.func };
+      while (! queue.empty()) {
+        auto one = queue.front();
+        queue.pop_front();
+        if (! seen.insert(one).second)
+          continue;
+        for (const auto& block : one->blocks)
+          for (auto inst : block->insts) {
+            for (auto named : inst->operands)
+              if (named != nullptr && named->vkind == ir::ValueKind::global) {
+                auto var = static_cast<ir::GlobalVar*>(named);
+                bool reads = inst->kind == ir::InstKind::LoadInst && inst->operands[1] == named;
+                if ((var != init.var || one != init.func || reads) && met.insert(var).second)
+                  found.push_back(var);
+              }
+            if (inst->kind == ir::InstKind::CallInst || inst->kind == ir::InstKind::CodeInst)
+              if (auto callee = inst->callee; callee != nullptr && ! callee->is_declaration())
+                queue.push_back(callee);
+          }
+      }
+      return found;
+    }
+
+  } // anonymous namespace
+
+
+  void Checker::order_initializers()
+  {
+    // Where nothing else decides, the order the variables were defined in,
+    // which is the order they are in the module; an initializer reading
+    // another `constinit` variable comes after that one's.
+    auto& initializers = module.initializers;
+    if (initializers.empty())
+      return;
+    std::unordered_map<const ir::GlobalVar*, std::size_t> rank;
+    for (const auto& [_, var] : module.globals)
+      rank.try_emplace(var.get(), rank.size());
+    auto rank_of = [&](const ir::Initializer& one) {
+      auto at = rank.find(one.var);
+      return at == rank.end() ? rank.size() : at->second;
+    };
+    std::ranges::stable_sort(initializers, {}, rank_of);
+    std::unordered_map<const ir::GlobalVar*, std::size_t> of_var;
+    for (std::size_t at = 0; at < initializers.size(); ++at)
+      of_var.try_emplace(initializers[at].var, at);
+    // A table the generated constructor builds is nought until it has run,
+    // which is after every initializer.
+    std::unordered_set<const ir::Value*> built;
+    for (auto func : module.ctors)
+      if (func->name.starts_with(globals_symbol))
+        for (const auto& block : func->blocks)
+          for (auto inst : block->insts)
+            if (inst->kind == ir::InstKind::StoreInst && inst->operands[1]->vkind == ir::ValueKind::global)
+              built.insert(inst->operands[1]);
+    std::vector<ir::Initializer> ordered;
+    std::unordered_set<std::size_t> done;
+    std::vector<std::size_t> path;
+    auto visit = [&](this auto& self, std::size_t one) -> void {
+      path.push_back(one);
+      const auto& init = initializers[one];
+      for (auto var : variables_reached(init)) {
+        if (built.contains(var)) [[unlikely]] {
+          diags.emit(D::LANG_CONSTINIT_READS_A_TABLE, init.var->name_span,
+                     { { "name", init.var->name }, { "table", var->name } });
+          continue;
+        }
+        auto read = of_var.find(var);
+        if (read == of_var.end() || done.contains(read->second))
+          continue;
+        if (auto open = std::ranges::find(path, read->second); open != path.end()) [[unlikely]] {
+          std::string circle;
+          for (auto step = open; step != path.end(); ++step) {
+            circle += initializers[*step].var->name;
+            circle += " \N{RIGHTWARDS ARROW} ";
+          }
+          circle += initializers[read->second].var->name;
+          const auto& closed = initializers[read->second];
+          diags.emit(D::LANG_CONSTINIT_READS_ITSELF, closed.var->name_span,
+                     { { "name", closed.var->name }, { "cycle", circle } });
+          continue;
+        }
+        self(read->second);
+      }
+      path.pop_back();
+      done.insert(one);
+      ordered.push_back(init);
+    };
+    for (std::size_t one = 0; one < initializers.size(); ++one)
+      if (! done.contains(one))
+        visit(one);
+    initializers = std::move(ordered);
   }
 
 
@@ -2197,7 +2313,11 @@ namespace pl4g::sema {
       if (later.insert(it->first).second)
         listed.push_back(it->second.get());
     std::ranges::reverse(listed);
-    for (auto func : listed)
+    for (auto func : listed) {
+      if (func->attrs.special == ir::SpecialKind::initializer)
+        // Giving a `constinit` variable its value is what defining one does,
+        // and no more a write than an ordinary initializer is.
+        continue;
       for (const auto& block : func->blocks)
         for (auto inst : block->insts) {
           if (inst->kind == ir::InstKind::LoadInst && inst->operands[1]->vkind == ir::ValueKind::global)
@@ -2205,6 +2325,7 @@ namespace pl4g::sema {
           if (inst->kind == ir::InstKind::StoreInst && inst->operands[1]->vkind == ir::ValueKind::global)
             writes[id_of(inst->operands[1])] += 1;
         }
+    }
     return { std::move(reads), std::move(writes) };
   }
 

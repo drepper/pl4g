@@ -1879,6 +1879,10 @@ namespace pl4g::interp {
           auto answer = call(made, args);
           std::memcpy(places.at(module.environ), answer.data(), 8);
         }
+        // The `constinit` variables first, in the order they read one another,
+        // as the entry point of an image calls them; then the constructors.
+        for (const auto& one : module.initializers)
+          call(one.func, {});
         for (auto ctor : module.ctors)
           call(ctor, {});
         // The tests this binary runs: the ones a program always runs, or what

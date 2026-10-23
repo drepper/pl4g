@@ -183,8 +183,9 @@ namespace pl4g {
     // Tokens at which recovery stops: a new definition can begin there.
     bool is_recovery(TokKind kind) noexcept
     {
-      return kind == TokKind::kw_fn || kind == TokKind::kw_let || kind == TokKind::kw_type
-             || kind == TokKind::kw_unit || kind == TokKind::at_lbracket || kind == TokKind::eof;
+      return kind == TokKind::kw_fn || kind == TokKind::kw_let || kind == TokKind::kw_constinit
+             || kind == TokKind::kw_type || kind == TokKind::kw_unit || kind == TokKind::at_lbracket
+             || kind == TokKind::eof;
     }
 
     // What ends a run of statements, whichever notation the block is in.
@@ -342,7 +343,8 @@ namespace pl4g {
 
       bool attached_to_nothing() const noexcept;
       const Node* parse_item();
-      Node* parse_variable(List<const Attribute*> attrs = {}, MaybeText doc = std::nullopt, List<Span> doc_lines = {});
+      Node* parse_variable(List<const Attribute*> attrs = {}, MaybeText doc = std::nullopt, List<Span> doc_lines = {},
+                           std::optional<Span> constinit_ = std::nullopt);
       ModuleImport* parse_import(Span start, const Token& name, bool mutable_, const TypeExpr* declared, MaybeText doc,
                                  List<Span> doc_lines, List<const Attribute*> attrs);
       std::pair<MaybeText, List<Span>> parse_doc_comments();
@@ -640,6 +642,10 @@ namespace pl4g {
       }
       if (check(TokKind::kw_let))
         return parse_variable(attrs, doc, doc_lines);
+      if (check(TokKind::kw_constinit)) {
+        Span said = advance().span;
+        return parse_variable(attrs, doc, doc_lines, said);
+      }
       if (check(TokKind::kw_type))
         return parse_type_definition(attrs, doc, doc_lines);
       if (check(TokKind::kw_enum))
@@ -655,11 +661,15 @@ namespace pl4g {
     }
 
 
-    Node* Parser::parse_variable(List<const Attribute*> attrs, MaybeText doc, List<Span> doc_lines)
+    Node* Parser::parse_variable(List<const Attribute*> attrs, MaybeText doc, List<Span> doc_lines,
+                                 std::optional<Span> constinit_)
     {
-      // `let NAME ':' ['mut'] [TYPE] '=' VALUE`; names next to each other take
-      // a tuple apart.
+      // `['constinit'] let NAME ':' ['mut'] [TYPE] '=' VALUE`; names next to
+      // each other take a tuple apart.  `constinit_` is where `constinit` was
+      // written, which the caller has read.
       Span start = expect(TokKind::kw_let).span;
+      if (constinit_)
+        start = constinit_->to(start);
       const Token& name = expect(TokKind::ident);
       std::vector<NameAt> more;
       while (accept(TokKind::comma) != nullptr) {
@@ -683,7 +693,9 @@ namespace pl4g {
         throw Bail{};
       }
       if (check(TokKind::ident) && current().text == import_name)
-        return parse_import(start, name, mutable_, declared, doc, doc_lines, attrs);
+        // A module is not worked out by anything: `constinit` qualifies it as
+        // `mut` would.
+        return parse_import(start, name, mutable_ || constinit_.has_value(), declared, doc, doc_lines, attrs);
       auto value = parse_expression();
       auto def = make<VarDef>(start.to(value->span));
       def->name = name.text;
@@ -697,6 +709,7 @@ namespace pl4g {
       def->attrs = attrs;
       def->more = list(more);
       def->made_in = received;
+      def->constinit_ = constinit_.has_value();
       return def;
     }
 
@@ -2158,7 +2171,11 @@ namespace pl4g {
     {
       if (check(TokKind::kw_unit))
         return parse_unit_definition();
-      if (check(TokKind::kw_let)) {
+      if (check(TokKind::kw_let) || check(TokKind::kw_constinit)) {
+        if (check(TokKind::kw_constinit))
+          // Worked out before the program starts is about the life of the
+          // program; read as the `let` it stands before.
+          diags.emit(D::LANG_CONSTINIT_NOT_AT_TOP_LEVEL, advance().span);
         auto found = parse_variable();
         if (auto import = as<ModuleImport>(found)) [[unlikely]] {
           // A module is the program's, not one function's.

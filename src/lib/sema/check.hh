@@ -131,6 +131,11 @@ namespace pl4g::sema {
       const ir::Type* ty = nullptr;
     };
     std::vector<std::pair<std::string, WaitingImage>> waiting_images;  // check.py:_waiting_images
+    // The `constinit` variables whose initializers are not lowered yet, by
+    // name, in the order they are written: lowered where the variable is
+    // named, as a function is.
+    std::vector<std::pair<std::string, std::pair<ir::GlobalVar*, const ast::VarDef*>>>
+      constinit_waiting;  // check.py:_constinit_waiting
     // Whether the variables are worked out where they are defined.
     bool images_now = true;
     // Work out the variable *name* in the image, left until something named it.
@@ -158,9 +163,12 @@ namespace pl4g::sema {
     // compiler-provided function may be called from is that and nothing
     // else, and this is how the check knows where it is.
     ir::Function* in_build_function = nullptr;  // check.py:3809
-    // Whether the body being checked is a constructor's own, which is where a
-    // `@[relro]` variable may be written and nowhere else.
-    bool seals_open = false;
+    // The `constinit` variable whose initializer is being lowered, which is
+    // pure: what it may not do is reported as about the variable.
+    ir::GlobalVar* constinit_of = nullptr;  // check.py:_constinit_of
+    // And the one it is being given, while what it came to is copied in: that
+    // write is the initializer's, and nothing else is let make it.
+    ir::GlobalVar* giving = nullptr;  // check.py:_giving
     Dict<std::string, std::tuple<Span, std::string>> defined;  // check.py:3810
     // The variables at the top level whose value is a table rather than
     // bytes: what they are given is built by running code, so they are

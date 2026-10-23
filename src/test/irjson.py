@@ -441,6 +441,8 @@ class Writer:
             "environ": None if module.environ is None else module.environ.name,
             "auxv": None if module.auxv is None else module.auxv.name,
             "ring_addresses": [self.const(c) for c in module.ring_addresses],
+            "initializers": [[list(module.globals.values()).index(one.var), name(one.func)]
+                             for one in module.initializers],
             "ctors": [name(f) for f in module.ctors], "dtors": [name(f) for f in module.dtors],
             "tests": [name(f) for f in module.tests], "test_plan": [name(f) for f in module.test_plan],
             "source_paths": list(module.source_paths),

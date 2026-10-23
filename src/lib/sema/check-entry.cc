@@ -6,6 +6,7 @@
 #include "sema/check.hh"
 
 #include <algorithm>
+#include <exception>
 #include <format>
 #include <ranges>
 
@@ -22,6 +23,31 @@
 namespace pl4g::sema {
 
   namespace {
+
+    // Run `cleanup` when the scope is left, however it is left: Python's
+    // `finally`.  A cleanup failing while something else is already being
+    // thrown is the first failure's to report.
+    template<typename F>
+    class Finally {
+    public:
+      explicit Finally(F cleanup) : cleanup(std::move(cleanup)), unwinding(std::uncaught_exceptions()) {}
+      Finally(const Finally&) = delete;
+      Finally& operator=(const Finally&) = delete;
+      ~Finally() noexcept(false)
+      {
+        if (std::uncaught_exceptions() > unwinding) {
+          try {
+            cleanup();
+          } catch (...) {
+          }
+        } else
+          cleanup();
+      }
+
+    private:
+      F cleanup;
+      int unwinding;
+    };
 
     // What a turn of a loop is bound to in a name the compiler made up.
     constexpr std::string_view iter_glyph = "\N{RIGHTWARDS PAIRED ARROWS}";
@@ -218,6 +244,11 @@ namespace pl4g::sema {
         lower_function(entry);
       for (auto one : std::vector(generics_here))
         check_generic(one);
+      // After the functions, which they call as any caller does.
+      std::vector<std::string> all;
+      for (const auto& [name, _] : constinit_waiting)
+        all.push_back(name);
+      lower_initializers(all);
       if ((whole_program || whole_modules) && diags.error_count == 0)
         // Only of a program that is otherwise right: a body an error stopped
         // part way has not said all it does.
@@ -230,8 +261,9 @@ namespace pl4g::sema {
       waiting_generics = generics_here;
       NameSet roots;
       for (const auto& [name, item] : top_written) {
-        if (in_the_image(item->value))
-          // Worked out while compiling: nothing of it is in the program.
+        if (in_the_image(item->value) || constinit_waits(name))
+          // Worked out while compiling: nothing of it is in the program.  Or a
+          // `constinit` one's, lowered where the variable is named.
           continue;
         mentioned(item->value, roots);
       }
@@ -256,8 +288,16 @@ namespace pl4g::sema {
     NameSet names = given;
     std::vector<Collected*> chosen;
     std::vector<Generic*> generics;
+    std::vector<std::string> initialized;
     for (;;) {
       bool grew = false;
+      for (const auto& [name, waited] : std::vector(constinit_waiting))
+        if (names.contains(name) && std::ranges::find(initialized, name) == initialized.end()) {
+          // What the initializer names is wanted with it.
+          initialized.push_back(name);
+          mentioned(waited.second->value, names);
+          grew = true;
+        }
       for (auto entry : std::vector(waiting))
         if (names.contains(entry->node->name) || ! is_identifier(entry->node->name)) {
           std::erase(waiting, entry);
@@ -284,7 +324,7 @@ namespace pl4g::sema {
         named.push_back(name);
     for (const auto& name : named)
       image_now(name);
-    if (chosen.empty() && generics.empty()) {
+    if (chosen.empty() && generics.empty() && initialized.empty()) {
       for (const auto& name : exported_imports) {
         auto held = top->get(name);
         if (held == nullptr)
@@ -299,6 +339,7 @@ namespace pl4g::sema {
       lower_function(entry);
     for (auto one : generics)
       check_generic(one);
+    lower_initializers(initialized);
   }
 
 
@@ -421,6 +462,94 @@ namespace pl4g::sema {
   }
 
 
+  bool Checker::constinit_waits(std::string_view name) const
+  {
+    return std::ranges::any_of(constinit_waiting, [&](const auto& one) { return one.first == name; });
+  }
+
+
+  void Checker::lower_initializers(std::span<const std::string> names)
+  {
+    for (const auto& name : names) {
+      auto at = std::ranges::find_if(constinit_waiting, [&](const auto& one) { return one.first == name; });
+      if (at == constinit_waiting.end())
+        continue;
+      auto [var, node] = at->second;
+      constinit_waiting.erase(at);
+      lower_initializer(var, node);
+    }
+  }
+
+
+  void Checker::lower_initializer(ir::GlobalVar* var, const ast::VarDef* node)
+  {
+    // One function per variable, so that each is kept exactly where its
+    // variable is and the entry point can call them in the order they read one
+    // another; checked as a pure function's body is.
+    auto func = std::make_unique<ir::Function>(unused_name(std::string(initializer_symbol) + var->name),
+                                               ir::func_type({}, ir::void_type()));
+    func->attrs.special = ir::SpecialKind::initializer;
+    func->attrs.impure = true;
+    func->linkage = ir::Linkage::internal;
+    func->span = node->span;
+    func->name_span = node->name_span;
+    auto made = module.add_function(std::move(func));
+    made->add_block();
+    ir::Builder builder(module, *made);
+    borrows.clear();
+    places.clear();
+    auto outer_answer = std::exchange(answering, ir::void_type());
+    auto outer_impure = std::exchange(impure, false);
+    auto outer_io = std::exchange(may_do_io, false);
+    auto outer_did = std::exchange(did_io, false);
+    auto outer_marking = std::exchange(marking, nullptr);
+    auto outer_of = std::exchange(constinit_of, var);
+    push_scope();
+    {
+      Finally restore([&] {
+        pop_scope();
+        answering = outer_answer;
+        impure = outer_impure;
+        may_do_io = outer_io;
+        did_io = outer_did;
+        marking = outer_marking;
+        constinit_of = outer_of;
+      });
+      give_initial(builder, var, node);
+    }
+    if (! builder.is_terminated())
+      builder.ret();
+    module.initializers.push_back({ var, made });
+  }
+
+
+  void Checker::give_initial(ir::Builder& builder, ir::GlobalVar* var, const ast::VarDef* node)
+  {
+    stored_into[id_of(node->value)] = "a variable at the top level";
+    if (auto array = ir::as<ir::ArrayType>(var->value_type)) {
+      // Its elements are in the image, and what is given is copied there: the
+      // one write of them there is, and no effect of the initializer's.
+      auto value = lower_expr(builder, node->value, ast::is<ast::ArrayLit>(node->value) ? array : nullptr);
+      giving = var;
+      Finally given([&] { giving = nullptr; });
+      copy_elements(builder, read_global(builder, var, node->span), array, value, value_type_of(value), node->span);
+      return;
+    }
+    auto assigned = syntax.make<ast::AssignStmt>(node->span);
+    assigned->name = node->name;
+    assigned->name_span = node->name_span;
+    assigned->value = node->value;
+    auto value = checked_value(builder, assigned, var->value_type);
+    if (value_type_of(value) == ir::error_type() || builder.is_terminated())
+      return;
+    if (ir::is<ir::SumType>(var->value_type))
+      copy_bytes(builder, builder.address(var, node->span), value, std::int64_t(ir::size_of(var->value_type, layout())),
+                 node->span);
+    else
+      builder.store(var, value, node->span);
+  }
+
+
   std::string Checker::unused_name(std::string_view wanted)
   {
     if (module.function(wanted) == nullptr)
@@ -523,13 +652,24 @@ namespace pl4g::sema {
       return;
     }
     auto linkage = linkage_of(attrs);
-    const BoundAttr* relro = relro_of(node, attrs);
+    // Said once: a `constinit` variable written `mut` is read as the read-only
+    // one it can only be, and its type is not then refused a second time for
+    // what `mut` made of it.
+    bool said_mut = node->constinit_ && node->mutable_;
+    if (said_mut) [[unlikely]] {
+      diags.emit(D::LANG_CONSTINIT_MUT, node->name_span, { { "name", node->name } });
+      auto read_only = syntax.make<ast::VarDef>(node->span);
+      *read_only = *node;
+      read_only->mutable_ = false;
+      node = read_only;
+    }
     auto pairs = expected_numbers(attrs);
     auto expectation = begin_expecting(pairs);
     const ir::Type* ty = nullptr;
     const ir::Value* initializer = nullptr;
     bool is_static = false;
     bool later = false;
+    bool at_start = false;
     {
       defining_globally = true;
       ty = variable_type(node);
@@ -555,8 +695,13 @@ namespace pl4g::sema {
       is_static = in_the_image(node->value);
       if (ty != nullptr && ! image_definition(node, ty))
         ty = ir::error_type();
+      // A `constinit` variable is an ordinary constant where the compiler
+      // works its value out as it does a constant's, and otherwise one its
+      // initializer gives a value at start.
+      at_start = node->constinit_ && ty != nullptr && ty != ir::error_type() && ! is_static
+                 && ! folds_while_compiling(node, ty);
       // An empty one in the heap costs nothing until something is put in it.
-      bool unbuilt = ty != nullptr && is_a_table(ty) && ! is_static && empty_in_the_heap(node->value);
+      bool unbuilt = ty != nullptr && is_a_table(ty) && ! is_static && ! at_start && empty_in_the_heap(node->value);
       // A call laid out in the image, in a module lowered as far as it is
       // named, is worked out where something names it.
       if (auto allocated = ast::as<ast::Allocated>(node->value);
@@ -566,7 +711,7 @@ namespace pl4g::sema {
       auto outer = std::exchange(for_the_image, is_static);
       if (unbuilt)
         initializer = empty_table_constant(ty);
-      else if (ty == nullptr || later || (is_a_table(ty) && ! is_static))
+      else if (ty == nullptr || later || at_start || (is_a_table(ty) && ! is_static))
         initializer = nullptr;
       else
         initializer = constant_value(node, ty);
@@ -585,14 +730,20 @@ namespace pl4g::sema {
     }
     if (ty == nullptr)
       ty = ir::error_type();
-    if (relro != nullptr && ty != ir::error_type() && changes_by_itself(ty)) [[unlikely]] {
-      diags.emit(D::LANG_RELRO_HOLDS_WHAT_CHANGES, relro->node->span,
-                 { { "name", node->name }, { "found", ty->written() } });
-      relro = nullptr;
+    if (at_start && (changes_by_itself(ty) || ty == ir::arena_type())) [[unlikely]] {
+      // Changed without the variable being written, which nothing would
+      // refuse and the pages would fault.
+      if (! said_mut)
+        diags.emit(D::LANG_CONSTINIT_HOLDS_WHAT_CHANGES, node->name_span,
+                   { { "name", node->name }, { "found", ty->written() } });
+      ty = ir::error_type();
+      at_start = false;
     }
     // A table's handle is written by the constructor whatever the program may
-    // do with it, so the place it waits in is one that may be written.
-    bool writable = node->mutable_ || (is_a_table(ty) && ! is_static) || has_mutable_field(ty);
+    // do with it, so the place it waits in is one that may be written; a
+    // `constinit` one is written by its initializer, and the checker refuses
+    // every other write (`sealed`).
+    bool writable = node->mutable_ || (is_a_table(ty) && ! is_static) || has_mutable_field(ty) || at_start;
     auto made = std::make_unique<ir::GlobalVar>(std::string(node->name), ty, ir::ptr_type(ty, writable));
     made->initializer = initializer;
     made->linkage = linkage;
@@ -600,7 +751,7 @@ namespace pl4g::sema {
     made->name_span = node->name_span;
     made->exported = is_export(attrs);
     made->system_layout = std::ranges::any_of(attrs, [](const BoundAttr& a) { return a.name() == "cdecl"; });
-    made->relro = relro != nullptr;
+    made->relro = at_start;
     auto var = module.add_global(std::move(made), key(node->name));
     (*top)[std::string(node->name)] = Held(static_cast<ir::Value*>(var));
     owned.push_back(Held(static_cast<ir::Value*>(var)));
@@ -614,10 +765,53 @@ namespace pl4g::sema {
     global->expectation = expectation;
     global->expected_pairs = pairs;
     top_level.push_back(global);
-    if (is_a_table(ty) && ! is_static && initializer == nullptr)
+    if (is_a_table(ty) && ! is_static && initializer == nullptr && ! at_start)
       built_globals.emplace_back(var, node);
     if (later && ty != ir::error_type())
       waiting_images.emplace_back(std::string(node->name), WaitingImage{ var, node, ty });
+    if (at_start)
+      constinit_waiting.emplace_back(std::string(node->name), std::pair{ var, node });
+  }
+
+
+  bool Checker::folds_while_compiling(const ast::VarDef* node, const ir::Type* ty)
+  {
+    return known_constant(node->value, ty);
+  }
+
+
+  bool Checker::known_constant(const ast::Expr* expr, const ir::Type* ty)
+  {
+    if (known_while_compiling(expr, [this](const ast::Member* m) { return names_an_enum(m); }))
+      return true;
+    if (auto taken = ast::as<ast::AddressOf>(expr); taken != nullptr && ir::is<ir::PtrType>(ty)) {
+      auto place = taken->operand;
+      while (auto member = ast::as<ast::Member>(place))
+        place = member->base;
+      auto name = ast::as<ast::NameRef>(place);
+      if (name == nullptr || find_local(name->name) != nullptr)
+        return false;
+      auto held = top->get(std::string(name->name));
+      return held != nullptr && held->get<ir::GlobalVar>() != nullptr;
+    }
+    if (auto record = ir::as<ir::ProductType>(ty); record != nullptr && ast::is<ast::Call>(expr)
+                                                    && is_record_literal(expr, record)) {
+      for (auto one : ast::as<ast::Call>(expr)->args) {
+        auto named = ast::as<ast::Named>(one);
+        if (named == nullptr)
+          return false;
+        auto field = std::ranges::find_if(record->fields, [&](const auto& f) { return f.first == named->name; });
+        if (field == record->fields.end() || ! known_constant(named->value, field->second))
+          return false;
+      }
+      return true;
+    }
+    auto int_ty = ir::as<ir::IntType>(ty);
+    if (int_ty == nullptr)
+      return false;
+    auto found = welcome_constant(expr);
+    return found && ! found->refused && ! found->failed && (found->ty == nullptr || found->ty == int_ty)
+           && int_ty->holds(found->value);
   }
 
 
@@ -643,7 +837,9 @@ namespace pl4g::sema {
 
   bool Checker::sealed(const ir::GlobalVar* found) const
   {
-    return found != nullptr && found->relro && ! seals_open;
+    // A `constinit` variable, which no body writes: its initializer is lowered
+    // as a store of its own, and nothing else may.
+    return found != nullptr && found->relro && found != giving;
   }
 
 
@@ -685,22 +881,8 @@ namespace pl4g::sema {
 
   void Checker::refuse_sealed(const ir::GlobalVar* var, std::string_view name, Span where)
   {
-    diags.emit(D::LANG_RELRO_WRITTEN_AFTER_STARTUP, where, { { "name", name } })
-      .note(D::LANG_RELRO_DEFINED_HERE, var->name_span, { { "name", var->name } });
-  }
-
-
-  const BoundAttr* Checker::relro_of(const ast::VarDef* node, const std::vector<BoundAttr>& attrs)
-  {
-    auto said = std::ranges::find_if(attrs, [](const BoundAttr& a) { return a.name() == "relro"; });
-    if (said == attrs.end())
-      return nullptr;
-    if (! node->mutable_) [[unlikely]] {
-      // Without it the variable is in the read-only data from the start.
-      diags.emit(D::LANG_RELRO_NOT_MUT, said->node->span, { { "name", node->name } });
-      return nullptr;
-    }
-    return &*said;
+    diags.emit(D::LANG_CONSTINIT_WRITTEN, where, { { "name", name } })
+      .note(D::LANG_CONSTINIT_DEFINED_HERE, var->name_span, { { "name", var->name } });
   }
 
 

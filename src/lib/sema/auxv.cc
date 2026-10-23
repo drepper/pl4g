@@ -42,7 +42,8 @@ namespace pl4g::sema::auxv {
       return found;
     auto ty = held_type();
     auto var = std::make_unique<ir::GlobalVar>(std::string(target::auxv_symbol), ty, ir::ptr_type(ty, true));
-    // Filled before the constructors, read-only after them, as pypl4g's is.
+    // Filled before the initializers and the constructors, read-only after
+    // them, in the section of the `constinit` variables, as pypl4g's is.
     var->relro = true;
     return module.add_global(std::move(var), std::string(target::auxv_symbol));
   }

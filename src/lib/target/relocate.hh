@@ -37,7 +37,7 @@ namespace pl4g::target {
   // word it names, and then, where `protects` says, asks the kernel, through
   // `abi`, to make what was read-only but for that read-only again -- which
   // the entry point does instead, after the constructors, where the same
-  // pages hold what they write (target/relro.hh).  What it works in is the
+  // pages hold what the initializers write (target/relro.hh).  What it works in is the
   // allocator's, the width of the first of `scratch`, which are the registers
   // it may have.
   void emit_relocate(mc::Assembler& asm_, std::span<const mc::Reg> scratch, const SyscallABI& abi,

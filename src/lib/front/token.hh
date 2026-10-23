@@ -44,6 +44,9 @@ namespace pl4g {
     kw_continue [[=Describe("'continue'")]],
     kw_defer [[=Describe("'defer'")]],
     kw_let [[=Describe("'let'")]],
+    // Before `let` at the top level: a variable worked out once, before the
+    // program starts, and read-only from then on.
+    kw_constinit [[=Describe("'constinit'")]],
     kw_mut [[=Describe("'mut'")]],
     kw_singleton [[=Describe("'singleton'")]],
     kw_unit [[=Describe("'unit'")]],

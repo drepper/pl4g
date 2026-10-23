@@ -264,7 +264,9 @@ namespace pl4g::ir {
   enum class Linkage : std::uint8_t { internal, visible, imported };
 
   enum class SpecialKind : std::uint8_t {
-    startup, build, constructor, destructor, test_always, test_build, test_suite,
+    // `initializer` gives a `constinit` variable its value: generated, called by
+    // the entry point before every constructor, and kept where the variable is.
+    startup, build, constructor, initializer, destructor, test_always, test_build, test_suite,
   };
 
   enum class InlineHint : std::uint8_t { default_, always, never };
@@ -387,8 +389,9 @@ namespace pl4g::ir {
     std::string module;
     bool exported = false;
     bool system_layout = false;
-    // Whether it is `@[relro]`: written by the constructors and read-only from
-    // the startup function on, in the section the entry point protects.
+    // Whether it is in the section the entry point makes read-only once the work
+    // before the startup function is done: a `constinit` variable its
+    // initializer writes, and the table the auxiliary vector is read into.
     bool relro = false;
 
     GlobalVar(std::string name, const Type* value_type, const Type* ptr)
@@ -407,6 +410,14 @@ namespace pl4g::ir {
     Span span;
     // The catalog's number, for what the compiler said rather than chose.
     std::optional<unsigned> number;
+  };
+
+
+  // A `constinit` variable and the function that gives it its value
+  // (pypl4g's ir/module.py `Initializer`).
+  struct Initializer {
+    GlobalVar* var = nullptr;
+    Function* func = nullptr;
   };
 
 
@@ -458,6 +469,10 @@ namespace pl4g::ir {
     // `⎕auxv` anything.
     GlobalVar* auxv = nullptr;
     std::vector<const Value*> ring_addresses;
+    // The functions that give the `constinit` variables their values, in the
+    // order the entry point calls them: before every constructor, an
+    // initializer after those of the variables it reads.
+    std::vector<Initializer> initializers;
     std::vector<Function*> ctors;
     std::vector<Function*> dtors;
     std::vector<Function*> tests;

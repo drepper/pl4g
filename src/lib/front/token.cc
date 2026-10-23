@@ -19,11 +19,12 @@ namespace pl4g {
 
   namespace {
 
-    constexpr std::array<std::pair<std::string_view, TokKind>, 29> keywords{ {
+    constexpr std::array<std::pair<std::string_view, TokKind>, 30> keywords{ {
       { "fn", TokKind::kw_fn },
       { "return", TokKind::kw_return },
       { "yield", TokKind::kw_yield },
       { "let", TokKind::kw_let },
+      { "constinit", TokKind::kw_constinit },
       { "mut", TokKind::kw_mut },
       { "singleton", TokKind::kw_singleton },
       { "unit", TokKind::kw_unit },

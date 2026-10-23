@@ -133,12 +133,15 @@ namespace pl4g::ir {
       {
         std::vector<const Function*> startups;
         std::unordered_set<const Function*> ctors;
+        std::unordered_set<const Function*> inits;
         std::unordered_set<const Function*> dtors;
         for (const auto& [key, func] : module.functions) {
           if (func->attrs.special == SpecialKind::startup)
             startups.push_back(func.get());
           if (func->attrs.special == SpecialKind::constructor)
             ctors.insert(func.get());
+          if (func->attrs.special == SpecialKind::initializer)
+            inits.insert(func.get());
           if (func->attrs.special == SpecialKind::destructor)
             dtors.insert(func.get());
         }
@@ -150,6 +153,11 @@ namespace pl4g::ir {
           fail("module", "a startup function exists but was not cached");
         if (ctors != std::unordered_set<const Function*>(module.ctors.begin(), module.ctors.end()))
           fail("module", "the constructor cache disagrees with the attributes");
+        std::unordered_set<const Function*> listed;
+        for (const auto& one : module.initializers)
+          listed.insert(one.func);
+        if (inits != listed)
+          fail("module", "the initializer cache disagrees with the attributes");
         if (dtors != std::unordered_set<const Function*>(module.dtors.begin(), module.dtors.end()))
           fail("module", "the destructor cache disagrees with the attributes");
       }

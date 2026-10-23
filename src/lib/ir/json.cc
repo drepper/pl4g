@@ -746,6 +746,13 @@ namespace pl4g::ir {
         out->environ = named(globals, string_of(doc["environ"]), "global");
       if (! is_null(doc["auxv"]))
         out->auxv = named(globals, string_of(doc["auxv"]), "global");
+      // A variable by where it is among the globals, which tells apart two of
+      // one name.
+      for (Element pair : doc["initializers"].get_array()) {
+        auto both = pair.get_array();
+        auto at = std::size_t(int_of(both.at(0)));
+        out->initializers.push_back({ out->globals.at(at).second.get(), function_named(both.at(1)) });
+      }
       for (Element f : doc["ctors"].get_array())
         out->ctors.push_back(function_named(f));
       for (Element f : doc["dtors"].get_array())

@@ -20,6 +20,19 @@
     void check_closers();  // check.py:4462
     // Generate the constructor that gives the top-level tables their own.
     void build_the_tables();  // check.py:4480
+    // Whether the `constinit` variable `name` waits for its initializer to be lowered.
+    bool constinit_waits(std::string_view name) const;
+    // Lower the initializers of the waiting `constinit` variables `names`, each into a function of its own.
+    void lower_initializers(std::span<const std::string> names);  // check.py:_lower_initializers
+    // Generate the function that gives the `constinit` variable `var` its value, called by the entry point
+    // before the constructors, its initializer checked as a pure body is.
+    void lower_initializer(ir::GlobalVar* var, const ast::VarDef* node);  // check.py:_lower_initializer
+    // Store what the initializer of `var` comes to in it, as an assignment to a variable at the top level
+    // stores.
+    void give_initial(ir::Builder& builder, ir::GlobalVar* var, const ast::VarDef* node);  // check.py:_give_initial
+    // Put the initializers in the order the entry point calls them, and refuse what no order can satisfy
+    // (4396, 4397).
+    void order_initializers();  // check.py:_order_initializers
     // `wanted`, or `wanted` and a number where a file already took it.
     std::string unused_name(std::string_view wanted);  // check.py:4526
 
@@ -37,21 +50,23 @@
     bool declare(std::string_view name, Span span, std::string_view path = "");  // check.py:4582
     // Register one variable defined at the top level.
     void collect_global(const ast::VarDef* node);
-    // Whether `found` is a `@[relro]` variable this body may not write -- every body's but a
-    // constructor's own.
-    bool sealed(const ir::GlobalVar* found) const;  // check.py:5191
-    // Whether this body may write the variable at the top level `var`: `mut`, and not `@[relro]` where
-    // the body is not a constructor's.
-    bool writable_global(const ir::GlobalVar* var) const;  // check.py:5196
-    // The `@[relro]` variable this body may not write that `expr` names a part of.
-    ir::GlobalVar* sealed_root(const ast::Expr* expr);  // check.py:5201
-    // Report a write to a part of a `@[relro]` variable outside a constructor's body, where `expr`
-    // names one; and say whether it did.
-    bool said_sealed(const ast::Expr* expr, Span where);  // check.py:5220
-    // Report that `var`, `@[relro]`, is written outside a constructor.
-    void refuse_sealed(const ir::GlobalVar* var, std::string_view name, Span where);  // check.py:5230
-    // The `@[relro]` said of a variable at the top level, where it may be: only on one defined `mut`.
-    const BoundAttr* relro_of(const ast::VarDef* node, const std::vector<BoundAttr>& attrs);  // check.py:5236
+    // Whether the value of the `constinit` variable `node` is one the compiler works out as it does an
+    // ordinary variable's at the top level, which then makes it one.
+    bool folds_while_compiling(const ast::VarDef* node, const ir::Type* ty);  // check.py:_folds_while_compiling
+    // Whether `expr`, given where a `ty` is wanted, is a value the compiler knows, read off what is
+    // written and asked quietly.
+    bool known_constant(const ast::Expr* expr, const ir::Type* ty);  // check.py:_known_constant
+    // Whether `found` is a `constinit` variable, which no body writes: every one but the one whose value
+    // is being put in place.
+    bool sealed(const ir::GlobalVar* found) const;  // check.py:_sealed
+    // Whether this body may write the variable at the top level `var`: `mut`, and not `constinit`.
+    bool writable_global(const ir::GlobalVar* var) const;  // check.py:_writable_global
+    // The `constinit` variable that `expr` names a part of.
+    ir::GlobalVar* sealed_root(const ast::Expr* expr);  // check.py:_sealed_root
+    // Report a write to a part of a `constinit` variable, where `expr` names one; and say whether it did.
+    bool said_sealed(const ast::Expr* expr, Span where);  // check.py:_said_sealed
+    // Report that `var`, `constinit`, is written (4393, with 4394).
+    void refuse_sealed(const ir::GlobalVar* var, std::string_view name, Span where);  // check.py:_refuse_sealed
     // A variable of the interactive session, declared where the session wrote it.
     void session_variable(const ast::VarDef* node);  // check.py:4600
     // Bind what was said of the file itself, and note a system file.

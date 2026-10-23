@@ -495,6 +495,9 @@ namespace pl4g::sema {
   inline constexpr std::string_view tolerance_symbol = "__pl4g_tolerance";
   inline constexpr std::string_view heap_symbol = "__pl4g_heap";
   inline constexpr std::string_view globals_symbol = "__pl4g_globals";
+  // What the generated function that gives a `constinit` variable its value is
+  // called, the variable's name after it (check.py:INITIALIZER_SYMBOL).
+  inline constexpr std::string_view initializer_symbol = "__pl4g_constinit.";
   inline constexpr std::string_view text_symbol = "__pl4g_text.";
   inline constexpr std::string_view static_symbol = "__pl4g_static.";
   inline constexpr std::int64_t instances_deep = 8;
