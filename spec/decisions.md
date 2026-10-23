@@ -11788,6 +11788,61 @@ system call where it finds none.  Compare glibc, which finds the same functions 
 parses the vDSO itself as this does; Rust's standard library, which calls libc's `clock_gettime`; and Zig's, which looks the vDSO
 up as Go's does.
 
+## 2026-10-23T16:00+02:00 — language and runtime
+
+### `⎕auxv(TYPE)`: the auxiliary vector, read by the program's own code
+
+The user decided, for `std.time` to find the vDSO in PL4G rather than in the C runtime: **`⎕auxv(TYPE) → u64?`** answers the
+value of the auxiliary vector's entry of type `TYPE` -- an integer, `AT_SYSINFO_EHDR` 33, `AT_PAGESZ` 6, `AT_HWCAP` 16, `AT_RANDOM`
+25 -- or nothing where the kernel gave none.  **The vector is read once**, by the entry point, before the constructors and the
+startup function, into a table the program then only reads; only a program that uses `⎕auxv` has one.  The table's entries belong
+in a section made read-only after the constructors, which another change adds (`@[relro]`); until then the table is a writable
+variable of the compiler's own.  The interpreter answers with the C library's `getauxval`.  What was left to decide, and why each
+went the way it did:
+
+- **The table is fifty-two words, indexed by the type, and the word of `AT_NULL` holds the presence bits.**  The largest type the
+  kernel defines is `AT_MINSIGSTKSZ`, 51; nought is `AT_NULL`, which ends the vector and is never an entry, so its word is free
+  for a bit per type that was there.  A lookup is that bit and one load, with no walk and no branch: a type past the end asks the
+  word of `AT_NULL`, whose own bit is never set, so the index is a `select` and not a test.  For a type written down the two
+  loads are all there is.  416 bytes.  Considered: a pair per type, a flag word beside the value (832 bytes and still two loads);
+  the vector kept where the kernel put it and walked at each question, which is what `getauxval` does (a loop per question, and
+  a pointer into the stack the program has since left); a value of nought meaning absent (wrong: `AT_SECURE` and `AT_UID` are
+  nought in most processes and are answers).  A type the kernel adds past 51 is answered nothing until the table grows, which is
+  one constant.
+- **The reader is generated, in the intermediate representation**, `__pl4g_auxv_make(at)`, the way the environment's builder is,
+  and the entry point calls it with the stack it was started on, first of everything it calls.  Not the runtime's: the point of
+  the feature is that the C runtime need not know the vector, and the walk is a dozen instructions every back end selects like
+  any others.  It steps over the arguments by their count and the environment to its null, then keeps every pair whose type the
+  table has a word for, gathering the presence bits in a register and writing them once.  A duplicated type, which no kernel
+  makes, is the last one.
+- **Any whole number is a type**, of any width and either signedness, widened by its own; one written with no suffix is the
+  `u64` the vector holds a type as, so `⎕auxv(6)` needs none.  A negative number is far past the table once it is a word, and is
+  answered nothing.  Anything else is refused (4380); the count of arguments is 4211's.
+- **A type written down that the table never holds is warned about** (4381) -- nought, a negative number, one past 51 -- and
+  answered nothing where it is written, with no table made for it: the rule a division by a zero written down follows (4215),
+  under the same option, `always-fails`.
+- **It makes no function impure.**  The table is written once before anything of the program runs and nothing the program
+  writes can reach it, so reading it is reading a constant the compiler does not know.  It is memory, so a pure function asking
+  it is never worked out while compiling; the build evaluator cannot work it out either and says so.
+- **A shared object answers nothing.**  It has no start of its own -- the program it is loaded into was handed the stack and
+  hands it to nobody -- so its table is never filled and it has no reader.  The alternative was `getauxval` through `dlsym`,
+  which a shared object can reach (it depends on the C library for `dlsym` already); refused because `getauxval` says that it
+  has nothing only through `errno`, which is the C library's thread-local and not something this language reaches, and because
+  a constructor asking fifty-one questions of every shared object that names `⎕auxv` is a price for an answer a caller has to be
+  ready not to get anyway.  `std.time` in a shared object makes the system call, which it does today.  Reading
+  `/proc/self/auxv` would work without the C library and was not chosen: it needs a mounted file system, and three system calls.
+- **The interpreter** fills the same table from `getauxval`, a type present where the answer is not nought or `errno` is not
+  `ENOENT`, before the constructors; the generated reader is not made for it.  An embedded interpreter answers what its host
+  process was started with, which is the process the program is running in.
+
+Compare: **C**'s `getauxval` (glibc since 2.16, `ENOENT` for absent since 2.19; musl; Bionic), which walks the vector the C
+library kept at each question, glibc keeping `AT_HWCAP` and `AT_HWCAP2` apart; **Go**, whose runtime reads the vector once at
+start (`sysauxv`) into the few variables it wants -- the page size, the vDSO, the hardware capabilities -- which is this design
+with the table chosen by the runtime instead of indexed by the type; **Rust**, whose standard library asks libc's `getauxval`
+(for the processor's features, in `std_detect`) and offers nothing of its own; **Zig**, whose start code keeps where the vector is
+and whose `std.os.linux.getauxval` walks it at each question; **D**, whose `core.sys.linux.sys.auxv` binds the C function;
+**Python**, which has none, `os.sysconf("SC_PAGESIZE")` answering one of the questions through the C library.
+
 Open questions
 --------------
 

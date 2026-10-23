@@ -1,0 +1,26 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0
+※ pl4g-test: expect-diag 4381 LANG_AUXV_NO_SUCH_TYPE
+
+※ The types of the auxiliary vector run from 1 to 51, `AT_MINSIGSTKSZ`, and the
+※ table the entry point reads the vector into has a word for each.  A type
+※ written down outside them is one the table never holds, so the question never
+※ has an answer: it is warned about (4381), and answers nothing -- nought, which
+※ is `AT_NULL` and ends the vector rather than being an entry of it, a negative
+※ number, and one larger than any the kernel defines.  A program asking only
+※ such questions carries no table at all.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if (⎕auxv(0) ?? 1u64) ≠ 1u64:
+        return 1u6
+    if (⎕auxv(52) ?? 1u64) ≠ 1u64:
+        return 2u6
+    if (⎕auxv(⁻6i32) ?? 1u64) ≠ 1u64:
+        return 3u6
+    if (⎕auxv(18446744073709551615u64) ?? 1u64) ≠ 1u64:
+        return 4u6
+    @[ignore(4381)]
+    let quiet: u64 = ⎕auxv(1000) ?? 1u64
+    if quiet ≠ 1u64: 5u6 else: 0u6

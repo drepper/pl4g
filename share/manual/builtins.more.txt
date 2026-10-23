@@ -31,6 +31,7 @@ In a macro, over pieces of the program ([[compiletime.macros.functions]]):
 The machine and the kernel ([[running.foreign]]):
 
     ⎕syscall(n, …)      ask the kernel; ⎕sc@NAME is the call's number
+    ⎕auxv(t)            what the auxiliary vector says of type t: a u64?
     ⎕at(addr, ⌜&T⌝)     a place at an address
     ⎕span(addr, n, ⌜T⟦⟧⌝)   a run of places at an address, or a list adopted
     ⎕address(&x)        a place as the number it is

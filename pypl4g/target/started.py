@@ -72,6 +72,12 @@ READS_ENVIRONMENT: Final[str] = "pl4g_env"
 ENVIRON_SYMBOL: Final[str] = "__pl4g_environ"
 ENVIRON_MAKE: Final[str] = "__pl4g_environ_make"
 
+#: What the table the auxiliary vector is read into is called in the image, and
+#: what the generated function that reads it is called -- named here for the
+#: reason the environment's two are.
+AUXV_SYMBOL: Final[str] = "__pl4g_auxv"
+AUXV_MAKE: Final[str] = "__pl4g_auxv_make"
+
 
 def wanted_by(module: Module) -> ProductType | None:
     """The record the startup function takes a reference to, where it takes one.
@@ -125,6 +131,17 @@ def ring_at(module: Module, layout: DataLayout) -> int | None:
     start, state = where_in(found, STATE, layout)
     assert isinstance(state, ProductType), state
     return start + where_in(state, RING, layout)[0]
+
+
+def holds_stack(module: Module, layout: DataLayout) -> bool:
+    """Whether the entry point keeps the stack the kernel started it with.
+
+    It does where something after its first instruction reads that stack: the
+    runtime, for the arguments and the environment, and the function that reads
+    the auxiliary vector, where the program asked the vector anything.
+    """
+    return arguments_at(module, layout) is not None \
+        or module.environ is not None or module.auxv is not None
 
 
 def entry_wants_runtime(module: Module) -> bool:

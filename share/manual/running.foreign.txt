@@ -44,6 +44,10 @@ by being defined elsewhere.
 machine words (4572, 4573), answering the `i64` the kernel did, negative where
 it refused; **`⎕sc@NAME`** is the call's number on the target being built
 for, `⎕sc@write`, `⎕sc@pipe2` (4574, 4575).  A function asking is `@[impure]`.
+**`⎕auxv(TYPE)`** is what the kernel's auxiliary vector says of an entry type
+-- `⎕auxv(6)` the page size, `⎕auxv(33)` where the vDSO is -- as a `u64?`,
+nothing where it said nothing, as in a shared object (4380, 4381); read once at
+the start, it makes no function impure.
 **`⎕at(ADDRESS, ⌜&T⌝)`** and **`⎕span(ADDRESS, COUNT, ⌜T⟦⟧⌝)`** make a place,
 or a run of them, out of an address something else gave, and
 **`⎕address(&x)`** is the way back; **`⎕acquire(&p)`** and **`⎕release(&mut

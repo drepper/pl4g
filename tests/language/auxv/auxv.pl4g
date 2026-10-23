@@ -1,0 +1,63 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕auxv(TYPE)` is what the auxiliary vector says of an entry type: the value
+※ the kernel put beside it, as a `u64`, or nothing where it put none.  The
+※ entry point reads the vector once, before anything of the program runs, into
+※ a table with a word for every type the kernel defines; asking is a bit and a
+※ load.
+※
+※ What is asked here is what every one of these kernels gives a process, and
+※ what QEMU gives the one it runs: the size of a page (`AT_PAGESZ`, 6), where
+※ the vDSO is (`AT_SYSINFO_EHDR`, 33) -- whose first four bytes are an ELF
+※ image's -- where the sixteen random bytes are (`AT_RANDOM`, 25), and the entry
+※ point (`AT_ENTRY`, 9).  A type the kernel does not define, nought (`AT_NULL`,
+※ which ends the vector), and a negative number answer nothing, asked through
+※ a function the optimizer does not see through so that nothing about them is
+※ known while compiling.
+※
+※ Compare: **C**'s `getauxval` (glibc, musl, Bionic), which answers nought and
+※ sets `errno` where there is none; **Go**, whose runtime reads the vector at
+※ start and keeps what it wants; **Rust**, which calls libc's; **Zig**'s
+※ `std.os.linux.getauxval`, which walks the vector the start code kept.
+
+let std := ⎕import("std")
+
+※ What the vector says of `t`, which the optimizer cannot see the value of.
+@[opaque]
+fn ask(t: u64) → u64?:
+    ⎕auxv(t)
+
+@[opaque]
+fn ask_signed(t: i32) → u64?:
+    ⎕auxv(t)
+
+※ A function reading the vector need not say it has an effect.
+fn page_size() → u64:
+    ⎕auxv(6) ?? 0u64
+
+※ Whether `n` is a power of two.
+fn power_of_two(n: u64) → bool:
+    n ≠ 0u64 ∧ ⎕ones(n) = 1u8
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let page: u64 = page_size()
+    if ¬power_of_two(page) ∨ page < 4096u64 ∨ page > 65536u64:
+        return 1u6
+    ※ The same entry whatever width and signedness the type is written in.
+    if (⎕auxv(6u8) ?? 0u64) ≠ page ∨ (⎕auxv(6i32) ?? 0u64) ≠ page ∨ (ask(6u64) ?? 0u64) ≠ page:
+        return 2u6
+    match ⎕auxv(33):
+        u64(vdso):
+            if ⎕at(vdso, ⌜&u32⌝)⌖ ≠ 0x464c457fu32:
+                return 3u6
+        ⊥:
+            return 4u6
+    if (⎕auxv(25) ?? 0u64) = 0u64 ∨ (⎕auxv(9) ?? 0u64) = 0u64:
+        return 5u6
+    ※ Asked through a function, so that nothing is settled while compiling.
+    if (ask(52u64) ?? 1u64) ≠ 1u64 ∨ (ask(0u64) ?? 1u64) ≠ 1u64 ∨ (ask(1000u64) ?? 1u64) ≠ 1u64:
+        return 6u6
+    if (ask_signed(⁻1i32) ?? 1u64) ≠ 1u64 ∨ (ask_signed(6i32) ?? 0u64) ≠ page:
+        return 7u6
+    0u6

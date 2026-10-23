@@ -59,8 +59,7 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
     # What the kernel set the process up with is at the stack pointer, and this
     # is the only moment it is: everything below puts something there.  It waits
     # in a register a call leaves alone until the runtime is asked to read it.
-    if started.arguments_at(module, layout) is not None \
-            or module.environ is not None:
+    if started.holds_stack(module, layout):
         # An addition of nothing and not a move: the stack pointer and the zero
         # register share an encoding here, and the move between registers is the
         # form that reads that encoding as the zero.  The addition of an
@@ -70,6 +69,7 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
     # return address, so that a debugger unwinding the stack knows where to stop.
     asm.loadreg(X29, asm.reg(XZR))
     asm.loadreg(X30, asm.reg(XZR))
+    _read_auxv(asm, module, cconv)
     _read_environment(asm, module, cconv)
     for ctor in module.ctors:
         asm.call(symbol_name(ctor))
@@ -320,6 +320,23 @@ def _drain(asm: Assembler, module: Module, layout: DataLayout) -> None:
         asm.op(ops.PLUS, theirs.int_arg_regs[0],
                asm.reg(theirs.int_arg_regs[0]), asm.imm(at, 12, signed=False))
     asm.call(started.DRAINS)
+
+
+def _read_auxv(asm: Assembler, module: Module, cconv: CallConvDesc) -> None:
+    """Read the auxiliary vector into its table, where the program asks it.
+
+    The function `sema/auxv.py` generated walks the stack the kernel set the
+    process up with, which is the one argument it takes, under the language's
+    convention: it is the program's own code and not the runtime's.  First of
+    everything the entry point calls, so that whatever reads the table later --
+    the environment's builder does not, a constructor may -- finds it filled.
+    """
+    if module.auxv is None:
+        return
+    reader = module.functions.get(started.AUXV_MAKE)
+    assert reader is not None, "the table is there and nothing fills it"
+    asm.loadreg(cconv.int_arg_regs[0], asm.reg(HELD_STACK))
+    asm.call(symbol_name(reader))
 
 
 def _read_environment(asm: Assembler, module: Module,

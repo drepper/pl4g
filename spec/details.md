@@ -4621,6 +4621,42 @@ what the key stands for or `MISSING`, which `??` reads and everything else
 refuses -- so a build file that uses a variable nobody set, without saying what
 to do instead, is told where it did.
 
+The auxiliary vector, read by the compiler's own code
+-----------------------------------------------------
+
+`⎕auxv(TYPE)` reads `__pl4g_auxv`, a variable of the image holding fifty-two words, `u64⟦52⟧`: word *t* is the value the
+kernel gave type *t*, and word 0 -- `AT_NULL`'s, which ends the vector and is never an entry -- has bit *t* set for each type that
+was there.  `sema/auxv.py` makes the variable on first ask and generates `__pl4g_auxv_make(at)`, which fills it; `Module.auxv`
+being there is what tells the entry point, the pass that drops what nothing reaches (which keeps the reader as a root, as it keeps
+the environment's builder), and the interpreter.
+
+**The reader** takes the stack pointer the process started with -- `HELD_STACK`, which `started.holds_stack` now keeps for a
+program that asks the vector too -- and is called by `_read_auxv` in each target's `startup.py` under the language's convention,
+first of everything the entry point calls: before the environment's builder and the constructors, and after only the processor
+check of x86-64 and, in a position-independent image, the relocation.  It loads the count of arguments, steps past it, the
+arguments and their null, walks the environment to its null, and then takes the pairs to `AT_NULL`, storing each value whose
+type is below 52 and `or`ing its bit into a block parameter; the bits are stored once, at the end.  About forty instructions on
+each target.
+
+**A question** is lowered where it is written, with no call: the type as a `u64` (zero- or sign-extended by its own type, or
+truncated from an `i64`, which is the same bits), `select`ed to 0 where it is not below 52; the presence word shifted right by
+that and masked to its low bit; the word at that index loaded; and the two made into the result, `wrap`.  So a type outside the
+table asks `AT_NULL`'s bit, which is never set, and no branch is needed.  For a type written down the shift and the address fold,
+and what is left is two loads, a test and the result; a type written down outside the table is warned about (4381) and is the
+failed result with no table made.  The variable is `mut` in the image, which keeps the pass that works out pure calls from
+reading it while compiling -- it would read nought, the table being empty in the image.
+
+**Where it goes.**  The table is in the image's writable data, `.data`, as nought.  Its entries want to be in the section the entry
+point makes read-only after the constructors (`@[relro]`, a change of its own): moving it there is putting the variable
+`auxv.variable` makes in that section, and nothing else, the reader running before the constructors.
+
+**A shared object has the table and no reader**: it has no start of its own and is never handed the stack, so the table stays
+nought and every question answers nothing.  The reader is made only where `Module.output` is an executable.
+
+**The interpreter** has no reader either: it fills the variable before the constructors from `getauxval`, for every type from 1 to
+51, a type present where the answer is not nought or `errno` is not `ENOENT` -- the questions the generated code asks of the
+table are then the same.
+
 The compiler as a language server
 ---------------------------------
 

@@ -3240,6 +3240,49 @@
       "option": null
     },
     {
+      "number": 4380,
+      "name": "LANG_AUXV_NOT_AN_INTEGER",
+      "severity": "error",
+      "message": "what the auxiliary vector is asked about is the number of a type of entry, and this is '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        }
+      ],
+      "cause": "The kernel names each entry of the auxiliary vector by a number -- `AT_PAGESZ` is 6, `AT_SYSINFO_EHDR` 33 -- and that number is all `⎕auxv` is asked.  A whole number of any width and either signedness is one; a truth value, a character, a floating-point number or a value of a type the program made up is not.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4381,
+      "name": "LANG_AUXV_NO_SUCH_TYPE",
+      "severity": "warning",
+      "message": "the auxiliary vector has no entry of type {value}, so this never has an answer",
+      "args": [
+        {
+          "name": "value",
+          "type": "string",
+          "description": "the type asked about, written out"
+        }
+      ],
+      "cause": "The types of the auxiliary vector's entries run from 1 to 51, `AT_MINSIGSTKSZ`, and the table the entry point reads the vector into has a word for each of those and for no others.  A type written down outside them -- nought, which is `AT_NULL` and ends the vector, a negative number, or one larger than the kernel defines -- is one the table never holds, so the answer is always that there is none.  `@[ignore(4381)]` says it is meant.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A question of the auxiliary vector that can be shown never to have an answer is diagnosed."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "always-fails"
+    },
+    {
       "number": 4401,
       "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
       "severity": "error",
