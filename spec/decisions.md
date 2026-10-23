@@ -12051,6 +12051,50 @@ Compare **Rust**, where an `extern "C" fn() -> S` pointer and an `extern "C" fn`
 `fn() -> S` pointer as rustc does; **Zig** and **D** likewise, the convention being part of the type; **C**, where a call through a
 pointer and a call by name are one call; **Go**, whose `func` values follow its own register ABI whatever they point at.
 
+## 2026-10-23T19:00+02:00 — library and compiler
+
+### `std.time` as wrappers of the system calls, and constructors nothing needs
+
+The user asked "what language features are needed to decrease the code size of the std.time interfaces?  these should just be
+wrappers around the system calls with some error checking.  which also meants, the return value of the gettime the getres
+interfaces should be a timespec or an error", and then directed: "the calling convention should allow returning non-elemental
+types as the regular ABI implements it, using a hidden, implicit parameter pointing at the location the caller allocated.  the
+auxiliary vector entries only have to be parsed once and the value implicitly stored.  the function which performs this is
+called before the startup function is reached so marking that function impure, because it writes into a global variable, does
+not impact the startup function.  the pointer should also be stored in a relro section".  The four features that took -- an
+`@[abi]` record answered by value, `@[cdecl] fn` values and `⎕at` of one, `@[relro]`, `⎕auxv` -- have their own entries above.
+This one is what `std.time` became with them, and what that made of the images.
+
+- **`clock_gettime(clock) → Timespec ? i32` and `clock_getres(clock)`**, POSIX's names and C's `struct timespec`, answering
+  the time or the error number; the user chose "System rules for C, hidden pointer otherwise" for the answer, which a
+  `Timespec` gets by C's rules (two words in registers).
+- **The module finds the vDSO itself**, in a constructor, and keeps the two functions in `@[relro]` variables, as the user said;
+  the clocks left the C runtime and the interpreter, which runs the same module.  The user chose "Always run it" for the
+  constructor, so it is no root of `⎕import`: a program that imports `std` has it.
+- **Either name is looked up on every architecture** (`__vdso_…`, `__kernel_…`), there being no way for a module to ask which
+  architecture it is built for (TODO-pypl4g.md, `⎕sc@`'s entry).  **Only the SysV hash table is read**: every Linux vDSO has one.
+- **The functions are `@[impure]` and no longer `@[io]`**: a call through an `@[impure]` value and `⎕syscall` both ask for
+  `impure`, and a function both is says both.  A caller of them is `@[impure]` too, where it was `@[io]` or held a device.
+- **The clock crosses as its `i32`, read where it is held** (`⎕at(⎕address(&clock), ⌜&i32⌝)`), an enumeration having no
+  conversion to its number by design; `⎕syscall` takes only machine words.
+
+**What it cost, and the decision it led to.**  Written first with checked arithmetic and indexed views, the walk was 2.4 kB and
+brought the stop machinery and a backtrace into every image; with every address under `⎕wrap` and nothing indexed it is 1.1 kB, as
+the C was.  But a program reading no clock still carried it, the auxiliary vector's table (416 bytes), its reader and the
+read-only segment: `exit0` on x86-64 at `-O1` was 12800 bytes before the clocks, 14864 with them in the C runtime, and 15544 with
+this.  Asked, the user chose **"Drop unread constructors"**: a constructor whose body and callees only work out values, read, and
+write their own frame and variables they name -- no system call, no call of a declaration or through a value, no check, no call
+of something `@[opaque]` -- is left out, with what only it needed, where nothing the program keeps names a variable it writes.
+`exit0` is 12944 bytes with it (the rest is `time.pl4g`'s row in the bill of materials), and the constructor is in an image only
+where a clock is read.  Its writes are all anybody could see of it, so running it or not is the same program; a read that would
+have faulted and a loop that would not have ended go with it.
+
+Compare: **C** and **C++**, whose compilers may remove a loop with no effect but whose linkers keep every constructor of every
+object linked in, so a library's static initializers are paid for by every program linking it -- the cost this avoids; **Rust**,
+with no life before `main`, filling such a table on first use through `OnceLock`, which costs a check on every call instead;
+**Go** and **D**, whose package `init` and module constructors always run.  glibc finds the vDSO's functions when the dynamic
+loader starts, as this does; musl on the first call, as the C runtime here did.
+
 Open questions
 --------------
 

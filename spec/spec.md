@@ -725,27 +725,32 @@ in the language itself, its tables included.
 
 #### `std.time`
 
-**The clocks, as POSIX has them.**  `std.time.clock_gettime(clock, into)` writes the time `clock` says into the `Timespec` that
-`into` names and answers nought, or the system's error number where the clock cannot be read -- 22 for one this system does not
-keep; `clock_getres(clock, into)` writes how finely the clock tells the time and answers the same.  A `Timespec` is C's
-`struct timespec` -- `tv_sec`, whole seconds, and `tv_nsec`, the nanoseconds past them -- and is `@[abi]`, so it crosses a call as
-a reference only, as C's own functions take it.  `Clock` names the clocks Linux keeps, by the numbers its kernel gives them:
+**The clocks, as POSIX has them, answering a time or an error.**  `std.time.clock_gettime(clock)` answers the time `clock` says,
+or the system's error number where the clock cannot be read -- 22 for one this system does not keep; `clock_getres(clock)`
+answers how finely the clock tells the time, the same way.  Both answer a `Timespec ? i32`.  A `Timespec` is C's
+`struct timespec` -- `tv_sec`, whole seconds, and `tv_nsec`, the nanoseconds past them -- and is `@[abi]`: answered by value as C
+answers one, and handed to a call as a reference.  `Clock` names the clocks Linux keeps, by the numbers its kernel gives them:
 `realtime`, `monotonic`, `process_cputime`, `thread_cputime`, `monotonic_raw`, `realtime_coarse`, `monotonic_coarse`,
-`boottime` and `tai`.  Both functions are `@[io]`: a clock answers something else each time, so no read may be dropped, merged
-or moved, and a caller needs only the permission a device carries.
+`boottime` and `tai`.  Both functions are `@[impure]`: a clock answers something else each time, so no read may be dropped,
+merged or moved.
 
-    let now: mut std.time.Timespec = std.time.Timespec(.tv_sec ← 0i64, .tv_nsec ← 0i64)
-    if std.time.clock_gettime(std.time.Clock.monotonic, &mut now) = 0i32:
-        ...
+    match std.time.clock_gettime(std.time.Clock.monotonic):
+        std.time.Timespec(now): ...
+        ⊥(error): ...
 
-**A compiled program reads the clocks without entering the kernel**, through the functions the kernel maps into every process,
-the vDSO: the runtime finds where it is in the auxiliary vector the program was started with, and the two functions among its
-dynamic symbols, the first time a clock is read.  Where there is no vDSO, or no such function in it, the runtime makes the system
-call -- as a shared object always does, having no start of its own to read the vector at.  The interpreter reads the clocks
-through the C library.
+**A program reads the clocks without entering the kernel**, through the functions the kernel maps into every process, the vDSO.
+The module is written in the language and nothing else: a constructor asks `⎕auxv(33)` where the vDSO is, finds the two
+functions among its dynamic symbols, and keeps them in two `@[relro]` variables of type `@[cdecl, impure] fn(i32, &mut
+Timespec) → i32`, read-only once the constructors have run; each function is a call through one of them and the check of what
+it answered.  Where there is no vDSO, or no such function in it, the call is the system call, `⎕syscall(⎕sc@clock_gettime, …)` --
+as in a shared object always, which never sees the auxiliary vector.  The constructor only fills in those two variables, so a
+program that reads no clock does not run it and its image does not hold it (Special Functions).  The interpreter runs
+the same module: its auxiliary vector is its own process's, and it calls the vDSO's functions through libffi.
 
-Compare: **C**'s `clock_gettime`, which this is; **Rust**'s `Instant` and `SystemTime` and **Go**'s `time.Now`, which wrap the
-same call in values of their own; **Python**'s `time.clock_gettime_ns`, which takes the same clock numbers.
+Compare: **C**'s `clock_gettime`, which this is but for the answer, which C writes into a place the caller hands it; **Rust**'s
+`Instant` and `SystemTime` and **Go**'s `time.Now`, which wrap the same call in values of their own; **Python**'s
+`time.clock_gettime_ns`, which takes the same clock numbers.  glibc finds the vDSO's functions when the dynamic loader starts, as
+this does in a constructor, and musl on the first call.
 
 #### `json`
 
@@ -8602,6 +8607,21 @@ The attributes that mark them are:
 
 The three kinds of test are one attribute with a parameter rather than three attributes, because they are three answers to one
 question.  These attributes exclude one another: a function is one of these things or none of them.
+
+**A constructor that only fills in what nothing reads is not run, and is not in the image.**  One whose body, and every function it
+calls, does nothing but work out values, read, and write its own locals and variables at the top level -- no request to the
+kernel, no call of code whose body is elsewhere or through a value, no check that could stop the program -- changes nothing a
+program can observe but those variables.  Where nothing else the program keeps names any of them, running it and not running it
+are the same program, and the compiler leaves it out along with them; a constructor that some kept one's variables are read by is
+kept with it.  This is what lets a library prepare a table for its functions in a constructor without every program carrying it:
+`std.time`'s finds the kernel's clocks, and is in the image of a program that reads a clock and of no other.  A read of memory that
+would have faulted, and a loop that would never have ended, go with it; a constructor meant to do either says `@[opaque]` on a
+function it calls, or does something else that counts.
+
+Compare: **C** and **C++**, whose compilers may remove a loop with no observable effect, and whose linkers keep every constructor
+an object file has, used or not, which is why a library's static initializers are paid for by every program linking it; **Rust**,
+which has no life before `main` and fills such a table lazily, through `OnceLock`, on first use; **Go**, whose package `init`
+functions always run; **D**, whose module constructors always run as well.
 
 ##### The build function
 

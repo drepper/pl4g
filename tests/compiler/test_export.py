@@ -49,7 +49,8 @@ let std := ⎕import("std")
 
 @[startup]
 fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
-    shared
+    \N{REFERENCE MARK} What the constructor wrote is read, or it would have nothing to do.
+    if private = 8u6: shared else: 0u6
 """
 
 #: What the ELF format calls the two bindings and the two visibilities here.
@@ -145,7 +146,7 @@ def test_visible_is_the_only_thing_that_changes_it(compile_source) -> None:  # n
         "let g: mut u6 = 0u6\n\n",
         "@[align(16), constructor, impure]\nfn helper():\n",
         "    g \N{LEFTWARDS ARROW} 1u6\n\n",
-        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    1u6\n")))
+        "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n@[startup]\nfn main(init: std.Init) ", ARROW, " u6:\n    g\n")))
     assert proc.returncode == 0, describe(proc)
     parsed = elfcheck.parse(output.read_bytes())
     symbol = parsed.symbol("helper()void")

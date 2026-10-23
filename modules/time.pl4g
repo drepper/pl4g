@@ -3,13 +3,15 @@
 ※※ Clocks: what time it is by each the system keeps, and how finely each tells it.
 ※
 ※ Imported by `std` and handed on, so a program knows it as `std.time`.  The two
-※ functions are POSIX's `clock_gettime` and `clock_getres`, and `Timespec` is
-※ C's `struct timespec`: seconds, and nanoseconds within the second.  A compiled
-※ program reads the clocks through the functions the kernel maps into every
-※ process, the vDSO, found through the auxiliary vector it was started with, and
-※ asks the kernel itself where those are not there -- a shared object, which has
-※ no start of its own to read the vector at, always asks.  The interpreter reads
-※ them through the C library.
+※ functions are POSIX's `clock_gettime` and `clock_getres`, answering the time
+※ or the system's error number, and `Timespec` is C's `struct timespec`:
+※ seconds, and nanoseconds within the second.  A program reads the clocks
+※ through the functions the kernel maps into every process, the vDSO, which
+※ answer without entering the kernel: a constructor finds them once, through
+※ the auxiliary vector, and keeps where they are in variables nothing may
+※ write after it -- in a program that reads a clock, and in no other.  Where
+※ there is no vDSO -- a shared object, which never sees the vector -- the
+※ kernel is asked.
 
 ※※ A time, as C's `struct timespec` holds one.
 ※※
@@ -41,36 +43,140 @@ enum Clock : i32:
     boottime = 7 ;
     tai = 11
 
-※ What the runtime offers: the time or the resolution written where it is
-※ handed, and nought or the kernel's error negated.
-@[external("pl4g_clock_gettime"), io]
-fn gettime(clock: Clock, into: &mut Timespec) → i64
+※ The vDSO's two functions, which take and answer what the system calls do:
+※ nought, or the error negated.  Nought until the constructor finds them, and
+※ nought after it where it found none.
+@[relro]
+let vdso_gettime: mut @[cdecl, impure] fn(i32, &mut Timespec) → i32 = (
+    ⎕at(0u64, ⌜@[cdecl, impure] fn(i32, &mut Timespec) → i32⌝))
 
-@[external("pl4g_clock_getres"), io]
-fn getres(clock: Clock, into: &mut Timespec) → i64
+@[relro]
+let vdso_getres: mut @[cdecl, impure] fn(i32, &mut Timespec) → i32 = (
+    ⎕at(0u64, ⌜@[cdecl, impure] fn(i32, &mut Timespec) → i32⌝))
 
-※ The error number of what the runtime answered, nought for none.
-fn error_of(got: i64) → i32:
-    if got ≥ 0i64: 0i32 else: ⎕narrow(0i64 - got, ⌜i32⌝) ?? 22i32
+※ Where the two are in the vDSO, nought for one not there.
+type Found = gettime : u64 ; getres : u64
 
-※※ What time `clock` says it is, written into `into`: POSIX's `clock_gettime`.
+※ What an image of 64 bits says, read where it lies.  Every address below is
+※ worked out wrapping: it is one the kernel mapped, and a check that could
+※ stop the program would bring all that stopping takes into every image.
+fn u64_at(at: u64) → u64:
+    ⎕at(at, ⌜&u64⌝)⌖
+
+fn u32_at(at: u64) → u64:
+    ⎕widen(⎕at(at, ⌜&u32⌝)⌖, ⌜u64⌝)
+
+fn u16_at(at: u64) → u64:
+    ⎕widen(⎕at(at, ⌜&u16⌝)⌖, ⌜u64⌝)
+
+※ Whether the text of a string table at `at` is `name`, nothing following it.
+@[inline(never)]
+fn named(at: u64, name: str) → bool:
+    let here: mut u64 = at
+    foreach byte: u8 = ⎕bytes(name):
+        if ⎕at(here, ⌜&u8⌝)⌖ ≠ byte:
+            return false
+        here ← ⎕wrap(here + 1u64)
+    ⎕at(here, ⌜&u8⌝)⌖ = 0u8
+
+※ The two functions in the dynamic symbols of the vDSO at `image`.  The kernel
+※ names them `__vdso_…` on x86-64 and RISC-V and `__kernel_…` on AArch64, and
+※ no image has both, so either name is taken.  How many symbols there are is
+※ read from the SysV hash table, which the kernel links every vDSO with
+※ (`--hash-style=sysv` on AArch64, `both` on the other two); one without it is
+※ taken to have none of the two.
+fn look(image: u64) → Found:
+    let none: Found = Found(.gettime ← 0u64, .getres ← 0u64)
+    let phoff: u64 = u64_at(⎕wrap(image + 32u64))
+    let phentsize: u64 = u16_at(⎕wrap(image + 54u64))
+    let bias: mut u64 = 0u64
+    let loaded: mut bool = false
+    let dynamic: mut u64 = 0u64
+    foreach at: u64 = 0u64…u16_at(⎕wrap(image + 56u64)):
+        let header: u64 = ⎕wrap(image + phoff + at × phentsize)
+        let kind: u64 = u32_at(header)
+        if kind = 1u64 ∧ ¬loaded:
+            ※ Where the image is, against where it says it was linked.
+            bias ← ⎕wrap(image + u64_at(header + 8u64) - u64_at(header + 16u64))
+            loaded ← true
+        elif kind = 2u64:
+            dynamic ← u64_at(⎕wrap(header + 16u64))
+    if ¬loaded ∨ dynamic = 0u64:
+        return none
+    let strings: mut u64 = 0u64
+    let symbols: mut u64 = 0u64
+    let hash: mut u64 = 0u64
+    let entry: mut u64 = ⎕wrap(dynamic + bias)
+    while u64_at(entry) ≠ 0u64:
+        let tag: u64 = u64_at(entry)
+        let where: u64 = ⎕wrap(u64_at(entry + 8u64) + bias)
+        if tag = 5u64:
+            strings ← where
+        elif tag = 6u64:
+            symbols ← where
+        elif tag = 4u64:
+            hash ← where
+        entry ← ⎕wrap(entry + 16u64)
+    if strings = 0u64 ∨ symbols = 0u64 ∨ hash = 0u64:
+        return none
+    let count: u64 = u32_at(⎕wrap(hash + 4u64))
+    let found: mut Found = none
+    foreach at: u64 = 1u64…count:
+        let symbol: u64 = ⎕wrap(symbols + 24u64 × at)
+        ※ Defined, and a function.
+        if u16_at(⎕wrap(symbol + 6u64)) ≠ 0u64 ∧ (u32_at(⎕wrap(symbol + 4u64)) & 15u64) = 2u64:
+            let name: u64 = ⎕wrap(strings + u32_at(symbol))
+            let address: u64 = ⎕wrap(u64_at(symbol + 8u64) + bias)
+            if named(name, "__vdso_clock_gettime") ∨ named(name, "__kernel_clock_gettime"):
+                found.gettime ← address
+            elif named(name, "__vdso_clock_getres") ∨ named(name, "__kernel_clock_getres"):
+                found.getres ← address
+    found
+
+※ Find the vDSO's two before the program starts, a walk of a few dozen
+※ symbols.  It only fills in the two variables, so a program reading no clock
+※ does not run it and its image does not hold it.
+@[constructor, impure]
+fn find():
+    let image: u64 = ⎕auxv(33) ?? 0u64
+    if image ≠ 0u64:
+        let found: Found = look(image)
+        vdso_gettime ← ⎕at(found.gettime, ⌜@[cdecl, impure] fn(i32, &mut Timespec) → i32⌝)
+        vdso_getres ← ⎕at(found.getres, ⌜@[cdecl, impure] fn(i32, &mut Timespec) → i32⌝)
+
+※ The number the kernel gives `clock`, which is how a `Clock` is held.
+fn number(clock: Clock) → i32:
+    ⎕at(⎕address(&clock), ⌜&i32⌝)⌖
+
+※ The time or the resolution of what a call answered, or its error number.
+fn answer(got: i64, into: &Timespec) → Timespec ? i32:
+    if got < 0i64:
+        return ⊥ ⎕narrow(⎕wrap(0i64 - got), ⌜i32⌝) ?? 22i32
+    into⌖
+
+※※ What time `clock` says it is: POSIX's `clock_gettime`.
 ※※
-※※ \details A `Timespec` is laid out as C's is, so it crosses as a reference --
-※※ which is what C's own `clock_gettime` takes too.
 ※※ \param clock which clock to read
-※※ \param into where the time is written
-※※ \return nought, or the system's error number where the clock cannot be read
-※※ -- 22 (`EINVAL`) for one this system does not keep -- `into` then unchanged
-@[export, io]
-fn clock_gettime(clock: Clock, into: &mut Timespec) → i32:
-    error_of(gettime(clock, into))
+※※ \return the time, or the system's error number where the clock cannot be
+※※ read -- 22 (`EINVAL`) for one this system does not keep
+@[export, impure]
+fn clock_gettime(clock: Clock) → Timespec ? i32:
+    let into: mut Timespec = Timespec(.tv_sec ← 0i64, .tv_nsec ← 0i64)
+    let got: i64 = if ⎕address(vdso_gettime) ≠ 0u64:
+        ⎕widen(vdso_gettime(number(clock), &mut into), ⌜i64⌝)
+    else:
+        ⎕syscall(⎕sc@clock_gettime, number(clock), &mut into)
+    answer(got, &into)
 
-※※ How finely `clock` tells the time, written into `into`: POSIX's
-※※ `clock_getres`.
+※※ How finely `clock` tells the time: POSIX's `clock_getres`.
 ※※
 ※※ \param clock which clock to ask
-※※ \param into where the smallest step the clock takes is written
-※※ \return nought, or the system's error number
-@[export, io]
-fn clock_getres(clock: Clock, into: &mut Timespec) → i32:
-    error_of(getres(clock, into))
+※※ \return the smallest step the clock takes, or the system's error number
+@[export, impure]
+fn clock_getres(clock: Clock) → Timespec ? i32:
+    let into: mut Timespec = Timespec(.tv_sec ← 0i64, .tv_nsec ← 0i64)
+    let got: i64 = if ⎕address(vdso_getres) ≠ 0u64:
+        ⎕widen(vdso_getres(number(clock), &mut into), ⌜i64⌝)
+    else:
+        ⎕syscall(⎕sc@clock_getres, number(clock), &mut into)
+    answer(got, &into)

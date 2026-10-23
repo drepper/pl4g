@@ -511,15 +511,12 @@ static u64 how_long(const unsigned char *s)
  * worth having.  Where the system will not give it, the answer is no arguments
  * at all rather than some of them. */
 static void hash_start(const u64 *stack);
-static void vdso_start(const u64 *stack);
 
 void pl4g_args(const u64 *stack, struct view *out)
 {
   /* Where the process's tables take their seeds from is worked out here, the
-   * one thing every program calls with the stack in hand, and where the
-   * kernel put the functions it offers in the process's own memory. */
+   * one thing every program calls with the stack in hand. */
   hash_start(stack);
-  vdso_start(stack);
   out->at = 0;
   out->len = 0;
   out->stride = 1;
@@ -1016,170 +1013,6 @@ void pl4g_io_drain(struct pl4g_ring *r)
   }
   for (int at = 0; at < ENTRIES; ++at)
     r->held[at] = FREE;
-}
-
-/* -- the clocks -------------------------------------------------------------- */
-
-/* What `clock_gettime` and `clock_getres` answer in, as C's `struct timespec`
- * lays it out. */
-struct pl4g_timespec {
-  i64 sec;
-  i64 nsec;
-};
-
-/* The kernel's own functions for the two, in the shared object it maps into
- * every process -- the vDSO -- which read the clocks without entering the
- * kernel, and the calls that ask the kernel where the vDSO has none. */
-#define AT_SYSINFO_EHDR 33
-#if defined(__x86_64__)
-# define NR_CLOCK_GETTIME 228
-# define NR_CLOCK_GETRES 229
-# define VDSO_GETTIME "__vdso_clock_gettime"
-# define VDSO_GETRES "__vdso_clock_getres"
-#elif defined(__aarch64__)
-# define NR_CLOCK_GETTIME 113
-# define NR_CLOCK_GETRES 114
-# define VDSO_GETTIME "__kernel_clock_gettime"
-# define VDSO_GETRES "__kernel_clock_getres"
-#else
-# define NR_CLOCK_GETTIME 113
-# define NR_CLOCK_GETRES 114
-# define VDSO_GETTIME "__vdso_clock_gettime"
-# define VDSO_GETRES "__vdso_clock_getres"
-#endif
-
-typedef int (*clock_function)(i32, struct pl4g_timespec *);
-
-/* Where the vDSO is, from the auxiliary vector; nought where the kernel said
- * nothing, or nothing was read: a shared object has no stack of its own to
- * read it from, and asks the kernel. */
-static const unsigned char *vdso;
-/* What was found in it, looked for once, at the first call. */
-static clock_function vdso_gettime;
-static clock_function vdso_getres;
-static int vdso_looked;
-
-/* Find the vDSO: the auxiliary vector follows the environment's null. */
-static void vdso_start(const u64 *stack)
-{
-  if (stack == 0)
-    return;
-  const unsigned char *const *envp =
-    (const unsigned char *const *) &stack[stack[0] + 2];
-  u64 at = 0;
-  while (envp[at] != 0)
-    at += 1;
-  for (const u64 *aux = (const u64 *) &envp[at + 1]; aux[0] != AT_NULL; aux += 2)
-    if (aux[0] == AT_SYSINFO_EHDR) {
-      vdso = (const unsigned char *) aux[1];
-      return;
-    }
-}
-
-/* What an ELF image of 64 bits says, read where it lies. */
-static u64 read_u64(const unsigned char *at) { u64 v; __builtin_memcpy(&v, at, 8); return v; }
-static u32 read_u32(const unsigned char *at) { u32 v; __builtin_memcpy(&v, at, 4); return v; }
-static u32 read_u16(const unsigned char *at) { unsigned short v; __builtin_memcpy(&v, at, 2); return v; }
-
-static int same_name(const unsigned char *one, const char *other)
-{
-  while (*one != 0 && *one == (unsigned char) *other) {
-    one += 1;
-    other += 1;
-  }
-  return *one == 0 && *other == 0;
-}
-
-/* How many symbols a GNU hash table has: one past the last any chain holds. */
-static u64 gnu_symbols(const unsigned char *table)
-{
-  u32 buckets = read_u32(table);
-  u32 offset = read_u32(table + 4);
-  u32 bloom = read_u32(table + 8);
-  const unsigned char *bucket = table + 16 + 8 * (u64) bloom;
-  const unsigned char *chain = bucket + 4 * (u64) buckets;
-  u32 last = 0;
-  for (u32 at = 0; at < buckets; ++at)
-    if (read_u32(bucket + 4 * at) > last)
-      last = read_u32(bucket + 4 * at);
-  if (last < offset)
-    return offset;
-  while ((read_u32(chain + 4 * (u64) (last - offset)) & 1) == 0)
-    last += 1;
-  return (u64) last + 1;
-}
-
-/* Look up the two functions in the vDSO's dynamic symbols. */
-static void vdso_look(void)
-{
-  vdso_looked = 1;
-  if (vdso == 0)
-    return;
-  u64 phoff = read_u64(vdso + 32);
-  u32 phentsize = read_u16(vdso + 54), phnum = read_u16(vdso + 56);
-  const unsigned char *dynamic = 0;
-  i64 bias = 0;
-  int loaded = 0;
-  for (u32 at = 0; at < phnum; ++at) {
-    const unsigned char *ph = vdso + phoff + (u64) at * phentsize;
-    u32 type = read_u32(ph);
-    if (type == 1 && ! loaded) {
-      /* Where the image is, against where it says it was linked. */
-      bias = (i64) vdso + (i64) read_u64(ph + 8) - (i64) read_u64(ph + 16);
-      loaded = 1;
-    } else if (type == 2)
-      dynamic = (const unsigned char *) read_u64(ph + 16);
-  }
-  if (! loaded || dynamic == 0)
-    return;
-  dynamic = (const unsigned char *) ((i64) dynamic + bias);
-  const unsigned char *strings = 0, *symbols = 0, *hash = 0, *gnu = 0;
-  for (; read_u64(dynamic) != 0; dynamic += 16) {
-    u64 tag = read_u64(dynamic);
-    const unsigned char *where = (const unsigned char *) ((i64) read_u64(dynamic + 8) + bias);
-    if (tag == 5)
-      strings = where;
-    else if (tag == 6)
-      symbols = where;
-    else if (tag == 4)
-      hash = where;
-    else if (tag == 0x6ffffef5)
-      gnu = where;
-  }
-  if (strings == 0 || symbols == 0 || (hash == 0 && gnu == 0))
-    return;
-  u64 count = hash != 0 ? read_u32(hash + 4) : gnu_symbols(gnu);
-  for (u64 at = 1; at < count; ++at) {
-    const unsigned char *sym = symbols + 24 * at;
-    if (read_u16(sym + 6) == 0 || (sym[4] & 0xf) != 2)
-      continue;
-    const unsigned char *name = strings + read_u32(sym);
-    clock_function found = (clock_function) ((i64) read_u64(sym + 8) + bias);
-    if (same_name(name, VDSO_GETTIME))
-      vdso_gettime = found;
-    else if (same_name(name, VDSO_GETRES))
-      vdso_getres = found;
-  }
-}
-
-/* The time `clock` says, into `ts`: nought, or the kernel's negated error. */
-i64 pl4g_clock_gettime(i32 clock, struct pl4g_timespec *ts)
-{
-  if (! vdso_looked)
-    vdso_look();
-  if (vdso_gettime != 0)
-    return vdso_gettime(clock, ts);
-  return sys(NR_CLOCK_GETTIME, clock, (i64) ts, 0, 0, 0, 0);
-}
-
-/* How finely `clock` tells the time, into `ts`, answered as the above is. */
-i64 pl4g_clock_getres(i32 clock, struct pl4g_timespec *ts)
-{
-  if (! vdso_looked)
-    vdso_look();
-  if (vdso_getres != 0)
-    return vdso_getres(clock, ts);
-  return sys(NR_CLOCK_GETRES, clock, (i64) ts, 0, 0, 0, 0);
 }
 
 /* -- the heap ---------------------------------------------------------------- */

@@ -7,9 +7,9 @@ import pytest
 from conftest import describe
 from pypl4g.ir.function import FuncAttrs, Function, Linkage, SpecialKind
 from pypl4g.ir.inst import (BinaryInst, BinOp, CallInst, LoadInst, MemStartInst,
-                            RetInst, StoreInst)
+                            RetInst, StoreInst, SyscallInst)
 from pypl4g.ir.module import GlobalVar, Module
-from pypl4g.ir.types import BOOL, U8, VOID
+from pypl4g.ir.types import BOOL, I64, U8, VOID
 from pypl4g.ir.verify import verify
 from pypl4g.opt.pass_ import pipeline_for
 from pypl4g.opt.passes.dce import DeadCodeElimination
@@ -259,7 +259,12 @@ def test_a_function_the_program_takes_part_through_is_a_root(
     module = Module("t")
     func = Function("side", module.types.func_type((), VOID),
                     FuncAttrs(special=special))
-    func.add_block().append(RetInst())
+    block = func.add_block()
+    if special is SpecialKind.CONSTRUCTOR:
+        # A constructor with something to do: one that only writes what nothing
+        # reads is dropped, which the tests below are about.
+        block.append(SyscallInst(module.int_const(I64, 39), (), I64))
+    block.append(RetInst())
     module.add_function(func)
     if special is SpecialKind.CONSTRUCTOR:
         module.ctors.append(func)
@@ -273,6 +278,85 @@ def test_a_function_the_program_takes_part_through_is_a_root(
     entry.append(RetInst(module.int_const(U8, 0)))
     assert not DropUnreached().run(module)
     assert set(module.functions) == {"side", "main"}
+
+
+def _filling(module: Module, var: GlobalVar) -> Function:
+    """A constructor that writes *var* and does nothing else."""
+    func = Function("fill", module.types.func_type((), VOID),
+                    FuncAttrs(special=SpecialKind.CONSTRUCTOR, impure=True))
+    block = func.add_block()
+    token = block.append(MemStartInst())
+    block.append(StoreInst(token, var, module.int_const(U8, 7)))
+    block.append(RetInst())
+    module.add_function(func)
+    module.ctors.append(func)
+    return func
+
+
+def test_a_constructor_filling_what_nothing_reads_is_dropped() -> None:
+    """Running it or not is the same program, so it goes, and so does the
+    variable, and the entry point is no longer asked to call it."""
+    module = Module("t")
+    var = GlobalVar("g", U8, module.types.ptr_type(U8, mutable=True),
+                    module.int_const(U8, 1))
+    module.add_global(var)
+    _filling(module, var)
+    entry = _startup(module).entry
+    assert entry is not None
+    entry.append(RetInst(module.int_const(U8, 0)))
+    assert DropUnreached().run(module)
+    assert set(module.functions) == {"main"}
+    assert module.ctors == [] and module.globals == {}
+
+
+def test_a_constructor_filling_what_something_reads_is_kept() -> None:
+    """Where what it writes is read, it is a root as it always was."""
+    module = Module("t")
+    var = GlobalVar("g", U8, module.types.ptr_type(U8, mutable=True),
+                    module.int_const(U8, 1))
+    module.add_global(var)
+    fill = _filling(module, var)
+    entry = _startup(module).entry
+    assert entry is not None
+    token = entry.append(MemStartInst())
+    entry.append(RetInst(entry.append(LoadInst(U8, (token, var)))))
+    DropUnreached().run(module)
+    assert set(module.functions) == {"fill", "main"}
+    assert module.ctors == [fill]
+
+
+def test_a_constructor_doing_more_than_filling_is_kept() -> None:
+    """A request to the kernel is something nobody can tell did not happen."""
+    module = Module("t")
+    var = GlobalVar("g", U8, module.types.ptr_type(U8, mutable=True),
+                    module.int_const(U8, 1))
+    module.add_global(var)
+    fill = _filling(module, var)
+    fill.blocks[0].insts.insert(1, SyscallInst(module.int_const(I64, 39), (), I64))
+    entry = _startup(module).entry
+    assert entry is not None
+    entry.append(RetInst(module.int_const(U8, 0)))
+    DropUnreached().run(module)
+    assert set(module.functions) == {"fill", "main"}
+
+
+def test_a_constructor_calling_something_opaque_is_kept() -> None:
+    """A call of an opaque function is kept whatever it does, and so is the
+    constructor making it -- which is how one asks to be run regardless."""
+    module = Module("t")
+    var = GlobalVar("g", U8, module.types.ptr_type(U8, mutable=True),
+                    module.int_const(U8, 1))
+    module.add_global(var)
+    fill = _filling(module, var)
+    kept = Function("kept", module.types.func_type((), U8), FuncAttrs(opaque=True))
+    kept.add_block().append(RetInst(module.int_const(U8, 1)))
+    module.add_function(kept)
+    fill.blocks[0].insts.insert(1, CallInst(kept, (), U8))
+    entry = _startup(module).entry
+    assert entry is not None
+    entry.append(RetInst(module.int_const(U8, 0)))
+    DropUnreached().run(module)
+    assert set(module.functions) == {"fill", "kept", "main"}
 
 
 @pytest.mark.parametrize("special", [

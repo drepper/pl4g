@@ -103,7 +103,9 @@ GROUPS: tuple[Group, ...] = (
           "Definitions the compiler drops and definitions it keeps.  These move "
           "when the reachability pass or the report log does.",
           {"unreached-function": "a function and a variable that are dropped",
-           "export-visibility": "several definitions, some exported"}),
+           "export-visibility": "several definitions, some exported",
+           "std-time": "the clocks, and the constructor finding them, which a "
+                       "program reading no clock leaves out"}),
     Group("Expressions",
           "Operators, and the folding of them.  These move when the expression "
           "parser, the semantic analysis or the optimizer does.",

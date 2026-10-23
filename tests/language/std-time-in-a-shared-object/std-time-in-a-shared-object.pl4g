@@ -1,0 +1,31 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none host=host.c
+※ pl4g-test: args -shared
+
+※ `std.time` in a shared object asks the kernel.  The object never sees the
+※ stack its process started on, so `⎕auxv(33)` answers nothing there, the
+※ module's constructor finds no vDSO, and both functions take the system call
+※ instead -- answering what the host's own `clock_gettime` does.  `now`
+※ answers the monotonic seconds and nanoseconds as one number, and `step` the
+※ resolution's nanoseconds, so that the host can hold them to its own; a clock
+※ the system does not keep answers its error number negated.
+※
+※ The module is imported by its own name: a shared object importing `std`
+※ is not compiled yet (TODO-pypl4g.md).
+
+let time := ⎕import("time")
+
+@[visible, cdecl, impure]
+fn now() → i64:
+    match time.clock_gettime(time.Clock.monotonic):
+        time.Timespec(t):
+            t.tv_sec × 1000000000i64 + t.tv_nsec
+        ⊥(error):
+            ⎕widen(error, ⌜i64⌝) × ⁻1i64
+
+@[visible, cdecl, impure]
+fn step() → i64:
+    match time.clock_getres(time.Clock.monotonic):
+        time.Timespec(t):
+            t.tv_sec × 1000000000i64 + t.tv_nsec
+        ⊥(error):
+            ⎕widen(error, ⌜i64⌝) × ⁻1i64

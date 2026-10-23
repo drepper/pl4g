@@ -3,6 +3,7 @@
 #include <chrono>
 
 #include <algorithm>
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -181,24 +182,167 @@ namespace pl4g::opt {
       }
     }
 
+
+    // What `address` points into, seen through the casts and offsets that
+    // keep a pointer one: a variable, a frame slot, or nothing known.
+    const Value* place_of(const Value* address)
+    {
+      while (true) {
+        if (address->vkind == ValueKind::global)
+          return address;
+        if (address->vkind != ValueKind::instruction)
+          return nullptr;
+        auto inst = static_cast<const Instruction*>(address);
+        if (inst->kind == InstKind::FrameInst)
+          return inst;
+        if (inst->kind == InstKind::AddressInst
+            || (inst->kind == InstKind::CastInst && inst->cast == CastKind::bitcast
+                && is<PtrType>(inst->operands[0]->ty))
+            || (inst->kind == InstKind::BinaryInst && is<PtrType>(inst->ty) && is<PtrType>(inst->operands[0]->ty)))
+          address = inst->operands[0];
+        else
+          return nullptr;
+      }
+    }
+
+    // Whether `inst` does nothing but what a constructor nothing reads may do:
+    // work out a value, read, call a function whose body is asked the same, or
+    // write its frame or a variable it names, which goes to `written`.
+    bool harmless(const Instruction* inst, std::vector<const GlobalVar*>& written)
+    {
+      if (inst->kind == InstKind::UnreachableInst)
+        return false;
+      if (inst->is_terminator() || ! has_effects(inst))
+        return true;
+      if (inst->kind == InstKind::CallInst)
+        // What the callee's body does is asked of it in its turn -- but of one
+        // that asked to be opaque, which is a call kept whatever it does.
+        return inst->callee != nullptr && ! inst->callee->attrs.opaque;
+      if (inst->kind == InstKind::StoreInst && inst->ordering == Ordering::plain) {
+        auto place = place_of(inst->operands[1]);
+        if (place != nullptr && place->vkind == ValueKind::global) {
+          written.push_back(static_cast<const GlobalVar*>(place));
+          return true;
+        }
+        return place != nullptr;
+      }
+      return false;
+    }
+
+    // The variables `ctor` writes, where writing them, its own frame and
+    // nothing else is all it and what it calls do; nothing otherwise.
+    std::optional<std::vector<const GlobalVar*>> only_writes(Function* ctor)
+    {
+      std::vector<const GlobalVar*> written;
+      std::unordered_set<const Function*> seen;
+      std::vector<Function*> queue{ ctor };
+      while (! queue.empty()) {
+        auto func = queue.back();
+        queue.pop_back();
+        if (! seen.insert(func).second)
+          continue;
+        if (func->is_declaration())
+          return std::nullopt;
+        for (auto& block : func->blocks)
+          for (auto inst : block->insts) {
+            if (! harmless(inst, written))
+              return std::nullopt;
+            if (auto named = named_by(inst))
+              queue.push_back(named);
+          }
+      }
+      return written;
+    }
+
+    // Add to `seen` every function `queue` reaches.
+    void walk(std::vector<Function*> queue, std::unordered_set<const Function*>& seen)
+    {
+      while (! queue.empty()) {
+        auto func = queue.back();
+        queue.pop_back();
+        if (! seen.insert(func).second)
+          continue;
+        for (auto& block : func->blocks)
+          for (auto inst : block->insts)
+            if (auto named = named_by(inst))
+              queue.push_back(named);
+      }
+    }
+
+    // The variables the functions in `seen` name, those the image offers,
+    // and what the values of either point at.
+    std::unordered_set<const GlobalVar*> named_variables(const Module& module,
+                                                         const std::unordered_set<const Function*>& seen)
+    {
+      std::unordered_set<const GlobalVar*> named;
+      for (auto& [_, func] : module.functions)
+        if (seen.contains(func.get()))
+          for (auto& block : func->blocks)
+            for (auto inst : block->insts)
+              for (auto place : inst->operands)
+                if (place->vkind == ValueKind::global)
+                  named.insert(static_cast<const GlobalVar*>(place));
+      std::vector<const GlobalVar*> waiting;
+      for (auto& [_, var] : module.globals)
+        if (named.contains(var.get()) || var->linkage == Linkage::visible)
+          waiting.push_back(var.get());
+      while (! waiting.empty()) {
+        auto var = waiting.back();
+        waiting.pop_back();
+        std::vector<const GlobalVar*> targets;
+        addresses_in(var->initializer, targets);
+        for (auto target : targets)
+          if (named.insert(target).second)
+            waiting.push_back(target);
+      }
+      return named;
+    }
+
   } // anonymous namespace
 
 
   bool drop_unreached(Module& module)
   {
-    // The roots: what the entry point calls, and what is exported.
-    std::vector<Function*> queue = roots(module);
+    // The roots: what the entry point calls, and what is exported -- but a
+    // constructor writing only what nothing kept reads, and the reader of the
+    // auxiliary vector where nothing kept reads its table, as pypl4g has it.
+    std::unordered_map<const Function*, std::vector<const GlobalVar*>> writes;
+    for (auto one : module.ctors)
+      if (auto found = only_writes(one))
+        writes.emplace(one, std::move(*found));
+    auto auxv_make = module.auxv != nullptr ? module.function("__pl4g_auxv_make") : nullptr;
+    std::vector<Function*> left;
+    for (auto one : roots(module))
+      if (! writes.contains(one) && one != auxv_make)
+        left.push_back(one);
     std::unordered_set<const Function*> seen;
-    while (! queue.empty()) {
-      auto func = queue.back();
-      queue.pop_back();
-      if (! seen.insert(func).second)
-        continue;
-      for (auto& block : func->blocks)
-        for (auto inst : block->insts)
-          if (auto named = named_by(inst))
-            queue.push_back(named);
+    std::unordered_set<const Function*> unread;
+    for (auto one : module.ctors)
+      if (writes.contains(one))
+        unread.insert(one);
+    std::unordered_set<const GlobalVar*> read;
+    while (true) {
+      walk(std::move(left), seen);
+      read = named_variables(module, seen);
+      left.clear();
+      for (auto one : module.ctors)
+        if (unread.contains(one)
+            && std::ranges::any_of(writes[one], [&](auto var) { return read.contains(var); }))
+          left.push_back(one);
+      if (left.empty())
+        break;
+      for (auto one : left)
+        unread.erase(one);
     }
+    if (module.auxv != nullptr && read.contains(module.auxv)) {
+      if (auxv_make != nullptr)
+        walk({ auxv_make }, seen);
+    } else
+      // Nothing reads the table, so nothing fills it: not the reader, nor the
+      // interpreter, which fills it itself.
+      module.auxv = nullptr;
+    if (! unread.empty())
+      std::erase_if(module.ctors, [&](auto one) { return unread.contains(one); });
     bool changed = false;
     std::vector<std::pair<std::string, std::unique_ptr<Function>>> kept;
     for (auto& [key, func] : module.functions)
@@ -206,10 +350,15 @@ namespace pl4g::opt {
         kept.emplace_back(key, std::move(func));
       else {
         changed = true;
-        if (! func->is_declaration())
+        // One the compiler made, the reader of the vector, is nothing anybody
+        // wrote, so nobody asks where it went.
+        if (! func->is_declaration() && ! func->name.starts_with("__pl4g_"))
           module.record("drop-function", func->name,
-                        "nothing the program can run reaches it, and it is not exported, so nothing outside can "
-                        "reach it either",
+                        unread.contains(func.get())
+                          ? "a constructor that only writes variables nothing the program keeps reads, so running "
+                            "it changes nothing"
+                          : "nothing the program can run reaches it, and it is not exported, so nothing outside can "
+                            "reach it either",
                         func->name_span.is_valid() ? func->name_span : func->span);
         // Kept alive, if not listed: a dropped function may still be named by
         // a constant somewhere.
@@ -218,26 +367,10 @@ namespace pl4g::opt {
     module.functions = std::move(kept);
 
     // The variables what is left names, and what their values point at.
-    std::unordered_set<const GlobalVar*> named;
+    std::unordered_set<const Function*> left_over;
     for (auto& [_, func] : module.functions)
-      for (auto& block : func->blocks)
-        for (auto inst : block->insts)
-          for (auto place : inst->operands)
-            if (place->vkind == ValueKind::global)
-              named.insert(static_cast<const GlobalVar*>(place));
-    std::vector<const GlobalVar*> waiting;
-    for (auto& [_, var] : module.globals)
-      if (named.contains(var.get()) || var->linkage == Linkage::visible)
-        waiting.push_back(var.get());
-    while (! waiting.empty()) {
-      auto var = waiting.back();
-      waiting.pop_back();
-      std::vector<const GlobalVar*> targets;
-      addresses_in(var->initializer, targets);
-      for (auto target : targets)
-        if (named.insert(target).second)
-          waiting.push_back(target);
-    }
+      left_over.insert(func.get());
+    auto named = named_variables(module, left_over);
     std::vector<std::pair<std::string, std::unique_ptr<GlobalVar>>> variables;
     bool dropped = false;
     for (auto& [key, var] : module.globals)

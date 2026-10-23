@@ -3654,17 +3654,6 @@ be added for the runtime as it stands -- the family of load-and-store offsets
 AArch64 scales by the width of the access -- and two architectures need no
 relocations at all.
 
-**The clocks go through the vDSO.**  `pl4g_args`, which every program's entry point calls with the stack it was started
-with, also records where the vDSO is: `AT_SYSINFO_EHDR` in the auxiliary vector after the environment.  The first call of
-`pl4g_clock_gettime` or `pl4g_clock_getres` reads that image as the kernel laid it out -- the program headers for where it was
-linked against where it is and for the dynamic section, that for the symbols and their strings and a hash table to count them
-by (`DT_HASH`, or `DT_GNU_HASH`, whose chains say where the last symbol is) -- and keeps the two functions it finds:
-`__vdso_clock_gettime` and `__vdso_clock_getres` on x86-64 and RISC-V, `__kernel_clock_gettime` and `__kernel_clock_getres` on
-AArch64.  Each is then called as C calls it, and answers nought or the error negated, as the system call does; where one was not
-found -- no vDSO, as in a shared object, which never sees the stack -- the call is the system call, `clock_gettime` (228 on
-x86-64, 113 on the others) or `clock_getres` (229, 114).  `std.time` is the module that reaches them, its two functions
-turning the negated error into POSIX's number; the interpreter calls the C library's functions in their place.
-
 Saying which tests failed
 -------------------------
 
@@ -5759,6 +5748,33 @@ impure).  `tests/language/error-name` walks `⎕fields(⌜std.Error⌝)` and ask
 defines into the program's module, and the passes before it used to work on all of them -- `largeanswers`, `coroutines` and
 `leanvalues` over the whole of `std` for a program that called one function of it.  After `dropignored` so that an ignored answer in
 a function nothing calls is still reported.
+
+**A constructor that only fills in what nothing reads is no root of `dropunreached`.**  `_only_writes` (C++ `only_writes`)
+walks a constructor and everything it calls and answers the variables it writes, or nothing where any instruction does more than
+`_harmless` allows: an instruction with no effects, a terminator other than `unreachable`, a call naming a function that has a
+body here and is not `@[opaque]` (whose body is then asked in its turn), and a plain store whose address `_place_of` follows
+through bitcasts of pointers, pointer offsets and `address` to a variable -- recorded -- or to a frame slot.  A call through a
+value, of a declaration, a system call, a check, an ordered access, or a store through anything else keeps it.  Reachability then
+starts from the roots without such constructors and without the reader of the auxiliary vector, and a left-out constructor is
+added, with all it reaches, as soon as what is reached names one of the variables it writes; that is repeated until none is added.
+The reader is added last, where what is reached names its table.  A constructor left out is taken off `module.ctors`, reported as a
+dropped function with a reason of its own, and its variables go with the rest nothing names; `module.auxv` is cleared where the
+reader went, so the entry point calls nothing and lays out no table.  It is what keeps `std.time`'s constructor, which every
+program that imports `std` has, out of every image but one that reads a clock: `exit0` is 12944 bytes on x86-64 with it left out,
+15544 with it in.
+
+**`std.time` is written in the language.**  Its constructor reads `⎕auxv(33)`, and from that image the first `PT_LOAD` (where it
+was linked against where it is) and `PT_DYNAMIC`, from the dynamic section `DT_STRTAB`, `DT_SYMTAB` and `DT_HASH`, whose second
+word counts the symbols, and among the defined functions `__vdso_clock_gettime` and `__vdso_clock_getres`, or
+`__kernel_clock_gettime` and `__kernel_clock_getres` -- AArch64's names, taken on every architecture since no vDSO has both.  No
+GNU hash table is read: every Linux vDSO is linked with a SysV one (`--hash-style=sysv` on arm64, `both` on x86 and RISC-V).
+Every address is worked out under `⎕wrap` and nothing is indexed, so the walk carries no check and brings none of what stopping a
+program takes; at `-O1` it is 1.1 kB on x86-64, about what the C it replaced was.  The two functions it finds go to `@[relro]`
+variables of type `@[cdecl, impure] fn(i32, &mut Timespec) → i32`, which `clock_gettime` and `clock_getres` call, falling back to
+`⎕syscall(⎕sc@clock_gettime, …)` and `⎕sc@clock_getres` -- 228 and 229 on x86-64, 113 and 114 on the others, added to both
+compilers' tables -- where the variable is nought.  The clock crosses as its `i32`, read where it is held since an enumeration has
+no conversion to a number.  The runtime has no clocks any more, and the interpreter none either: its table of the auxiliary vector
+is its own process's, and it calls the vDSO's functions it finds through libffi as any foreign `@[cdecl]` value.
 
 **A module is lowered as far as it is named.**  A module read by something else (`run(…, whole_program=False)`) checks every
 definition's signature, as before, and lowers only its roots -- the constructors, destructors and tests, what the image offers

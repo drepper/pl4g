@@ -25,7 +25,12 @@ top level are made before them, and `⎕environ` is read before them.  What is
 still being written when the program ends is waited for after them.  A `mut`
 variable at the top level marked `@[relro]` is written in a constructor's own
 body and nowhere else (4373); the entry point makes it read-only once they
-have run, so a write through its address after that faults.
+have run, so a write through its address after that faults.  **A constructor
+that only fills in variables nothing reads is left out**: one that, with all
+it calls, only works out values, reads, and writes its locals and variables at
+the top level -- no `⎕syscall`, no call of foreign code, through a value or of
+something `@[opaque]`, no check that could stop -- is not run, and is not in
+the image, where nothing the program keeps names what it writes.
 
 **`@[test]`** marks a test: a function taking nothing and answering whether it
 passed, a `bool` (4407).  `@[test(always)]` runs every time the program starts,

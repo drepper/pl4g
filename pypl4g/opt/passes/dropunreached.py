@@ -29,6 +29,21 @@ unreachable -- which is why the two are answered here together and in that
 order rather than by two passes that would have to be run until they agreed.
 A variable the image offers to the outside is a root of its own, for the reason
 such a function is: something this compilation cannot see may name it.
+
+**A constructor that only fills in variables nothing reads is no root.**  One
+whose body, and everything it calls, does nothing but work out values, read,
+and write its own frame and variables it names -- no request to the kernel, no
+call of code whose body is not here or through a value, no check that could
+stop the program -- changes nothing anybody can see except those variables.
+Where nothing else the program keeps names any of them, running it or not is
+the same program, so it goes with them: `std.time`'s, which finds the vDSO's
+clocks, is in every program that imports `std` and in the image only of one
+that reads a clock.  Kept constructors can name what another writes, so the
+kept ones are found until no more are.  Leaving one out also leaves out a read
+of memory that would have faulted and a loop that would not have ended, which
+is what C and C++ assume of a loop with no effect too.  And where the reader of
+the auxiliary vector is left the only function naming its table, both go,
+along with the entry point's call of it.
 """
 
 from __future__ import annotations
@@ -39,9 +54,13 @@ from ...ir.reports import ReportKind
 from ...ir.function import Function, SpecialKind, Linkage
 from typing import Final
 
+from ...ir.inst import (AddressInst, BinaryInst, CallInst, CastInst, CastKind,
+                        FrameInst, Instruction, StoreInst, Terminator,
+                        UnreachableInst)
 from ...ir.module import GlobalVar, Module
+from ...ir.types import PtrType
 from ...ir.value import (AddressConst, ArrayConst, PartsConst, RecordConst,
-                         ResultConst, SumConst)
+                         ResultConst, SumConst, Value)
 from ...source.location import Span
 
 
@@ -76,12 +95,29 @@ class DropUnreached:
         # Nothing is changed in what is left, so there is no function to check
         # again -- only the module, which is always checked.
         self.touched: list[Function] = []
-        reachable = self._reachable(module)
+        reachable, unread, table_read = self._reachable(module)
         functions = {name: func for name, func in module.functions.items()
                      if id(func) in reachable}
         changed = len(functions) != len(module.functions)
+        if unread:
+            module.ctors = [one for one in module.ctors if id(one) not in unread]
+        if module.auxv is not None and not table_read:
+            # Nothing reads the table, so nothing fills it: not the reader, nor
+            # the interpreter, which fills it itself.
+            module.auxv = None
         for key, func in module.functions.items():
-            if key not in functions and not func.is_declaration:
+            # One the compiler made, the reader of the vector, is nothing
+            # anybody wrote, so nobody asks where it went.
+            if key in functions or func.is_declaration \
+                    or func.name.startswith(COMPILER_MADE):
+                continue
+            if id(func) in unread:
+                module.reports.record(
+                    ReportKind.DROP_FUNCTION, func.name,
+                    "a constructor that only writes variables nothing the "
+                    "program keeps reads, so running it changes nothing",
+                    _where(func.name_span, func.span))
+            else:
                 # The name the source wrote, not what the module files it
                 # under: the key tells two files' definitions apart and is
                 # nothing a reader of the log should have to know about.
@@ -128,11 +164,6 @@ class DropUnreached:
             found = module.functions.get(ENVIRON_MAKE)
             if found is not None:
                 roots.append(found)
-        if module.auxv is not None:
-            # And the reader of the vector, which the entry point calls too.
-            found = module.functions.get(AUXV_MAKE)
-            if found is not None:
-                roots.append(found)
         roots.extend(module.ctors)
         roots.extend(module.dtors)
         # A test the binary runs is a root and one it does not is not: a suite
@@ -149,17 +180,63 @@ class DropUnreached:
                      if func.linkage is Linkage.VISIBLE and not func.is_declaration)
         return roots
 
-    def _reachable(self, module: Module) -> set[int]:
-        """The identities of the functions a root reaches, directly or not."""
+    def _reachable(self, module: Module) -> tuple[set[int], set[int], bool]:
+        """The identities of the functions a root reaches, directly or not, and
+        of the constructors left out for writing only what nothing reads, and
+        whether what is reached reads the table of the auxiliary vector."""
+        writes = {id(one): found for one in module.ctors
+                  if (found := self._only_writes(one)) is not None}
+        left = [one for one in self._roots(module) if id(one) not in writes]
         seen: set[int] = set()
-        queue = list(self._roots(module))
+        unread = {id(one) for one in module.ctors if id(one) in writes}
+        while True:
+            self._walk(left, seen)
+            named = self._variables_named_by(
+                module, [func for func in module.functions.values()
+                         if id(func) in seen])
+            wanted = [one for one in module.ctors if id(one) in unread
+                      and any(id(var) in named for var in writes[id(one)])]
+            if not wanted:
+                break
+            unread.difference_update(id(one) for one in wanted)
+            left = wanted
+        table_read = module.auxv is not None and id(module.auxv) in named
+        if table_read:
+            # And the reader of the vector, which the entry point calls, where
+            # what is kept reads the table it fills.
+            found = module.functions.get(AUXV_MAKE)
+            if found is not None:
+                self._walk([found], seen)
+        return seen, unread, table_read
+
+    def _walk(self, queue: list[Function], seen: set[int]) -> None:
+        """Add to *seen* every function *queue* reaches."""
         while queue:
             func = queue.pop()
             if id(func) in seen:
                 continue
             seen.add(id(func))
             queue.extend(self._called_by(func))
-        return seen
+
+    def _only_writes(self, ctor: Function) -> list[GlobalVar] | None:
+        """The variables *ctor* writes, where writing them, its own frame and
+        nothing else is all it and what it calls do; nothing otherwise."""
+        written: list[GlobalVar] = []
+        seen: set[int] = set()
+        queue = [ctor]
+        while queue:
+            func = queue.pop()
+            if id(func) in seen:
+                continue
+            seen.add(id(func))
+            if func.is_declaration:
+                return None
+            for block in func.blocks:
+                for inst in block.insts:
+                    if not _harmless(inst, written):
+                        return None
+            queue.extend(self._called_by(func))
+        return written
 
     def _called_by(self, func: Function) -> list[Function]:
         """The functions *func* names."""
@@ -209,6 +286,45 @@ class DropUnreached:
                     named.add(id(target))
                     waiting.append(target)
         return named
+
+
+def _harmless(inst: Instruction, written: list[GlobalVar]) -> bool:
+    """Whether *inst* does nothing but what a constructor nothing reads may do:
+    work out a value, read, call a function whose body is asked the same, or
+    write its frame or a variable it names, which goes to *written*."""
+    if isinstance(inst, UnreachableInst):
+        return False
+    if isinstance(inst, Terminator) or not inst.has_effects:
+        return True
+    if isinstance(inst, CallInst):
+        # What the callee's body does is asked of it in its turn -- but of one
+        # that asked to be opaque, which is a call kept whatever it does.
+        return isinstance(inst.callee, Function) and not inst.callee.attrs.opaque
+    if isinstance(inst, StoreInst) and inst.ordering.value == "plain":
+        place = _place_of(inst.operands[1])
+        if isinstance(place, GlobalVar):
+            written.append(place)
+            return True
+        return isinstance(place, FrameInst)
+    return False
+
+
+def _place_of(address: Value) -> object:
+    """What *address* points into, seen through the casts and offsets that
+    keep a pointer one: a variable, a frame slot, or nothing known."""
+    while True:
+        if isinstance(address, (GlobalVar, FrameInst)):
+            return address
+        if isinstance(address, AddressInst):
+            address = address.operands[0]
+        elif isinstance(address, CastInst) and address.kind is CastKind.BITCAST \
+                and isinstance(address.operands[0].ty, PtrType):
+            address = address.operands[0]
+        elif isinstance(address, BinaryInst) and isinstance(address.ty, PtrType) \
+                and isinstance(address.operands[0].ty, PtrType):
+            address = address.operands[0]
+        else:
+            return None
 
 
 def _addresses_in(held: object) -> list[GlobalVar]:

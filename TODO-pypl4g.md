@@ -700,9 +700,8 @@ Optimizations
     so the same walk `dropunreached` makes would do, given the package keeps each function's extent.
     **Out of date (2026-10-04):** What pulls the runtime in is the entry point -- `pl4g_args` and `pl4g_io_drain` -- not a
     destructor of `std`, which is gone.
-    Since 2026-10-23 the clocks of `std.time` add to it: reading the vDSO's dynamic symbols is 1.5 to 1.9 kilobytes of every
-    image, a program reading no clock among them (`exit0`: 12272 to 14208 bytes on x86-64, 11688 to 13168 on AArch64, 13256
-    to 15144 on RISC-V); test_elf's bound went from 11 to 13 kilobytes with it.
+    The clocks of `std.time` were in the runtime for a day (2026-10-23), 1.5 to 1.9 kilobytes of every image; they are PL4G
+    of the module's own now, a constructor reading the vDSO's symbols, and the runtime is what it was before them.
 
 [ ] give the startup function's `std.Init` no register where nothing reads it.  Every startup function takes the record now, and
     on x86-64 one that never names it still copies the pointer (`mov rcx, rax`) before anything else.
@@ -945,3 +944,11 @@ Found writing the manual (2026-10-22), in both compilers unless said otherwise:
     declared to return 'u8'" (4202), which says nothing of what is wrong.
 [ ] spec/details.md says a failing test exits with 66 and that a run stops at the first test that fails; the spec and the test
     `tests-that-fail` say 88, every test being run.  Correct details.md.
+
+
+Found writing `std.time` in the language (2026-10-23):
+
+[ ] a shared object that imports `std` is not compiled: pypl4g stops on the assertion "an address of the ring, and no record
+    to hold one" in `target/globals.emit_globals`, a shared object having no record the entry point lays out, and `std.fs`'s
+    directory holding an address of it.  Every module `std` hands on can be imported by its own name meanwhile, which is how
+    `std-time-in-a-shared-object` does it.  Check the C++ compiler, which should agree.

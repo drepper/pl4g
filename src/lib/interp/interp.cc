@@ -19,7 +19,6 @@
 #include <sys/auxv.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
-#include <ctime>
 #include <unistd.h>
 
 #include "ir/layout.hh"
@@ -1801,15 +1800,6 @@ namespace pl4g::interp {
         return ::pl4g_hash_word(args[0], args[1]);
       if (name == "pl4g_hash_seed")
         return ::pl4g_hash_seed();
-      // The clocks through the C library, which finds the vDSO itself: the
-      // interpreter has no start of its own to read the auxiliary vector at.
-      // What it answers is the runtime's: nought, or the error negated.
-      if (name == "pl4g_clock_gettime" || name == "pl4g_clock_getres") {
-        auto into = static_cast<::timespec*>(ptr(1));
-        auto clock = ::clockid_t(std::int32_t(args[0]));
-        int got = name == "pl4g_clock_gettime" ? ::clock_gettime(clock, into) : ::clock_getres(clock, into);
-        return got == 0 ? 0 : Cell(-std::int64_t(errno));
-      }
       if (name == "pl4g_io_submit")
         return Cell(::pl4g_io_submit(ptr(0), std::int32_t(args[1]), std::int32_t(args[2]), args[3], args[4], args[5]));
       if (name == "pl4g_io_read_kept")
