@@ -153,7 +153,7 @@ def _emit_stub(asm: Assembler, func: Function, abi: HostABI, cconv: CallConvDesc
     text = describe("".join(("the host defines no '", symbol, "'")), name, func.span,
                     sources)
     message = messages.symbol(text)
-    arguments = (*cconv.int_arg_regs, *cconv.float_arg_regs)
+    arguments = _arguments(cconv)
     asm.begin_function(symbol_name(func), exported=False)
     find = asm.reserve_label("".join((HOST_PREFIX, symbol, ".find")))
     missing = asm.reserve_label("".join((HOST_PREFIX, symbol, ".missing")))
@@ -185,6 +185,14 @@ def _emit_stub(asm: Assembler, func: Function, abi: HostABI, cconv: CallConvDesc
     asm.end_function()
 
 
+def _arguments(cconv: CallConvDesc) -> tuple[Reg, ...]:
+    """Every register a call of the system's convention may hand something
+    over in: the argument registers, and the one where the room for an answer
+    is handed over, where the convention keeps one apart from them."""
+    found: tuple[Reg, ...] = (*cconv.int_arg_regs, *cconv.float_arg_regs)
+    return found if cconv.answer_reg is None else (*found, cconv.answer_reg)
+
+
 def _emit_find(asm: Assembler, abi: HostABI, cconv: CallConvDesc) -> None:
     """Emit the finder: `dlsym(RTLD_DEFAULT, name)`, kept in the slot.
 
@@ -192,7 +200,7 @@ def _emit_find(asm: Assembler, abi: HostABI, cconv: CallConvDesc) -> None:
     room of sixteen bytes, which holds the whole of a floating-point register
     on every architecture and keeps the stack as aligned as it came.
     """
-    kept: Sequence[Reg] = (*cconv.int_arg_regs, *cconv.float_arg_regs, abi.slot)
+    kept: Sequence[Reg] = (*_arguments(cconv), abi.slot)
     room = 16 * len(kept)
     first, second = cconv.int_arg_regs[:2]
     asm.begin_function(FIND_SYMBOL, exported=False)

@@ -56,6 +56,13 @@ class CallConvDesc:
     #: convention has it.  The other two systems and the language's own send it
     #: straight to the stack.
     floats_in_integers: bool = False
+    #: Where a function answering through room its caller made is handed where
+    #: that room is, where the convention keeps a register of its own for it
+    #: rather than taking the first argument register: AArch64's `x8`, which
+    #: carries no argument.  Nothing where the first argument register is it,
+    #: as it is on x86-64 and RISC-V, and for the language's own convention,
+    #: which hands its place over last, as an argument like any other.
+    answer_reg: PhysReg | None = None
 
     def orders(self, integers: str, floats: str) -> dict[str, tuple[RegUnit, ...]]:
         """The allocation orders by the name of the class each belongs to.
@@ -132,7 +139,8 @@ Place = PhysReg | OnStack
 
 
 def argument_places(cconv: CallConvDesc, types: Sequence[Type],
-                    chained: bool = False) -> list[list[Place]]:
+                    chained: bool = False,
+                    answer_first: bool = False) -> list[list[Place]]:
     """Where each argument is passed, in order, one place per part.
 
     A register is taken from the list its *kind* comes out of, so a
@@ -155,8 +163,14 @@ def argument_places(cconv: CallConvDesc, types: Sequence[Type],
     *chained* says the first is passed in the convention's chain register
     rather than as an argument, the rest taking the places they would have had
     without it: a function called through a value finds its environment there,
-    and one that has none leaves it unread.
+    and one that has none leaves it unread.  *answer_first* says the first is
+    where the answer goes, which is the convention's `answer_reg` where it has
+    one and the first argument where it has not.
     """
+    if answer_first and cconv.answer_reg is not None and types:
+        return [[cconv.answer_reg],
+                *_places(cconv, cconv.int_arg_regs, cconv.float_arg_regs, types[1:],
+                         stack=True)]
     if not chained or not types:
         return _places(cconv, cconv.int_arg_regs, cconv.float_arg_regs, types,
                        stack=True)
@@ -248,5 +262,6 @@ def calls_placed(func: Function, conventions: Callable[[str], CallConvDesc]
                                  else callee.cconv)
             chained = through or (named and callee.attrs.chained)
             found[id(inst)] = (theirs, argument_places(
-                theirs, [a.ty for a in inst.arguments], chained=chained))
+                theirs, [a.ty for a in inst.arguments], chained=chained,
+                answer_first=named and not through and callee.attrs.answer_first))
     return found

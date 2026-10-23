@@ -72,15 +72,19 @@ CC_AAPCS64: Final[CallConvDesc] = CallConvDesc(
     int_arg_regs=_ARG_REGS,
     int_ret_regs=(reg("x0"), reg("x1")),
     float_arg_regs=_FLOAT_ARGS,
-    # What the system answers a pair of `double`s in, the first two of the
-    # four a homogeneous aggregate may take.
-    float_ret_regs=(reg("d0"), reg("d1")),
+    # What the system answers a homogeneous floating-point aggregate in: up to
+    # four of one kind, a member to a register.  Nothing else is answered in
+    # more than two.
+    float_ret_regs=(reg("d0"), reg("d1"), reg("d2"), reg("d3")),
     float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED | _FLOATS_KEPT,
     caller_saved=_CALLER_SAVED | _FLOATS,
     stack_align=16,
     allocation_order=_ALLOCATION_ORDER,
     red_zone=0,
+    # Where a function answering a record through its caller's room is handed
+    # that room: a register of its own, so that the arguments keep theirs.
+    answer_reg=reg("x8"),
 )
 
 CONVENTIONS: Final[dict[str, CallConvDesc]] = {

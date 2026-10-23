@@ -798,7 +798,8 @@ compiler to work out:
 | --- | --- |
 | `drop-function`, `drop-variable` | what the reachability pass left out |
 | `drop-local`, `drop-call` | what the dead-code sweep left out |
-| `answer-in-storage` | a function answering with more than the registers hold |
+| `answer-in-storage` | a function answering with more than the registers hold, or a record laid out for C through its caller's room |
+| `answer-as-c` | a function of the system's convention answering a record laid out for C in registers, and which |
 | `name-lambda` | the name a lambda's code was given |
 | `capture` | a name a capture list saying "all of them" brought in, and how |
 | `place-local` | a variable put in storage of its own rather than a register |
@@ -2511,6 +2512,56 @@ through storage would only move where it goes wrong.  Those are refused as they 
 answer in as values it answers: three for `pl4g`, two for the systems' (`xmm0`/`xmm1`, `d0`/`d1`, `fa0`/`fa1`, where C answers a
 pair of `double`s).  With one, as there was, an answer the style kept in registers could still find none of its kind -- a
 `〈f64, f64〉`, a record of two -- and was refused (8501).
+
+### A record laid out for C, answered whole
+
+**In the language's own convention it is a large answer whatever its size.**  `through_storage` answers yes for any function of
+that convention whose answer is or holds an `@[abi]` record (`holds_abi`: the record itself, or a result, a tuple or a record
+holding one by value), and for one of the system's convention whose answer holds one without being one -- a `Timespec ? i32`.
+Nothing else changes: the place goes last, the `ret`s become stores, every call makes a frame and reads it back.  **A call through
+a value is rewritten the same way** where its answer holds one: whatever the value points at is a function of the language's own
+convention -- one of another is reached through a shim of this one -- so it answers through the room, and the call hands one over
+after its arguments.  A call through a value answering anything else that does not fit is still refused (8501); this is the one
+shape that every callee is known to answer in storage.
+
+**In the system's convention it is answered as C answers it**, by a second half of the pass (`_as_c`) that runs after the first.
+`ir/cabi.py` holds the classification and nothing else: `follows_system` says which names a target's table holds its system
+convention under (`cdecl` and the architecture's own), and `answered_by_c` says how C answers a record on the module's triple --
+a tuple of `Piece`s, each the bytes of the record one register holds and the type it holds them as, or nothing for room the
+caller makes.  The members are flattened as C flattens them, an array's elements counted one by one (`scalars_of`):
+
+- **x86-64**: a record of more than sixteen bytes in memory; otherwise eightbyte by eightbyte, one holding only floating-point
+  numbers an `f64` -- or the `f32` it holds alone, two `f32`s packed as one `f64` -- and any other a `u64`, or the member itself
+  where it is one member that fills it from its start;
+- **AArch64**: one to four floating-point members of one width, a member to a register as itself; otherwise by sixteen bytes and
+  eightbytes as x86-64, every word an ordinary register;
+- **RISC-V**: one floating-point member, two, or one and one whole number, each as itself; otherwise as AArch64's.
+
+**A function answering in registers** answers the pieces: its answer becomes the one piece's type or a tuple of them, which the
+convention's registers take a part each by kind -- exactly SysV's assignment of INTEGER and SSE eightbytes to `rax`, `rdx` and
+`xmm0`, `xmm1` in order, and the other two's -- and each `ret` puts its pieces together.  **A piece is put together with shifts**:
+each member's bits (`fbits` for a floating-point one, a `bitcast` for an address) widened to `u64`, shifted to its offset in the
+word and `or`ed in, the `f64` of two `f32`s made with `fbits` at the end; a call takes the pieces apart again with `lshr`, `trunc`
+and the same casts the other way.  A word that is one member is that member and no instruction at all, which is the common
+case -- `Timespec` is two `i64`s in `rax` and `rdx` -- and what a C compiler emits for the rest is the same shifts.  Where the record
+is bytes in a place (it holds an array) or holds something no register is read as a number, the pieces go through a frame of
+whole words instead (`_by_memory`): nothing C has needs that, and it is the shape that is certainly right for the rest.
+
+**A function answering through room** gets the place *first* (`_widen_first`), as the systems put it, and the attribute
+`answer_first` beside `answer_in_storage`, printed `answer-first`.  On x86-64 and RISC-V the first parameter is the first argument
+register, which is what the systems want, and nothing below the pass has to know; **on AArch64 it is `x8`**, which is no argument
+register, and `CallConvDesc.answer_reg` says so: `argument_places` asked with `answer_first` puts the first in that register and
+the rest where they would have been without it, as `chained` does with the chain register.  **On x86-64 the function answers with
+the place**, its answer the pointer, because the psABI says `rax` holds it on return and a C caller may count on that; the other two
+leave it unsaid.  The sweep finds the place first where the attribute says so.  The stub of a host function and the finder keep
+`x8` with the argument registers, since the finder's own call to `dlsym` may destroy it.  AArch64's system convention answers in
+`d0` to `d3`, which only a homogeneous aggregate of three or four members uses.
+
+**Not in a program the interpreter runs.**  Nothing there reads a register: a function it runs answers whatever it answers as one
+value of several cells, and a function the host defines is called through libffi, which is handed the record's members as a
+`struct` type and applies the system's rules itself.  So `_as_c` does nothing for `Output.INTERPRETED`, and `through_storage`
+leaves such a host function's answer alone.  The interpreter builds the `ffi_type` of the record from its leaves at the layout C
+gives them, has libffi write the answer into a buffer, and reads each leaf out of it at its offset.
 
 Calling conventions
 -------------------

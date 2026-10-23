@@ -127,6 +127,13 @@ class FuncAttrs:
     #: no such parameter and never reads the register, which is what lets a
     #: value point at it directly.
     chained: bool = False
+    #: Whether the place the answer is written into is the *first* parameter
+    #: rather than the last, as the system's convention has it for a record
+    #: laid out for C that it answers through the caller's room: in the first
+    #: argument register, or in the register the convention keeps for it
+    #: (`CallConvDesc.answer_reg`, AArch64's `x8`), which a caller has to agree
+    #: with.  Only ever beside `answer_in_storage`.
+    answer_first: bool = False
     #: Whether an array handed where one element is wanted is walked, the
     #: function being called for each and the answers making an array of the
     #: same shape.  A property of the function, since what it means to hand it

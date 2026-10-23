@@ -7265,15 +7265,16 @@ class Checker:
             self._check_host(node, func_attrs, params, ret)
             self._check_offered(node, func_attrs, linkage)
             # Wherever it stands and whoever wrote it: a record laid out for
-            # something else to read travels as a reference or not at all, so
-            # that one type is not passed two ways.
+            # something else to read is handed to a function as a reference or
+            # not at all, so that one type is not passed two ways.  It may be
+            # answered whole: an answer goes one way only, into room the caller
+            # made or registers the system's convention names, and which of the
+            # two is the convention's to say (`largeanswers`).
             for one, param in zip(params, node.params):
                 self._not_by_value(one, param.type.span)
                 self._not_a_piece(one, param.type.span, node.name)
             self._not_a_piece(ret, node.ret_type.span if node.ret_type is not None
                               else node.name_span, node.name)
-            if node.ret_type is not None:
-                self._not_by_value(ret, node.ret_type.span)
             self._module.add_function(func, key=self._key(whole))
             self._hand_over_text(func)
             if node.held is None:
@@ -7521,8 +7522,11 @@ class Checker:
                                    StrType)):
                 self._diags.emit(D.LANG_HOST_PARAMETER_TYPE, param.type.span,
                                  type=ty.written(), param=param.name, name=node.name)
+        # A record laid out for C comes back as C answers one, which is the
+        # system's convention and so the host's.
         if ret is not ERROR and ret is not VOID \
-                and not isinstance(ret, (IntType, FloatType, BoolType, CharType)):
+                and not isinstance(ret, (IntType, FloatType, BoolType, CharType)) \
+                and not (isinstance(ret, ProductType) and ret.abi):
             self._diags.emit(D.LANG_HOST_RESULT_TYPE,
                              node.ret_type.span if node.ret_type is not None
                              else node.name_span, name=node.name, type=ret.written())
@@ -7588,11 +7592,13 @@ class Checker:
         builder.ret(None if func.ty.ret is VOID else answer)
 
     def _not_by_value(self, ty: Type, where: Span) -> None:
-        """Report a record laid out for something else crossing a call whole.
+        """Report a record laid out for something else handed to a call whole.
 
         Such a record is passed by rules this compiler does not follow: what
         crosses is a reference, which every convention agrees about and which
-        this one therefore does not have to classify.
+        this one therefore does not have to classify.  An answer is not asked
+        about here: one of these is answered the way the system's convention
+        answers it, which the compiler does follow.
         """
         if isinstance(ty, ProductType) and ty.abi:
             self._diags.emit(D.LANG_ABI_TYPE_BY_VALUE, where, type=ty.written())

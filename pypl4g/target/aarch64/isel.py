@@ -1625,7 +1625,8 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
     # no call to make it necessary.
     entry = func.blocks[0] if func.blocks else None
     arriving = (argument_places(cconv, [p.ty for p in entry.params],
-                                chained=func.attrs.chained)
+                                chained=func.attrs.chained,
+                                answer_first=func.attrs.answer_first)
                 if entry is not None else [])
     # What each call passes where, asked once here rather than at the call:
     # the room the arguments that go on the stack are written into is at the

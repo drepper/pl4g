@@ -66,6 +66,9 @@ class ReportKind(StrEnum):
     DROP_LOCAL = "drop-local"
     DROP_CALL = "drop-call"
     ANSWER_IN_STORAGE = "answer-in-storage"
+    #: A record laid out for C answered in the registers C answers it in, and
+    #: which: what a reader comparing with a C compiler's code looks for.
+    ANSWER_AS_C = "answer-as-c"
     #: A condition the compiler settled, so that nothing of it reaches the
     #: binary.  A reader who wrote one wants to know it was free.
     CONDITION_HOLDS = "condition-holds"

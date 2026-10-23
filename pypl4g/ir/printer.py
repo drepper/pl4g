@@ -167,6 +167,10 @@ def render_function(func: Function, out: list[str]) -> None:
         # impure, and the difference is what lets a caller reading none of the
         # place it handed over drop the call.
         head.append(" answer-in-storage")
+    if func.attrs.answer_first:
+        # And which parameter the place is, which a caller has to agree with
+        # as it does with where the chain arrives.
+        head.append(" answer-first")
     if func.attrs.chained:
         # Where its first parameter arrives, which a caller has to agree with.
         head.append(" chained")

@@ -6642,8 +6642,28 @@ function type is taken to do, asked of a call to a body that is not in this comp
 I/O would go with it.
 
 **`@[abi]` on a record says it is laid out the way one compiled by something else is**: the fields are never reordered, and
-**only a reference to one crosses a call** (4596).  Something compiled by something else passes a record by rules of its own --
-rules this compiler does not follow and does not have to, a reference being passed the same way by every convention there is.
+**only a reference to one is handed to a call** (4596).  Something compiled by something else passes a record by rules of its own
+-- rules this compiler does not follow and does not have to, a reference being passed the same way by every convention there is.
+
+**Such a record may be answered whole**, and how is the convention's to say.  An answer goes one way, into registers or into room
+the caller made, and which of the two is a rule about the record's size and members that every system states for C:
+
+- **A function of the system's convention answers it as C answers the `struct` it is laid out as** -- `@[cdecl]`, `@[abi]`, a
+  host function, an external one, whichever side is C.  A record of up to sixteen bytes is answered in registers, its members
+  put into them as the architecture says: on x86-64 by eightbytes, one holding only floating-point numbers in the next of `xmm0`
+  and `xmm1` and any other in the next of `rax` and `rdx`; on AArch64 a homogeneous floating-point aggregate -- one to four
+  members of one floating-point type, an array's elements counted as members -- a member to each of `d0` to `d3` (or `s0` to
+  `s3`), whatever its size, and anything else as its bytes in `x0` and `x1`; on RISC-V one or two floating-point members, or one
+  and one whole number, each in `fa0`, `fa1` or `a0` by its kind, and anything else as its bytes in `a0` and `a1`.  **Anything
+  larger is answered through room the caller makes**, whose address is handed over before every argument: in `rdi`, `x8` --
+  which carries no argument -- or `a0`, and on x86-64 answered back in `rax`, as C's callers there may count on.
+- **A function of the language's own convention answers it through the caller's room, always**, whatever its size: the room is
+  where the bytes are wanted -- something will hand them to C -- and this is how the convention already answers what does not fit
+  in registers.  A call through a value reaches a function of that convention, so it does the same.
+- **A result, a tuple or a record holding one is answered as the language's own convention answers it**, in either convention,
+  the record part through the caller's room: none of them is anything C has, so there is no rule of C's to follow, and the
+  room is where the record is wanted.  `clock_gettime(clock) → Timespec ? i32` is the shape this is for.
+
 `@[abi]` on a *function* is the same request about the same thing, and says which convention by name; written with no name it says
 the system's, which is what `@[cdecl]` says.  **The name has to be one the target knows** (3210): `pl4g` and `cdecl` are names
 every target answers to -- the one being the language's own and the other "whatever this system calls C" -- and anything else is
@@ -6653,8 +6673,12 @@ convention under a name nothing would mangle.  **A name on a record says nothing
 laid out is one thing and the same whoever compiled the other side, whereas a convention is about how a function is *called*.
 
 Compare: **C**, whose `extern` declaration this is, with a linker behind it rather than a compiler that carries the code;
-**Rust**, whose `extern "C"` and `#[repr(C)]` are this pair almost exactly; **Zig**, whose `extern fn` and `extern struct`
-likewise; **Go**, whose cgo compiles the C as part of the build, which is the answer not taken here.
+**Rust**, whose `extern "C"` and `#[repr(C)]` are this pair almost exactly -- a `#[repr(C)]` struct returned from an `extern "C"`
+fn as C returns it, and from a Rust fn however the compiler likes, which is the split here; **Zig**, whose `extern fn` and
+`extern struct` likewise; **D**, whose `extern(C)` returns a `struct` by the C ABI and whose own convention by its own; **Odin**,
+whose `"c"` calling convention does the same; **Go**, whose cgo compiles the C as part of the build, which is the answer not
+taken here.  None of them refuses a C struct by value as a parameter, as this does: they classify what is handed over as they
+classify what is answered, a second set of the same rules that nothing here needs while a reference crosses as well.
 
 ##### Functions the host defines
 
@@ -6679,8 +6703,9 @@ executable has none**, so a host function in one is refused (5300): the image a 
 handed over as the address of the place it names -- or a `str`; a record marked `@[abi]` crosses by reference only (4596), and
 anything else is refused (5301).  **A `str` is handed over as a C string**: a copy of its bytes followed by a nul, made in the
 heap for the call and given back after it -- what C means by text, which a `str` is not, holding its length beside its bytes and
-no nul.  The answer is nothing or a number (5302).  Like an external function, a host function is impure by being one, since
-nothing here can see what it does.
+no nul.  The answer is nothing, a number, or an `@[abi]` record answered as C answers the `struct` (5302): the interpreter has
+libffi call it with the record's members as the `struct`'s, and a shared object calls it as any function of the system's
+convention.  Like an external function, a host function is impure by being one, since nothing here can see what it does.
 
 Compare: **LuaJIT**'s `ffi.cdef`, which declares C functions and finds them with `dlsym` when first called, and **Python**'s
 ctypes, whose `c_char_p` makes the same nul-terminated copy of a string; **Julia**'s `@ccall`, looked up the first time it runs;

@@ -158,6 +158,7 @@ class _FunctionReader:
         impure = False
         opaque = False
         in_storage = False
+        first = False
         chained = False
         for word in words[1:]:
             if word == "impure":
@@ -168,6 +169,8 @@ class _FunctionReader:
                 chained = True
             elif word == "answer-in-storage":
                 in_storage = True
+            elif word == "answer-first":
+                first = True
             elif word in (l.value for l in Linkage):
                 linkage = Linkage(word)
             elif word.startswith("cconv("):
@@ -182,7 +185,7 @@ class _FunctionReader:
                 host = word[len("host("):-1]
         attrs = FuncAttrs(special=special, priority=priority, inline=InlineHint.DEFAULT,
                           abi=abi, host=host, impure=impure, opaque=opaque,
-                          answer_in_storage=in_storage,
+                          answer_in_storage=in_storage, answer_first=first,
                           chained=chained)
         func = Function(name=name, ty=self._module.types.func_type(params, ret),
                         attrs=attrs, linkage=linkage, cconv=cconv)

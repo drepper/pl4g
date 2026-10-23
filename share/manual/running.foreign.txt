@@ -8,7 +8,10 @@ system's C convention and keeps its plain name -- `@[cdecl(variadic=true)]`
 a variadic one; on an array variable, C's layout.  **`@[abi]`** says the same
 of a function, `@[abi("sysv64")]` naming a convention the target knows
 (3210); on a record it says the fields are laid out as C would and never
-reordered, and only a reference to one crosses a call (4596).
+reordered, and only a reference to one is handed to a call (4596).  **One may
+be answered whole**: by a `@[cdecl]` function as C answers the `struct`, in
+registers up to sixteen bytes and through room the caller made beyond; by one
+of the language's own convention always through that room.
 
 **`@[visible]`** puts a definition's symbol in the finished image for something
 outside to find; `@[export]` is the other question, what files importing the
@@ -37,7 +40,8 @@ the first call -- after what the host handed the interpreter by name
 ([[running.interpreter]]) -- status 92 where it is not there -- and refused in an
 executable (5300).  What crosses is what C has (5301, 5302): whole and
 floating-point numbers, `bool`, `char`, references, an `@[abi]` record by
-reference, and `str`, handed over as a nul-terminated copy.  Both are impure
+reference -- and answered by value -- and `str`, handed over as a
+nul-terminated copy.  Both are impure
 by being defined elsewhere.
 
 **`⎕syscall(NUMBER, ARG…)`** asks the kernel directly, with at most six

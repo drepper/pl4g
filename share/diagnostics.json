@@ -9574,7 +9574,7 @@
       "number": 4596,
       "name": "LANG_ABI_TYPE_BY_VALUE",
       "severity": "error",
-      "message": "'{type}' is laid out for something else to read, so only a reference to one crosses a call",
+      "message": "'{type}' is laid out for something else to read, so only a reference to one is handed to a call",
       "args": [
         {
           "name": "type",
@@ -9582,7 +9582,7 @@
           "description": "the type"
         }
       ],
-      "cause": "A record marked with the 'abi' attribute is shared with code compiled by something else, which passes a record by rules of its own -- rules this compiler does not follow and does not have to, since a reference is passed the same way by every one of them.  Bind it to a name and hand over a reference to that name.",
+      "cause": "A record marked with the 'abi' attribute is shared with code compiled by something else, which passes a record by rules of its own -- rules this compiler does not follow and does not have to, since a reference is passed the same way by every one of them.  Bind it to a name and hand over a reference to that name.  Answering one is another matter: an answer goes one way only, and a function of the system's convention answers it as C does.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Product and sum types"
@@ -11102,7 +11102,7 @@
           "description": "the type"
         }
       ],
-      "cause": "What a function the host defines answers with is nothing or a number: an integer, a floating-point number, a truth value or a character.  Anything else would be memory the host made, and nothing here could say how long it lasts or who gives it back.",
+      "cause": "What a function the host defines answers with is nothing, a number -- an integer, a floating-point number, a truth value or a character -- or a record marked with the 'abi' attribute, answered as C answers the struct it is laid out as.  Anything else would be memory the host made, and nothing here could say how long it lasts or who gives it back.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition"

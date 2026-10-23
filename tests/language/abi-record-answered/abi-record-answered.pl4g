@@ -1,0 +1,256 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A record marked `@[abi]` may be answered whole**, though it is still handed
+※ to a function only by reference (4596).  An answer goes one way, and which
+※ way is the convention's to say:
+※
+※ - **A function of the system's convention answers it as C does.**  Up to
+※   sixteen bytes in registers, cut the way the architecture cuts a `struct`
+※   -- x86-64 into eightbytes of `rax`/`rdx` and `xmm0`/`xmm1` by what each
+※   holds, AArch64 a homogeneous floating-point aggregate of up to four members
+※   a member to a register and anything else into `x0`/`x1`, RISC-V one or two
+※   floating-point members (and an integer beside one) in `fa0`/`fa1`/`a0` and
+※   anything else into `a0`/`a1` -- and anything larger through room the
+※   caller makes, its address handed over before every argument.
+※ - **A function of the language's own convention answers it always through
+※   the caller's room**, whatever its size: the room is where the bytes are
+※   wanted, and the rule is the one that already answers a large value.  So
+※   does a call through a value, which reaches a function of that convention,
+※   and so does a result holding such a record.
+※
+※ Here each size the rules tell apart -- eight, sixteen, twenty-four and forty
+※ bytes -- of whole numbers, of floating-point numbers and of both, is answered
+※ by a function of each convention, and every member is checked where it
+※ arrives.  A member in the wrong register, or the wrong half of one, arrives
+※ as some other number.
+※
+※ Compare: **C**, whose compilers do exactly this for a `struct` returned by
+※ value; **Rust**, whose `#[repr(C)]` struct returned from an `extern "C"` fn
+※ follows the same ABI and from a Rust fn whatever the compiler likes; **Zig**,
+※ whose `extern struct` likewise; **Go**, whose cgo goes through C.
+
+@[abi]
+type I8 = a : i32 ; b : i32
+
+@[abi]
+type F8 = a : f32 ; b : f32
+
+@[abi]
+type M8 = a : f32 ; b : i32
+
+@[abi]
+type I16 = a : i64 ; b : i64
+
+@[abi]
+type F16 = a : f64 ; b : f64
+
+@[abi]
+type M16 = a : i32 ; b : f32 ; c : f64
+
+@[abi]
+type Small = a : u8 ; b : bool ; c : char ; d : i16
+
+@[abi]
+type I24 = a : i64 ; b : i64 ; c : i64
+
+@[abi]
+type F24 = a : f64 ; b : f64 ; c : f64
+
+@[abi]
+type M24 = a : i64 ; b : f64 ; c : i32
+
+@[abi]
+type I40 = a : i64 ; b : i64 ; c : i64 ; d : i64 ; e : i64
+
+@[abi]
+type F40 = a : f64 ; b : f64 ; c : f64 ; d : f64 ; e : f64
+
+@[abi]
+type M40 = a : f32 ; b : i64 ; c : f64 ; d : i32 ; e : f64
+
+※ Records holding an array are bytes in a place rather than values, and C
+※ counts the array's elements as members of their own: two `float`s and a
+※ `double` are no aggregate of one kind on AArch64, three `double`s are.
+
+@[abi]
+type Bytes = v : u8⟦3⟧ ; tag : u16
+
+@[abi]
+type FArr = v : f32⟦2⟧ ; w : f64
+
+@[abi]
+type DArr = v : f64⟦3⟧
+
+※ The system's convention.
+
+@[cdecl]
+fn c_i8(n: i32) → I8:
+    I8(.a ← n, .b ← n + 1i32)
+
+@[cdecl]
+fn c_f8(x: f32) → F8:
+    F8(.a ← x, .b ← x + 1f32)
+
+@[cdecl]
+fn c_m8(x: f32, n: i32) → M8:
+    M8(.a ← x, .b ← n)
+
+@[cdecl]
+fn c_i16(n: i64) → I16:
+    I16(.a ← n, .b ← n + 1i64)
+
+@[cdecl]
+fn c_f16(x: f64) → F16:
+    F16(.a ← x, .b ← x + 1f64)
+
+@[cdecl]
+fn c_m16(n: i32, x: f64) → M16:
+    M16(.a ← n, .b ← 2.5f32, .c ← x)
+
+@[cdecl]
+fn c_small(n: u8) → Small:
+    Small(.a ← n, .b ← true, .c ← 'q', .d ← 300i16)
+
+@[cdecl]
+fn c_i24(n: i64) → I24:
+    I24(.a ← n, .b ← n + 1i64, .c ← n + 2i64)
+
+@[cdecl]
+fn c_f24(x: f64) → F24:
+    F24(.a ← x, .b ← x + 1f64, .c ← x + 2f64)
+
+@[cdecl]
+fn c_m24(n: i64, x: f64) → M24:
+    M24(.a ← n, .b ← x, .c ← 0i32 - 7i32)
+
+@[cdecl]
+fn c_i40(n: i64) → I40:
+    I40(.a ← n, .b ← n + 1i64, .c ← n + 2i64, .d ← n + 3i64, .e ← n + 4i64)
+
+@[cdecl]
+fn c_f40(x: f64) → F40:
+    F40(.a ← x, .b ← x + 1f64, .c ← x + 2f64, .d ← x + 3f64, .e ← x + 4f64)
+
+@[cdecl]
+fn c_m40(n: i64, x: f64) → M40:
+    M40(.a ← 0.5f32, .b ← n, .c ← x, .d ← 9i32, .e ← x + 1f64)
+
+@[cdecl]
+fn c_bytes(n: u8) → Bytes:
+    Bytes(.v ← ⟦n, n + 1u8, n + 2u8⟧, .tag ← 513u16)
+
+@[cdecl]
+fn c_farr(x: f32) → FArr:
+    FArr(.v ← ⟦x, x + 1f32⟧, .w ← 6.5f64)
+
+@[cdecl]
+fn c_darr(x: f64) → DArr:
+    DArr(.v ← ⟦x, x + 1f64, x + 2f64⟧)
+
+※ The language's own.
+
+fn p_i8(n: i32) → I8:
+    I8(.a ← n, .b ← n + 1i32)
+
+fn p_f16(x: f64) → F16:
+    F16(.a ← x, .b ← x + 1f64)
+
+fn p_m24(n: i64, x: f64) → M24:
+    M24(.a ← n, .b ← x, .c ← 0i32 - 7i32)
+
+fn p_f40(x: f64) → F40:
+    F40(.a ← x, .b ← x + 1f64, .c ← x + 2f64, .d ← x + 3f64, .e ← x + 4f64)
+
+※ A result holding one, answered through the caller's room in either.
+
+fn p_maybe(n: i64) → I16 ? i32:
+    if n > 0i64: I16(.a ← n, .b ← n + 1i64) else: ⊥ 5i32
+
+@[cdecl]
+fn c_maybe(n: i64) → I16 ? i32:
+    if n > 0i64: I16(.a ← n, .b ← n + 1i64) else: ⊥ 6i32
+
+fn first_of(r: I16 ? i32) → i64:
+    match r:
+        I16(found):
+            found.a
+        ⊥(why):
+            0i64 - ⎕widen(why, ⌜i64⌝)
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let i8: I8 = c_i8(3i32)
+    let f8: F8 = c_f8(1.5f32)
+    let m8: M8 = c_m8(0.25f32, 0i32 - 4i32)
+    let i16: I16 = c_i16(5i64)
+    let f16: F16 = c_f16(2.5f64)
+    let m16: M16 = c_m16(7i32, 4.25f64)
+    let small: Small = c_small(200u8)
+    let i24: I24 = c_i24(10i64)
+    let f24: F24 = c_f24(3.5f64)
+    let m24: M24 = c_m24(11i64, 6.5f64)
+    let i40: I40 = c_i40(20i64)
+    let f40: F40 = c_f40(7.5f64)
+    let m40: M40 = c_m40(21i64, 8.5f64)
+    let pi8: I8 = p_i8(30i32)
+    let pf16: F16 = p_f16(9.5f64)
+    let pm24: M24 = p_m24(31i64, 10.5f64)
+    let pf40: F40 = p_f40(11.5f64)
+    let bytes: Bytes = c_bytes(60u8)
+    let farr: FArr = c_farr(0.75f32)
+    let darr: DArr = c_darr(1.25f64)
+    ※ and through a value, which reaches a function of the language's own
+    let made := p_f16
+    let through: F16 = made(12.5f64)
+    if i8.a ≠ 3i32 ∨ i8.b ≠ 4i32:
+        1u6
+    elif ¬(f8.a ≅ 1.5f32) ∨ ¬(f8.b ≅ 2.5f32):
+        2u6
+    elif ¬(m8.a ≅ 0.25f32) ∨ m8.b ≠ 0i32 - 4i32:
+        3u6
+    elif i16.a ≠ 5i64 ∨ i16.b ≠ 6i64:
+        4u6
+    elif ¬(f16.a ≅ 2.5f64) ∨ ¬(f16.b ≅ 3.5f64):
+        5u6
+    elif m16.a ≠ 7i32 ∨ ¬(m16.b ≅ 2.5f32) ∨ ¬(m16.c ≅ 4.25f64):
+        6u6
+    elif small.a ≠ 200u8 ∨ ¬small.b ∨ small.c ≠ 'q' ∨ small.d ≠ 300i16:
+        7u6
+    elif i24.a ≠ 10i64 ∨ i24.b ≠ 11i64 ∨ i24.c ≠ 12i64:
+        8u6
+    elif ¬(f24.a ≅ 3.5f64) ∨ ¬(f24.b ≅ 4.5f64) ∨ ¬(f24.c ≅ 5.5f64):
+        9u6
+    elif m24.a ≠ 11i64 ∨ ¬(m24.b ≅ 6.5f64) ∨ m24.c ≠ 0i32 - 7i32:
+        10u6
+    elif i40.a ≠ 20i64 ∨ i40.c ≠ 22i64 ∨ i40.e ≠ 24i64:
+        11u6
+    elif ¬(f40.a ≅ 7.5f64) ∨ ¬(f40.e ≅ 11.5f64):
+        12u6
+    elif ¬(m40.a ≅ 0.5f32) ∨ m40.b ≠ 21i64 ∨ ¬(m40.c ≅ 8.5f64):
+        13u6
+    elif m40.d ≠ 9i32 ∨ ¬(m40.e ≅ 9.5f64):
+        13u6
+    elif pi8.a ≠ 30i32 ∨ pi8.b ≠ 31i32:
+        14u6
+    elif ¬(pf16.a ≅ 9.5f64) ∨ ¬(pf16.b ≅ 10.5f64):
+        15u6
+    elif pm24.a ≠ 31i64 ∨ ¬(pm24.b ≅ 10.5f64) ∨ pm24.c ≠ 0i32 - 7i32:
+        16u6
+    elif ¬(pf40.a ≅ 11.5f64) ∨ ¬(pf40.d ≅ 14.5f64):
+        17u6
+    elif ¬(through.a ≅ 12.5f64) ∨ ¬(through.b ≅ 13.5f64):
+        18u6
+    elif first_of(p_maybe(40i64)) ≠ 40i64 ∨ first_of(p_maybe(0i64)) ≠ 0i64 - 5i64:
+        19u6
+    elif first_of(c_maybe(41i64)) ≠ 41i64 ∨ first_of(c_maybe(0i64)) ≠ 0i64 - 6i64:
+        20u6
+    elif bytes.v⟦0⟧ ≠ 60u8 ∨ bytes.v⟦2⟧ ≠ 62u8 ∨ bytes.tag ≠ 513u16:
+        21u6
+    elif ¬(farr.v⟦0⟧ ≅ 0.75f32) ∨ ¬(farr.v⟦1⟧ ≅ 1.75f32) ∨ ¬(farr.w ≅ 6.5f64):
+        22u6
+    elif ¬(darr.v⟦0⟧ ≅ 1.25f64) ∨ ¬(darr.v⟦2⟧ ≅ 3.25f64):
+        23u6
+    else:
+        0u6

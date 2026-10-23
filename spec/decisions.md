@@ -11788,6 +11788,64 @@ system call where it finds none.  Compare glibc, which finds the same functions 
 parses the vDSO itself as this does; Rust's standard library, which calls libc's `clock_gettime`; and Zig's, which looks the vDSO
 up as Go's does.
 
+## 2026-10-23T12:00+02:00 — language and compiler
+
+### An `@[abi]` record answered by value
+
+`std.time` is to be thin wrappers over the vDSO's functions and the system calls, `clock_gettime(clock: Clock) → Timespec ? i32`,
+and that wants a record laid out for C to be *answered*, which 4596 refused along with handing one over.  The user decided:
+**answers of an `@[abi]` record by value are allowed; parameters by value stay refused** (4596 unchanged for them), and
+
+- **a function of the system's convention** -- `@[cdecl]`, `@[abi]`, a host function, an external one -- **follows the ABI
+  exactly**: a record of up to sixteen bytes in registers as the architecture classifies it (SysV's eightbytes in `rax`/`rdx` and
+  `xmm0`/`xmm1` by class; AAPCS64's `x0`/`x1`, a homogeneous floating-point aggregate in `d0`-`d3`; LP64D's `a0`/`a1`, with the
+  hardware floating-point convention's rules for one or two floating-point members), anything larger through a hidden pointer to
+  room the caller made -- `rdi` and answered back in `rax`, `x8`, `a0` -- as C compilers do;
+- **a function of the language's own convention answers one always through the hidden pointer** to the caller's room, as its large
+  answers already do;
+- **results and other wrappers holding such a record** are answered as the language's own convention answers them, the record part
+  through the caller's room;
+- the interpreter runs its functions as it already does, and a **host** function answering one is called through libffi's
+  `struct` return types.
+
+Why the split: the system's convention exists to be called by C, so there is no choice to make in it -- what C does is what is
+right -- whereas the language's own is the compiler's, and the room is where an `@[abi]` record is wanted: it is about to be
+handed to C by reference.  One rule for every size there also leaves nothing to classify, which is the reason 4596 gave for refusing
+the record in the first place.  The parameter stays refused because nothing asks for it yet -- the C functions `std` calls take
+their structs by pointer -- and the classification of arguments is a second, larger set of rules (a record split between
+registers and the stack, AAPCS64's copy of a large one to memory) that would be written for nothing.
+
+What the brief left open, settled the way the rest of the language does it, and the reasons:
+
+- **Where the classification is done.**  In `largeanswers`, the pass that already rewrites answers, rather than in the three
+  instruction selectors: the selectors see words in registers or a place handed over first, which they already know how to do.
+  The rules are a table per architecture in `ir/cabi.py` asked of the module's triple, the representation being already the
+  target's (a system call's number is).  It is what Clang does -- C's struct returns are lowered by the front end into `sret` and
+  coerced integer types per target -- and what makes the two compilers agree by construction.
+- **How the words are made.**  With shifts and `or`s of the members' bits, as GCC and Clang do at `-O2`, and not through memory;
+  a word that is one member is that member.  A record that is bytes in a place (one holding an array) goes through a frame of
+  whole words, which is the shape that is certainly right and costs nothing a C record of numbers would see.
+- **A call through a value** answering something holding such a record is rewritten too, a place handed over last, since every
+  function such a value can point at follows the language's own convention.  Without it a function answering a `Timespec` would
+  answer it through the room while a call through its value read registers.
+- **Where AArch64's hidden pointer goes** is said by the convention (`answer_reg`, `x8`) and by an attribute of the function
+  (`answer-first` in the textual form), placed by the same `argument_places` that places a lambda's environment in the chain
+  register; and the host stubs keep `x8` while they ask `dlsym`, as they keep every argument register.
+- **No new diagnostic.**  Everything the brief allowed compiles; nothing refused before is refused differently, and 5302 now
+  admits a record laid out for C.
+- **What the interpreter does** for a host function: libffi is given the record as an `FFI_TYPE_STRUCT` of its leaves, which
+  is C's rule applied by the library that knows it on whatever machine the interpreter runs.  An interpreted function of the
+  system's convention answers its record as any other value -- there is no register for anything to read.
+
+Compare: **C**, whose compilers this is, to the register; **Clang**, which lowers struct returns in its front end per target, as
+this does in a pass; **Rust**, whose `#[repr(C)]` struct is returned as C returns it from an `extern "C"` fn and however rustc
+likes from a Rust fn, the same split; **Zig**, whose `extern struct` from a `callconv(.C)` fn likewise and whose own convention is
+the compiler's; **D**, whose `extern(C)` follows the C ABI and whose `extern(D)` returns a struct through a hidden pointer as this
+convention does; **Odin**, whose `"c"` convention and default `"odin"` one split the same way; **Go**, whose register ABI returns
+a struct in registers by its own rules and whose cgo converts to C's; **Swift**, whose `@convention(c)` follows C and whose own is
+Swift's.  None of them refuses a C struct as a parameter: each classifies arguments as it classifies answers, which is the larger
+half of the rules and the one this leaves for when something wants it.
+
 Open questions
 --------------
 

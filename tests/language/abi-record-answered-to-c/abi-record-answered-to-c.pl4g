@@ -1,0 +1,64 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none host=host.c
+※ pl4g-test: args -shared
+
+※ **A record laid out for C is answered to C, and by C, as C answers a
+※ `struct`.**  `host.c` loads this shared object and calls the functions it
+※ offers, each answering one by value, and they in turn call functions of the
+※ host's that do the same: the C compiler on the other side is what says
+※ whether each member arrived in the register it looked in.
+※
+※ Sixteen bytes and less are answered in registers -- on x86-64 an eightbyte
+※ of whole numbers in `rax` or `rdx` and one of floating-point numbers in
+※ `xmm0` or `xmm1`, the two `float`s of one in the one register -- and anything
+※ larger through room the caller made, whose address is handed over first and,
+※ on x86-64, answered back.  A function the host defines answering one is
+※ found the way every host function is, by a stub that keeps every register an
+※ argument may be in while it asks: the address of that room among them.
+
+@[abi]
+type Pair = whole : i64 ; part : f64
+
+@[abi]
+type Floats = x : f32 ; y : f32 ; z : f32
+
+@[abi]
+type Quad = a : i64 ; b : f64 ; c : i32 ; d : f64
+
+@[host("host_pair")]
+fn host_pair(n: i64) → Pair
+
+@[host("host_floats")]
+fn host_floats(x: f32) → Floats
+
+@[host("host_quad")]
+fn host_quad(n: i64, x: f64) → Quad
+
+※ What the host calls, each answering a record whole.
+
+@[visible, cdecl]
+fn make_pair(n: i64, x: f64) → Pair:
+    Pair(.whole ← n, .part ← x)
+
+@[visible, cdecl]
+fn make_floats(x: f32) → Floats:
+    Floats(.x ← x, .y ← x + 1f32, .z ← x + 2f32)
+
+@[visible, cdecl]
+fn make_quad(n: i64, x: f64) → Quad:
+    Quad(.a ← n, .b ← x, .c ← 77i32, .d ← x + 0.5f64)
+
+※ And what calls the host's, saying with a number which answer was wrong.
+
+@[visible, cdecl, impure]
+fn ask_host() → i64:
+    let p: Pair = host_pair(40i64)
+    let f: Floats = host_floats(1.5f32)
+    let q: Quad = host_quad(50i64, 2.25f64)
+    if p.whole ≠ 41i64 ∨ ¬(p.part ≅ 0.75f64):
+        1i64
+    elif ¬(f.x ≅ 1.5f32) ∨ ¬(f.y ≅ 3f32) ∨ ¬(f.z ≅ 4.5f32):
+        2i64
+    elif q.a ≠ 51i64 ∨ ¬(q.b ≅ 4.5f64) ∨ q.c ≠ 52i32 ∨ ¬(q.d ≅ 6.75f64):
+        3i64
+    else:
+        0i64

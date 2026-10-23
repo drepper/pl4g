@@ -104,7 +104,10 @@ class DeadCodeElimination:
         """
         if not isinstance(inst, CallInst) or not _writes_only_its_place(inst):
             return inst.has_effects
-        place = inst.operands[-1] if inst.operands else None
+        # Last, or first where the system's convention puts it there.
+        first = getattr(getattr(inst.callee, "attrs", None), "answer_first", False)
+        place = (inst.operands[0] if first else inst.operands[-1]) \
+            if inst.operands else None
         if not isinstance(place, FrameInst):
             # Room this function did not make, which something else may read.
             return True
