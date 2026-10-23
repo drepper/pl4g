@@ -11,8 +11,8 @@
 
 namespace pl4g::rt {
 
-  inline constexpr std::array<std::string_view, 16> names{
-    "pl4g_args", "pl4g_env", "pl4g_hash", "pl4g_hash_seed", "pl4g_hash_word", "pl4g_heap_alloc",
+  inline constexpr std::array<std::string_view, 18> names{
+    "pl4g_args", "pl4g_clock_getres", "pl4g_clock_gettime", "pl4g_env", "pl4g_hash", "pl4g_hash_seed", "pl4g_hash_word", "pl4g_heap_alloc",
     "pl4g_heap_free", "pl4g_io_close", "pl4g_io_drain", "pl4g_io_open", "pl4g_io_read_kept", "pl4g_io_ready",
     "pl4g_io_step", "pl4g_io_submit", "pl4g_io_taken", "pl4g_io_wait",
   };

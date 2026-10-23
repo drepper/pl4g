@@ -11,10 +11,11 @@ documentation comments, so it is what the module is.
   [[std.fs]]      -- files and directories, and what I/O is done with
   [[std.string]]  -- numbers read out of bytes and written onto them,
                      characters as UTF-8
+  [[std.time]]    -- the clocks: `clock_gettime` and `clock_getres`
   [[json]]        -- JSON documents read into a value and written back
 
-`std` hands on `std.io`, `std.fs` and `std.string`, so a program that imports
-`std` -- every program does -- reaches all four.  `json` is imported on its own:
+`std` hands on `std.io`, `std.fs`, `std.string` and `std.time`, so a program
+that imports `std` -- every program does -- reaches all five.  `json` is imported on its own:
 
     let std := ⎕import("std")
     let json := ⎕import("json")

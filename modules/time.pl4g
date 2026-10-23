@@ -1,0 +1,76 @@
+@[system]
+
+※※ Clocks: what time it is by each the system keeps, and how finely each tells it.
+※
+※ Imported by `std` and handed on, so a program knows it as `std.time`.  The two
+※ functions are POSIX's `clock_gettime` and `clock_getres`, and `Timespec` is
+※ C's `struct timespec`: seconds, and nanoseconds within the second.  A compiled
+※ program reads the clocks through the functions the kernel maps into every
+※ process, the vDSO, found through the auxiliary vector it was started with, and
+※ asks the kernel itself where those are not there -- a shared object, which has
+※ no start of its own to read the vector at, always asks.  The interpreter reads
+※ them through the C library.
+
+※※ A time, as C's `struct timespec` holds one.
+※※
+※※ \details `tv_sec` is whole seconds and `tv_nsec` the nanoseconds past them,
+※※ from nought to 999999999.  Which seconds they are counted from is the
+※※ clock's: the epoch of 1970 for `Clock.realtime`, an unspecified moment for
+※※ the others.
+@[export, abi]
+type Timespec = tv_sec : i64 ; tv_nsec : i64
+
+※※ The clocks Linux keeps, with the numbers its kernel gives them, which are the
+※※ same on every architecture.
+※※
+※※ \details `realtime` is the time of day, which may be set and may jump;
+※※ `monotonic` never goes back and does not count a suspended system;
+※※ `boottime` is `monotonic` that does; `monotonic_raw` is `monotonic` without
+※※ the corrections of a time protocol; `tai` is `realtime` without leap seconds;
+※※ the two `_coarse` ones are cheaper and coarser; and `process_cputime` and
+※※ `thread_cputime` count the processor time of the process and of the thread.
+@[export]
+enum Clock : i32:
+    realtime = 0 ;
+    monotonic = 1 ;
+    process_cputime = 2 ;
+    thread_cputime = 3 ;
+    monotonic_raw = 4 ;
+    realtime_coarse = 5 ;
+    monotonic_coarse = 6 ;
+    boottime = 7 ;
+    tai = 11
+
+※ What the runtime offers: the time or the resolution written where it is
+※ handed, and nought or the kernel's error negated.
+@[external("pl4g_clock_gettime"), io]
+fn gettime(clock: Clock, into: &mut Timespec) → i64
+
+@[external("pl4g_clock_getres"), io]
+fn getres(clock: Clock, into: &mut Timespec) → i64
+
+※ The error number of what the runtime answered, nought for none.
+fn error_of(got: i64) → i32:
+    if got ≥ 0i64: 0i32 else: ⎕narrow(0i64 - got, ⌜i32⌝) ?? 22i32
+
+※※ What time `clock` says it is, written into `into`: POSIX's `clock_gettime`.
+※※
+※※ \details A `Timespec` is laid out as C's is, so it crosses as a reference --
+※※ which is what C's own `clock_gettime` takes too.
+※※ \param clock which clock to read
+※※ \param into where the time is written
+※※ \return nought, or the system's error number where the clock cannot be read
+※※ -- 22 (`EINVAL`) for one this system does not keep -- `into` then unchanged
+@[export, io]
+fn clock_gettime(clock: Clock, into: &mut Timespec) → i32:
+    error_of(gettime(clock, into))
+
+※※ How finely `clock` tells the time, written into `into`: POSIX's
+※※ `clock_getres`.
+※※
+※※ \param clock which clock to ask
+※※ \param into where the smallest step the clock takes is written
+※※ \return nought, or the system's error number
+@[export, io]
+fn clock_getres(clock: Clock, into: &mut Timespec) → i32:
+    error_of(getres(clock, into))

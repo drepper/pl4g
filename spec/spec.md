@@ -723,6 +723,30 @@ White's method; **APL**'s `⍎` and `⍕`, **BQN**'s `•ParseFloat` and `•Rep
 and `ToString`, which read and write their own notations rather than JSON's.  What is unusual here is only that the whole of it is
 in the language itself, its tables included.
 
+#### `std.time`
+
+**The clocks, as POSIX has them.**  `std.time.clock_gettime(clock, into)` writes the time `clock` says into the `Timespec` that
+`into` names and answers nought, or the system's error number where the clock cannot be read -- 22 for one this system does not
+keep; `clock_getres(clock, into)` writes how finely the clock tells the time and answers the same.  A `Timespec` is C's
+`struct timespec` -- `tv_sec`, whole seconds, and `tv_nsec`, the nanoseconds past them -- and is `@[abi]`, so it crosses a call as
+a reference only, as C's own functions take it.  `Clock` names the clocks Linux keeps, by the numbers its kernel gives them:
+`realtime`, `monotonic`, `process_cputime`, `thread_cputime`, `monotonic_raw`, `realtime_coarse`, `monotonic_coarse`,
+`boottime` and `tai`.  Both functions are `@[io]`: a clock answers something else each time, so no read may be dropped, merged
+or moved, and a caller needs only the permission a device carries.
+
+    let now: mut std.time.Timespec = std.time.Timespec(.tv_sec ← 0i64, .tv_nsec ← 0i64)
+    if std.time.clock_gettime(std.time.Clock.monotonic, &mut now) = 0i32:
+        ...
+
+**A compiled program reads the clocks without entering the kernel**, through the functions the kernel maps into every process,
+the vDSO: the runtime finds where it is in the auxiliary vector the program was started with, and the two functions among its
+dynamic symbols, the first time a clock is read.  Where there is no vDSO, or no such function in it, the runtime makes the system
+call -- as a shared object always does, having no start of its own to read the vector at.  The interpreter reads the clocks
+through the C library.
+
+Compare: **C**'s `clock_gettime`, which this is; **Rust**'s `Instant` and `SystemTime` and **Go**'s `time.Now`, which wrap the
+same call in values of their own; **Python**'s `time.clock_gettime_ns`, which takes the same clock numbers.
+
 #### `json`
 
 **A JSON document is read out of bytes into a value of a recursive type, and a value is written back as UTF-8**, by a module of

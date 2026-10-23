@@ -245,11 +245,12 @@ def test_sections_and_symbols_are_present(built: Built) -> None:
     # architecture has to say in the file because its base is small and
     # everything else is an extension.
     extra = [".riscv.attributes"] if built.arch == "riscv64" else []
-    # AArch64's compiler of the runtime puts its sixteen-byte constants in a
-    # section of their own, and RISC-V's its eight-byte ones -- the words the
-    # hash mixes with.  All three keep the flags each way of opening a file asks
-    # the kernel for as a table of thirty-two bytes, laid out after the rest.
-    constants = {"aarch64": [".pl4grt.rodata.cst16"],
+    # The compiler of the runtime puts sixteen-byte constants in a section of
+    # their own on x86-64 and AArch64, and RISC-V's its eight-byte ones -- the
+    # words the hash mixes with.  All three keep the names of the vDSO's clock
+    # functions as strings, and the flags each way of opening a file asks the
+    # kernel for as a table of thirty-two bytes, laid out after the rest.
+    constants = {"x86_64": [".pl4grt.rodata.cst16"], "aarch64": [".pl4grt.rodata.cst16"],
                  "riscv64": [".pl4grt.rodata.cst8"]}.get(built.arch, [])
     # The bill of materials comes before the code because it is read-only and
     # the code is not: sections are grouped by what may be done to them, and a
@@ -257,7 +258,8 @@ def test_sections_and_symbols_are_present(built: Built) -> None:
     # the ring before the process ends -- so the ring is in the data, and the
     # runtime's code and data beside the program's own.
     assert [s.name for s in built.image.sections] == \
-        ["", *constants, ".pl4grt.rodata", ".pl4grt.rodata.cst32", ".sbom", ".sbomstr",
+        ["", *constants, ".pl4grt.rodata", ".pl4grt.rodata.str1.1", ".pl4grt.rodata.cst32", ".sbom",
+         ".sbomstr",
          ".text", ".pl4grt.text", ".data", ".pl4grt.bss", *extra,
          ".shstrtab", ".symtab", ".strtab"]
     start = built.image.symbol("_start")
@@ -378,7 +380,10 @@ def test_the_image_is_small(built: Built) -> None:
     # about nine kilobytes of it with the hash tables' keys are hashed with, and
     # the program's own is a few instructions.  The runtime goes in whole, which
     # is what TODO-pypl4g.md's entry about placing only what is called is about.
-    assert built.path.stat().st_size - said < 11 * 1024
+    # Reading the clocks through the vDSO -- finding it among the dynamic
+    # symbols the kernel mapped -- is a kilobyte and a half of it or more,
+    # which every program carries until that entry is done.
+    assert built.path.stat().st_size - said < 13 * 1024
 
 
 def test_asking_the_processor_is_what_a_level_costs(tmp_path: Path) -> None:

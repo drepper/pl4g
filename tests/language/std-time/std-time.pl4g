@@ -1,0 +1,79 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `std.time` is POSIX's `clock_gettime` and `clock_getres`: a `Clock` to read and
+※ a `Timespec` to write into, answering nought or the system's error number.  A
+※ compiled program reads the clocks through the kernel's vDSO, found through
+※ the auxiliary vector, and the kernel itself where there is none.
+※
+※ A `Timespec` is laid out as C's is, so it crosses a call only as a reference,
+※ which is how the helpers below take one.
+※
+※ Compare: **C**'s `clock_gettime` itself, which this is; **Rust**'s
+※ `std::time::Instant` and `SystemTime`, and **Go**'s `time.Now`, which wrap the
+※ same call in a value of their own; **Python**'s `time.clock_gettime`, which
+※ takes the same clock numbers.
+
+let std := ⎕import("std")
+
+※ Whether `t` is a time a clock can say: nanoseconds below a second.
+fn well_formed(t: &std.time.Timespec) → bool:
+    t⌖.tv_sec ≥ 0i64 ∧ t⌖.tv_nsec ≥ 0i64 ∧ t⌖.tv_nsec < 1000000000i64
+
+※ Whether `later` is not before `earlier`.
+fn not_before(later: &std.time.Timespec, earlier: &std.time.Timespec) → bool:
+    later⌖.tv_sec > earlier⌖.tv_sec ∨ (later⌖.tv_sec = earlier⌖.tv_sec ∧ later⌖.tv_nsec ≥ earlier⌖.tv_nsec)
+
+※ Whether `clock` can be read and asked for its resolution, and says a time.
+@[io]
+fn readable(clock: std.time.Clock) → bool:
+    let t: mut std.time.Timespec = std.time.Timespec(.tv_sec ← 0i64, .tv_nsec ← 0i64)
+    let r: mut std.time.Timespec = std.time.Timespec(.tv_sec ← 0i64, .tv_nsec ← 0i64)
+    if std.time.clock_gettime(clock, &mut t) ≠ 0i32 ∨ std.time.clock_getres(clock, &mut r) ≠ 0i32:
+        return false
+    well_formed(&t) ∧ well_formed(&r) ∧ r.tv_sec = 0i64 ∧ r.tv_nsec > 0i64
+
+※ Some work to spend processor time on.
+@[opaque]
+fn spin(n: u64) → u64:
+    let s: mut u64 = 0u64
+    foreach i := 0u64…n:
+        s ← ⎕wrap(s × 31u64 + i)
+    s
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let now: mut std.time.Timespec = std.time.Timespec(.tv_sec ← 0i64, .tv_nsec ← 0i64)
+    if std.time.clock_gettime(std.time.Clock.realtime, &mut now) ≠ 0i32:
+        return 1u6
+    ※ after the start of 2024
+    if now.tv_sec < 1704067200i64 ∨ ¬well_formed(&now):
+        return 2u6
+    let first: mut std.time.Timespec = std.time.Timespec(.tv_sec ← 0i64, .tv_nsec ← 0i64)
+    let second: mut std.time.Timespec = std.time.Timespec(.tv_sec ← 0i64, .tv_nsec ← 0i64)
+    if std.time.clock_gettime(std.time.Clock.monotonic, &mut first) ≠ 0i32:
+        return 3u6
+    if std.time.clock_gettime(std.time.Clock.monotonic, &mut second) ≠ 0i32:
+        return 4u6
+    if ¬not_before(&second, &first):
+        return 5u6
+    if (¬readable(std.time.Clock.realtime) ∨ ¬readable(std.time.Clock.monotonic)
+            ∨ ¬readable(std.time.Clock.process_cputime) ∨ ¬readable(std.time.Clock.thread_cputime)
+            ∨ ¬readable(std.time.Clock.monotonic_raw) ∨ ¬readable(std.time.Clock.boottime)):
+        return 6u6
+    ※ the coarse clocks and TAI are read, but their resolution may be a tick
+    let coarse: mut std.time.Timespec = std.time.Timespec(.tv_sec ← 0i64, .tv_nsec ← 0i64)
+    if (std.time.clock_gettime(std.time.Clock.realtime_coarse, &mut coarse) ≠ 0i32
+            ∨ std.time.clock_gettime(std.time.Clock.monotonic_coarse, &mut coarse) ≠ 0i32
+            ∨ std.time.clock_gettime(std.time.Clock.tai, &mut coarse) ≠ 0i32):
+        return 7u6
+    ※ the processor time of the process grows with work done
+    let before: mut std.time.Timespec = std.time.Timespec(.tv_sec ← 0i64, .tv_nsec ← 0i64)
+    let after: mut std.time.Timespec = std.time.Timespec(.tv_sec ← 0i64, .tv_nsec ← 0i64)
+    if std.time.clock_gettime(std.time.Clock.process_cputime, &mut before) ≠ 0i32:
+        return 8u6
+    let spent: u64 = spin(20000000u64)
+    if std.time.clock_gettime(std.time.Clock.process_cputime, &mut after) ≠ 0i32:
+        return 9u6
+    if ¬not_before(&after, &before) ∨ (after.tv_sec = before.tv_sec ∧ after.tv_nsec = before.tv_nsec) ∨ spent = 0u64:
+        return 10u6
+    0u6

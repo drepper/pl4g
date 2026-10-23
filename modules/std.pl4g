@@ -27,6 +27,10 @@ let io := ⎕import("io")
 @[export]
 let string := ⎕import("string")
 
+※※ Clocks: `clock_gettime` and `clock_getres`, through the vDSO: `std.time`.
+@[export]
+let time := ⎕import("time")
+
 
 ※※ The devices a program starts with open.
 ※※

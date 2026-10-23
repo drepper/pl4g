@@ -691,6 +691,9 @@ Optimizations
     so the same walk `dropunreached` makes would do, given the package keeps each function's extent.
     **Out of date (2026-10-04):** What pulls the runtime in is the entry point -- `pl4g_args` and `pl4g_io_drain` -- not a
     destructor of `std`, which is gone.
+    Since 2026-10-23 the clocks of `std.time` add to it: reading the vDSO's dynamic symbols is 1.5 to 1.9 kilobytes of every
+    image, a program reading no clock among them (`exit0`: 12272 to 14208 bytes on x86-64, 11688 to 13168 on AArch64, 13256
+    to 15144 on RISC-V); test_elf's bound went from 11 to 13 kilobytes with it.
 
 [ ] give the startup function's `std.Init` no register where nothing reads it.  Every startup function takes the record now, and
     on x86-64 one that never names it still copies the pointer (`mov rcx, rax`) before anything else.

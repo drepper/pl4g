@@ -3512,6 +3512,17 @@ be added for the runtime as it stands -- the family of load-and-store offsets
 AArch64 scales by the width of the access -- and two architectures need no
 relocations at all.
 
+**The clocks go through the vDSO.**  `pl4g_args`, which every program's entry point calls with the stack it was started
+with, also records where the vDSO is: `AT_SYSINFO_EHDR` in the auxiliary vector after the environment.  The first call of
+`pl4g_clock_gettime` or `pl4g_clock_getres` reads that image as the kernel laid it out -- the program headers for where it was
+linked against where it is and for the dynamic section, that for the symbols and their strings and a hash table to count them
+by (`DT_HASH`, or `DT_GNU_HASH`, whose chains say where the last symbol is) -- and keeps the two functions it finds:
+`__vdso_clock_gettime` and `__vdso_clock_getres` on x86-64 and RISC-V, `__kernel_clock_gettime` and `__kernel_clock_getres` on
+AArch64.  Each is then called as C calls it, and answers nought or the error negated, as the system call does; where one was not
+found -- no vDSO, as in a shared object, which never sees the stack -- the call is the system call, `clock_gettime` (228 on
+x86-64, 113 on the others) or `clock_getres` (229, 114).  `std.time` is the module that reaches them, its two functions
+turning the negated error into POSIX's number; the interpreter calls the C library's functions in their place.
+
 Saying which tests failed
 -------------------------
 

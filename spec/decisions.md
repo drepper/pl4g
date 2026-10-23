@@ -11772,6 +11772,22 @@ or see that it is there -- and libffi's description of the call is made at the f
 Compare the `void* user_data` of GLib's callbacks and of `pthread_create`, `qsort_r`'s `arg`, and Lua's upvalues of a C closure
 (`lua_pushcclosure`), each the way one C function serves several objects.
 
+## 2026-10-23T10:00+02:00 — library and runtime
+
+### `std.time`: `clock_gettime` and `clock_getres`, through the vDSO
+
+The user asked for **functions mirroring POSIX's `clock_gettime`**, read through the vDSO, found through the auxiliary vector,
+in a module `std.time` with a `timespec` type; the interpreter may read the clocks some other way.  Asked, the user chose: both
+`clock_gettime` and `clock_getres`; a `Timespec` with POSIX's field names, `tv_sec` and `tv_nsec`, plain `i64` and laid out as C's
+(`@[abi]`); every clock Linux keeps, with the kernel's numbers; and `@[io]` for both, a clock read being an effect on the outside
+that a caller needs only a device's permission for.  **`@[abi]` decided the shape**: such a record crosses a call only as a
+reference (4596), so the functions take where to write the time, `clock_gettime(clock, into: &mut Timespec) → i32`, and answer
+nought or the error number -- which is C's own shape, the error being the answer rather than `errno`.  A result over nothing is
+refused, so a plain `i32` it is.  The runtime finds the vDSO's functions in its dynamic symbols at the first read and makes the
+system call where it finds none.  Compare glibc, which finds the same functions in the same way at start-up; Go's runtime, which
+parses the vDSO itself as this does; Rust's standard library, which calls libc's `clock_gettime`; and Zig's, which looks the vDSO
+up as Go's does.
+
 Open questions
 --------------
 
