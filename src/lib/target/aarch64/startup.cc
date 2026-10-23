@@ -96,6 +96,20 @@ namespace pl4g::target::aarch64 {
     }
 
 
+    // Read the auxiliary vector into its table, where the program asks it: the
+    // function `sema/auxv` generated walks the stack the kernel set the process
+    // up with, under the language's convention, first of everything called.
+    void read_auxv(mc::Assembler& asm_, const ir::Module& module, const CallConvDesc& cconv)
+    {
+      if (module.auxv == nullptr)
+        return;
+      auto reader = module.function(auxv_make);
+      if (reader == nullptr) [[unlikely]]
+        throw std::logic_error("the table is there and nothing fills it");
+      asm_.loadreg(cconv.int_arg_regs[0], register_(held_stack()));
+      asm_.call(ir::symbol_name(*reader));
+    }
+
     // Build the environment, where the program named it: the runtime is asked
     // for the strings, and they are handed to the function the checker
     // generated; what comes back is the word the variable holds.
@@ -273,12 +287,13 @@ namespace pl4g::target::aarch64 {
     // What the kernel set the process up with is at the stack pointer, and this
     // is the only moment it is.  An addition of nothing and not a move: the
     // move between registers reads that encoding as the zero.
-    if (arguments_at(module, layout) || module.environ != nullptr)
+    if (holds_stack(module, layout))
       asm_.op(mc::ops::plus, held_stack(), { register_(regs().sp), immediate(0, 12) });
     // The outermost frame is marked by a null frame pointer and a null return
     // address, so that a debugger unwinding the stack knows where to stop.
     asm_.loadreg(regs().x29, register_(regs().xzr));
     asm_.loadreg(regs().x30, register_(regs().xzr));
+    read_auxv(asm_, module, cconv);
     read_environment(asm_, module, cconv);
     for (auto ctor : module.ctors)
       asm_.call(ir::symbol_name(*ctor));

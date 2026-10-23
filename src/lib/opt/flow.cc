@@ -50,6 +50,9 @@ namespace pl4g::opt {
     if (module.environ != nullptr)
       if (auto made = module.function("__pl4g_environ_make"))
         found.push_back(made);
+    if (module.auxv != nullptr)
+      if (auto made = module.function("__pl4g_auxv_make"))
+        found.push_back(made);
     found.insert(found.end(), module.ctors.begin(), module.ctors.end());
     found.insert(found.end(), module.dtors.begin(), module.dtors.end());
     if (! module.test_plan.empty())

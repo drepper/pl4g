@@ -3200,6 +3200,44 @@ call**, so a function that does it says `impure`.
 It is how the standard library will reach anything outside the process, and it is the only way: there is no C library underneath
 and nothing else to call.
 
+**`⎕auxv(TYPE)` is what the kernel's auxiliary vector says of an entry type**: the value it put beside `TYPE`, as a `u64`, or
+nothing where it put none -- a `u64?`.
+
+```
+let page: u64 = ⎕auxv(6) ?? 4096u64          ※ AT_PAGESZ
+match ⎕auxv(33):                              ※ AT_SYSINFO_EHDR, where the vDSO is
+    u64(vdso):  …
+    ⊥:          …
+```
+
+The vector is the run of pairs the kernel leaves after the environment on the stack a process starts on, each a type and a
+word: where the vDSO is (33), the size of a page (6), what the processor can do (`AT_HWCAP`, 16), where sixteen random bytes are
+(25), the entry point (9), and some forty more.  **The types are the kernel's numbers** and the compiler holds no names for them,
+as it holds none for the numbers a request to the kernel answers: they are the same on every architecture, and a program says
+which it means by writing it.
+
+**It is read once, before anything of the program runs.**  The entry point walks the vector into a table before the
+constructors, so a constructor may ask it, and nothing writes the table afterwards: what it says is what the process was started
+with.  The table has a word for every type up to the largest the kernel defines, `AT_MINSIGSTKSZ` (51), and a bit for each type
+that was there, so asking is one bit and one load.  **A program that never asks carries none of it** -- no table and nothing done
+at its start -- which is the bargain `⎕environ` strikes.
+
+**Any whole number is a type**, of any width and either signedness, widened by its own; one written without a suffix is the `u64`
+the vector holds a type as.  Anything else is refused (4380).  A negative number, nought -- `AT_NULL`, which ends the vector and is
+no entry of it -- and one past 51 are types the table never holds and are answered nothing; written down, such a question is
+warned about (4381), as a division by a zero written down is, since its answer is settled before the program runs.
+
+**Asking changes nothing**, so a function asking need not say `impure`.  The answer is the system's and not the program's, so it is
+never worked out while compiling, and a build function cannot ask.  **A shared object is answered nothing**: it has no start of its
+own -- the program it is loaded into was handed the stack, and hands it on to nobody -- so its table stays empty, which a caller
+has to be ready for anyway, the kernel being free to leave any entry out.  The interpreter answers what the C library's `getauxval`
+answers in the process it runs in.
+
+Compare: **C**'s `getauxval`, which answers nought and sets `errno` where there is nothing, so that a nought that is an answer --
+`AT_SECURE` in nearly every process -- has to be told apart by a second question; **Go**, whose runtime reads the vector at start
+and keeps the few entries it wants; **Zig**'s `std.os.linux.getauxval`, which walks the vector the start code kept at each
+question; **Rust**, which has nothing of its own and calls libc's.
+
 **`⎕acquire(REF)` reads a place and `⎕release(REF, VALUE)` writes one**, each saying what a *second* observer may see.  An
 acquiring read is one nothing written after it may be seen to have happened before; a releasing write is one nothing written
 before it may be seen to have happened after.

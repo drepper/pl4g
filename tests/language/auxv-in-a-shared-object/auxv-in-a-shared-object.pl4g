@@ -1,0 +1,25 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none host=host.c
+※ pl4g-test: args -shared
+
+※ A shared object has no start of its own: the program it is loaded into was
+※ handed the stack the process began on, and nothing hands it on.  So the table
+※ `⎕auxv` reads is never filled in one, and every question answers nothing --
+※ which is what a caller asking it has to be ready for anyway, the kernel being
+※ free to leave any entry out.  `host.c` loads the object and calls what it
+※ offers.
+※
+※ Compare: **C**'s `getauxval`, which a shared object can call because the C
+※ library kept the vector for it, and which says that it has nothing only
+※ through `errno`; **Go**'s `c-shared` build mode, whose runtime reads the vector
+※ off the stack where the loader leaves it -- which glibc's loader happens to
+※ do, and no interface promises.
+
+※ What the vector says of the page size and of the vDSO: nought where it says
+※ nothing of either, the sum of the two where it does.
+@[visible, cdecl]
+fn asked() → u64:
+    match ⎕auxv(6):
+        u64(page):
+            page + (⎕auxv(33) ?? 0u64)
+        ⊥:
+            if (⎕auxv(33) ?? 0u64) = 0u64: 0u64 else: 1u64

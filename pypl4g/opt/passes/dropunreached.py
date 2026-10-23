@@ -50,6 +50,10 @@ from ...source.location import Span
 #: does not depend on.
 ENVIRON_MAKE: Final[str] = "__pl4g_environ_make"
 
+#: And what the function that reads the auxiliary vector is called, for the same
+#: reason.
+AUXV_MAKE: Final[str] = "__pl4g_auxv_make"
+
 #: How every name the compiler makes for itself begins.
 COMPILER_MADE: Final[str] = "__pl4g_"
 
@@ -122,6 +126,11 @@ class DropUnreached:
             # Nothing the program writes calls the builder: the entry point
             # does, and only where the program named the environment at all.
             found = module.functions.get(ENVIRON_MAKE)
+            if found is not None:
+                roots.append(found)
+        if module.auxv is not None:
+            # And the reader of the vector, which the entry point calls too.
+            found = module.functions.get(AUXV_MAKE)
             if found is not None:
                 roots.append(found)
         roots.extend(module.ctors)

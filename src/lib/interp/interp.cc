@@ -1,6 +1,7 @@
 #include "interp/interp.hh"
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cerrno>
 #include <cmath>
@@ -15,6 +16,7 @@
 
 #include <dlfcn.h>
 #include <ffi.h>
+#include <sys/auxv.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <ctime>
@@ -23,6 +25,7 @@
 #include "ir/layout.hh"
 #include "diag/engine.hh"
 #include "rt/runtime.hh"
+#include "sema/auxv.hh"
 #include "target/host.hh"
 #include "target/statuses.hh"
 #include "util/fdio.hh"
@@ -1666,6 +1669,23 @@ namespace pl4g::interp {
       initial_stack.push_back(0);
 
       try {
+        // The auxiliary vector, where the program asks it: the table the
+        // generated reader would have filled, filled from the C library's
+        // `getauxval` instead -- the vector of the process the interpreter runs
+        // in, which is the one the program runs in.  It says that it has
+        // nothing only through `errno`, nought being an answer of its own.
+        if (module.auxv != nullptr) {
+          std::array<std::uint64_t, sema::auxv::slots> table{};
+          for (std::int64_t type = 1; type < sema::auxv::slots; ++type) {
+            errno = 0;
+            auto value = ::getauxval(static_cast<unsigned long>(type));
+            if (value != 0 || errno != ENOENT) {
+              table[type] = value;
+              table[0] |= std::uint64_t(1) << type;
+            }
+          }
+          std::memcpy(places.at(module.auxv), table.data(), sizeof table);
+        }
         if (module.environ != nullptr) {
           auto made = module.function("__pl4g_environ_make");
           if (made == nullptr) [[unlikely]]

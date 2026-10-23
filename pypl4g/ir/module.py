@@ -120,6 +120,10 @@ class Module:
     #: `⎕environ`.  Nothing where it does not: the variable is made on first
     #: ask, so this being here is what says the entry point has one to fill.
     environ: GlobalVar | None = None
+    #: The table the auxiliary vector is read into, where the program asks
+    #: `⎕auxv` anything.  Made on first ask, as the environment's variable is,
+    #: and for the same reason: this being here says the entry point reads it.
+    auxv: GlobalVar | None = None
     #: Addresses in the image of where the program's ring is, which only the
     #: entry point's record knows: each points into that record, and how far
     #: in is settled when the record is laid out (`target/started.py`).

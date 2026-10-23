@@ -45,7 +45,7 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                           ENUMERATE_NAME, TYPEOF_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
                           WRAP_NAME,
-                          ENVIRON_NAME, ITER_NAME, RESERVE_NAME,
+                          AUXV_NAME, ENVIRON_NAME, ITER_NAME, RESERVE_NAME,
                           HEAP_NAME, STATIC_NAME, SYSCALL_NAME, SYSCALL_NUMBER_PREFIX,
                           TOLERANCE_DEFAULT,
                           TOLERANCE_NAME, WILDCARD_NAME)
@@ -83,7 +83,7 @@ from ..ir.types import (ARENA, ARENA_NAME, StrType, ArrayType, BOOL, BoolType, B
                         without_units,
                         CHAR, MAX_CODE_POINT, U8, made_of_parts, parts_of,
                         held_in_memory as _held_in_memory)
-from . import environ, lists, owned, strings, tables
+from . import auxv, environ, lists, owned, strings, tables
 from .rapidhash import rapidhash, word_hash
 from .modules import (SUFFIX, ImportCycle, LoadedModule, ModuleNotFound,
                       ModuleRegistry, base_name, system_modules)
@@ -26653,6 +26653,8 @@ class Checker:
                 return self._lower_widen(builder, expr, expected)
             if given == SYSCALL_NAME:
                 return self._lower_syscall(builder, expr, expected)
+            if given == AUXV_NAME:
+                return self._lower_auxv(builder, expr, expected)
             if given in (ACQUIRE_NAME, RELEASE_NAME):
                 return self._lower_ordered(builder, expr, expected)
             if given in (AT_NAME, SPAN_NAME):
@@ -27728,6 +27730,93 @@ class Checker:
             self._report_mismatch(expr.span, answer.ty, expected)
             return UndefConst(ERROR)
         return answer
+
+    def _lower_auxv(self, builder: IRBuilder, expr: ast.Call,
+                    expected: Type | None) -> Value:
+        """Lower `⎕auxv(TYPE)`: what the auxiliary vector says of *TYPE*.
+
+        A `u64?`: the value of the entry of that type, or nothing where the
+        kernel gave none.  The table the entry point read the vector into has a
+        word for every type and, in the word of `AT_NULL`, a bit for each that
+        was there; so what is asked is a bit and a load, and a type past the
+        table's end asks the word of `AT_NULL` instead, whose own bit is never
+        set.  No branch, and for a type written down nothing but the two loads.
+
+        **Any whole number is a type**, widened by its own signedness, and one
+        written with no suffix is the `u64` the vector holds it as.  A negative
+        number is far past the end of the table once it is a word, which is the
+        answer it deserves.  A type written down that the table never holds is
+        answered nothing here and warned about (4381), and makes no table.
+
+        Reading the table changes nothing, so a pure function may ask it; what
+        it reads is memory, so the answer is never worked out while compiling.
+        """
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=AUXV_NAME, expected=1, found=len(expr.args))
+            return UndefConst(ERROR)
+        written = expr.args[0]
+        bare = isinstance(written, ast.IntLit) and written.type_name is None
+        given = self._lower_expr(builder, written, U64 if bare else None)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(found, IntType):
+            self._diags.emit(D.LANG_AUXV_NOT_AN_INTEGER, written.span,
+                             found=found.written())
+            return UndefConst(ERROR)
+        answer = self._module.types.result_type(U64)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        span = expr.span
+        if isinstance(given, IntConst):
+            if not 0 < given.value < auxv.SLOTS:
+                self._diags.emit(D.LANG_AUXV_NO_SUCH_TYPE, span,
+                                 value=str(given.value))
+                return builder.wrap(builder.int_const(U64, 0),
+                                    builder.bool_const(True), answer, span)
+        # A word by the type's own signedness, and the same bits read as the
+        # unsigned one a word of the vector is.
+        word = given if found is U64 else builder.cast(
+            CastKind.TRUNC if found.bits == 64
+            else CastKind.SEXT if found.signed else CastKind.ZEXT,
+            given, U64, span)
+        first = auxv.words_of(builder, self._auxv())
+        index = builder.select(
+            builder.compare(CmpPred.ULT, word,
+                            builder.int_const(U64, auxv.SLOTS), span),
+            word, builder.int_const(U64, 0), span)
+        bit = builder.binary(
+            BinOp.AND,
+            builder.binary(BinOp.WRAP_LSHR, builder.load(first, span), index,
+                           span),
+            builder.int_const(U64, 1), span)
+        value = builder.load(builder.binary(
+            BinOp.ADD, first,
+            builder.binary(BinOp.WRAP_MUL, index,
+                           builder.int_const(U64, auxv.WORD), span), span), span)
+        return builder.wrap(value, builder.compare(
+            CmpPred.EQ, bit, builder.int_const(U64, 0), span), answer, span)
+
+    def _auxv(self) -> GlobalVar:
+        """The table the auxiliary vector is read into, and what reads it.
+
+        Made on first ask, as the environment's variable is: a program that
+        never asks the vector anything has no table and no reader, and its entry
+        point does nothing about the vector.
+
+        **Only an executable has the reader**, being the only output with a
+        start of its own.  A shared object is never handed the stack the
+        process began on, so its table stays empty and every question answers
+        nothing; the interpreter fills the table itself, from the C library's
+        `getauxval`.
+        """
+        made = auxv.variable(self._module)
+        if self._module.output is Output.EXECUTABLE:
+            auxv.make_function(self._module, made)
+        self._module.auxv = made
+        return made
 
     def _lower_place_at(self, builder: IRBuilder, expr: ast.Call,
                         expected: Type | None) -> Value:

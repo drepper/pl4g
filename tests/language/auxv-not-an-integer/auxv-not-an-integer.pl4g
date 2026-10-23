@@ -1,0 +1,21 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4380 LANG_AUXV_NOT_AN_INTEGER
+※ pl4g-test: expect-diag 4211 LANG_CALL_WRONG_ARGUMENT_COUNT
+
+※ What the auxiliary vector is asked about is the number the kernel gives a
+※ type of entry, and nothing else is one: a truth value, a character or a
+※ floating-point number is refused (4380), as is asking about no type or about
+※ two at once (4211).  A whole number of any width and either signedness is
+※ accepted, widened by its own signedness.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let page: u64 = ⎕auxv(true) ?? 0u64
+    let size: f64 = 6f64
+    let more: u64 = ⎕auxv(size) ?? 0u64
+    let letter: u64 = ⎕auxv('a') ?? 0u64
+    let none: u64 = ⎕auxv() ?? 0u64
+    let two: u64 = ⎕auxv(6u64, 33u64) ?? 0u64
+    if page + more + letter + none + two = 0u64: 0u6 else: 1u6

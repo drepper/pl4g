@@ -406,6 +406,12 @@ TOLERANCE_DEFAULT: Final[float] = 1e-13
 #: is made before the program runs, out of what only the entry point can reach.
 ENVIRON_NAME: Final[str] = "".join((BUILTIN_GLYPH, "environ"))
 
+#: What the auxiliary vector says: `\N{APL FUNCTIONAL SYMBOL QUAD}auxv(TYPE)` answers the value of the entry
+#: of that type, or nothing where the kernel gave none.  The compiler's for the
+#: reason the environment is: the vector is on the stack the process started on,
+#: which only the entry point reaches.
+AUXV_NAME: Final[str] = "".join((BUILTIN_GLYPH, "auxv"))
+
 #: What makes a cursor over a list: `\N{APL FUNCTIONAL SYMBOL QUAD}iter(l)` is where a walk over `l` begins.  It
 #: is given the *place* the list is in and not the list, because a walk may take
 #: an element out and what is left has to go back where the list was.

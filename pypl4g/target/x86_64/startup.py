@@ -66,14 +66,14 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
     # What the kernel set the process up with is at the stack pointer, and this
     # is the only moment it is: everything below pushes something.  It is kept
     # in a register a call leaves alone until the runtime is asked to read it.
-    if started.arguments_at(module, layout) is not None \
-            or module.environ is not None:
+    if started.holds_stack(module, layout):
         asm.loadreg(HELD_STACK, asm.reg(RSP))
     # The outermost stack frame is marked by a null frame pointer, so that a
     # debugger unwinding the stack knows where to stop.
     asm.op(ops.XOR, EBP, asm.reg(EBP), asm.reg(EBP))
     if refused is not None:
         _check_level(asm, level, refused, turned_off)
+    _read_auxv(asm, module, cconv)
     _read_environment(asm, module, cconv)
     for ctor in module.ctors:
         asm.call(symbol_name(ctor))
@@ -234,6 +234,23 @@ def _drain(asm: Assembler, module: Module, layout: DataLayout) -> None:
         asm.op(ops.PLUS, theirs.int_arg_regs[0],
                asm.reg(theirs.int_arg_regs[0]), asm.imm(at, 32, signed=True))
     asm.call(started.DRAINS)
+
+
+def _read_auxv(asm: Assembler, module: Module, cconv: CallConvDesc) -> None:
+    """Read the auxiliary vector into its table, where the program asks it.
+
+    The function `sema/auxv.py` generated walks the stack the kernel set the
+    process up with, which is the one argument it takes, under the language's
+    convention: it is the program's own code and not the runtime's.  First of
+    everything the entry point calls, so that whatever reads the table later --
+    the environment's builder does not, a constructor may -- finds it filled.
+    """
+    if module.auxv is None:
+        return
+    reader = module.functions.get(started.AUXV_MAKE)
+    assert reader is not None, "the table is there and nothing fills it"
+    asm.loadreg(cconv.int_arg_regs[0], asm.reg(HELD_STACK))
+    asm.call(symbol_name(reader))
 
 
 def _read_environment(asm: Assembler, module: Module,

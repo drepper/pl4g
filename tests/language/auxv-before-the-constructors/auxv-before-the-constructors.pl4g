@@ -1,0 +1,20 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ The entry point reads the auxiliary vector before the constructors run, and
+※ before the environment's table is built, so a constructor may ask it and is
+※ answered what the startup function is answered.
+
+let std := ⎕import("std")
+
+let seen: mut u64 = 0u64
+
+@[constructor, impure]
+fn begin():
+    seen ← ⎕auxv(6) ?? 1u64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let page: u64 = ⎕auxv(6) ?? 0u64
+    if page < 4096u64:
+        return 1u6
+    if seen ≠ page: 2u6 else: 0u6

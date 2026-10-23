@@ -435,6 +435,7 @@ class Writer:
             "listed": len(module.functions),
             "startup": name(module.startup), "build": name(module.build),
             "environ": None if module.environ is None else module.environ.name,
+            "auxv": None if module.auxv is None else module.auxv.name,
             "ring_addresses": [self.const(c) for c in module.ring_addresses],
             "ctors": [name(f) for f in module.ctors], "dtors": [name(f) for f in module.dtors],
             "tests": [name(f) for f in module.tests], "test_plan": [name(f) for f in module.test_plan],

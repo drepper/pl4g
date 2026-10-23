@@ -13,6 +13,7 @@
 #include "front/names.hh"
 #include "front/parser.hh"
 #include "ir/printer.hh"
+#include "sema/auxv.hh"
 #include "sema/environ.hh"
 #include "sema/lastuse.hh"
 #include "util/unicode.hh"
@@ -461,6 +462,16 @@ namespace pl4g::sema {
     auto made = sema::environ::variable(module);
     sema::environ::make_function(module, heap);
     module.environ = made;
+    return made;
+  }
+
+
+  ir::GlobalVar* Checker::auxv()
+  {
+    auto made = sema::auxv::variable(module);
+    if (module.output == ir::Output::executable)
+      sema::auxv::make_function(module, made);
+    module.auxv = made;
     return made;
   }
 

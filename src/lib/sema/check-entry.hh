@@ -28,6 +28,9 @@
     Held provided(std::string_view name);  // check.py:4537
     // The variable the environment waits in, and what fills it.
     ir::GlobalVar* environ();  // check.py:4556
+    // The table the auxiliary vector is read into, and what reads it -- the
+    // reader only in an executable, the one output with a start of its own.
+    ir::GlobalVar* auxv();
     // What a definition of this file is filed under.
     std::string key(std::string_view name);  // check.py:4571
     // Record a top-level name, reporting one that is already taken.

@@ -46,6 +46,11 @@ namespace pl4g::target {
   inline constexpr std::string_view environ_symbol = "__pl4g_environ";
   inline constexpr std::string_view environ_make = "__pl4g_environ_make";
 
+  // What the table the auxiliary vector is read into is called in the image,
+  // and what the generated function that reads it is called.
+  inline constexpr std::string_view auxv_symbol = "__pl4g_auxv";
+  inline constexpr std::string_view auxv_make = "__pl4g_auxv_make";
+
   // The record the startup function takes a reference to, where it takes one.
   const ir::ProductType* wanted_by(const ir::Module& module);
 
@@ -57,6 +62,11 @@ namespace pl4g::target {
   // is; nothing where the program takes no such record.
   std::optional<std::uint64_t> arguments_at(const ir::Module& module, const ir::DataLayout& layout);
   std::optional<std::uint64_t> ring_at(const ir::Module& module, const ir::DataLayout& layout);
+
+  // Whether the entry point keeps the stack the kernel started it with: where
+  // the runtime reads the arguments or the environment off it, or the reader of
+  // the auxiliary vector does.
+  bool holds_stack(const ir::Module& module, const ir::DataLayout& layout);
 
   // Whether the entry point itself calls into the packaged runtime.
   bool entry_wants_runtime(const ir::Module& module);
