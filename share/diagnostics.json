@@ -3240,6 +3240,147 @@
       "option": null
     },
     {
+      "number": 4360,
+      "name": "LANG_CONVENTIONS_DO_NOT_CONVERT",
+      "severity": "error",
+      "message": "'{found}' is called by another convention than '{expected}', and one does not stand where the other is wanted",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the value"
+        },
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "the type wanted"
+        }
+      ],
+      "cause": "A function of the language's own convention is three words -- where its code is, what it brought in, and that room's allocator -- and is called with what it brought in first; one of the system's, `@[cdecl] fn(…)`, is one word, the address of code that knows of no environment, and is called as C calls it.  Neither is the other with something dropped, so neither stands for the other.  A named function of the language's own convention is not one of the system's either: its parameters arrive where the language's convention puts them.  Write the function `@[cdecl]` to have a value of the system's convention, or the type without it to have one of the language's.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Attributes / Values of the system's convention",
+        "requirement": "the two types do not convert"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4361,
+      "name": "LANG_CDECL_LAMBDA",
+      "severity": "error",
+      "message": "a lambda is of the language's own convention and may not be written '@[cdecl]'",
+      "args": [],
+      "cause": "What a lambda is, is its code and what it brought in, and the system's convention has nowhere to hand over what it brought in: something C compiled calls the address and nothing else.  A function of the system's convention handed over as a value is a named one, written `@[cdecl]`.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Attributes / Values of the system's convention"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4362,
+      "name": "LANG_CDECL_TYPE_VARIADIC",
+      "severity": "error",
+      "message": "a function type of the system's convention may not be variadic",
+      "args": [],
+      "cause": "A call through a value is placed by what its type says the parameters are, and a variadic function takes more than that: what a call hands it beyond them goes where the convention puts variadic arguments, which on some systems is not where it puts the others.  A type naming the parameters is the only one a call through a value can be placed by.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Attributes / Values of the system's convention"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4363,
+      "name": "LANG_CDECL_TYPE_ENVIRONMENT",
+      "severity": "error",
+      "message": "a function type of the system's convention brings nothing in and hands no arena out, so '{what}' says nothing a value of it could do",
+      "args": [
+        {
+          "name": "what",
+          "type": "string",
+          "description": "what was written: 'in ⎕heap', or the arena the answer is handed out in"
+        }
+      ],
+      "cause": "A value of the system's convention is the address of code, which lasts as long as the program: there is nothing it brought in to keep anywhere, so `in ⎕heap` would say what is always so.  And `→ T in pool` is a parameter more that no caller compiled by something else knows to hand over.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Attributes / Values of the system's convention"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4364,
+      "name": "LANG_CDECL_VALUE_TAKES_OWNED",
+      "severity": "error",
+      "message": "'{name}' takes a list as its own, and called through a value of the system's convention nothing would hand it one nobody else names",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "A function that changes a list it is handed in place takes it as its own, and a call by name sees to it that what arrives is room nobody else holds -- a copy, or room the caller is done with.  A call through a value of the system's convention is a call of an address, and the code at the address is all there is: nothing would stand between to make the copy.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Attributes / Values of the system's convention"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4365,
+      "name": "LANG_AT_FUNCTION_OF_THE_LANGUAGE",
+      "severity": "error",
+      "message": "'⎕at' makes a function only of the system's convention, and '{found}' is of the language's own",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type that was lifted"
+        }
+      ],
+      "cause": "An address is one word and is where code is.  A function of the language's own convention is three words, two of them about what it brought in, which no address says; one of the system's convention, `@[cdecl] fn(…)`, is the address and nothing else, which is what `⎕at` can make of one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Attributes / Values of the system's convention"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4366,
+      "name": "LANG_ADDRESS_OF_A_FUNCTION_OF_THE_LANGUAGE",
+      "severity": "error",
+      "message": "'⎕address' answers where the code of a function of the system's convention is, and '{found}' is of the language's own",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the value"
+        }
+      ],
+      "cause": "A function of the language's own convention is its code and what it brought in, and the code expects what it brought in first: the address alone is nothing anything else could call.  A function of the system's convention, `@[cdecl]`, is called with what its type says and nothing more, so its address is all of it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Attributes / Values of the system's convention"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4401,
       "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
       "severity": "error",

@@ -1,0 +1,18 @@
+※ pl4g-test: compile=error diag=4360
+
+※ **The two conventions are two types, and neither converts to the other**, in
+※ this direction either: a function of the language's own convention takes its
+※ arguments where that convention puts them, and a caller of an
+※ `@[cdecl] fn(u64) → u64` puts them where C does.
+
+let std := ⎕import("std")
+
+fn tripled(x: u64) → u64:
+    x × 3u64
+
+fn apply(f: @[cdecl] fn(u64) → u64, x: u64) → u64:
+    f(x)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if apply(tripled, 2u64) = 6u64: 0u6 else: 1u6

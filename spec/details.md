@@ -3174,8 +3174,37 @@ says so for both ends, a call being chained where it goes through a value or to 
 argument uses and a call destroys -- r11 on x86-64, the language's own convention passing an argument in r10, which is the
 system's static chain; x15 on AArch64, the backend leaving x18 alone; t2 on RISC-V, as GCC has it -- so a function of the
 program, which has no environment, never reads it, and `_function_as_a_value` points the pair at the function itself.  A
-function of another convention still goes through `⎕through<name>`, kept in `_shims`: a call through a value follows the
-language's convention and such a function does not.
+function of a convention named by an architecture's name still goes through `⎕through<name>`, kept in `_shims`: a call through a
+value of the language's convention follows that convention and such a function does not.
+
+**A value of the system's convention is one word.**  `FuncType` carries `cconv`, `pl4g` or `cdecl` (`system` asks which), part
+of the interned key; `parts_of` is one `ptr<mut u8>` for the second, `size_of` a word, and the type context makes every such type
+`lasting`, code lasting as long as the program -- so every question about where a function value may go (`_kept_anywhere`,
+`_lambdas_last`) answers yes without being taught anything, and `_holds_a_lambda` and `_points_somewhere` answer no.  The
+type is written `@[cdecl] fn(…)`, the convention first among the words before `fn`, and `cdecl fn(…)` in the IR's text; it is never
+written `in ⎕heap`.  `_promises_as_much` asks the conventions to be one, and `_report_mismatch` says 4360 wherever they are not,
+before any of the messages that would read as though the parameters differed.  `_resolve_type` binds the attributes of a
+`FuncTypeRef` itself, `cdecl` being a `CALLABLE` attribute now, and `_system_convention_of` refuses `variadic=true`, `in ⎕heap`
+and `→ T in pool` on it; `_lower_lambda` refuses it on a lambda.
+
+**A named function of the system's convention is `make_tuple((code_address(func),))`** of that type, made by
+`_system_function_value`; a host function taking no `str` is one, and its code is the stub that finds it.  `⎕at` of such a type
+(`_function_at`) is the address bitcast to `ptr<mut u8>` and made the one part; `⎕address` of one takes the part out and bitcasts
+it to `u64`.  At the top level `_function_constant` reads `⎕at(0u64, …)` as a `PartsConst` of one `AddressConst` of nothing, which
+`target/globals.py` writes as the eight zero bytes it writes for any address of nothing; any other address, and a named function,
+are left to 9902.
+
+**The call carries the convention.**  `CallInst.cconv` is the convention of a call through a value -- `pl4g` unless said, and
+always `pl4g` for a call naming a function, which follows its callee's -- and the opcode says it where it is another, `call.cdecl`,
+which irjson writes as `"cconv"` and the C++ reader takes back.  `_call_through`, shared by a name in a body (`_lower_indirect`)
+and a variable at the top level (`_lower_through_global`), hands the arguments and nothing else for a value of the system's
+convention, `builder.call(code, args, ret, cconv=cdecl)`, where one of the language's hands the environment first.
+`calls_placed` places such a call by the convention it carries and not chained -- no environment, and the chain register a C
+callee may use for anything -- and `destroyed_by`, asked of the convention with no callee, answers everything that convention's
+callee may destroy, which for the system's is more than for the language's own.  **`largeanswers` rewrites such a call as it
+rewrites a call of a named function of that convention**: an answer the system's style does not answer in two registers
+(`answers_through_storage(ty, TWO_IN_REGISTERS)`) goes through a place in the caller's frame handed over last, which is what a
+`@[cdecl]` function answering three values was widened to take.
 
 Compare GCC's nested functions and LLVM's `nest`, the same register for the same reason; Rust tells the two apart in the type
 system, `fn` for the bare address and `Fn` for the pair, and C has nothing to carry, which is why a C callback needs a `void *`

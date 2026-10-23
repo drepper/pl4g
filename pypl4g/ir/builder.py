@@ -208,9 +208,9 @@ class IRBuilder:
         return self._append(AnyLaneInst(value, BOOL, span))
 
     def call(self, callee: object, args: Sequence[Value], result_ty: Type,
-             span: Span = INVALID_SPAN) -> Value:
-        """Append a call to *callee*."""
-        return self._append(CallInst(callee, args, result_ty, span))
+             span: Span = INVALID_SPAN, cconv: str = "pl4g") -> Value:
+        """Append a call to *callee*, placed by *cconv* where it is a value."""
+        return self._append(CallInst(callee, args, result_ty, span, cconv))
 
     def cast(self, kind: CastKind, value: Value, target: Type,
              span: Span = INVALID_SPAN) -> Value:

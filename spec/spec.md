@@ -1331,7 +1331,8 @@ arena goes with the arena.  The third word says which allocator it is, so that g
 a lambda is.
 
 **A variable at the top level may not hold a lambda** (4550).  Its value is in the image, and the image does not yet hold an address
-of code -- nor, for that matter, a string (9902).
+of code -- nor, for that matter, a string (9902).  A value of the system's convention is not a lambda and may be held there, starting
+out as nought (Values of the system's convention, under Attributes).
 
 What is left is where a lambda earns its keep: bound to a name, handed to a parameter, answered, and called through whatever holds
 it.
@@ -3252,6 +3253,9 @@ or a reference, which is a place being read as a place of another type.  A narro
 not a place, and widening one would be the compiler deciding which half.  Neither name makes a function impure: making a place is
 not reaching through it.
 
+**`⎕at(ADDRESS, ⌜@[cdecl] fn(…) → T⌝)` is code at an address**, a value of the system's convention (Values of the system's
+convention, under Attributes), believed as a reference `⎕at` makes is.
+
 Compare: **C**, where a cast of an integer to a pointer says this and may be written anywhere; **Rust**, where it is `unsafe` and
 the word marks a region rather than the operation; **Zig**, whose `@ptrFromInt` is this exactly, one name for the one thing that
 cannot be checked; **Go**, whose `unsafe.Pointer` is the same idea behind a package a program has to name.
@@ -3266,7 +3270,8 @@ It is the compiler's name for the same reason its inverse is, and the two are th
 it for is handing an address to something outside itself: a request to the kernel takes one and a ring's submission entry holds one
 in a field.  **What has an address is a place** and a reference is how this language names one, so a value the program worked out
 has none (4592) -- taking a reference of the name it is bound to is what gives it one.  It makes no function impure: asking where
-something is changes nothing, and what is done through the address says so itself.
+something is changes nothing, and what is done through the address says so itself.  **`⎕address(f)` of a function of the system's
+convention is where its code is**, which is all of it; one of the language's own has no address anything else could call (4366).
 
 Compare: **Rust**, whose `as usize` on a raw pointer is this and is *not* `unsafe` -- making the number is safe and using it is
 not, which is the line drawn here too; **Zig**, whose `@intFromPtr` is this exactly; **C**, where `&x` and a cast are the same
@@ -6687,6 +6692,67 @@ ctypes, whose `c_char_p` makes the same nul-terminated copy of a string; **Julia
 **C**, **Zig** and **Rust**, whose `extern` declarations are this one with a linker resolving them before the program starts
 rather than the program resolving them as it goes.
 
+##### Values of the system's convention
+
+**`@[cdecl] fn(i32, &mut Timespec) → i32` is a function type of the system's convention**: a value of it is the address of code
+and nothing else, and a call of it is made as C makes one -- on every back end, and in the interpreter, which calls it through
+libffi as it calls a host function.  `@[cdecl]` stands before `fn` where the words a caller reads off a type stand, and is one of
+them: what it says is how a call of the value is placed, which is the first thing a caller has to know.
+
+```
+@[cdecl]
+fn tripled(x: u64) → u64:
+    x × 3u64
+
+let f: @[cdecl] fn(u64) → u64 = tripled          ※ the address of the code
+let g: @[cdecl] fn(u64) → u64 = ⎕at(⎕address(f), ⌜@[cdecl] fn(u64) → u64⌝)
+g(2u64)                                          ※ 6, called as C calls it
+```
+
+**A named function of the system's convention, used as a value, is one of these** -- `@[cdecl]`, `@[abi]` without a name, an
+external function and a host function that takes no `str` -- and nothing stands between: the function expects to be called that
+way by whatever calls it, this program or something the address is handed to.  **The two conventions are two types and neither
+converts to the other** (4360).  A function of the language's own convention is three words and is called with what it brought in
+first; one of the system's is one word, and its code knows of no environment.  Neither is the other with something dropped, so a
+`@[cdecl]` function does not stand where `fn(u64) → u64` is wanted, nor a function of the language's own where `@[cdecl] fn(u64) →
+u64` is.  **A lambda is never one** (4361): what it brought in has nowhere to go in a call C makes.
+
+**What may cross is what a `@[cdecl]` function may take and answer**, placed as the convention places it: whole numbers,
+references and truth values in the integer registers, floating-point numbers in theirs, what the registers do not hold on the
+stack; an answer of up to two values in registers and a larger one through a place the caller hands over last, as a `@[cdecl]`
+function of more than two answers expects; a value C does not have, a `str`, as its parts go for a call by name.  **The type is
+the parameters'**, so a variadic one is refused (4362): what a variadic call hands over beyond them goes where the convention puts
+variadic arguments, which on some systems is not where it puts the others.  **It brought nothing in and hands no arena out**, so
+`in ⎕heap` and `→ T in pool` are refused on it (4363), the one saying what is always so and the other a parameter more that nothing
+compiled elsewhere knows to hand over; a function taking a list as its own is not one (4364), a call of an address having nothing
+to stand between and make the copy a call by name makes.
+
+**It may be held where a value without an environment may**: in a record -- one word, where C's pointer to a function is in a
+`struct` -- in a list, handed over and answered, and in a variable at the top level, which may not hold a lambda (4550).  What such
+a variable starts out holding is known while compiling or is nothing: **`⎕at(0u64, ⌜@[cdecl] fn(…) → T⌝)` is the slot not yet
+filled in**, and `⎕address(f) = 0u64` asks whether it has been.  A named function there would be the image holding an address of
+code, which nothing it holds is yet (9902).
+
+**`⎕at(ADDRESS, ⌜@[cdecl] fn(…) → T⌝)` makes one out of an address**, a machine word or a reference as for any `⎕at`, and
+**`⎕address(f)` is the way back**.  What is at the address is what the program says is there: **the type is believed** -- what the
+code takes, what it answers, and whether a call changes anything, `@[impure]` being said in the brackets as anywhere -- and nothing
+is checked against it, there being nothing to check it against.  Making the value makes no function impure, as making a reference
+does not; a call of it is what its type says, so a pure function may call one whose type says it is pure, as it may call a pure
+function by name.  A function of the language's own convention is three words, two of them about what it brought in, which no
+address says (4365), and the address of its code alone is nothing anything else could call (4366).
+
+That is how a program reaches a function it did not compile and did not declare: the kernel's vDSO offers `clock_gettime` at an
+address the auxiliary vector leads to, and a C host hands a shared object a callback as a number.
+
+Compare: **C**, whose pointer to a function this is, and whose cast of an integer to one says what `⎕at` does; **C++**, where
+`extern "C"` is part of a function's type by the standard and not by any compiler; **Rust**, whose `extern "C" fn(i32) -> i32` is a
+type beside `fn(i32) -> i32`, the two not converting, and whose `transmute` of a `usize` to one is `unsafe`; **Zig**, whose `*const
+fn (i32) callconv(.C) i32` puts the convention in the type the same way, made from a number by `@ptrFromInt`; **D**, whose `extern
+(C)` function pointers are likewise their own types; **Go**, which has no such type and reaches C's through cgo; **Odin**, whose
+`proc "c" (i32) -> i32` is this; **Python**'s ctypes, whose `CFUNCTYPE` makes such a value out of an address.  Lisp's and Scheme's
+foreign-function interfaces (`cffi:foreign-funcall-pointer`, Racket's `ffi/unsafe` `_fpointer`) call a bare address the same way,
+with the type given at the call rather than carried by the value.
+
 ##### Shared objects
 
 **A program may be compiled into a shared object rather than an executable** (`-shared`): a library a program written in
@@ -7150,8 +7216,10 @@ So a function and a lambda are two ways of writing one kind of value, and either
 holds is three words, where the code is, where what was brought in is and its allocator; a function brings nothing in, so the
 last two are nothing.  **Calling through one costs what calling the function by name does**: what was brought in is passed in a
 register of its own, which no argument uses and a function of the program never reads, so the code a function's value points at
-is the function itself.  Only a function of another convention -- `@[cdecl]` -- has something standing between, a call through a
-value following the language's own.  **A generic function is not one** (4569): it is compiled once per set of types and which sets
+is the function itself.  **A function of the system's convention, `@[cdecl]`, is a value of the system's convention** --
+`@[cdecl] fn(u8) → u8`, one word, called as C calls it, and a type of its own (Values of the system's convention, under
+Attributes); only one of a convention named by an architecture's name, `@[abi("sysv64")]`, has something standing between, a call
+through a value following the language's own.  **A generic function is not one** (4569): it is compiled once per set of types and which sets
 those are is what the calls ask for, so named where a value is wanted there is no call to ask and no type for the name to have.
 
 **A lambda says it the same way**, written before the thing it describes -- and there the word is part of the *type*:

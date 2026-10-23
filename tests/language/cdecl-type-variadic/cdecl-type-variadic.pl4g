@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4362
+
+※ **A function type of the system's convention names its parameters.**  A
+※ call through a value is placed by what its type says the parameters are, and
+※ a variadic function takes more than that, in places that on some systems are
+※ not where the others go.
+
+let std := ⎕import("std")
+
+fn apply(f: @[cdecl(variadic=true)] fn(u64) → u64, x: u64) → u64:
+    f(x)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

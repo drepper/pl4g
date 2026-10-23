@@ -1,0 +1,57 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none host=host.c
+※ pl4g-test: args -shared
+
+※ **A function the host compiled, handed over as the number its address is,
+※ is called as C calls it** once `⎕at` has made a value of the system's
+※ convention of it: `host.c` hands this shared object the addresses of three
+※ of its own functions, and `run` calls each -- twenty arguments, ten of them
+※ on the stack on every architecture; a reference, written through; and a
+※ narrow number, which C widens as its convention says.
+※
+※ **A function the host defines is one as well**, named where a value is
+※ wanted: the address is that of the stub that finds it at the first call,
+※ which goes on to it with the arguments as the caller left them.
+※
+※ **And the way back**: `offered` answers where the code of a `@[cdecl]`
+※ function of this object is, and the host calls it through a pointer of its
+※ own.  The value is the address and nothing else, which is what makes it
+※ something a program compiled by anything else can call.
+※
+※ Compare: **C**, whose callbacks are exactly this; **Rust**, whose
+※ `extern "C" fn` passes across an FFI boundary as a bare pointer; **Python**'s
+※ ctypes, whose `CFUNCTYPE` makes the same kind of value out of an address.
+
+@[host("bumped")]
+fn bumped(n: i64) → i64
+
+@[cdecl]
+fn twice(n: i64, x: f64) → i64:
+    n × 2i64 + (⎕trunc(x × 2f64, ⌜i64⌝) ?? 0i64)
+
+※ Filled in by the call that is handed what goes there.
+let kept: mut @[cdecl, impure] fn(i32, &mut i64, f64) → f64 = ⎕at(
+    0u64, ⌜@[cdecl, impure] fn(i32, &mut i64, f64) → f64⌝)
+
+@[visible, cdecl, impure]
+fn run(m: u64, s: u64, n: u64) → i64:
+    let many: @[cdecl] fn(i64, i64, i64, i64, i64, i64, i64, i64, i64, i64,
+                          f64, f64, f64, f64, f64, f64, f64, f64, f64, f64) → i64 = ⎕at(
+        m, ⌜@[cdecl] fn(i64, i64, i64, i64, i64, i64, i64, i64, i64, i64,
+                        f64, f64, f64, f64, f64, f64, f64, f64, f64, f64) → i64⌝)
+    let got: i64 = many(1i64, 1i64, 1i64, 1i64, 1i64, 1i64, 1i64, 1i64, 1i64,
+                        1i64, 1f64, 1f64, 1f64, 1f64, 1f64, 1f64, 1f64, 1f64,
+                        2f64, 3f64)
+    if got ≠ 55i64 + 8i64 + 200i64 + 3000i64: return 1i64
+    kept ← ⎕at(s, ⌜@[cdecl, impure] fn(i32, &mut i64, f64) → f64⌝)
+    let total: mut i64 = 10i64
+    let x: f64 = kept(3i32, &mut total, 1.5f64)
+    if total ≠ 13i64 ∨ x < 4.4f64 ∨ x > 4.6f64: return 2i64
+    let next: @[cdecl] fn(u8) → u8 = ⎕at(n, ⌜@[cdecl] fn(u8) → u8⌝)
+    if next(254u8) ≠ 255u8: return 3i64
+    let b: @[cdecl, impure] fn(i64) → i64 = bumped
+    if b(1i64) ≠ 101i64 ∨ b(2i64) ≠ 102i64: return 4i64
+    0i64
+
+@[visible, cdecl]
+fn offered() → u64:
+    ⎕address(twice)

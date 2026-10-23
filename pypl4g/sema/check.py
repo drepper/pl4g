@@ -1177,9 +1177,13 @@ def _can_be_referred_to(ty: Type) -> bool:
 
 
 def _holds_a_lambda(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
-    """Whether a value of *ty* holds a function anywhere inside it."""
+    """Whether a value of *ty* holds a function anywhere inside it.
+
+    Not one of the system's convention: that is the address of code, which
+    brought nothing in and is a word the image can hold.
+    """
     if isinstance(ty, FuncType):
-        return True
+        return not ty.system
     if id(ty) in seen:
         return False
     deeper = seen | {id(ty)}
@@ -1441,7 +1445,11 @@ def _promises_as_much(expected: Type | None, found: Type,
         # And one whose environment lasts does everything one that may not does.
         # A pure one does everything one that may change things does, and one
         # whose answer may be dropped stands where the answer has to be taken.
-        return ((found.listable or not expected.listable)
+        # And neither convention stands for the other: one is three words
+        # called with what it brought in first, the other one word called as C
+        # calls.
+        return (found.cconv == expected.cconv
+                and (found.listable or not expected.listable)
                 and (found.lasting or not expected.lasting)
                 and (not found.impure or expected.impure)
                 and (found.can_ignore or not expected.can_ignore)
@@ -2509,7 +2517,9 @@ def _call_borrows(call: CallInst) -> tuple[Sequence[Value], dict[int, Borrowed]]
         return call.arguments, ty.borrowed() if isinstance(ty, FuncType) else {}
     code = call.target
     if isinstance(code, ExtractInst) and isinstance(code.operands[0].ty, FuncType):
-        return call.arguments[1:], code.operands[0].ty.borrowed()
+        # What it brought in goes first, where the value has an environment.
+        ty = code.operands[0].ty
+        return call.arguments[0 if ty.system else 1:], ty.borrowed()
     return call.arguments, {}
 
 
@@ -2586,7 +2596,9 @@ def _points_somewhere(ty: Type, seen: frozenset[int] = frozenset(),
         case StrType() | ListType() | SetType() | DictType() | CursorType():
             return True
         case FuncType():
-            return lambdas
+            # One of the system's convention points at code, which nothing
+            # holds and nothing gives back.
+            return lambdas and not ty.system
         case ArrayType():
             return not ty.fixed or _points_somewhere(ty.element, deeper, lambdas,
                                                      references)
@@ -5878,6 +5890,41 @@ class Checker:
             return value.value_type
         return value.ty
 
+    def _function_constant(self, node: ast.VarDef, ty: FuncType) -> Const | None:
+        """What a variable at the top level of a function type of the system's
+        convention starts out holding, where it is `\N{APL FUNCTIONAL SYMBOL QUAD}at` of nought: a word of
+        the image, a slot the program fills in once it has found what goes
+        there.
+
+        Nothing where it is anything else, which the ordinary path reports.  A
+        named function is not yet one: the image would hold the address of
+        code, which nothing it holds is yet.
+        """
+        value = node.value
+        if not isinstance(value, ast.Call) or not isinstance(value.callee, ast.NameRef) \
+                or value.callee.name != AT_NAME or len(value.args) != 2 \
+                or not isinstance(value.args[1], ast.Lifted):
+            return None
+        written = self._lifted_type(value.args[1])
+        if not isinstance(written, FuncType):
+            return None
+        if not written.system:
+            self._diags.emit(D.LANG_AT_FUNCTION_OF_THE_LANGUAGE, value.args[1].span,
+                             found=written.written())
+            return UndefConst(ERROR)
+        folded = self._constant(value.args[0])
+        if folded is _REFUSED:
+            return UndefConst(ERROR)
+        if folded is None or folded.failed or folded.value != 0 \
+                or not isinstance(folded.ty, IntType) or folded.ty.bits != 64:
+            # Code is where the loader put it, so no other address is known
+            # while compiling.
+            return None
+        if not _promises_as_much(ty, written) and written is not ty:
+            self._report_mismatch(value.span, written, ty)
+            return UndefConst(ERROR)
+        return PartsConst(ty, (AddressConst(parts_of(ty)[0], None),))
+
     def _constant_value(self, node: ast.VarDef, ty: Type) -> Value | None:
         """The value a top-level variable is given, which must be a constant."""
         if ty is ARENA:
@@ -5895,6 +5942,10 @@ class Checker:
             # The type was already reported; saying anything about the value it
             # was given would be a second message about the same mistake.
             return None
+        if isinstance(ty, FuncType) and ty.system:
+            found = self._function_constant(node, ty)
+            if found is not None:
+                return found
         if isinstance(ty, ResultType):
             # The only constant of a result type a program can write is the
             # successful one, since a value of the answer type written where a
@@ -9031,7 +9082,11 @@ class Checker:
                 self._diags.emit(D.LANG_KEPT_IN_NOT_HEAP, ref.kept_in[1],
                                  name=ref.kept_in[0])
                 return ERROR
-            said = self._promised(ref.attrs)
+            bound = self._bind_attributes(ref.attrs, AttrTarget.CALLABLE)
+            said = {one.name for one in bound}
+            system = self._system_convention_of(bound, ref)
+            if system is None:
+                return ERROR
             # A value of it is called with nothing but the type in hand, so the
             # type says how long a reference it answers with lives, as a
             # definition does -- on its own parameters, or on the signature
@@ -9044,7 +9099,8 @@ class Checker:
                 hands_out=ref.made_in is not None,
                 lasting=ref.kept_in is not None,
                 impure="impure" in said, can_ignore="can_ignore" in said,
-                borrows=tuple(sorted(borrows.items())))
+                borrows=tuple(sorted(borrows.items())),
+                cconv=SYSTEM_CCONV if system else DEFAULT_CCONV)
         return self._named_type(ref)
 
     # -- units -----------------------------------------------------------------
@@ -13809,16 +13865,51 @@ class Checker:
         ty = self._held_by(local)
         assert isinstance(ty, FuncType)
         held = self._read_capture(builder, local, expr.span)
+        return self._call_through(builder, expr, held, ty, local.name,
+                                  self._slot_of_local.get(id(local)), expected)
+
+    def _global_callee(self, expr: ast.Expr) -> GlobalVar | None:
+        """The variable at the top level a call names, where it holds a function
+        -- which only one of the system's convention may (4550)."""
+        if not isinstance(expr, ast.NameRef) or self._find_local(expr.name) is not None:
+            return None
+        found = self._top.get(expr.name)
+        if not isinstance(found, GlobalVar) or not isinstance(found.value_type, FuncType):
+            return None
+        return found
+
+    def _lower_through_global(self, builder: IRBuilder, expr: ast.Call,
+                              expected: Type | None) -> Value:
+        """Lower a call through a function held in a variable at the top level.
+
+        The variable is read as any is -- which is what a pure function may not
+        do of one that may be written -- and called through what it held then.
+        """
+        assert isinstance(expr.callee, ast.NameRef)
+        held = self._lower_expr(builder, expr.callee, None)
+        ty = self._value_type_of(held)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        assert isinstance(ty, FuncType)
+        return self._call_through(builder, expr, held, ty, expr.callee.name, None,
+                                  expected)
+
+    def _call_through(self, builder: IRBuilder, expr: ast.Call, held: Value,
+                      ty: FuncType, name: str, key: object | None,
+                      expected: Type | None) -> Value:
+        """A call of *held*, a function of type *ty* a program reached as *name*:
+        the arguments checked against what the type says, and the call made by
+        the convention it says."""
         outer_listing, self._listing = self._listing, ty.listable
         try:
-            args = self._one_by_one(builder, expr.args, ty.params, local.name)
+            args = self._one_by_one(builder, expr.args, ty.params, name)
         finally:
             self._listing = outer_listing
         if args is None:
             return UndefConst(ERROR)
         if len(args) != len(ty.params):
             self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
-                             name=local.name, expected=len(ty.params),
+                             name=name, expected=len(ty.params),
                              found=len(args))
             return UndefConst(ERROR)
         if any(one.ty is ERROR for one in args):
@@ -13827,20 +13918,28 @@ class Checker:
             # What its type promises is what is known of it: a pure one may be
             # called from a pure function, as a pure definition may.  Whether
             # it is needed is the slot's question, where the name has one.
-            key = self._slot_of_local.get(id(local))
             self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span,
                             through=None if key is None else ("slot", key),
-                            name=local.name)
-        self._tables_handed(ty.params, args, local.name, expr.span)
+                            name=name)
+        self._tables_handed(ty.params, args, name, expr.span)
         # Both halves are read once, before any call is made: a walk makes one
         # call per element and they all go to the same code with the same
         # environment.
         code = builder.extract(held, 0, _ENVIRONMENT, expr.span)
+        if ty.system:
+            # The address and nothing else, called as C calls it: there is no
+            # environment to hand over, and no arena a type of this convention
+            # could say it hands out.
+            def direct(given: Sequence[Value], span: Span) -> Value:
+                return builder.call(code, tuple(given), ty.ret, span,
+                                    cconv=ty.cconv)
+            return self._answered_through(builder, ty, name, direct, args,
+                                          expr, expected)
         environment = builder.extract(held, 1, _ENVIRONMENT, expr.span)
 
         handing: list[Value] = []
         if ty.hands_out:
-            place = self._arena_for(expr, local.name)
+            place = self._arena_for(expr, name)
             if place is None:
                 return UndefConst(ERROR)
             handing.append(place)
@@ -13849,14 +13948,25 @@ class Checker:
             return builder.call(code, (environment, *given, *handing), ty.ret,
                                 span)
 
+        return self._answered_through(builder, ty, name, make, args, expr,
+                                      expected)
+
+    def _answered_through(self, builder: IRBuilder, ty: FuncType, name: str,
+                          make: Callable[[Sequence[Value], Span], Value],
+                          args: Sequence[Value], expr: ast.Call,
+                          expected: Type | None) -> Value:
+        """What a call through a value comes to, *make* being how one call of it
+        is made: walked where the type says so and an array was handed where an
+        element is wanted, and held to what the type says the answer lives as
+        long as."""
         if ty.listable \
                 and any(one.ty is not wanted
                         for one, wanted in zip(args, ty.params)):
             return self._walked(builder, ty, make, args, expr, expected)
-        answer = self._lasting_as_given(builder, local.name, (), ty.borrowed(),
+        answer = self._lasting_as_given(builder, name, (), ty.borrowed(),
                                         args, make(args, expr.span), expr.span)
         if ty.ret is VOID and expected is not None:
-            self._diags.emit(D.LANG_CALL_HAS_NO_VALUE, expr.span, name=local.name)
+            self._diags.emit(D.LANG_CALL_HAS_NO_VALUE, expr.span, name=name)
             return UndefConst(ERROR)
         if not self._accepts(expected, answer.ty):
             self._report_mismatch(expr.span, answer.ty, expected)
@@ -14730,6 +14840,36 @@ class Checker:
             return UndefConst(ERROR)
         return answer
 
+    def _system_convention_of(self, bound: Sequence[BoundAttr],
+                              ref: ast.FuncTypeRef) -> bool | None:
+        """Whether a function type says its values follow the system's
+        convention, `@[cdecl] fn(\N{HORIZONTAL ELLIPSIS})`, and nothing where
+        it says so with something that cannot go with it.
+
+        Such a value is the address of code and nothing else, so it brought
+        nothing in to keep in `\N{APL FUNCTIONAL SYMBOL QUAD}heap` and hands out
+        no arena of its own -- a parameter more, which nothing compiled
+        elsewhere knows to hand over (4363); and it is not variadic, a call
+        through a value being placed by what the type says the parameters are
+        (4362).
+        """
+        found = next((one for one in bound if one.name == "cdecl"), None)
+        if found is None:
+            return False
+        if found.as_bool("variadic"):
+            self._diags.emit(D.LANG_CDECL_TYPE_VARIADIC, found.node.span)
+            return None
+        if ref.kept_in is not None:
+            self._diags.emit(D.LANG_CDECL_TYPE_ENVIRONMENT, ref.kept_in[1],
+                             what="".join(("in ", ref.kept_in[0])))
+            return None
+        if ref.made_in is not None:
+            self._diags.emit(D.LANG_CDECL_TYPE_ENVIRONMENT, ref.made_in[1],
+                             what="".join(("\N{RIGHTWARDS ARROW} \N{HORIZONTAL ELLIPSIS} in ",
+                                           ref.made_in[0])))
+            return None
+        return True
+
     def _promised(self, attrs: Sequence[ast.Attribute]) -> set[str]:
         """What is written before a function type or a lambda, of the three things
         a caller reads off a type: `listable`, `impure` and `can_ignore`.
@@ -14813,6 +14953,12 @@ class Checker:
             return UndefConst(ERROR)
         said = self._promised(expr.attrs)
         walks = "listable" in said
+        if "cdecl" in said:
+            # What it is, is its code and what it brought in, and the system's
+            # convention has nowhere to hand the second over: what calls an
+            # address of that convention calls the address and nothing else.
+            self._diags.emit(D.LANG_CDECL_LAMBDA, expr.span)
+            return UndefConst(ERROR)
         if "impure" in said:
             # What a lambda's body does is what its type says: there is nothing
             # for the word to add, and saying it would be saying the body is
@@ -15064,10 +15210,13 @@ class Checker:
             # receives it by name.  A lambda may hand one out; its type says so.
             self._diags.emit(D.LANG_HANDED_OUT_UNBOUND, ref.span, name=func.name)
             return UndefConst(ERROR)
+        if func.cconv == SYSTEM_CCONV:
+            return self._system_function_value(builder, func, ref, expected)
         # A call through a value passes the environment in the chain register,
         # which a function of the language's own convention never reads: the
-        # value points at the function itself.  One of another convention is
-        # called the way the system calls, so something has to stand between.
+        # value points at the function itself.  One of a convention named by
+        # an architecture's name is called the way that convention calls, so
+        # something has to stand between.
         shim = func if func.cconv == DEFAULT_CCONV and not func.attrs.chained \
             and not func.takes_owned else self._shim_for(func, ref.span)
         if shim is None:
@@ -15088,6 +15237,36 @@ class Checker:
                           _ENVIRONMENT, ref.span),
              tables.no_allocator(builder)),
             ty, ref.span)
+        if not self._accepts(expected, ty):
+            self._report_mismatch(ref.span, ty, expected)
+            return UndefConst(ERROR)
+        return made
+
+    def _system_function_value(self, builder: IRBuilder, func: Function,
+                               ref: ast.NameRef, expected: Type | None) -> Value:
+        """A named function of the system's convention where a value is wanted:
+        the address of its code, of the type `@[cdecl] fn(\N{HORIZONTAL ELLIPSIS})`.
+
+        Nothing stands between: what calls a value of that type calls it as C
+        does, which is how the function expects to be called -- by this
+        program, by the host it is loaded into, or by whatever it hands the
+        address to.  A variadic one takes more than its type says, so no type
+        could place a call of it; one taking a list as its own would need a
+        copy made that a call of an address cannot make (4364).
+        """
+        if func.attrs.extra.get("variadic"):
+            self._diags.emit(D.LANG_CALL_NOT_A_FUNCTION, ref.span, name=func.name)
+            return UndefConst(ERROR)
+        if func.takes_owned:
+            self._diags.emit(D.LANG_CDECL_VALUE_TAKES_OWNED, ref.span,
+                             name=func.name)
+            return UndefConst(ERROR)
+        ty = self._module.types.func_type(
+            func.ty.params, func.ty.ret, func.ty.listable,
+            impure=func.attrs.impure, can_ignore=func.attrs.can_ignore,
+            cconv=SYSTEM_CCONV)
+        made = builder.make_tuple((builder.code_address(func, ref.span),), ty,
+                                  ref.span)
         if not self._accepts(expected, ty):
             self._report_mismatch(ref.span, ty, expected)
             return UndefConst(ERROR)
@@ -26724,6 +26903,8 @@ class Checker:
         held = self._callee_value(expr.callee)
         if held is not None:
             return self._lower_indirect(builder, expr, held, expected)
+        if self._global_callee(expr.callee) is not None:
+            return self._lower_through_global(builder, expr, expected)
         # A function whose types this call settles, which is not a function yet:
         # what it comes to depends on what the arguments turn out to be, so the
         # call is what makes it.  Reached by a bare name or through the module it
@@ -27763,6 +27944,8 @@ class Checker:
                                  found=answer.written())
                 return UndefConst(ERROR)
             place_ty = self._module.types.ptr_type(answer.element, mutable=True)
+        elif isinstance(answer, FuncType):
+            return self._function_at(builder, expr, answer, expected)
         else:
             if not isinstance(answer, PtrType):
                 self._diags.emit(D.LANG_AT_NOT_A_REFERENCE, written.span,
@@ -27804,6 +27987,34 @@ class Checker:
                 builder, place,
                 (self._as_count(builder, count, counting, expr.span),),
                 answer, expr.span)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return made
+
+    def _function_at(self, builder: IRBuilder, expr: ast.Call, answer: FuncType,
+                     expected: Type | None) -> Value:
+        """`\N{APL FUNCTIONAL SYMBOL QUAD}at(ADDRESS, \N{TOP LEFT CORNER}@[cdecl] fn(\N{HORIZONTAL ELLIPSIS}) \N{RIGHTWARDS ARROW} T\N{TOP RIGHT CORNER})`: code at an address the
+        program worked out, as a function of the system's convention.
+
+        What is there is what the program says is there, as for a reference:
+        the type is believed, the parameters and the answer and whether a call
+        may change things, and nothing is checked against it -- there is
+        nothing to check it against.  Making the value changes nothing, so it
+        makes no function impure; a call of it is what its type says it is.
+        One of the language's own convention is three words, two of them about
+        what it brought in, which no address says (4365).
+        """
+        if not answer.system:
+            self._diags.emit(D.LANG_AT_FUNCTION_OF_THE_LANGUAGE, expr.args[-1].span,
+                             found=answer.written())
+            return UndefConst(ERROR)
+        address = self._as_an_address(builder, expr.args[0], AT_NAME)
+        if address is None:
+            return UndefConst(ERROR)
+        made = builder.make_tuple(
+            (builder.cast(CastKind.BITCAST, address, _ENVIRONMENT, expr.span),),
+            answer, expr.span)
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
@@ -28631,7 +28842,17 @@ class Checker:
         ty = self._value_type_of(place)
         if ty is ERROR:
             return UndefConst(ERROR)
-        if not isinstance(ty, PtrType):
+        if isinstance(ty, FuncType):
+            # Where the code of a function of the system's convention is, which
+            # is all of it: what something else is handed to call it by.  One of
+            # the language's own is its code and what it brought in, and the
+            # code alone is nothing anything else could call (4366).
+            if not ty.system:
+                self._diags.emit(D.LANG_ADDRESS_OF_A_FUNCTION_OF_THE_LANGUAGE,
+                                 expr.args[0].span, found=ty.written())
+                return UndefConst(ERROR)
+            place = builder.extract(place, 0, _ENVIRONMENT, expr.span)
+        elif not isinstance(ty, PtrType):
             self._diags.emit(D.LANG_ADDRESS_OF_NOT_A_REFERENCE,
                              expr.args[0].span, found=ty.written())
             return UndefConst(ERROR)
@@ -30828,6 +31049,14 @@ class Checker:
         value reaches would add nothing.
         """
         if found is ERROR or expected is ERROR:
+            return
+        if isinstance(found, FuncType) and isinstance(expected, FuncType) \
+                and found.cconv != expected.cconv:
+            # Said for what it is wherever it happens: the two are different
+            # kinds of thing, and a message about an argument or a field would
+            # read as though the parameters were what differed.
+            self._diags.emit(D.LANG_CONVENTIONS_DO_NOT_CONVERT, span,
+                             found=found.written(), expected=expected.written())
             return
         if self._leaving:
             self._diags.emit(D.LANG_LOOP_VALUE_MISMATCH, span,

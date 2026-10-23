@@ -225,8 +225,9 @@ def calls_placed(func: Function, conventions: Callable[[str], CallConvDesc]
 
     The convention is the callee's, *conventions* being how a target looks one
     up by name, and for a call through a value -- where nothing here knows
-    which callee it is -- the one every function of this language follows,
-    the environment travelling in its chain register.  Asked once, before any
+    which callee it is -- the one the call says the value's type named: the one
+    every function of this language follows, the environment travelling in its
+    chain register, or the system's, with no environment at all.  Asked once, before any
     code is generated, because the room the stack's share takes is at the
     bottom of the caller's frame and has to be taken before anything else is.
     """
@@ -244,9 +245,11 @@ def calls_placed(func: Function, conventions: Callable[[str], CallConvDesc]
             if not through and not named:
                 # Refused where the call is lowered, which says why.
                 continue
-            theirs = conventions(DEFAULT_CCONV if through or not named
+            theirs = conventions(inst.cconv if through
+                                 else DEFAULT_CCONV if not named
                                  else callee.cconv)
-            chained = through or (named and callee.attrs.chained)
+            chained = (through and inst.cconv == DEFAULT_CCONV) \
+                or (named and callee.attrs.chained)
             found[id(inst)] = (theirs, argument_places(
                 theirs, [a.ty for a in inst.arguments], chained=chained))
     return found

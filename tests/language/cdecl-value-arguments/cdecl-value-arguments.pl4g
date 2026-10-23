@@ -1,0 +1,66 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A call through a value of the system's convention is placed as C places
+※ it**: whole numbers and references in the integer registers, floating-point
+※ numbers in their own, what the registers do not hold on the stack -- the
+※ eleventh number and the ninth floating-point one here, and on RISC-V a
+※ floating-point argument in an integer register once its own run out.  An
+※ answer of up to two values comes back in registers and a larger one through
+※ a place the caller hands over, which is what a function of the convention
+※ named by its name expects.  A reference is the address of the place, as C's
+※ pointer is, and the callee writes through it.
+※
+※ What may cross is what a `@[cdecl]` function may take and answer; a value C
+※ does not have, a `str`, goes where the compiler puts its parts, as for a call
+※ by name.
+
+let std := ⎕import("std")
+
+@[cdecl]
+fn many(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64, i: i64,
+        j: i64, k: i64, x: f64, y: f64, z: f64, w: f64, p: f64, q: f64, r: f64,
+        s: f64, t: f64, u: f64) → i64:
+    let low: i64 = a + b × 2i64 + c × 3i64 + d × 4i64 + e × 5i64 + f × 6i64
+    let whole: i64 = low + g × 7i64 + h × 8i64 + i × 9i64 + j × 10i64 + k × 11i64
+    let sum: f64 = x + y + z + w + p + q + r + s + t × 100f64 + u × 1000f64
+    let floating: i64 = ⎕trunc(sum, ⌜i64⌝) ?? 0i64
+    whole + floating
+
+@[cdecl, impure]
+fn counted(by: u32, total: &mut u64, scale: f32) → f32:
+    total⌖ ← total⌖ + ⎕widen(by, ⌜u64⌝)
+    scale × 2f32
+
+@[cdecl]
+fn three(a: u32) → 〈u32, u32, u32〉:
+    〈a, a + 1u32, a + 2u32〉
+
+@[cdecl]
+fn two(a: u32) → 〈u32, f64〉:
+    〈a, 0.25f64〉
+
+@[cdecl]
+fn five_letters(s: str) → bool:
+    #⎕bytes(s) = 5
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let m: @[cdecl] fn(i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64,
+                       f64, f64, f64, f64, f64, f64, f64, f64, f64, f64) → i64 = many
+    let got: i64 = m(1i64, 1i64, 1i64, 1i64, 1i64, 1i64, 1i64, 1i64, 1i64, 1i64,
+                     1i64, 1f64, 1f64, 1f64, 1f64, 1f64, 1f64, 1f64, 1f64, 2f64,
+                     3f64)
+    if got ≠ 66i64 + 8i64 + 200i64 + 3000i64: return 1u6
+    let c: @[cdecl, impure] fn(u32, &mut u64, f32) → f32 = counted
+    let total: mut u64 = 10u64
+    let doubled: f32 = c(5u32, &mut total, 1.5f32)
+    if total ≠ 15u64 ∨ doubled < 2.9f32 ∨ doubled > 3.1f32: return 2u6
+    let t: @[cdecl] fn(u32) → 〈u32, u32, u32〉 = three
+    let abc: 〈u32, u32, u32〉 = t(5u32)
+    if abc⟦0⟧ ≠ 5u32 ∨ abc⟦1⟧ ≠ 6u32 ∨ abc⟦2⟧ ≠ 7u32: return 3u6
+    let tw: @[cdecl] fn(u32) → 〈u32, f64〉 = two
+    let de: 〈u32, f64〉 = tw(7u32)
+    if de⟦0⟧ ≠ 7u32 ∨ de⟦1⟧ < 0.2f64 ∨ de⟦1⟧ > 0.3f64: return 4u6
+    let l: @[cdecl] fn(str) → bool = five_letters
+    if ¬l("hello") ∨ l("hi"): return 5u6
+    0u6

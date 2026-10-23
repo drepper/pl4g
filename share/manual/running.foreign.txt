@@ -10,6 +10,14 @@ of a function, `@[abi("sysv64")]` naming a convention the target knows
 (3210); on a record it says the fields are laid out as C would and never
 reordered, and only a reference to one crosses a call (4596).
 
+**A value of the system's convention** is `@[cdecl] fn(i32) → i32`: the
+address of code and nothing else, called as C calls it -- a named `@[cdecl]`
+function where a value is wanted, or **`⎕at(ADDRESS, ⌜@[cdecl] fn(…)⌝)`**,
+code at an address something else gave, believed as `⎕at` of a reference is;
+**`⎕address(f)`** is where its code is.  It may be held anywhere, a variable at
+the top level too, starting as `⎕at(0u64, …)`.  It does not convert to or from
+`fn(i32) → i32` (4360); a lambda is never one (4361).
+
 **`@[visible]`** puts a definition's symbol in the finished image for something
 outside to find; `@[export]` is the other question, what files importing the
 module may name ([[modules]]).  The image's own names -- `_start`, anything

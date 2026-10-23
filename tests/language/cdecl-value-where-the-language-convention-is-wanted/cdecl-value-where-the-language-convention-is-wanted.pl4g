@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error diag=4360
+
+※ **The two conventions are two types, and neither converts to the other.**  A
+※ function of the language's own convention is three words and is called with
+※ what it brought in first; one of the system's is the address of code that
+※ knows of no environment.  So a named `@[cdecl]` function, whose value is of
+※ the system's convention, does not stand where `fn(u64) → u64` is wanted --
+※ which it once did, through a shim.
+
+let std := ⎕import("std")
+
+@[cdecl]
+fn tripled(x: u64) → u64:
+    x × 3u64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let f: fn(u64) → u64 = tripled
+    if f(2u64) = 6u64: 0u6 else: 1u6

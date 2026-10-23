@@ -22,7 +22,7 @@ from dataclasses import replace
 from typing import Sequence
 
 from ...ir.reports import ReportKind, ReportLog
-from ...ir.function import BasicBlock, Function, ReturnStyle
+from ...ir.function import BasicBlock, DEFAULT_CCONV, Function, ReturnStyle
 from ...ir.inst import (BinOp, BinaryInst, CallInst, CastInst, CastKind,
                         ErrorInst, ExtractInst, FailedInst, FrameInst,
                         Instruction, LoadInst,
@@ -57,11 +57,33 @@ def through_storage(func: Function) -> bool:
     room and the answer is written into it, which is the one way such a value
     can outlive the call that made it.
     """
-    if func.ty.ret is VOID or func.answer_style.in_registers(func.ty.ret):
+    return answers_through_storage(func.ty.ret, func.answer_style)
+
+
+def answers_through_storage(answer: Type, style: ReturnStyle) -> bool:
+    """Whether an answer of *answer*, handed back in *style*, travels through
+    storage the caller provides: `through_storage` asked of a type and a style
+    rather than of a function, which is what a call through a value has."""
+    if answer is VOID or style.in_registers(answer):
         return False
-    if held_in_memory(func.ty.ret):
+    if held_in_memory(answer):
         return True
-    return all(len(parts_of(leaf)) == 1 for leaf in leaves_of(func.ty.ret))
+    return all(len(parts_of(leaf)) == 1 for leaf in leaves_of(answer))
+
+
+def _through_storage_by_value(inst: object) -> bool:
+    """Whether *inst* is a call through a value of the system's convention
+    whose answer travels through storage.
+
+    Such a call reaches code that answers as a function of that convention
+    does -- two values in registers and anything more through a place handed
+    over last -- whatever compiled it, so the call is rewritten as a call of a
+    named one would be.  One of the language's own convention reaches a lambda
+    or a function named as a value, each answering the way the language does.
+    """
+    return isinstance(inst, CallInst) and inst.target is not None \
+        and inst.cconv != DEFAULT_CCONV \
+        and answers_through_storage(inst.ty, ReturnStyle.TWO_IN_REGISTERS)
 
 
 class LargeAnswers:
@@ -87,7 +109,10 @@ class LargeAnswers:
         every = {id(func): func for func in module.functions.values()}
         wanted = {at: func for at, func in every.items()
                   if through_storage(func)}
-        if not wanted:
+        if not wanted and not any(_through_storage_by_value(inst)
+                                  for func in every.values()
+                                  for block in func.blocks
+                                  for inst in block.insts):
             return False
         answers = {at: func.ty.ret for at, func in wanted.items()}
         for func in wanted.values():
@@ -186,11 +211,13 @@ class LargeAnswers:
             # A call already rewritten answers with nothing, which is what says
             # it has been: the place it writes into is among its arguments and
             # giving it a second one would be giving it two.
-            if not isinstance(inst, CallInst) or id(callee) not in wanted \
+            by_value = _through_storage_by_value(inst)
+            if not isinstance(inst, CallInst) \
+                    or (id(callee) not in wanted and not by_value) \
                     or inst.ty is VOID:
                 index += 1
                 continue
-            answer = answers[id(callee)]
+            answer = inst.ty if by_value else answers[id(callee)]
             span = inst.span
             # The token first: finding it may put the start of the chain at the
             # top of the entry block, which moves this call along with it.
@@ -200,7 +227,9 @@ class LargeAnswers:
             slot = FrameInst(answer, module.types.ptr_type(answer, mutable=True),
                              span)
             made.append(slot)
-            made.append(CallInst(callee, (*inst.operands, slot), VOID, span))
+            made.append(CallInst(inst.target, (*inst.arguments, slot), VOID, span,
+                                 inst.cconv) if by_value
+                        else CallInst(callee, (*inst.operands, slot), VOID, span))
             if held_in_memory(answer):
                 # Nothing to read back: the room the caller made *is* the
                 # answer, since a value of such a type is where its bytes are.
