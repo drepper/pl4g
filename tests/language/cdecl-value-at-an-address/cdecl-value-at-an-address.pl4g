@@ -1,0 +1,55 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **`⎕at(ADDRESS, ⌜@[cdecl] fn(…) → T⌝)` is code at an address the program
+※ worked out**, as a value of the system's convention, and **`⎕address(f)`**
+※ is the way back: where the code of one is, as a number.  What is there is
+※ what the program says is there, as for a reference `⎕at` makes: the type is
+※ believed -- what the code takes, what it answers, whether calling it changes
+※ anything -- and there is nothing to check it against.  Making the value
+※ makes no function impure; a call of it is what its type says it is.
+※
+※ **A variable at the top level may hold one**, having no environment that
+※ could be gone before the program is.  What it starts out holding is known
+※ while compiling or it is nothing: `⎕at(0u64, …)`, a slot the program fills
+※ in once it has found what goes there -- which is how a program keeps a
+※ function the kernel's vDSO offers, found through the auxiliary vector.
+※
+※ Compare: **C**, where a cast of an integer to a pointer to a function says
+※ this anywhere; **Zig**, whose `@ptrFromInt` makes a `*const fn` as it makes
+※ any pointer; **Rust**, whose `transmute` of a `usize` to an `extern "C" fn` is
+※ `unsafe`, and whose `Option<extern "C" fn>` is the slot that starts empty.
+
+let std := ⎕import("std")
+
+@[cdecl]
+fn squared(x: i64) → i64:
+    x × x
+
+@[cdecl]
+fn halved(x: f64) → f64:
+    x × 0.5f64
+
+let found: mut @[cdecl] fn(i64) → i64 = ⎕at(0u64, ⌜@[cdecl] fn(i64) → i64⌝)
+
+fn through_the_slot(x: i64) → i64:
+    if ⎕address(found) = 0u64: ⁻1i64 else: found(x)
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    if through_the_slot(3i64) ≠ ⁻1i64: return 1u6
+    ※ the way there and back: the same code, called through a number
+    let where: u64 = ⎕address(squared)
+    let again: @[cdecl] fn(i64) → i64 = ⎕at(where, ⌜@[cdecl] fn(i64) → i64⌝)
+    if again(7i64) ≠ 49i64: return 2u6
+    ※ an `i64` is a machine word as well, which is what a request answers
+    let signed: i64 = ⎕narrow(where, ⌜i64⌝) ?? 0i64
+    let h: @[cdecl] fn(f64) → f64 = ⎕at(⎕address(halved) + 0u64,
+                                        ⌜@[cdecl] fn(f64) → f64⌝)
+    if h(5f64) < 2.4f64 ∨ h(5f64) > 2.6f64: return 3u6
+    let s: @[cdecl] fn(i64) → i64 = ⎕at(signed, ⌜@[cdecl] fn(i64) → i64⌝)
+    if s(4i64) ≠ 16i64: return 4u6
+    ※ the slot filled in, and called from elsewhere
+    found ← squared
+    if through_the_slot(5i64) ≠ 25i64: return 5u6
+    if ⎕address(found) ≠ where: return 6u6
+    0u6

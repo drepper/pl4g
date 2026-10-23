@@ -107,6 +107,9 @@
     const ir::Type* value_type_of(ir::Value* value);  // check.py:5402
     // The value a top-level variable is given, which must be a constant.
     ir::Value* constant_value(const ast::VarDef* node, const ir::Type* ty);  // check.py:5408
+    // What a variable at the top level of a function type of the system's convention starts out holding,
+    // where it is `⎕at` of nought -- a slot the program fills in -- and nothing where it is anything else.
+    ir::Value* function_constant(const ast::VarDef* node, const ir::FuncType* ty);
     // A set written by a macro's spread, where a dictionary is wanted: the pieces two at a time, a key and
     // what it stands for.
     const ast::DictLit* spread_paired(const ast::SetLit* written);  // check.py:5605

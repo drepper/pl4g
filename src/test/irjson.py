@@ -118,7 +118,7 @@ class Writer:
                 table, key = c._dicts, (ty.key, ty.value, ty.mutable)
             case T.FuncType():
                 table, key = c._functions, (ty.params, ty.ret, ty.listable, ty.hands_out, ty.lasting, ty.impure,
-                                            ty.can_ignore, ty.borrows)
+                                            ty.can_ignore, ty.borrows, ty.cconv)
             case T.IterType():
                 table, key = c._iterators, ty.element
             case T.RunningType():
@@ -175,7 +175,7 @@ class Writer:
             case T.FuncType():
                 return {"k": "func", "params": [self.type(p) for p in ty.params], "ret": self.type(ty.ret),
                         "listable": ty.listable, "hands_out": ty.hands_out, "lasting": ty.lasting,
-                        "impure": ty.impure, "can_ignore": ty.can_ignore,
+                        "impure": ty.impure, "can_ignore": ty.can_ignore, "cconv": ty.cconv,
                         "borrows": [[leaf, {"params": list(b.params),
                                             "leaves": [None if one is None else list(one) for one in b.leaves],
                                             "outer": [list(o) for o in b.outer]}]
@@ -346,6 +346,9 @@ class Writer:
                 out["index"] = inst.variant
             case I.CallInst():
                 out["callee"] = self.function_name(inst.callee)
+                out["cconv"] = inst.cconv
+                if inst.answer_first:
+                    out["answer_first"] = True
             case I.CodeInst():
                 out["callee"] = self.function_name(inst.callee)
             case I.FrameInst() | I.SizeOfInst():

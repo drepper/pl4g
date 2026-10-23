@@ -296,6 +296,9 @@ namespace pl4g::ir {
         shape.lasting = bool_of(t["lasting"]);
         shape.impure = bool_of(t["impure"]);
         shape.can_ignore = bool_of(t["can_ignore"]);
+        std::string_view convention;
+        if (t["cconv"].get(convention) == ::simdjson::SUCCESS)
+          shape.cconv = convention;
         for (Element b : t["borrows"].get_array()) {
           Borrowed borrowed;
           Object o = b.at(1).get_object();
@@ -548,6 +551,10 @@ namespace pl4g::ir {
             malformed("a call of a function the module does not have: " + std::string(string_of(callee)));
           inst->callee = it->second;
         }
+        if (o["cconv"].get(text) == ::simdjson::SUCCESS)
+          inst->cconv = text;
+        if (bool first; o["answer_first"].get(first) == ::simdjson::SUCCESS)
+          inst->answer_first = first;
         Element held;
         if (o["held"].get(held) == ::simdjson::SUCCESS)
           inst->held = type(held);

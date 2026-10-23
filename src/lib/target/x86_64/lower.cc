@@ -1313,8 +1313,8 @@ namespace pl4g::target::x86_64 {
     void Lowering::lower_call(ir::Instruction* inst, std::optional<Span> span)
     {
       auto callee = inst->callee;
-      // A call through a value: the convention is the one every function of
-      // the language follows, nothing here knowing which callee it is.
+      // A call through a value: the convention is the one the call carries,
+      // which the value's type said, nothing here knowing which callee it is.
       ir::Value* through = callee == nullptr ? inst->operands[0] : nullptr;
       auto given = inst->arguments();
       const auto& [placed_by, going] = placed.at(inst);

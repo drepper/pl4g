@@ -1,8 +1,22 @@
 ※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
 
-※ A function of the system's convention handed over as a value: a call through a
-※ value follows the language's own, so something stands between the two -- the
-※ one function that still has a shim.
+※ **A function of the system's convention named where a value is wanted is a
+※ value of the system's convention**: `@[cdecl] fn(u64) → u64`, one word, the
+※ address of the code, called as C calls it.  Nothing stands between, since the
+※ function expects to be called that way by whatever calls it -- this program,
+※ or something it hands the address to.
+※
+※ It has no environment, so it may be held where a value without one may: in a
+※ record, in a list, handed to a function and answered by one.  What a caller
+※ reads off the type is written before `fn` as for any function type, and the
+※ convention is one of those words: a call of a value of this type is placed
+※ by it.
+※
+※ Compare: **C**, whose pointer to a function this is; **Rust**, whose
+※ `extern "C" fn(u64) -> u64` is a type of its own beside `fn(u64) -> u64`, the
+※ two not converting; **Zig**, whose `*const fn (u64) callconv(.C) u64` puts
+※ the convention in the type the same way; **Go**, which has no such type and
+※ reaches C's through cgo.
 
 let std := ⎕import("std")
 
@@ -10,7 +24,34 @@ let std := ⎕import("std")
 fn tripled(x: u64) → u64:
     x × 3u64
 
+@[cdecl]
+fn plus_one(x: u64) → u64:
+    x + 1u64
+
+type Step =
+    name : str ; f : @[cdecl] fn(u64) → u64
+
+fn apply(f: @[cdecl] fn(u64) → u64, x: u64) → u64:
+    f(x)
+
+fn pick(first: bool) → @[cdecl] fn(u64) → u64:
+    if first: tripled else: plus_one
+
 @[startup]
 fn main(init: std.Init) → u6:
-    let f: fn(u64) → u64 = tripled
-    if f(2u64) = 6u64: 0u6 else: 1u6
+    let f: @[cdecl] fn(u64) → u64 = tripled
+    if f(2u64) ≠ 6u64: return 1u6
+    if apply(plus_one, 4u64) ≠ 5u64: return 2u6
+    let g: @[cdecl] fn(u64) → u64 = pick(false)
+    if g(9u64) ≠ 10u64: return 3u6
+    ※ in a record, called by taking it out
+    let s: Step = Step(.name ← "triple", .f ← tripled)
+    let h: @[cdecl] fn(u64) → u64 = s.f
+    if h(5u64) ≠ 15u64: return 4u6
+    ※ in a list, one after the other
+    let all: [@[cdecl] fn(u64) → u64] = [tripled, plus_one, tripled]
+    let n: mut u64 = 1u64
+    foreach one := all:
+        n ← one(n)
+    if n ≠ 12u64: return 5u6
+    0u6

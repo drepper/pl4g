@@ -1410,3 +1410,7 @@ Found writing the manual (2026-10-22); the manual says what the compiler does to
 [?] a macro's `$(number)` is always written as an `i64` literal (front/expand.py `_put_number`), whatever the number's type;
     the spec says it is written "as a program would have written" it.
     Question: keep the type's suffix, as the spec says?
+[ ] a variable at the top level of a function type of the system's convention starts out as `⎕at(0u64, …)` only; a named
+    `@[cdecl]` function there (a fallback a slot holds until something better is found) wants the image to hold the address of
+    code -- a relocation of a function's address in the data on the three back ends, `dropunreached` keeping a function a kept
+    variable's initializer names, and the interpreter handing out a closure for it.  9902 until then.

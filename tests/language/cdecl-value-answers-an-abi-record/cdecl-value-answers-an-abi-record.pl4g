@@ -1,0 +1,108 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A call through a value of `@[cdecl] fn(…)` answers as a call of a named
+※ `@[cdecl]` function answering the same type does**, so that the value
+※ `⎕address` and `⎕at` make of a function, or the function named as a value,
+※ reaches code that answers where its caller looks.  For a record laid out for
+※ C (`@[abi]`) answered whole that is C's rules: up to sixteen bytes in
+※ registers, cut as the architecture cuts a `struct`, and anything larger
+※ through room the caller makes, its address handed over before every
+※ argument -- on AArch64 in `x8`, which no argument takes.  Anything else
+※ holding such a record, a result answering one, goes through the room handed
+※ over last, as it does for a named function.
+※
+※ Here each record is answered by the named function and by a value made of
+※ its address, and the two are compared member by member: sixteen bytes of
+※ whole numbers (`rax`/`rdx`, `x0`/`x1`, `a0`/`a1`), sixteen of both kinds
+※ (an eightbyte of each class on x86-64), twenty-four of `double`s (a
+※ homogeneous aggregate in `d0`-`d2` on AArch64, the room elsewhere) and forty
+※ of whole numbers (the room everywhere), with arguments beside it so that a
+※ room handed over in the wrong place moves them.
+※
+※ Compare: **C**, where a call through a pointer to a function and a call by
+※ name are one call; **Rust**, whose `extern "C" fn` pointer returns a
+※ `#[repr(C)]` struct as the `extern "C"` fn it points at does; **Zig**, the
+※ convention being part of the type there too.
+
+@[abi]
+type I16 = a : i64 ; b : i64
+
+@[abi]
+type M16 = a : i32 ; b : f32 ; c : f64
+
+@[abi]
+type F24 = a : f64 ; b : f64 ; c : f64
+
+@[abi]
+type I40 = a : i64 ; b : i64 ; c : i64 ; d : i64 ; e : i64
+
+@[cdecl]
+fn c_i16(n: i64, m: i64) → I16:
+    I16(.a ← n, .b ← m)
+
+@[cdecl]
+fn c_m16(n: i32, x: f64) → M16:
+    M16(.a ← n, .b ← 2.5f32, .c ← x)
+
+@[cdecl]
+fn c_f24(x: f64, y: f64) → F24:
+    F24(.a ← x, .b ← y, .c ← x + y)
+
+@[cdecl]
+fn c_i40(n: i64, m: i64) → I40:
+    I40(.a ← n, .b ← m, .c ← n + m, .d ← n - m, .e ← n × m)
+
+@[cdecl]
+fn c_maybe(n: i64) → I16 ? i32:
+    if n > 0i64: I16(.a ← n, .b ← n + 1i64) else: ⊥ 6i32
+
+fn first_of(r: I16 ? i32) → i64:
+    match r:
+        I16(found):
+            found.a
+        ⊥(why):
+            0i64 - ⎕widen(why, ⌜i64⌝)
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let small: @[cdecl] fn(i64, i64) → I16 = ⎕at(⎕address(c_i16), ⌜@[cdecl] fn(i64, i64) → I16⌝)
+    let mixed: @[cdecl] fn(i32, f64) → M16 = ⎕at(⎕address(c_m16), ⌜@[cdecl] fn(i32, f64) → M16⌝)
+    let floats: @[cdecl] fn(f64, f64) → F24 = ⎕at(⎕address(c_f24), ⌜@[cdecl] fn(f64, f64) → F24⌝)
+    let large: @[cdecl] fn(i64, i64) → I40 = ⎕at(⎕address(c_i40), ⌜@[cdecl] fn(i64, i64) → I40⌝)
+    ※ and a named function as a value, with nothing standing between
+    let named: @[cdecl] fn(i64, i64) → I40 = c_i40
+    let maybe: @[cdecl] fn(i64) → I16 ? i32 = ⎕at(⎕address(c_maybe), ⌜@[cdecl] fn(i64) → I16 ? i32⌝)
+    let s: I16 = small(5i64, 9i64)
+    let ds: I16 = c_i16(5i64, 9i64)
+    let m: M16 = mixed(7i32, 4.25f64)
+    let dm: M16 = c_m16(7i32, 4.25f64)
+    let f: F24 = floats(1.5f64, 2.25f64)
+    let df: F24 = c_f24(1.5f64, 2.25f64)
+    let l: I40 = large(12i64, 5i64)
+    let dl: I40 = c_i40(12i64, 5i64)
+    let n: I40 = named(3i64, 4i64)
+    let dn: I40 = c_i40(3i64, 4i64)
+    if s.a ≠ ds.a ∨ s.b ≠ ds.b ∨ s.a ≠ 5i64 ∨ s.b ≠ 9i64:
+        1u6
+    elif m.a ≠ 7i32 ∨ ¬(m.b ≅ 2.5f32) ∨ ¬(m.c ≅ 4.25f64):
+        2u6
+    elif m.a ≠ dm.a ∨ ¬(m.b ≅ dm.b) ∨ ¬(m.c ≅ dm.c):
+        3u6
+    elif ¬(f.a ≅ 1.5f64) ∨ ¬(f.b ≅ 2.25f64) ∨ ¬(f.c ≅ 3.75f64):
+        4u6
+    elif ¬(f.a ≅ df.a) ∨ ¬(f.b ≅ df.b) ∨ ¬(f.c ≅ df.c):
+        5u6
+    elif l.a ≠ 12i64 ∨ l.b ≠ 5i64 ∨ l.c ≠ 17i64 ∨ l.d ≠ 7i64 ∨ l.e ≠ 60i64:
+        6u6
+    elif l.a ≠ dl.a ∨ l.b ≠ dl.b ∨ l.c ≠ dl.c ∨ l.d ≠ dl.d ∨ l.e ≠ dl.e:
+        7u6
+    elif n.a ≠ dn.a ∨ n.c ≠ dn.c ∨ n.e ≠ dn.e ∨ n.e ≠ 12i64:
+        8u6
+    elif first_of(maybe(41i64)) ≠ 41i64 ∨ first_of(maybe(0i64)) ≠ 0i64 - 6i64:
+        9u6
+    elif first_of(maybe(41i64)) ≠ first_of(c_maybe(41i64)):
+        10u6
+    else:
+        0u6

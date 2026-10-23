@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4366
+
+※ **`⎕address` of a function is where the code of one of the system's
+※ convention is**, which is all such a value is.  A function of the language's
+※ own convention expects what it brought in first, so its code alone is
+※ nothing anything else could call.
+
+let std := ⎕import("std")
+
+fn tripled(x: u64) → u64:
+    x × 3u64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let f: fn(u64) → u64 = tripled
+    if ⎕address(f) ≠ 0u64: 0u6 else: 1u6

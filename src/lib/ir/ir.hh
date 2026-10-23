@@ -201,6 +201,15 @@ namespace pl4g::ir {
     // The function a direct call calls, or whose code `code` answers.  An
     // indirect call has none: what it calls is its first operand.
     Function* callee = nullptr;
+    // The convention a call through a value is placed by: the language's own,
+    // the environment in the chain register, unless the value's type said the
+    // system's.  A call naming a function follows that function's.
+    std::string cconv = "pl4g";
+    // Whether a call through a value hands over first the room its answer is
+    // written to, as the system's convention has it for a record laid out for
+    // C that C answers through its caller's room: what a named function's
+    // `answer_first` says of its calls.  Only `large_answers` sets it.
+    bool answer_first = false;
     // What a frame holds room for, and what `sizeof` measures.
     const Type* held = nullptr;
     // An assertion's message, the status it stops with, and whether it goes on.

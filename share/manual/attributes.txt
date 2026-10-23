@@ -23,7 +23,7 @@ Before a statement, the list stands on its own line above it.
     visible           the finished image offers its symbol     [[running.foreign]]
     system            alone at a file's top: a system module   [[running.diagnostics]]
     cdecl             the system's C convention and plain name; C's layout for an
-                      array variable
+                      array variable; before `fn`, a value called as C calls
     abi(name)         a named convention for a function; C's layout for a record
     external(sym)     defined in the runtime the compiler carries
     host(sym)         defined by the program the interpreter or shared object is in

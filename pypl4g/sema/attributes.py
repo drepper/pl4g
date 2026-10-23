@@ -133,9 +133,11 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
                  (_param("mode", "name", choices=("always", "never"),
                          default="always", required=False),),
                  doc="guides the decision whether to inline the function"),
-        AttrSpec("cdecl", AttrTarget.FUNCTION | AttrTarget.VARIABLE,
+        AttrSpec("cdecl", AttrTarget.FUNCTION | AttrTarget.VARIABLE
+                 | AttrTarget.CALLABLE,
                  (_param("variadic", "boolean", default=False, required=False),),
-                 doc="the definition follows the system's conventions"),
+                 doc="the definition follows the system's conventions; before "
+                     "a function type, a value of it is called as C calls"),
         AttrSpec("listable", AttrTarget.FUNCTION | AttrTarget.CALLABLE,
                  doc="an array argument is walked and the answers make an array"),
         AttrSpec("impure", AttrTarget.FUNCTION | AttrTarget.CALLABLE,

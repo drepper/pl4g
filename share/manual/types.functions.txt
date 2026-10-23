@@ -34,8 +34,12 @@ in its type, `fn(&⧖x u32) → &⧖x u32` ([[memory.lifetimes]]).
 
 **Not a value**: a generic function (4569), and a function that writes an
 array it is handed (4641).  A variable at the top level may not hold a lambda
-(4550).  A function of C's convention, `@[cdecl]`, is called through a value
-in the language's own.
+(4550).
+
+**`@[cdecl] fn(u8) → u8` is a function of the system's convention**: one
+word, the address of code, called as C calls it ([[running.foreign]]).  A
+named `@[cdecl]` function's value is one, and the two conventions do not
+convert (4360).
 
 Program:
 

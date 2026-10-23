@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4363
+
+※ **A value of the system's convention brought nothing in**: it is where code
+※ is, and code lasts as long as the program, so `in ⎕heap` would say what is
+※ always so of it.
+
+let std := ⎕import("std")
+
+fn apply(f: @[cdecl] fn(u64) in ⎕heap → u64, x: u64) → u64:
+    f(x)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    0u6

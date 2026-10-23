@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4361
+
+※ **A lambda is of the language's own convention.**  What it is, is its code
+※ and what it brought in, and the system's convention has nowhere to hand the
+※ second over: what calls an address of that convention calls the address and
+※ nothing else.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let f: @[cdecl] fn(u64) → u64 = @[cdecl] λ x: u64 → u64 { x + 1u64 }
+    if f(2u64) = 3u64: 0u6 else: 1u6

@@ -1,0 +1,18 @@
+※ pl4g-test: compile=error diag=4364
+
+※ **A function taking a list as its own is no value of the system's
+※ convention.**  A call by name sees to it that the room it changes in place is
+※ room nobody else holds, copying where it has to; a call of an address is the
+※ code at the address and nothing else, so nothing would make the copy.
+
+let std := ⎕import("std")
+
+@[cdecl]
+fn pushed(l: mut [u8], x: u8) → [u8]:
+    l ⧺← [x]
+    l
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let f: @[cdecl] fn([u8], u8) → [u8] = pushed
+    if #f([], 1u8) = 1: 0u6 else: 1u6

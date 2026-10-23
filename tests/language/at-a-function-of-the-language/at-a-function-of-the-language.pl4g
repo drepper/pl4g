@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4365
+
+※ **`⎕at` makes a function only of the system's convention.**  An address is
+※ one word, where code is; a function of the language's own convention is three
+※ words, two of them about what it brought in, which no address says.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let f: fn(u64) → u64 = ⎕at(4096u64, ⌜fn(u64) → u64⌝)
+    if f(2u64) = 6u64: 0u6 else: 1u6

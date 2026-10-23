@@ -2547,7 +2547,8 @@ Nothing else changes: the place goes last, the `ret`s become stores, every call 
 a value is rewritten the same way** where its answer holds one: whatever the value points at is a function of the language's own
 convention -- one of another is reached through a shim of this one -- so it answers through the room, and the call hands one over
 after its arguments.  A call through a value answering anything else that does not fit is still refused (8501); this is the one
-shape that every callee is known to answer in storage.
+shape that every callee is known to answer in storage.  (That is a value of the language's own convention; one of the system's,
+`@[cdecl] fn(…)`, answers as a named function of that convention does, below under *Indirect calls*.)
 
 **In the system's convention it is answered as C answers it**, by a second half of the pass (`_as_c`) that runs after the first.
 `ir/cabi.py` holds the classification and nothing else: `follows_system` says which names a target's table holds its system
@@ -2582,11 +2583,12 @@ leave it unsaid.  The sweep finds the place first where the attribute says so.  
 `x8` with the argument registers, since the finder's own call to `dlsym` may destroy it.  AArch64's system convention answers in
 `d0` to `d3`, which only a homogeneous aggregate of three or four members uses.
 
-**Not in a program the interpreter runs.**  Nothing there reads a register: a function it runs answers whatever it answers as one
-value of several cells, and a function the host defines is called through libffi, which is handed the record as a `struct`
-type and applies the system's rules itself.  So `_as_c` does nothing for `Output.INTERPRETED`, and `through_storage` sends such a
-host function's answer through the caller's room, the place last as in the language's own convention: the interpreter calls the
-host with every argument but that one, as a `struct`-returning function described to libffi by the record's fields -- a nested
+**Not in a program the interpreter runs.**  Nothing there reads a register: a function the host defines is called through libffi,
+which is handed the record as a `struct` type and applies the system's rules itself.  So `_as_c` does nothing for
+`Output.INTERPRETED`, and `through_storage` sends the answer of every function of the system's convention answering such a
+record through the caller's room, the place last as in the language's own convention -- the host's, and the program's too, since
+a call through a value of `@[cdecl] fn(…)` may reach either, or code nothing in the program made, and has to hand over the same
+arguments to all of them.  The interpreter calls the host with every argument but that one, as a `struct`-returning function described to libffi by the record's fields -- a nested
 record a nested `struct`, an array a `struct` of its elements, which is how libffi is told of one -- and copies what libffi wrote
 into the room.  The record is laid out as C lays it out wherever it is, so the bytes need nothing done to them.
 
@@ -3252,8 +3254,70 @@ says so for both ends, a call being chained where it goes through a value or to 
 argument uses and a call destroys -- r11 on x86-64, the language's own convention passing an argument in r10, which is the
 system's static chain; x15 on AArch64, the backend leaving x18 alone; t2 on RISC-V, as GCC has it -- so a function of the
 program, which has no environment, never reads it, and `_function_as_a_value` points the pair at the function itself.  A
-function of another convention still goes through `⎕through<name>`, kept in `_shims`: a call through a value follows the
-language's convention and such a function does not.
+function of a convention named by an architecture's name still goes through `⎕through<name>`, kept in `_shims`: a call through a
+value of the language's convention follows that convention and such a function does not.
+
+**A value of the system's convention is one word.**  `FuncType` carries `cconv`, `pl4g` or `cdecl` (`system` asks which), part
+of the interned key; `parts_of` is one `ptr<mut u8>` for the second, `size_of` a word, and the type context makes every such type
+`lasting`, code lasting as long as the program -- so every question about where a function value may go (`_kept_anywhere`,
+`_lambdas_last`) answers yes without being taught anything, and `_holds_a_lambda` and `_points_somewhere` answer no.  The
+type is written `@[cdecl] fn(…)`, the convention first among the words before `fn`, and `cdecl fn(…)` in the IR's text; it is never
+written `in ⎕heap`.  `_promises_as_much` asks the conventions to be one, and `_report_mismatch` says 4360 wherever they are not,
+before any of the messages that would read as though the parameters differed.  `_resolve_type` binds the attributes of a
+`FuncTypeRef` itself, `cdecl` being a `CALLABLE` attribute now, and `_system_convention_of` refuses `variadic=true`, `in ⎕heap`
+and `→ T in pool` on it; `_lower_lambda` refuses it on a lambda.
+
+**A named function of the system's convention is `make_tuple((code_address(func),))`** of that type, made by
+`_system_function_value`; a host function taking no `str` is one, and its code is the stub that finds it.  `⎕at` of such a type
+(`_function_at`) is the address bitcast to `ptr<mut u8>` and made the one part; `⎕address` of one takes the part out and bitcasts
+it to `u64`.  At the top level `_function_constant` reads `⎕at(0u64, …)` as a `PartsConst` of one `AddressConst` of nothing, which
+`target/globals.py` writes as the eight zero bytes it writes for any address of nothing; any other address, and a named function,
+are left to 9902.
+
+**The call carries the convention.**  `CallInst.cconv` is the convention of a call through a value -- `pl4g` unless said, and
+always `pl4g` for a call naming a function, which follows its callee's -- and the opcode says it where it is another, `call.cdecl`,
+which irjson writes as `"cconv"` and the C++ reader takes back.  `_call_through`, shared by a name in a body (`_lower_indirect`)
+and a variable at the top level (`_lower_through_global`), hands the arguments and nothing else for a value of the system's
+convention, `builder.call(code, args, ret, cconv=cdecl)`, where one of the language's hands the environment first.
+`calls_placed` places such a call by the convention it carries and not chained -- no environment, and the chain register a C
+callee may use for anything -- and `destroyed_by`, asked of the convention with no callee, answers everything that convention's
+callee may destroy, which for the system's is more than for the language's own.  **`largeanswers` rewrites such a call as it
+rewrites a call of a named function of that convention**: an answer the system's style does not answer in two registers
+(`answers_through_storage(ty, TWO_IN_REGISTERS)`) goes through a place in the caller's frame handed over last, which is what a
+`@[cdecl]` function answering three values was widened to take.
+
+**An `@[abi]` record answered whole goes by C's rules, as for a named function** (`_answers_as_c_by_value`): `_as_c` asks
+`cabi.answered_by_c` of the record the call answers, and rewrites the call to answer the pieces -- taken apart again as a named
+call's are -- or to hand a frame over first, answering the place on x86-64.  A call through a value has no function whose
+`answer_first` the instruction selectors could read, so **`CallInst.answer_first` says it of the call**, set by `_as_c` and by
+nothing else, written `"answer_first"` by irjson and kept by the inliner's copy; `calls_placed` reads it where it reads the
+callee's attribute for a named call, which on AArch64 puts the place in `x8`.  Anything else holding such a record -- a result
+answering one -- goes through the room handed over last, as `through_storage` sends a named function's; and in the interpreter the
+record itself does too, as for every function of the system's convention there.  So the rule for a call through a value is the
+rule for a named function of the same convention answering the same type, whichever the value points at.
+
+**The interpreter calls code it did not make through libffi, and hands out code a host can call.**  A value of the language's
+convention holds the `Function*` itself, as before.  One of the system's convention made of a function of the program holds,
+where every type of the function is one C has (`crosses`), the address of a libffi closure made for it on its first `code`
+(`Machine::code_value`) -- `ffi_closure_alloc`, `ffi_prep_closure_loc`, kept for the run and freed with the machine -- whose
+handler (`closed_call`) makes cells of what C handed over, as a load makes them, runs the function with `Machine::call`, and
+hands its answer back as libffi wants it, an integer widened to a word.  So `⎕address` of such a function is a number a host
+can call.  A call through a value of the system's convention looks its target up among the closures first and runs the
+function in the interpreter where it is one -- or is a `Function*`, for a function whose types C does not have -- with no
+environment to skip; anything else is code nothing here made, called with `ffi_call` by a description made from the call's
+own argument types and answer the first time that call reaches one (`Machine::foreign_call`, kept by the instruction), the
+argument cells and the answer crossing as a host function's do (`crossed_call`, which `host_call` now shares).  Where the value's
+type answers an `@[abi]` record and the call hands over one argument more than the type takes -- the room `largeanswers` put
+last -- libffi is told the rest and a `struct` answer, and what it answers is copied into the room, as for a host function; and a
+function of the program answering one that way is given a closure answering the `struct`, whose handler hands the buffer libffi
+answers from to the function as its room.  A target of
+nought stops the run as `SIGSEGV`, as the compiled program would.  **A host function may now call back into the program**,
+through a closure, so whatever a call into the host leaves behind re-reads the frame afterwards: the cells may have moved.
+A function the host defines named as a value is a closure of the declaration, whose handler makes the host call; the
+compiled image's `hosted` counts a `code` of one as it counts a call, so that it has a stub to point at, in pypl4g and the
+C++ port alike.  `src/examples/embed/callbacks.cc` runs both directions under ctest's `embed-callbacks`: the host hands the
+program two of its functions as numbers, one of twenty arguments, and the program hands the host `⎕address` of a `@[cdecl]`
+function of its own, which the host calls twice from within a call the program made.
 
 Compare GCC's nested functions and LLVM's `nest`, the same register for the same reason; Rust tells the two apart in the type
 system, `fn` for the bare address and `Fn` for the pair, and C has nothing to carry, which is why a C callback needs a `void *`

@@ -456,7 +456,7 @@ namespace pl4g::opt {
     // Whether `func` answers a record laid out for C in the system's
     // convention, which C's rules say how to answer -- except in a program the
     // interpreter runs, where nothing reads a register and libffi calls the
-    // host's functions.
+    // host's functions, and so every such function answers through the room.
     bool answers_as_c(const Module& module, const Function& func)
     {
       auto record = as<ProductType>(func.fty->ret);
@@ -464,29 +464,59 @@ namespace pl4g::opt {
              && module.output != Output::interpreted;
     }
 
-    // Whether the answer travels through the caller's storage: a record laid
+    // Whether an answer of `ret`, handed back by `cconv` in `style`, travels
+    // through storage the caller provides, handed over last: a record laid
     // out for C, or anything holding one, in the language's own convention
     // whatever its size, and anything holding one but the record itself in
-    // the system's.
-    bool through_storage(const Module& module, const Function& func)
+    // the system's -- and the record itself there in the interpreter, the
+    // host's functions and the program's alike, since a value of `@[cdecl]
+    // fn(…)` may reach either.
+    bool answers_through_storage(const Module& module, const Type* ret, std::string_view cconv, ReturnStyle style)
     {
-      const Type* ret = func.fty->ret;
       if (is<VoidType>(ret))
         return false;
-      if (auto record = as<ProductType>(ret);
-          record != nullptr && record->abi && cabi::follows_system(module.triple, func.cconv)) {
-        // In the interpreter, libffi writes what the host answers into the room.
-        if (module.output != Output::interpreted)
-          return false;
-        if (func.attrs.host)
-          return true;
-      } else if (holds_abi(ret))
+      if (auto record = as<ProductType>(ret); record != nullptr && record->abi && cabi::follows_system(module.triple, cconv))
+        return module.output == Output::interpreted;
+      if (holds_abi(ret))
         return true;
-      if (in_registers(func.answer_style(), ret))
+      if (in_registers(style, ret))
         return false;
       if (held_in_memory(ret))
         return true;
       return std::ranges::all_of(leaves_of(ret), [](auto leaf) { return parts_of(leaf).size() == 1; });
+    }
+
+    // Whether the answer of `func` travels through the caller's storage.
+    bool through_storage(const Module& module, const Function& func)
+    {
+      return answers_through_storage(module, func.fty->ret, func.cconv, func.answer_style());
+    }
+
+    // Whether `inst` is a call through a value whose answer travels through
+    // storage handed over last.  One of the system's convention reaches code
+    // that answers as a named function of that convention does, whatever
+    // compiled it, so it is rewritten as a call of a named one would be; one
+    // of the language's own reaches a lambda or a function named as a value,
+    // which answer through the room only what holds a record laid out for C.
+    bool through_storage_by_value(const Module& module, const Instruction* inst)
+    {
+      if (inst->kind != InstKind::CallInst || inst->callee != nullptr)
+        return false;
+      if (inst->cconv == default_cconv)
+        return holds_abi(inst->ty);
+      return answers_through_storage(module, inst->ty, inst->cconv, ReturnStyle::two_in_registers);
+    }
+
+    // Whether `inst` is a call through a value of the system's convention
+    // answering a record laid out for C, which C's rules answer as they
+    // answer it for a named function of that convention.
+    bool answers_as_c_by_value(const Module& module, const Instruction* inst)
+    {
+      if (inst->kind != InstKind::CallInst || inst->callee != nullptr || inst->cconv == default_cconv)
+        return false;
+      auto record = as<ProductType>(inst->ty);
+      return record != nullptr && record->abi && cabi::follows_system(module.triple, inst->cconv)
+             && module.output != Output::interpreted;
     }
 
     // The memory token in force before `at`, starting the chain at the top
@@ -788,15 +818,14 @@ namespace pl4g::opt {
       return index + made_insts.size();
     }
 
-    // Whether any function calls through a value something holding a record
-    // laid out for C, which is answered through the caller's room.
-    bool calls_through_values(const std::vector<Function*>& every)
+    // Whether any of `every` calls through a value something `wanted` says of.
+    template<typename Pred>
+    bool calls_through_values(const std::vector<Function*>& every, Pred wanted)
     {
       for (auto func : every)
         for (const auto& block : func->blocks)
-          for (auto inst : block->insts)
-            if (inst->kind == InstKind::CallInst && inst->callee == nullptr && holds_abi(inst->ty))
-              return true;
+          if (std::ranges::any_of(block->insts, wanted))
+            return true;
       return false;
     }
 
@@ -813,7 +842,8 @@ namespace pl4g::opt {
           wanted.push_back(func);
           answers[func] = func->fty->ret;
         }
-      if (wanted.empty() && ! calls_through_values(every))
+      if (wanted.empty()
+          && ! calls_through_values(every, [&](const Instruction* inst) { return through_storage_by_value(module, inst); }))
         return false;
       // What it answers goes where its last parameter, added here, says.
       for (auto func : wanted) {
@@ -830,10 +860,11 @@ namespace pl4g::opt {
           for (std::size_t index = 0; index < block->insts.size();) {
             auto inst = block->insts[index];
             auto callee = inst->callee;
-            // A call through a value answering something holding a record laid
-            // out for C is one too: whatever the value points at follows the
-            // language's own convention, which answers that through the room.
-            bool through = inst->kind == InstKind::CallInst && callee == nullptr && holds_abi(inst->ty);
+            // A call through a value is one too where what the value points
+            // at answers through the room: an answer holding a record laid out
+            // for C in the language's own convention, and in the system's
+            // whatever a named function of it would answer there.
+            bool through = through_storage_by_value(module, inst);
             if (inst->kind != InstKind::CallInst || is<VoidType>(inst->ty)
                 || ((callee == nullptr || ! answers.contains(callee)) && ! through)) {
               ++index;
@@ -851,6 +882,7 @@ namespace pl4g::opt {
             args.push_back(slot);
             auto call = made(*func, InstKind::CallInst, void_type(), args, span);
             call->callee = through ? nullptr : callee;
+            call->cconv = inst->cconv;
             made_insts.push_back(call);
             index = read_back(module, *func, block.get(), index, inst, answer, slot, token, made_insts);
           }
@@ -1096,7 +1128,8 @@ namespace pl4g::opt {
           auto record = as<ProductType>(func->fty->ret);
           shapes[func] = { record, cabi::answered_by_c(module.triple, record) };
         }
-      if (wanted.empty())
+      if (wanted.empty()
+          && ! calls_through_values(every, [&](const Instruction* inst) { return answers_as_c_by_value(module, inst); }))
         return false;
       bool back = cabi::answers_its_place(module.triple);
       for (auto func : wanted) {
@@ -1126,13 +1159,31 @@ namespace pl4g::opt {
           for (std::size_t index = 0; index < block->insts.size();) {
             auto inst = block->insts[index];
             auto callee = inst->callee;
+            // A call through a value of the system's convention answering
+            // such a record is one too, rewritten as a call of a named one
+            // answering it is: whatever the value points at answers as C
+            // does.  Where the room goes first the call says so, as a named
+            // function's `answer_first` does, for `calls_placed`.
+            bool by_value = answers_as_c_by_value(module, inst);
             // A call already rewritten answers something other than the record.
-            if (inst->kind != InstKind::CallInst || callee == nullptr || ! shapes.contains(callee)
+            if (inst->kind != InstKind::CallInst || ((callee == nullptr || ! shapes.contains(callee)) && ! by_value)
                 || ! is<ProductType>(inst->ty)) {
               ++index;
               continue;
             }
-            const auto& [record, pieces] = shapes[callee];
+            const ProductType* record = nullptr;
+            Pieces pieces;
+            const Type* answered = nullptr;
+            if (by_value) {
+              record = as<ProductType>(inst->ty);
+              pieces = cabi::answered_by_c(module.triple, record);
+              answered = pieces ? words_type(*pieces)
+                         : back ? static_cast<const Type*>(ptr_type(record, true))
+                                : void_type();
+            } else {
+              std::tie(record, pieces) = shapes[callee];
+              answered = callee->fty->ret;
+            }
             auto span = inst->span;
             auto token = token_before(*func, block.get(), index);
             index = index_of(block.get(), inst);
@@ -1142,15 +1193,24 @@ namespace pl4g::opt {
               slot->held = record;
               made_insts.push_back(slot);
               std::vector<Value*> args{ slot };
-              args.insert(args.end(), inst->operands.begin(), inst->operands.end());
-              auto call = made(*func, InstKind::CallInst, callee->fty->ret, args, span);
+              if (by_value) {
+                // The value called stays first among the operands, the room
+                // first among the arguments.
+                args.insert(args.begin(), inst->operands[0]);
+                args.insert(args.end(), inst->operands.begin() + 1, inst->operands.end());
+              } else
+                args.insert(args.end(), inst->operands.begin(), inst->operands.end());
+              auto call = made(*func, InstKind::CallInst, answered, args, span);
               call->callee = callee;
+              call->cconv = inst->cconv;
+              call->answer_first = by_value;
               made_insts.push_back(call);
               index = read_back(module, *func, block.get(), index, inst, record, slot, token, made_insts);
               continue;
             }
-            auto call = made(*func, InstKind::CallInst, callee->fty->ret, inst->operands, span);
+            auto call = made(*func, InstKind::CallInst, answered, inst->operands, span);
             call->callee = callee;
+            call->cconv = inst->cconv;
             made_insts.push_back(call);
             std::vector<Value*> words;
             if (pieces->size() == 1)

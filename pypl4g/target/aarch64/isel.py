@@ -2500,8 +2500,9 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     # A call through a value rather than to a definition: what
                     # is called is whatever the register holds, so the
                     # convention cannot be the callee's -- nothing here knows
-                    # which callee it is -- and is the one every function of
-                    # this language follows.
+                    # which callee it is -- and is the one the call carries,
+                    # which the value's type said: the language's own, or the
+                    # system's.
                     through = inst.target
                     if through is None and not isinstance(callee, _Function):
                         raise UnsupportedOperation(

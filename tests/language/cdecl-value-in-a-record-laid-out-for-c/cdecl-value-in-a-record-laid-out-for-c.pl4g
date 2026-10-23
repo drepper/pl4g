@@ -1,0 +1,50 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A value of the system's convention is one word**, so a record laid out for
+※ C (`@[abi]`) holds one where C's `struct` holds a pointer to a function: the
+※ field after it is eight bytes in.  And it is the shape a library keeps the
+※ functions it found in: a variable at the top level that starts out as nought,
+※ is filled in once, and is called with a reference to a record C's function
+※ writes -- `clock_gettime(clock, &ts)` as the vDSO offers it.
+※
+※ A pure function may call one whose type says it is pure, as it may call a
+※ pure function by name.
+※
+※ Compare: **C**, `struct { int (*gettime)(int, struct timespec *); uint64_t
+※ count; }`; **Rust**, whose `#[repr(C)]` struct holds an `extern "C" fn` the
+※ same way.
+
+let std := ⎕import("std")
+
+@[abi]
+type Timespec =
+    mut tv_sec : i64 ; mut tv_nsec : i64
+
+@[abi]
+type Table =
+    gettime : @[cdecl, impure] fn(i32, &mut Timespec) → i32 ; count : u64
+
+@[cdecl, impure]
+fn by_hand(clock: i32, into: &mut Timespec) → i32:
+    into⌖ ← Timespec(.tv_sec ← 7i64, .tv_nsec ← ⎕widen(clock, ⌜i64⌝))
+    0i32
+
+let gettime: mut @[cdecl, impure] fn(i32, &mut Timespec) → i32 = ⎕at(
+    0u64, ⌜@[cdecl, impure] fn(i32, &mut Timespec) → i32⌝)
+
+fn pure_apply(f: @[cdecl] fn(u8) → u8, x: u8) → u8:
+    f(x)
+
+@[cdecl]
+fn inc(x: u8) → u8: x + 1u8
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let t: Table = Table(.gettime ← by_hand, .count ← 1u64)
+    if ⎕address(&t.count) - ⎕address(&t) ≠ 8u64: return 1u6
+    let ts: mut Timespec = Timespec(.tv_sec ← 0i64, .tv_nsec ← 0i64)
+    if ⎕address(gettime) = 0u64:
+        gettime ← t.gettime
+    if gettime(3i32, &mut ts) ≠ 0i32 ∨ ts.tv_sec ≠ 7i64 ∨ ts.tv_nsec ≠ 3i64: return 2u6
+    if pure_apply(inc, 4u8) ≠ 5u8: return 3u6
+    0u6

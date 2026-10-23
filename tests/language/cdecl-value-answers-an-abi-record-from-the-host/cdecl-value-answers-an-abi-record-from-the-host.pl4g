@@ -1,0 +1,51 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none host=host.c
+※ pl4g-test: args -shared
+
+※ **A function the host compiled answering a `struct`, handed over as the
+※ number its address is, answers as C answers it** once `⎕at` has made a
+※ value of the system's convention of it whose answer is a record laid out
+※ for C: `host.c` hands this shared object the addresses of three of its own
+※ functions, and `run` calls each -- a whole number beside a `double`, which
+※ x86-64 answers in `rax` and `xmm0`; three `float`s, a homogeneous aggregate
+※ AArch64 answers in `s0`-`s2`; and thirty-two bytes, answered through room
+※ the caller makes, its address handed over before the arguments (in `x8` on
+※ AArch64) -- every member checked where it arrives.
+※
+※ **And the way back**: `offered` answers where the code of a `@[cdecl]`
+※ function of this object answering such a record is, and the host calls it
+※ through a pointer of its own, as it calls a function of its own.
+※
+※ Compare: **C**, whose callbacks returning a `struct` are exactly this;
+※ **Rust**, whose `extern "C" fn() -> S` pointer, `S` being `#[repr(C)]`,
+※ crosses an FFI boundary as a bare pointer and returns as C does;
+※ **Python**'s ctypes, whose `CFUNCTYPE` with a `Structure` restype does too.
+
+@[abi]
+type Pair = whole : i64 ; part : f64
+
+@[abi]
+type Floats = x : f32 ; y : f32 ; z : f32
+
+@[abi]
+type Quad = a : i64 ; b : f64 ; c : i32 ; d : f64
+
+@[cdecl]
+fn quad_of(n: i64, x: f64) → Quad:
+    Quad(.a ← n + 1i64, .b ← 2f64 × x, .c ← 7i32, .d ← 3f64 × x)
+
+@[visible, cdecl]
+fn run(p: u64, f: u64, q: u64) → i64:
+    let pair: @[cdecl] fn(i64) → Pair = ⎕at(p, ⌜@[cdecl] fn(i64) → Pair⌝)
+    let floats: @[cdecl] fn(f32) → Floats = ⎕at(f, ⌜@[cdecl] fn(f32) → Floats⌝)
+    let quad: @[cdecl] fn(i64, f64) → Quad = ⎕at(q, ⌜@[cdecl] fn(i64, f64) → Quad⌝)
+    let one: Pair = pair(41i64)
+    if one.whole ≠ 42i64 ∨ ¬(one.part ≅ 0.75f64): return 1i64
+    let three: Floats = floats(1.5f32)
+    if ¬(three.x ≅ 1.5f32) ∨ ¬(three.y ≅ 3f32) ∨ ¬(three.z ≅ 4.5f32): return 2i64
+    let four: Quad = quad(10i64, 0.5f64)
+    if four.a ≠ 11i64 ∨ ¬(four.b ≅ 1f64) ∨ four.c ≠ 12i32 ∨ ¬(four.d ≅ 1.5f64): return 3i64
+    0i64
+
+@[visible, cdecl]
+fn offered() → u64:
+    ⎕address(quad_of)

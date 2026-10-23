@@ -584,6 +584,20 @@ class FuncType(Type):
     #: among the answer's parts, -1 being an answer that is one reference.  A
     #: caller through a value has nothing else to work it out from.
     borrows: tuple[tuple[int, Borrowed], ...] = ()
+    #: The convention a value of this type is called by: the language's own,
+    #: `pl4g`, for everything a lambda or a named function of that convention
+    #: comes to, and the system's, `cdecl`, for the address of code something
+    #: else may have compiled -- `@[cdecl] fn(i32) \N{RIGHTWARDS ARROW} i32`.
+    #: The two are different types and neither converts to the other: one is
+    #: three words and is called with what it brought in first, the other is
+    #: one word and is called as C calls it.
+    cconv: str = "pl4g"
+
+    @property
+    def system(self) -> bool:
+        """Whether a value of this type is called the way the system calls:
+        one word, the address of the code, and no environment."""
+        return self.cconv != "pl4g"
 
     def borrowed(self) -> dict[int, Borrowed]:
         """`borrows`, as a table."""
@@ -609,8 +623,11 @@ class FuncType(Type):
         return given, answered
 
     def _said(self, glyphs: bool) -> str:
-        """The promises written before `fn`, in the order they are written."""
-        words = [one for one, held in (("listable", self.listable),
+        """The promises written before `fn`, in the order they are written: the
+        convention first, where it is not the language's own, since it says
+        what kind of thing the value is before the rest says what it does."""
+        words = [one for one, held in ((self.cconv, self.system),
+                                       ("listable", self.listable),
                                        ("impure", self.impure),
                                        ("can_ignore", self.can_ignore)) if held]
         if not words:
@@ -623,7 +640,8 @@ class FuncType(Type):
         """The name of this type in the textual form of the IR."""
         inner = ", ".join(p.render() for p in self.params)
         return "".join((self._said(False),
-                        "fn(", inner, ")", " lasting" if self.lasting else "",
+                        "fn(", inner, ")",
+                        " lasting" if self.lasting and not self.system else "",
                         " \N{RIGHTWARDS ARROW} ", self.ret.render(),
                         " in arena" if self.hands_out else ""))
 
@@ -633,7 +651,10 @@ class FuncType(Type):
         inner = ", ".join(_marked(p, marks) for p, marks in zip(self.params, given))
         return "".join((self._said(True),
                         "fn(", inner, ")",
-                        " in \N{APL FUNCTIONAL SYMBOL QUAD}heap" if self.lasting else "",
+                        # One of the system's convention lasts by being one: it
+                        # brought nothing in, and saying so would be noise.
+                        " in \N{APL FUNCTIONAL SYMBOL QUAD}heap"
+                        if self.lasting and not self.system else "",
                         " \N{RIGHTWARDS ARROW} ", _marked(self.ret, answered),
                         " in its own arena" if self.hands_out else ""))
 
@@ -645,7 +666,8 @@ class FuncType(Type):
         """
         inner = ",".join(p.mangled() for p in self.params)
         return "".join((self._said(False),
-                        "fn(", inner, ")", " lasting" if self.lasting else "",
+                        "fn(", inner, ")",
+                        " lasting" if self.lasting and not self.system else "",
                         self.ret.mangled(),
                         " in" if self.hands_out else "",
                         "".join("".join((" from", str(leaf), ":",
@@ -1308,7 +1330,7 @@ class TypeContext:
         self._sets: dict[tuple[Type, bool], SetType] = {}
         self._dicts: dict[tuple[Type, Type, bool], DictType] = {}
         self._pointers: dict[tuple[Type, bool, bool], PtrType] = {}
-        self._functions: dict[tuple[tuple[Type, ...], Type], FuncType] = {}
+        self._functions: dict[tuple[object, ...], FuncType] = {}
         self._iterators: dict[Type | None, IterType] = {}
         self._running: dict[tuple[Type, Type | None, bool], RunningType] = {}
         self._integers: dict[tuple[int, bool], IntType] = {
@@ -1433,14 +1455,21 @@ class TypeContext:
                   listable: bool = False, hands_out: bool = False,
                   lasting: bool = False, impure: bool = False,
                   can_ignore: bool = False,
-                  borrows: tuple[tuple[int, Borrowed], ...] = ()) -> FuncType:
-        """Return the function type with the given signature."""
+                  borrows: tuple[tuple[int, Borrowed], ...] = (),
+                  cconv: str = "pl4g") -> FuncType:
+        """Return the function type with the given signature.
+
+        One of the system's convention always lasts: what it is, is where the
+        code is, and code lasts as long as the program.
+        """
+        if cconv != "pl4g":
+            lasting = True
         key = (params, ret, listable, hands_out, lasting, impure, can_ignore,
-               borrows)
+               borrows, cconv)
         found = self._functions.get(key)
         if found is None:
             found = FuncType(params, ret, listable, hands_out, lasting, impure,
-                             can_ignore, borrows)
+                             can_ignore, borrows, cconv)
             self._functions[key] = found
         return found
 
@@ -1669,6 +1698,13 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
         # what a resume hands in goes.
         return (_pointer_to(U8), _pointer_to(U8), _pointer_to(U64),
                 _pointer_to(U8))
+    if isinstance(ty, FuncType) and ty.system:
+        # One of the system's convention is where its code is and nothing
+        # else: it brought nothing in, and what calls it is compiled by
+        # something that knows of no environment.  One word, as C's pointer to
+        # a function is, so that a record laid out for C holds one where C has
+        # one.
+        return (_pointer_to(U8),)
     if isinstance(ty, FuncType):
         # A function written where a value is wanted is three words: where its
         # code is, where what it brought in with it is, and the allocator that

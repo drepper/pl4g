@@ -87,6 +87,10 @@ namespace pl4g::ir {
     case TypeKind::running:
       return 4 * ptr;
     case TypeKind::func:
+      // Where the code is and nothing else for one of the system's convention,
+      // as C's pointer to a function; the code, what was brought in and its
+      // allocator otherwise.
+      return static_cast<const FuncType*>(ty)->system() ? ptr : 3 * ptr;
     case TypeKind::iter:
       return 3 * ptr;
     case TypeKind::opaque:

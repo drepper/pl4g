@@ -15,6 +15,8 @@
 #   pl4g-embed-example-cc  the same in C++, through embed/pl4g-embed.hh
 #   pl4g-embed-defined  a host handing PL4G its functions by name, not dlsym
 #   pl4g-embed-members  the same with objects: a static member, the object its context
+#   pl4g-embed-callbacks  a host and its program calling each other's functions
+#                     through their addresses, values of the system's convention
 #   pl4g-embed        the interpreter as libpl4g-embed.so and libpl4g-embed.a
 #   pl4g-manual       the manual, a node at a time (libpl4g-manual.so, and
 #                     libpl4g-manual.a), and pl4g-help, which shows one
@@ -478,6 +480,17 @@ target_link_libraries(pl4g-embed-members PRIVATE ${CMAKE_DL_LIBS})
 add_dependencies(pl4g-embed-members pl4g-embed)
 add_test(NAME embed-members
   COMMAND prlimit --data=536870912 --cpu=120 -- $<TARGET_FILE:pl4g-embed-members> $<TARGET_FILE:pl4g-embed>)
+
+# And functions called through their addresses, both ways: the host's by the
+# program, through libffi, and the program's by the host, through a closure.
+add_executable(pl4g-embed-callbacks src/examples/embed/callbacks.cc)
+target_include_directories(pl4g-embed-callbacks PRIVATE ${CMAKE_SOURCE_DIR}/src/lib)
+target_compile_options(pl4g-embed-callbacks PRIVATE -Wall -Wextra -fcontracts)
+target_link_options(pl4g-embed-callbacks PRIVATE -fcontracts)
+target_link_libraries(pl4g-embed-callbacks PRIVATE ${CMAKE_DL_LIBS})
+add_dependencies(pl4g-embed-callbacks pl4g-embed)
+add_test(NAME embed-callbacks
+  COMMAND prlimit --data=536870912 --cpu=120 -- $<TARGET_FILE:pl4g-embed-callbacks> $<TARGET_FILE:pl4g-embed>)
 
 # Expressions handed over as JSON and evaluated in PL4G, the replies read with
 # nlohmann::json and checked against a schema with json-schema-validator;

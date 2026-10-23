@@ -30,11 +30,11 @@ written to memory and read back.
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Iterable, Sequence
+from typing import Sequence
 
 from ...ir import cabi
 from ...ir.reports import ReportKind, ReportLog
-from ...ir.function import BasicBlock, Function, ReturnStyle
+from ...ir.function import BasicBlock, DEFAULT_CCONV, Function, ReturnStyle
 from ...ir.inst import (BinOp, BinaryInst, CallInst, CastInst, CastKind,
                         ErrorInst, ExtractInst, FailedInst, FrameInst,
                         Instruction, LoadInst,
@@ -72,11 +72,12 @@ def answers_as_c(module: Module, func: Function) -> bool:
     """Whether *func* answers a record laid out for C in the system's
     convention: the answer C's rules are about, which is answered by them.
 
-    Not in a program the interpreter runs.  Nothing there reads a register: a
-    function it runs answers what it answers as it answers every value, and one
+    Not in a program the interpreter runs.  Nothing there reads a register: one
     the host defines is called through libffi, which is told the record's
     members, applies C's rules itself and writes the answer into the room the
-    caller made.
+    caller made, handed over last -- and so does a function of the program,
+    since a call through a value of `@[cdecl] fn(…)` may reach either and
+    cannot tell which.
     """
     ret = func.ty.ret
     return isinstance(ret, ProductType) and ret.abi \
@@ -103,25 +104,73 @@ def through_storage(module: Module, func: Function) -> bool:
     what is answered is bytes something else may be handed, and they are
     wanted where they will be read.  A record answered whole in the system's
     convention is C's to say (`answers_as_c`) -- but in the interpreter, where
-    one the host answers goes through the room too: the interpreter has libffi
-    call the host's function, which writes the `struct` C answered into it.
+    it goes through the room too, the host's and the program's alike: the
+    interpreter has libffi call the host's function, which writes the `struct`
+    C answered into it.
     """
-    ret = func.ty.ret
-    if ret is VOID:
+    return answers_through_storage(module, func.ty.ret, func.cconv,
+                                   func.answer_style)
+
+
+def answers_through_storage(module: Module, answer: Type, cconv: str,
+                            style: ReturnStyle) -> bool:
+    """Whether an answer of *answer*, handed back by *cconv* in *style*,
+    travels through storage the caller provides, handed over last:
+    `through_storage` asked of a type, a convention and a style rather than of
+    a function, which is what a call through a value has.
+
+    A record laid out for C answered whole in the system's convention is C's
+    to say (`answers_as_c`) -- but in the interpreter, where every function of
+    that convention answering one answers it through the room, the host's and
+    the program's alike: the interpreter has libffi call code it did not make,
+    which writes the `struct` C answered into it, and a value of `@[cdecl]
+    fn(…)` may be either, so the two answer alike.
+    """
+    if answer is VOID:
         return False
-    if isinstance(ret, ProductType) and ret.abi \
-            and cabi.follows_system(module.triple, func.cconv):
-        if module.output is not Output.INTERPRETED:
-            return False
-        if func.attrs.host is not None:
-            return True
-    elif holds_abi(ret):
+    if isinstance(answer, ProductType) and answer.abi \
+            and cabi.follows_system(module.triple, cconv):
+        return module.output is Output.INTERPRETED
+    if holds_abi(answer):
         return True
-    if func.answer_style.in_registers(ret):
+    if style.in_registers(answer):
         return False
-    if held_in_memory(ret):
+    if held_in_memory(answer):
         return True
-    return all(len(parts_of(leaf)) == 1 for leaf in leaves_of(ret))
+    return all(len(parts_of(leaf)) == 1 for leaf in leaves_of(answer))
+
+
+def _through_storage_by_value(module: Module, inst: object) -> bool:
+    """Whether *inst* is a call through a value whose answer travels through
+    storage handed over last.
+
+    One of the system's convention reaches code that answers as a named
+    function of that convention does -- two values in registers, anything
+    more or anything holding a record laid out for C through a place handed
+    over last -- whatever compiled it, so the call is rewritten as a call of a
+    named one would be; a record laid out for C answered whole is C's to say
+    (`_answers_as_c_by_value`).  One of the language's own convention reaches
+    a lambda or a function named as a value, each answering the way the
+    language does, which is through the room only for an answer holding a
+    record laid out for C.
+    """
+    if not isinstance(inst, CallInst) or inst.target is None:
+        return False
+    if inst.cconv == DEFAULT_CCONV:
+        return holds_abi(inst.ty)
+    return answers_through_storage(module, inst.ty, inst.cconv,
+                                   ReturnStyle.TWO_IN_REGISTERS)
+
+
+def _answers_as_c_by_value(module: Module, inst: object) -> bool:
+    """Whether *inst* is a call through a value of the system's convention
+    answering a record laid out for C, which C's rules answer as they answer
+    it for a named function of that convention (`answers_as_c`)."""
+    return isinstance(inst, CallInst) and inst.target is not None \
+        and inst.cconv != DEFAULT_CCONV \
+        and isinstance(inst.ty, ProductType) and inst.ty.abi \
+        and cabi.follows_system(module.triple, inst.cconv) \
+        and module.output is not Output.INTERPRETED
 
 
 class LargeAnswers:
@@ -148,7 +197,10 @@ class LargeAnswers:
         every = {id(func): func for func in module.functions.values()}
         wanted = {at: func for at, func in every.items()
                   if through_storage(module, func)}
-        if not wanted and not _calls_through_values(every.values()):
+        if not wanted and not any(_through_storage_by_value(module, inst)
+                                  for func in every.values()
+                                  for block in func.blocks
+                                  for inst in block.insts):
             return False
         answers = {at: func.ty.ret for at, func in wanted.items()}
         for func in wanted.values():
@@ -248,9 +300,11 @@ class LargeAnswers:
                        answers: dict[int, Type]) -> None:
         """Make a place for each such call, hand it over, and read it back.
 
-        A call through a value answering something holding a record laid out
-        for C is one of them as well: whatever the value points at follows the
-        language's own convention, which answers that through the caller's room.
+        A call through a value is one of them as well where what the value
+        points at answers through the room (`_through_storage_by_value`): an
+        answer holding a record laid out for C in the language's own
+        convention, and in the system's whatever a named function of it would
+        answer there.
         """
         index = 0
         while index < len(block.insts):
@@ -259,13 +313,12 @@ class LargeAnswers:
             # A call already rewritten answers with nothing, which is what says
             # it has been: the place it writes into is among its arguments and
             # giving it a second one would be giving it two.
-            through = isinstance(inst, CallInst) and inst.target is not None \
-                and holds_abi(inst.ty)
+            by_value = _through_storage_by_value(module, inst)
             if not isinstance(inst, CallInst) or inst.ty is VOID \
-                    or (id(callee) not in wanted and not through):
+                    or (id(callee) not in wanted and not by_value):
                 index += 1
                 continue
-            answer = inst.ty if through else answers[id(callee)]
+            answer = inst.ty if by_value else answers[id(callee)]
             span = inst.span
             # The token first: finding it may put the start of the chain at the
             # top of the entry block, which moves this call along with it.
@@ -275,10 +328,10 @@ class LargeAnswers:
             slot = FrameInst(answer, module.types.ptr_type(answer, mutable=True),
                              span)
             made.append(slot)
-            if through:
+            if by_value:
                 assert inst.target is not None
                 made.append(CallInst(inst.target, (*inst.arguments, slot), VOID,
-                                     span))
+                                     span, inst.cconv))
             else:
                 made.append(CallInst(callee, (*inst.operands, slot), VOID, span))
             index = self._read_back(module, block, index, inst, answer, slot,
@@ -325,7 +378,10 @@ class LargeAnswers:
         every = {id(func): func for func in module.functions.values()}
         wanted = {at: func for at, func in every.items()
                   if answers_as_c(module, func)}
-        if not wanted:
+        if not wanted and not any(_answers_as_c_by_value(module, inst)
+                                  for func in every.values()
+                                  for block in func.blocks
+                                  for inst in block.insts):
             return False
         shapes: dict[int, tuple[ProductType, tuple[cabi.Piece, ...] | None]] = {}
         for at, func in wanted.items():
@@ -393,33 +449,55 @@ class LargeAnswers:
                          wanted: dict[int, Function],
                          shapes: dict[int, tuple[ProductType,
                                                  tuple[cabi.Piece, ...] | None]]) -> None:
-        """Rewrite each call of a function answering as C does."""
+        """Rewrite each call of a function answering as C does.
+
+        A call through a value of the system's convention answering such a
+        record is one as well, rewritten as a call of a named one answering it
+        is: whatever the value points at answers as C does, and the record's
+        type is all there is to ask how.  Where the room is handed over first,
+        the call says so (`CallInst.answer_first`), as a named function's
+        attribute does, for the instruction selectors to place it.
+        """
         index = 0
         while index < len(block.insts):
             inst = block.insts[index]
             callee = getattr(inst, "callee", None)
             # A call already rewritten answers with something other than the
             # record, which is what says it has been.
-            if not isinstance(inst, CallInst) or id(callee) not in wanted \
+            by_value = _answers_as_c_by_value(module, inst)
+            if not isinstance(inst, CallInst) \
+                    or (id(callee) not in wanted and not by_value) \
                     or not isinstance(inst.ty, ProductType):
                 index += 1
                 continue
-            record, pieces = shapes[id(callee)]
+            if by_value:
+                assert isinstance(inst.ty, ProductType) and inst.target is not None
+                record = inst.ty
+                pieces = cabi.answered_by_c(module.triple, record)
+                answered = (_words_type(module, pieces) if pieces is not None
+                            else module.types.ptr_type(record, mutable=True)
+                            if cabi.answers_its_place(module.triple) else VOID)
+            else:
+                assert isinstance(callee, Function)
+                record, pieces = shapes[id(callee)]
+                answered = callee.ty.ret
             span = inst.span
             token = _token_before(block.parent, block, index)
             index = block.insts.index(inst)
             made: list[Instruction] = []
-            assert isinstance(callee, Function)
             if pieces is None:
                 slot = FrameInst(record, module.types.ptr_type(record, mutable=True),
                                  span)
                 made.append(slot)
-                made.append(CallInst(callee, (slot, *inst.operands),
-                                     callee.ty.ret, span))
+                made.append(CallInst(inst.target, (slot, *inst.arguments), answered,
+                                     span, inst.cconv, answer_first=True) if by_value
+                            else CallInst(callee, (slot, *inst.operands), answered,
+                                          span))
                 index = self._read_back(module, block, index, inst, record, slot,
                                         token, made)
                 continue
-            call = CallInst(callee, inst.operands, callee.ty.ret, span)
+            call = (CallInst(inst.target, inst.arguments, answered, span, inst.cconv)
+                    if by_value else CallInst(callee, inst.operands, answered, span))
             made.append(call)
             words: list[Value] = []
             if len(pieces) == 1:
@@ -456,14 +534,6 @@ class LargeAnswers:
                 answer = whole
             made.append(RetInst(answer, last.span))
             _splice(block, at, made)
-
-
-def _calls_through_values(funcs: Iterable[Function]) -> bool:
-    """Whether any of *funcs* calls through a value something answering a
-    record laid out for C, which is answered through the caller's room."""
-    return any(isinstance(inst, CallInst) and inst.target is not None
-               and holds_abi(inst.ty)
-               for func in funcs for block in func.blocks for inst in block.insts)
 
 
 def _words_type(module: Module, pieces: Sequence[cabi.Piece]) -> Type:

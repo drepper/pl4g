@@ -11894,17 +11894,76 @@ was settled:
   anything, may write anything anyway; the checker's rule holds the object's own code there as it does an executable's.
 - **The interpreter honours the rule by the checker alone.**  It lays variables out in memory of its own beside other things and
   could protect one only by giving each its own pages; a program the checker accepted never writes one after its constructors.
+## 2026-10-23T14:00+02:00 — language and compiler
 
-Open questions
---------------
+### Calling through an address with the system's convention
 
-Questions that are open, and tasks not yet done, are kept in the to-do lists rather than here:
-[TODO-language.md](../TODO-language.md) for the language, [TODO-pypl4g.md](../TODO-pypl4g.md) for the compiler and
-[TODO-editors.md](../TODO-editors.md) for what an editor reads and [TODO-cpp.md](../TODO-cpp.md) for the C++ implementation, with
-a list of its own for each further tool as one is needed.
+`std.time` is to be a thin wrapper around the vDSO's `clock_gettime` and `clock_getres`, found through the auxiliary vector by
+the module itself, and that wants a program to call code at an address it worked out, the way C calls it.  A function type
+already carried what a caller reads off it before `fn`; a `@[cdecl]` function called through a value was called in the language's
+own convention, through a shim, and the IR's indirect call carried no convention at all.  The user decided:
 
-This file records decisions that were made.  A decision that leaves something open says so in its own entry, and the thing left
-open belongs in a list.
+- **`@[cdecl] fn(i32, &mut Timespec) → i32` is a function type of the system's convention.**  A value of it is called as C calls
+  it, on the three back ends and in the interpreter, through libffi there as a host function is.  What may cross is what a
+  `@[cdecl]` function may take and answer.
+- **`⎕at(address, ⌜@[cdecl] fn(…) → T⌝)` makes one from an address**, `⎕at` already making a reference from one.
+- **It has no environment, so it may be held where a value without one may**: a variable at the top level, a record's field, a
+  list.  It is not a lambda, and 4550 is not about it.
+- **A named `@[cdecl]` function used as a value is of this type**, and a value of the language's own convention is not one of it:
+  the two types do not convert (4360).
+
+**One word, the address.**  A value of the language's convention is three -- the code, what it brought in, that room's allocator --
+and the obvious way to add a convention would have been a fourth part or a flag inside the three.  A value C made or will call is
+one pointer, though, and a record laid out for C (`@[abi]`, the `Timespec` beside it, a table of the vDSO's functions) holds one
+where C has one, so the value is the pointer and nothing else.  Neither is the other with something dropped, which is why they do
+not convert either way: a `@[cdecl]` function where `fn(u64) → u64` is wanted was the one case that needed a shim, and a function
+of the language's convention made into a bare address would be called with its parameters where it does not look for them.
+Compare **Rust**, whose `extern "C" fn(i32) -> i32` and `fn(i32) -> i32` are two types with no coercion between them; **Zig**, whose
+`callconv(.C)` is part of the function type the same way; **C++**, whose standard makes language linkage part of a function type;
+**D**, whose `extern (C)` function pointers are distinct types; **Odin**'s `proc "c"`; **Go**, which has no such type and goes
+through cgo; **C**, which has only the one convention and so only the one type.
+
+**`@[cdecl]` stands where `@[impure]` stands.**  The words before `fn` are what a caller reads off a type, and the convention is
+the first thing a caller reads: the attribute's targets gain "a lambda or a function type", the type binds what is written there
+itself, and the IR writes `cdecl fn(…)`.  Settled with it, and recorded so: `@[cdecl(variadic=true)] fn(…)` is refused (4362), a
+call through a value being placed by what its type says the parameters are; `in ⎕heap` and `→ T in pool` are refused on such a
+type (4363), the one saying what is always so, the other a parameter more that nothing compiled elsewhere knows to hand over; and
+`@[cdecl]` on a lambda is refused (4361), a lambda's environment having nowhere to go in a call C makes.
+
+**Which named functions are of it.**  Every function whose convention is the system's: `@[cdecl]`, `@[abi]` without a name, an
+`@[external]` function and an `@[host]` one -- whose value is the address of the stub that finds it at the first call, which goes on
+with the arguments as the caller left them.  A host function taking a `str` is a function of the language's convention the checker
+made around the host's, and is a value of that convention.  **A function of a convention named by an architecture's name,
+`@[abi("sysv64")]`, keeps its shim** and a value of the language's convention: the type carries the convention by name and could
+carry that one too, but nothing asked for a type naming an architecture, and a program written for one target that wrote one would
+not compile for the others.  A function that takes a list as its own is refused (4364): a call by name hands it room nobody else
+holds, copying where it must, and a call of an address has nothing to stand between and make the copy.
+
+**`⎕at` believes the type, as it believes the type of a reference.**  The checker treats a value made by `⎕at` as any value of its
+type: making it is no effect -- making a reference out of a number is not one either -- and a call of it is what its type says, so a
+pure function may call one whose type says it is pure and may not call one whose type says `@[impure]` (4480), as with any function
+type.  Nothing can check the claim, which is what `⎕at` is for: the one door through which a number becomes something that is used
+as what it is said to be.  A function of the language's convention is refused (4365), its other two words being nothing an
+address says.  **`⎕address(f)` is the way back**, the number a C program or a ring entry wants; of a value of the language's
+convention it is refused (4366), the code alone being nothing anything else could call.  Compare **Zig**'s `@ptrFromInt` and
+`@intFromPtr`, which make and read a `*const fn` as they do any pointer; **Rust**'s `transmute`, `unsafe`; **C**'s casts.
+
+**What a variable at the top level starts out holding.**  Its value is in the image, which holds no address of code yet -- the
+reason 4550 refuses a lambda there (and 9902 a string).  So the one initializer such a variable takes is `⎕at(0u64, …)`, the slot
+not yet filled in, which is what `std.time` needs: the vDSO's function is found once the program runs, and `⎕address(f) = 0u64` asks
+whether it has been.  A named function there would need a relocation of a function's address in the data, which the three back
+ends, `dropunreached` (whose roots would grow a variable's initializer) and the interpreter would each have to learn, and is left
+as the 9902 it is.  Compare Rust's `Option<extern "C" fn()>`, whose `None` is the null pointer, and glibc's own `__vdso_clock_gettime`,
+a pointer filled in at start-up.
+
+**The convention travels on the call.**  `CallInst` carries it for a call through a value (`call.cdecl.T %f, …` in the text,
+`"cconv"` in the JSON the C++ side reads) and the back ends place the call by it: arguments where that convention puts them,
+nothing in the chain register, what it lets a callee destroy taken as destroyed.  An answer of more than two values comes back
+through a place handed over last, which is how `largeanswers` already widened a `@[cdecl]` function answering one; the pass now
+rewrites a call through a value of the system's convention the way it rewrites a call of such a function.  The interpreter calls
+the address through libffi, and a function of the program whose address it hands out is given one libffi can call -- a closure
+that comes back into the interpreter -- so a value made by `⎕address` and `⎕at` of the program's own function, or handed to a host,
+reaches code that runs.
 
 ## 2026-10-23T16:00+02:00 — language and runtime
 
@@ -11960,3 +12019,45 @@ with the table chosen by the runtime instead of indexed by the type; **Rust**, w
 (for the processor's features, in `std_detect`) and offers nothing of its own; **Zig**, whose start code keeps where the vector is
 and whose `std.os.linux.getauxval` walks it at each question; **D**, whose `core.sys.linux.sys.auxv` binds the C function;
 **Python**, which has none, `os.sysconf("SC_PAGESIZE")` answering one of the questions through the C library.
+
+## 2026-10-23T18:00+02:00 — compiler
+
+### A `@[cdecl]` value answering an `@[abi]` record
+
+The two entries above were written side by side, and each said what a call through a value does with its answer as if the other
+did not exist: the first that every value is of the language's own convention, so that an answer holding an `@[abi]` record goes
+through the room handed over last; the second that a value of the system's convention answers as a named `@[cdecl]` function does,
+which at the time meant two values in registers and anything more through the room.  Put together, the user decided **a call
+through a value answers as a named function of the same convention answering the same type does**, so that a value made by
+`⎕address` and `⎕at` of a function, or a function named as a value, reaches code that answers where its caller looks:
+
+- **The language's own convention**: as the first entry has it -- through the room, last, where the answer holds an `@[abi]`
+  record, and as before otherwise.
+- **The system's**: an `@[abi]` record answered whole follows C's rules as `ir/cabi.py` classifies it for the record's type, in
+  registers where C says so and through the room otherwise, handed over first -- on AArch64 in `x8`, the call placed as a call of
+  a named function whose `answer-first` says so is.  Anything else holding such a record goes through the room, last, and
+  anything else as the second entry has it.
+- **Where the room goes is read off the value's type**, not written on the call: the instruction selectors place it first where
+  the type answers such a record and the call hands over one argument more than the type takes, which is only ever what
+  `largeanswers` made of it.  A word of its own on `call.cdecl` would have said the same thing twice, and the textual form read
+  back would have had to carry it.
+- **In the interpreter every function of the system's convention answering such a record answers it through the room, last** --
+  the program's as well as the host's, where the first entry had only the host's.  A value of `@[cdecl] fn(…)` may be either, or
+  code nothing in the program made, and the interpreter cannot tell which while it compiles the call; answering all of them alike
+  is what lets one call reach any of them.  Code nothing in the program made is called through libffi as one returning the
+  `struct`, as a host function is, its answer copied into the room.
+
+Compare **Rust**, where an `extern "C" fn() -> S` pointer and an `extern "C" fn` item return `S` the same way, C's, and a Rust
+`fn() -> S` pointer as rustc does; **Zig** and **D** likewise, the convention being part of the type; **C**, where a call through a
+pointer and a call by name are one call; **Go**, whose `func` values follow its own register ABI whatever they point at.
+
+Open questions
+--------------
+
+Questions that are open, and tasks not yet done, are kept in the to-do lists rather than here:
+[TODO-language.md](../TODO-language.md) for the language, [TODO-pypl4g.md](../TODO-pypl4g.md) for the compiler and
+[TODO-editors.md](../TODO-editors.md) for what an editor reads and [TODO-cpp.md](../TODO-cpp.md) for the C++ implementation, with
+a list of its own for each further tool as one is needed.
+
+This file records decisions that were made.  A decision that leaves something open says so in its own entry, and the thing left
+open belongs in a list.

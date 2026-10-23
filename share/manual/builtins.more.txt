@@ -32,9 +32,9 @@ The machine and the kernel ([[running.foreign]]):
 
     ⎕syscall(n, …)      ask the kernel; ⎕sc@NAME is the call's number
     ⎕auxv(t)            what the auxiliary vector says of type t: a u64?
-    ⎕at(addr, ⌜&T⌝)     a place at an address
+    ⎕at(addr, ⌜&T⌝)     a place at an address; ⌜@[cdecl] fn(…)⌝, code there
     ⎕span(addr, n, ⌜T⟦⟧⌝)   a run of places at an address, or a list adopted
-    ⎕address(&x)        a place as the number it is
+    ⎕address(&x)        a place as the number it is; of f, where its code is
     ⎕acquire(&p)        read a place, nothing after it seen before it
     ⎕release(&mut p, v) write one, nothing before it seen after it
 

@@ -107,6 +107,9 @@ def size_of(ty: Type, layout: DataLayout) -> int:
             return found
         case RunningType():
             return 4 * layout.pointer_size
+        case FuncType() if ty.system:
+            # Where the code is and nothing else, as C's pointer to a function.
+            return layout.pointer_size
         case FuncType() | IterType():
             # Where the code is, where what it brought in is, and the allocator
             # that came from: three words.

@@ -63,8 +63,9 @@ namespace pl4g::sema {
         .doc = "the compiler provides this function while it works out a build; there is none of it in a program" },
       { .name = "inline", .targets = T::function, .params = inline_mode,
         .doc = "guides the decision whether to inline the function" },
-      { .name = "cdecl", .targets = T::function | T::variable, .params = variadic,
-        .doc = "the definition follows the system's conventions" },
+      { .name = "cdecl", .targets = T::function | T::variable | T::callable, .params = variadic,
+        .doc = "the definition follows the system's conventions; before a function type, a value of it is called as "
+               "C calls" },
       { .name = "listable", .targets = T::function | T::callable,
         .doc = "an array argument is walked and the answers make an array" },
       { .name = "impure", .targets = T::function | T::callable,

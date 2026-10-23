@@ -481,7 +481,7 @@ class CallInst(Instruction):
     single compilation.
     """
 
-    __slots__ = ("callee",)
+    __slots__ = ("callee", "cconv", "answer_first")
 
     @property
     def has_effects(self) -> bool:
@@ -508,7 +508,8 @@ class CallInst(Instruction):
             or bool(getattr(attrs, "opaque", False))
 
     def __init__(self, callee: object, args: Sequence[Value], result_ty: Type,
-                 span: Span = INVALID_SPAN) -> None:
+                 span: Span = INVALID_SPAN, cconv: str = "pl4g",
+                 answer_first: bool = False) -> None:
         # A callee the graph computed is an operand and not a reference, and
         # has to be: everything that asks what an instruction uses asks its
         # operands, so a callee kept anywhere else is a value nothing counts as
@@ -517,6 +518,18 @@ class CallInst(Instruction):
         through = isinstance(callee, Value)
         super().__init__(result_ty, (callee, *args) if through else args, span)
         self.callee = None if through else callee
+        #: The convention a call through a value is placed by.  A call naming
+        #: a function follows that function's, which the function says; one
+        #: through a value has nothing to ask but the type the value had, so the
+        #: call carries what it said: the language's own, the environment
+        #: travelling in the chain register, or the system's, with none.
+        self.cconv = cconv if through else "pl4g"
+        #: Whether a call through a value hands over first the room its answer
+        #: is written to, as the system's convention has it for a record laid
+        #: out for C that C answers through its caller's room: what a named
+        #: function's `answer_first` says of its calls, said here because a
+        #: value has no function to say it.  Only `largeanswers` sets it.
+        self.answer_first = answer_first and through
 
     @property
     def target(self) -> Value | None:
@@ -534,8 +547,9 @@ class CallInst(Instruction):
 
     @property
     def opcode(self) -> str:
-        """The mnemonic used in the textual form."""
-        return "call"
+        """The mnemonic used in the textual form: the convention follows it
+        where a call through a value is not placed by the language's own."""
+        return "call" if self.cconv == "pl4g" else "".join(("call.", self.cconv))
 
 
 class SyscallInst(Instruction):

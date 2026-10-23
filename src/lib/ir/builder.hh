@@ -55,6 +55,9 @@ namespace pl4g::ir {
     Value* any_lane(Value* value, Span span = invalid_span);
     // A call of `callee`, or, where it is nothing, of the first of `args`.
     Value* call(Function* callee, std::span<Value* const> args, const Type* result, Span span = invalid_span);
+    // A call through a value, the first of *args*, placed by *cconv*.
+    Value* call_through(std::span<Value* const> args, const Type* result, std::string_view cconv,
+                        Span span = invalid_span);
     Value* cast(CastKind kind, Value* value, const Type* target, Span span = invalid_span);
     // The memory token in force, starting the chain at the top of the
     // function the first time it is asked for.
