@@ -2,9 +2,9 @@
 
 ※ `std.time` is POSIX's `clock_gettime` and `clock_getres`: a `Clock` to read,
 ※ answering a `Timespec` or the system's error number.  A compiled program reads
-※ the clocks through the kernel's vDSO, which a constructor of the module finds
-※ through the auxiliary vector before the program starts, and the kernel itself
-※ where there is none.
+※ the clocks through the kernel's vDSO, which the module's `constinit` variables
+※ find through the auxiliary vector before the program starts, and the kernel
+※ itself where there is none.
 ※
 ※ A `Timespec` is laid out as C's is: answered by value, as C answers one, and
 ※ handed to a call as a reference, which is how the helpers below take one.
