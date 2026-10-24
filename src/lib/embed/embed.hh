@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -102,12 +103,16 @@ namespace pl4g::embed {
       return define(symbol, reinterpret_cast<void*>(function), context);
     }
 
-    // Compile the program in the file `path` and run it.
-    Ended run_file(const std::filesystem::path& path);
+    // Compile the program in the file `path` and run it.  Where `args` is
+    // given, the program is started with it after its own name, as
+    // `init.args`, in place of what `arguments` said -- for this run only.
+    Ended run_file(const std::filesystem::path& path, std::optional<std::vector<std::string>> args = std::nullopt);
     // Compile the program `text` and run it.  `name` is the path it is known
     // by, in a diagnostic and as the program's own name; nothing is read from
-    // there, and a module it imports is looked for beside it.
-    Ended run_source(std::string_view text, std::filesystem::path name = "embedded.pl4g");
+    // there, and a module it imports is looked for beside it.  `args` is as
+    // for `run_file`.
+    Ended run_source(std::string_view text, std::filesystem::path name = "embedded.pl4g",
+                     std::optional<std::vector<std::string>> args = std::nullopt);
 
   private:
     struct State;

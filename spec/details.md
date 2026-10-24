@@ -1259,8 +1259,10 @@ and each of the others unwinds it, and the call that ran the program answers wit
 
 **The interpreter is also a shared object**, `libpl4g-embed.so`, for a program that loads it with `dlopen` rather than linking
 with the library.  It offers three functions with C's linkage (`src/lib/embed/pl4g-embed.h`): `pl4g_embed_state_new`, which makes a
-state of the interpreter, `pl4g_embed_state_free`, which gives one back, and `pl4g_embed_run_source(state, text, length, name)`,
-which runs a program held in memory in a state, with descriptors 0, 1 and 2, and answers its status -- 128 plus a signal's number
+state of the interpreter, `pl4g_embed_state_free`, which gives one back, and `pl4g_embed_run_source(state, text, length, name, args, count)`,
+which runs a program held in memory in a state, with descriptors 0, 1 and 2 and the `count` strings at `args` after its own name
+as what its startup function finds in `init.args` (`NULL` and 0 for none; a state keeps nothing of one run's for the next), and
+answers its status -- 128 plus a signal's number
 where it would have died of one, and -1 where there is no state or the interpreter itself failed, nothing being allowed to leave it
 as an exception.  A state is opaque: the C side names a type it never sees inside, which is a struct around a
 `pl4g::embed::Interpreter`.  Everything else in the object is hidden, by the visibility it is compiled with and by a version
@@ -1269,7 +1271,10 @@ library's templates.  The functions the program calls with `@[host]` are still f
 loading program is linked with `-rdynamic`.  `src/examples/embed/host.c` is such a program, in C, and ctest's `embed-example` runs
 it: in each of two states made at once, it hands the interpreter a program that reads its input through two functions of the host,
 works out a sum, the extremes and a sum of squares, and delivers them through a third that only stores them, which the host then
-checks against what it works out itself.  **A C++ program has an object for it** (`src/lib/embed/pl4g-embed.hh`, header
+checks against what it works out itself.  `host.cc`, the same program in C++ through `LoadedInterpreter`, also starts it with
+three words, `run(text, name, args)`, which it prints through a fourth host function, found by `dlsym` as the others are, that
+writes each with `std::println` and keeps it for the check.  `Interpreter::run_source` and `run_file` take the same as an
+optional vector, which for that run takes the place of what `arguments` said.  **A C++ program has an object for it** (`src/lib/embed/pl4g-embed.hh`, header
 only): `pl4g::embed::LoadedInterpreter` loads the library, finds the three functions and makes a state when it is made -- throwing,
 with what went wrong, where any of that fails -- and gives the state and the library back when it is destroyed; it can be moved
 and not copied, and `run(text, name)` runs a program in its state.  What it asks and promises is said as contracts, through `PL4G_PRE` and `PL4G_POST`, which

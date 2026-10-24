@@ -33,8 +33,11 @@ executable cannot (5300).
 and uses `pl4g::embed::Interpreter` (`src/lib/embed/embed.hh`), or loads
 `libpl4g-embed.so` through the header-only `pl4g::embed::LoadedInterpreter`
 (`pl4g-embed.hh`).  A C program loads the shared object and calls
-`pl4g_embed_state_new`, `pl4g_embed_run_source(state, text, length, name)`
-and `pl4g_embed_state_free` (`pl4g-embed.h`).  A run answers the status the
+`pl4g_embed_state_new`, `pl4g_embed_run_source(state, text, length, name,
+args, count)` and `pl4g_embed_state_free` (`pl4g-embed.h`).  The strings
+`args` -- `run(text, name, args)` in C++, both optional -- are what the
+program finds in `init.args` after its own name, as a compiled program finds
+the words it was named with.  A run answers the status the
 program would have exited with, and a stop of the program -- an overflow, a
 failed condition, `exit` asked of the system -- ends the run and not the
 embedding program.  **A host function is found in two places**: what the

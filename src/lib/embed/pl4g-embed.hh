@@ -23,6 +23,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "embed/pl4g-embed.h"
 
@@ -127,19 +128,25 @@ namespace pl4g::embed {
     }
 
     // Compile the PL4G program `text` and run it in this interpreter's
-    // state, `name` being what its diagnostics and faults call the file.
+    // state, `name` being what its diagnostics and faults call the file,
+    // and `args` what it is started with after its own name -- what its
+    // startup function finds in `init.args`.
     // Answers what pl4g_embed_run_source answers: the status it exited with,
     // 1 where it did not compile, 128 plus a signal's number, or -1 where
     // the interpreter itself failed.
     // Asked of an interpreter that has not been moved from; one that has
     // answers -1 where nothing checks.
-    int run(std::string_view text, const std::string& name = "embedded.pl4g")
+    int run(std::string_view text, const std::string& name = "embedded.pl4g",
+            const std::vector<std::string>& args = {})
       PL4G_PRE(valid())
       PL4G_PRE(text.data() != nullptr || text.empty())
     {
       if (state == nullptr) [[unlikely]]
         return -1;
-      return run_source(state, text.data(), text.size(), name.c_str());
+      std::vector<const char*> words;
+      for (const auto& one : args)
+        words.push_back(one.c_str());
+      return run_source(state, text.data(), text.size(), name.c_str(), words.data(), words.size());
     }
 
   private:

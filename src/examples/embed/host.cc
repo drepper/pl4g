@@ -5,12 +5,15 @@
 // finds what it offers and makes a state, and gives all of it back when it is
 // destroyed.  The PL4G program, held in a string, asks this one for its input
 // through two functions defined here, works out a few things about it, and
-// hands the answers back through a third, which only stores them.  Once the
-// program has run, main checks what was stored against what it works out
-// itself, and exits with 0 where everything agrees and with a number saying
-// what did not.  It does so with two interpreters alive at the same time.
+// hands the answers back through a third, which only stores them.  It is
+// started with three words, as a compiled program is with the words it was
+// named with, and prints each through a fourth function defined here, which
+// writes it with std::println and keeps it.  Once the program has run, main
+// checks what was stored against what it works out itself, and exits with 0
+// where everything agrees and with a number saying what did not.  It does so
+// with two interpreters alive at the same time.
 //
-// The three functions are found by the interpreter with
+// The four functions are found by the interpreter with
 // dlsym(RTLD_DEFAULT, ...), so they have C's linkage and this program is
 // linked with -rdynamic: what it defines is then in its dynamic symbol table,
 // where dlsym looks.
@@ -22,7 +25,9 @@
 #include <exception>
 #include <numeric>
 #include <print>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "embed/pl4g-embed.hh"
 
@@ -46,9 +51,14 @@ namespace {
 
   Result result;
 
+  // What the program is started with after its own name, and what it printed.
+  const std::vector<std::string> words{ "alpha", "beta", "gamma" };
+  std::vector<std::string> printed;
+
   // The program, in PL4G.  It declares the three functions below as defined
   // by its host, reads every reading, and delivers how many there were, their
-  // sum, the smallest and the largest, and the sum of their squares.
+  // sum, the smallest and the largest, and the sum of their squares.  Then
+  // it prints the words it was started with, its own name left out.
   constexpr std::string_view program =
     "@[host(\"example_count\")]\n"
     "fn count() \N{RIGHTWARDS ARROW} i64\n"
@@ -58,6 +68,9 @@ namespace {
     "\n"
     "@[host(\"example_deliver\")]\n"
     "fn deliver(count: i64, sum: i64, smallest: i64, largest: i64, squares: i64)\n"
+    "\n"
+    "@[host(\"example_print\")]\n"
+    "fn print(text: str)\n"
     "\n"
     "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
     "\n"
@@ -77,6 +90,11 @@ namespace {
     "        if x > largest:\n"
     "            largest \N{LEFTWARDS ARROW} x\n"
     "    deliver(n, sum, smallest, largest, squares)\n"
+    "    let first: mut bool = true\n"
+    "    foreach word: str = init.args:\n"
+    "        if \N{NOT SIGN}first:\n"
+    "            print(word)\n"
+    "        first \N{LEFTWARDS ARROW} false\n"
     "    0u6\n";
 
   // What the answers have to be, worked out here.
@@ -105,6 +123,10 @@ namespace {
                  result.sum, result.smallest, result.largest, result.squares, wanted.count, wanted.sum,
                  wanted.smallest, wanted.largest, wanted.squares);
       return 6;
+    }
+    if (printed != words) [[unlikely]] {
+      std::print(stderr, "printed {} words where {} were handed over\n", printed.size(), words.size());
+      return 7;
     }
     std::print("delivered: {} readings, sum {}, smallest {}, largest {}, sum of squares {}\n", result.count,
                result.sum, result.smallest, result.largest, result.squares);
@@ -137,6 +159,15 @@ extern "C" void example_deliver(std::int64_t count, std::int64_t sum, std::int64
 }
 
 
+// Where the program prints a word: written out, and kept for main to check.
+// The interpreter hands a `str` over as a nul-terminated copy.
+extern "C" void example_print(const char* text)
+{
+  std::println("{}", text);
+  printed.emplace_back(text);
+}
+
+
 int main(int argc, char* argv[])
 {
   const char* library = argc > 1 ? argv[1] : pl4g::embed::LoadedInterpreter::default_library;
@@ -145,7 +176,8 @@ int main(int argc, char* argv[])
     pl4g::embed::LoadedInterpreter first(library), second(library);
     for (auto* interpreter : { &first, &second }) {
       result = {};
-      if (int status = interpreter->run(program, "example.pl4g"); status != 0) [[unlikely]] {
+      printed.clear();
+      if (int status = interpreter->run(program, "example.pl4g", words); status != 0) [[unlikely]] {
         std::print(stderr, "the program ended with status {}\n", status);
         return 4;
       }

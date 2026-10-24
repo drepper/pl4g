@@ -132,7 +132,7 @@ int main(int argc, char *argv[])
   for (int which = 0; which < 2 && checked == 0; ++which)
     {
       result.delivered = false;
-      int status = run(states[which], program, strlen(program), "example.pl4g");
+      int status = run(states[which], program, strlen(program), "example.pl4g", NULL, 0);
       if (status != 0)
         {
           fprintf(stderr, "the program ended with status %d\n", status);

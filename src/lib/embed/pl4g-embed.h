@@ -33,7 +33,7 @@ typedef struct pl4g_embed_state pl4g_embed_state;
 typedef pl4g_embed_state *(*pl4g_embed_state_new_t)(void);
 typedef void (*pl4g_embed_state_free_t)(pl4g_embed_state *state);
 typedef int (*pl4g_embed_run_source_t)(pl4g_embed_state *state, const char *text, size_t length,
-                                       const char *name);
+                                       const char *name, const char *const *args, size_t count);
 typedef int (*pl4g_embed_define_t)(pl4g_embed_state *state, const char *symbol, void (*function)(void),
                                    void *context);
 
@@ -63,12 +63,17 @@ int pl4g_embed_define(pl4g_embed_state *state, const char *symbol, void (*functi
 /** Compile the PL4G program in the LENGTH bytes at TEXT and run it in STATE.
 
     NAME is what its diagnostics and the messages of its faults call the
-    file.  The program uses descriptors 0, 1 and 2 as its devices.  Answers
+    file.  The program is started with the COUNT nul-terminated strings at
+    ARGS after its own name, which is what its startup function finds in
+    `init.args`, as a compiled program finds the words it was named with;
+    ARGS may be NULL where COUNT is 0, and the program then has its name
+    alone.  The program uses descriptors 0, 1 and 2 as its devices.  Answers
     the status it exited with; 1 where it did not compile, the diagnostics
     having gone to standard error; 128 plus the number of a signal it would
     have died of; and -1 where STATE is NULL or the interpreter itself
-    failed.  */
-int pl4g_embed_run_source(pl4g_embed_state *state, const char *text, size_t length, const char *name);
+    failed, or ARGS is NULL and COUNT is not 0.  */
+int pl4g_embed_run_source(pl4g_embed_state *state, const char *text, size_t length, const char *name,
+                          const char *const *args, size_t count);
 
 #ifdef __cplusplus
 }
