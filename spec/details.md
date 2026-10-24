@@ -1272,9 +1272,10 @@ loading program is linked with `-rdynamic`.  `src/examples/embed/host.c` is such
 it: in each of two states made at once, it hands the interpreter a program that reads its input through two functions of the host,
 works out a sum, the extremes and a sum of squares, and delivers them through a third that only stores them, which the host then
 checks against what it works out itself.  `host.cc`, the same program in C++ through `LoadedInterpreter`, also starts it with
-three words, `run(text, name, args)`, which it prints through a fourth host function, found by `dlsym` as the others are, that
-writes each with `std::println` and keeps it for the check.  `Interpreter::run_source` and `run_file` take the same as an
-optional vector, which for that run takes the place of what `arguments` said.  **A C++ program has an object for it** (`src/lib/embed/pl4g-embed.hh`, header
+three words, `run(text, name, args)` with `args` a `std::span<const std::string>`, which it prints through a fourth host
+function, found by `dlsym` as the others are, that writes each with `std::println` and keeps it for the check.
+`Interpreter::run_source` and `run_file` take the same span as an optional one, which for that run takes the place of what
+`arguments` said.  **A C++ program has an object for it** (`src/lib/embed/pl4g-embed.hh`, header
 only): `pl4g::embed::LoadedInterpreter` loads the library, finds the three functions and makes a state when it is made -- throwing,
 with what went wrong, where any of that fails -- and gives the state and the library back when it is destroyed; it can be moved
 and not copied, and `run(text, name)` runs a program in its state.  What it asks and promises is said as contracts, through `PL4G_PRE` and `PL4G_POST`, which

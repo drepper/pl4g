@@ -113,13 +113,13 @@ namespace pl4g::embed {
   }
 
 
-  Ended Interpreter::run_file(const std::filesystem::path& path, std::optional<std::vector<std::string>> args)
+  Ended Interpreter::run_file(const std::filesystem::path& path, std::optional<std::span<const std::string>> args)
   {
     // A copy, so that what one run names is not left for the next.
     repl::Settings settings = state->settings;
     settings.compile.inputs = { path };
     if (args)
-      settings.args = std::move(*args);
+      settings.args.assign(args->begin(), args->end());
     Selected selected(state->runtime);
     auto ended = repl::run_file(settings);
     return { ended.status, ended.signal };
@@ -127,12 +127,12 @@ namespace pl4g::embed {
 
 
   Ended Interpreter::run_source(std::string_view text, std::filesystem::path name,
-                                std::optional<std::vector<std::string>> args)
+                                std::optional<std::span<const std::string>> args)
   {
     repl::Settings settings = state->settings;
     settings.compile.inputs = { name };
     if (args)
-      settings.args = std::move(*args);
+      settings.args.assign(args->begin(), args->end());
     settings.held.emplace_back(std::move(name), std::string(text));
     Selected selected(state->runtime);
     auto ended = repl::run_file(settings);

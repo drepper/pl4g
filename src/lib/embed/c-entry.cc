@@ -10,6 +10,7 @@
 #include <exception>
 #include <new>
 #include <print>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -57,9 +58,9 @@ extern "C" [[gnu::visibility("default")]] int pl4g_embed_run_source(pl4g_embed_s
   try {
     // What the program is started with is this call's alone, none being
     // none: a state keeps nothing of one run's arguments for the next.
-    std::vector<std::string> words(args, args + count);
+    const std::vector<std::string> words(args, args + count);
     auto ended = state->interpreter.run_source(std::string_view(text, length),
-                                               name != nullptr ? name : "embedded.pl4g", std::move(words));
+                                               name != nullptr ? name : "embedded.pl4g", std::span(words));
     return ended.signal != 0 ? 128 + ended.signal : ended.status;
   } catch (const std::exception& error) {
     // Nothing a C caller could catch may leave here.

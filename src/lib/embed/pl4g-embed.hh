@@ -19,6 +19,7 @@
 
 #include <dlfcn.h>
 
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -137,7 +138,7 @@ namespace pl4g::embed {
     // Asked of an interpreter that has not been moved from; one that has
     // answers -1 where nothing checks.
     int run(std::string_view text, const std::string& name = "embedded.pl4g",
-            const std::vector<std::string>& args = {})
+            std::span<const std::string> args = {})
       PL4G_PRE(valid())
       PL4G_PRE(text.data() != nullptr || text.empty())
     {
