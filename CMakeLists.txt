@@ -52,6 +52,8 @@ endif()
 option(PL4G_SANITIZERS "Also build the sanitizer variants" ON)
 # Set by the fuzzing build, which compiles only the fuzzing entry points.
 option(PL4G_FUZZ "Build the fuzzing entry points (with AFL++ as the compiler)" OFF)
+# Build only libpl4g-embed and libpl4g-manual, shared and archived.
+option(PL4G_LIBRARIES_ONLY "Build only the embeddable interpreter and the manual library" OFF)
 
 find_package(simdjson REQUIRED)
 find_library(UNISTRING_LIBRARY unistring REQUIRED)
@@ -318,6 +320,67 @@ if(PL4G_FUZZ)
   return()
 endif()
 
+# The interpreter as a shared object a program loads with dlopen, offering
+# the functions with C's linkage (src/lib/embed/pl4g-embed.h) and hiding the
+# rest.  The examples of programs doing so are defined with the tests.
+#
+# Its objects are compiled once and are both the shared object and an archive,
+# libpl4g-embed.a, for a program that carries the interpreter rather than
+# loading it: the archive holds the same C entry and the same C++ interface,
+# and passes on what it is linked with to what links it.
+add_library(pl4g-embed-objects OBJECT ${PL4G_LIB_SOURCES} src/lib/embed/c-entry.cc)
+set_target_properties(pl4g-embed-objects PROPERTIES C_VISIBILITY_PRESET hidden CXX_VISIBILITY_PRESET hidden
+  VISIBILITY_INLINES_HIDDEN ON)
+pl4g_library_settings(pl4g-embed-objects)
+add_library(pl4g-embed SHARED $<TARGET_OBJECTS:pl4g-embed-objects>)
+target_link_libraries(pl4g-embed PRIVATE ${PL4G_LIB_LINKS})
+target_link_options(pl4g-embed PRIVATE -Wl,--version-script=${CMAKE_SOURCE_DIR}/src/lib/embed/pl4g-embed.map)
+set_target_properties(pl4g-embed PROPERTIES LINK_DEPENDS ${CMAKE_SOURCE_DIR}/src/lib/embed/pl4g-embed.map)
+add_library(pl4g-embed-static STATIC $<TARGET_OBJECTS:pl4g-embed-objects>)
+set_target_properties(pl4g-embed-static PROPERTIES OUTPUT_NAME pl4g-embed)
+target_include_directories(pl4g-embed-static PUBLIC ${CMAKE_SOURCE_DIR}/src/lib)
+target_link_libraries(pl4g-embed-static PUBLIC ${PL4G_LIB_LINKS})
+
+# The manual: bin/pl4g-manual makes its nodes -- from share/manual/ and from the
+# modules' own comments -- and checks the graph they make, every time anything
+# it reads changes, and the library embeds what it made.  Standalone: nothing
+# of the compiler is in it.
+file(GLOB PL4G_MANUAL_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/share/manual/*.txt
+     ${CMAKE_SOURCE_DIR}/modules/*.pl4g)
+set(PL4G_MANUAL_DIR ${CMAKE_BINARY_DIR}/manual)
+add_custom_command(OUTPUT ${PL4G_MANUAL_DIR}/manual.pack ${PL4G_MANUAL_DIR}/manual.stamp.hh
+  COMMAND ${CMAKE_SOURCE_DIR}/bin/pl4g-manual --out ${PL4G_MANUAL_DIR}
+  DEPENDS ${PL4G_MANUAL_SOURCES} ${CMAKE_SOURCE_DIR}/bin/pl4g-manual ${CMAKE_SOURCE_DIR}/pypl4g/front/token.py
+          ${CMAKE_SOURCE_DIR}/pypl4g/front/doccomment.py ${CMAKE_SOURCE_DIR}/pypl4g/sema/attributes.py
+  COMMENT "Making the manual")
+add_custom_target(pl4g-manual-text DEPENDS ${PL4G_MANUAL_DIR}/manual.pack)
+# Compiled once, position-independent, and made both a shared object and an
+# archive of the same objects: a program may load the manual or carry it.
+add_library(pl4g-manual-objects OBJECT src/manual/manual.cc)
+target_include_directories(pl4g-manual-objects PUBLIC ${CMAKE_SOURCE_DIR}/src)
+# The stamp is included, and the pack embedded, from where the script made them.
+target_include_directories(pl4g-manual-objects PRIVATE ${PL4G_MANUAL_DIR})
+target_compile_options(pl4g-manual-objects PRIVATE ${PL4G_COMMON_FLAGS} --embed-dir=${PL4G_MANUAL_DIR})
+set_source_files_properties(src/manual/manual.cc PROPERTIES OBJECT_DEPENDS
+                            "${PL4G_MANUAL_DIR}/manual.pack;${PL4G_MANUAL_DIR}/manual.stamp.hh")
+add_dependencies(pl4g-manual-objects pl4g-manual-text)
+add_library(pl4g-manual SHARED $<TARGET_OBJECTS:pl4g-manual-objects>)
+target_include_directories(pl4g-manual PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(pl4g-manual PRIVATE fstrcmp)
+# The archive leaves fstrcmp to whatever links it, saying so.
+add_library(pl4g-manual-static STATIC $<TARGET_OBJECTS:pl4g-manual-objects>)
+set_target_properties(pl4g-manual-static PROPERTIES OUTPUT_NAME pl4g-manual)
+target_include_directories(pl4g-manual-static PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(pl4g-manual-static PUBLIC fstrcmp)
+
+# A build of the two libraries alone -- the embeddable interpreter and the
+# manual, each a shared object and an archive -- for a program that uses them
+# and needs nothing else: none of the compiler's programs, tools, sanitizer
+# variants, examples or tests are defined.
+if(PL4G_LIBRARIES_ONLY)
+  return()
+endif()
+
 pl4g_variant("")
 if(PL4G_SANITIZERS)
   pl4g_variant("-asan" -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all)
@@ -421,27 +484,6 @@ add_test(NAME repl-sessions
 # defines, every kind of value crossing both ways, and one that calls what it
 # does not define.  Its symbols are exported, as an embedding program's have
 # to be for dlsym to find them.
-# The interpreter as a shared object a program loads with dlopen, offering
-# one function with C's linkage (src/lib/embed/pl4g-embed.h) and hiding the
-# rest; and the example of a program doing so, whose functions the program it
-# runs calls, which is why its symbols are exported.
-#
-# Its objects are compiled once and are both the shared object and an archive,
-# libpl4g-embed.a, for a program that carries the interpreter rather than
-# loading it: the archive holds the same C entry and the same C++ interface,
-# and passes on what it is linked with to what links it.
-add_library(pl4g-embed-objects OBJECT ${PL4G_LIB_SOURCES} src/lib/embed/c-entry.cc)
-set_target_properties(pl4g-embed-objects PROPERTIES C_VISIBILITY_PRESET hidden CXX_VISIBILITY_PRESET hidden
-  VISIBILITY_INLINES_HIDDEN ON)
-pl4g_library_settings(pl4g-embed-objects)
-add_library(pl4g-embed SHARED $<TARGET_OBJECTS:pl4g-embed-objects>)
-target_link_libraries(pl4g-embed PRIVATE ${PL4G_LIB_LINKS})
-target_link_options(pl4g-embed PRIVATE -Wl,--version-script=${CMAKE_SOURCE_DIR}/src/lib/embed/pl4g-embed.map)
-set_target_properties(pl4g-embed PROPERTIES LINK_DEPENDS ${CMAKE_SOURCE_DIR}/src/lib/embed/pl4g-embed.map)
-add_library(pl4g-embed-static STATIC $<TARGET_OBJECTS:pl4g-embed-objects>)
-set_target_properties(pl4g-embed-static PROPERTIES OUTPUT_NAME pl4g-embed)
-target_include_directories(pl4g-embed-static PUBLIC ${CMAKE_SOURCE_DIR}/src/lib)
-target_link_libraries(pl4g-embed-static PUBLIC ${PL4G_LIB_LINKS})
 add_executable(pl4g-embed-example src/examples/embed/host.c)
 target_include_directories(pl4g-embed-example PRIVATE ${CMAKE_SOURCE_DIR}/src/lib)
 target_link_libraries(pl4g-embed-example PRIVATE ${CMAKE_DL_LIBS})
@@ -510,37 +552,7 @@ if(nlohmann_json_FOUND AND nlohmann_json_schema_validator_FOUND)
     COMMAND prlimit --data=1073741824 --cpu=300 -- $<TARGET_FILE:pl4g-embed-expressions> $<TARGET_FILE:pl4g-embed>)
 endif()
 
-# The manual: bin/pl4g-manual makes its nodes -- from share/manual/ and from the
-# modules' own comments -- and checks the graph they make, every time anything
-# it reads changes, and the library embeds what it made.  Standalone: nothing
-# of the compiler is in it.
-file(GLOB PL4G_MANUAL_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/share/manual/*.txt
-     ${CMAKE_SOURCE_DIR}/modules/*.pl4g)
-set(PL4G_MANUAL_DIR ${CMAKE_BINARY_DIR}/manual)
-add_custom_command(OUTPUT ${PL4G_MANUAL_DIR}/manual.pack ${PL4G_MANUAL_DIR}/manual.stamp.hh
-  COMMAND ${CMAKE_SOURCE_DIR}/bin/pl4g-manual --out ${PL4G_MANUAL_DIR}
-  DEPENDS ${PL4G_MANUAL_SOURCES} ${CMAKE_SOURCE_DIR}/bin/pl4g-manual ${CMAKE_SOURCE_DIR}/pypl4g/front/token.py
-          ${CMAKE_SOURCE_DIR}/pypl4g/front/doccomment.py ${CMAKE_SOURCE_DIR}/pypl4g/sema/attributes.py
-  COMMENT "Making the manual")
-add_custom_target(pl4g-manual-text DEPENDS ${PL4G_MANUAL_DIR}/manual.pack)
-# Compiled once, position-independent, and made both a shared object and an
-# archive of the same objects: a program may load the manual or carry it.
-add_library(pl4g-manual-objects OBJECT src/manual/manual.cc)
-target_include_directories(pl4g-manual-objects PUBLIC ${CMAKE_SOURCE_DIR}/src)
-# The stamp is included, and the pack embedded, from where the script made them.
-target_include_directories(pl4g-manual-objects PRIVATE ${PL4G_MANUAL_DIR})
-target_compile_options(pl4g-manual-objects PRIVATE ${PL4G_COMMON_FLAGS} --embed-dir=${PL4G_MANUAL_DIR})
-set_source_files_properties(src/manual/manual.cc PROPERTIES OBJECT_DEPENDS
-                            "${PL4G_MANUAL_DIR}/manual.pack;${PL4G_MANUAL_DIR}/manual.stamp.hh")
-add_dependencies(pl4g-manual-objects pl4g-manual-text)
-add_library(pl4g-manual SHARED $<TARGET_OBJECTS:pl4g-manual-objects>)
-target_include_directories(pl4g-manual PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(pl4g-manual PRIVATE fstrcmp)
-# The archive leaves fstrcmp to whatever links it, saying so.
-add_library(pl4g-manual-static STATIC $<TARGET_OBJECTS:pl4g-manual-objects>)
-set_target_properties(pl4g-manual-static PROPERTIES OUTPUT_NAME pl4g-manual)
-target_include_directories(pl4g-manual-static PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(pl4g-manual-static PUBLIC fstrcmp)
+# The manual's reader, and the check of its graph, over the library above.
 add_executable(pl4g-help src/manual/help.cc)
 target_link_libraries(pl4g-help PRIVATE pl4g-manual)
 add_executable(pl4g-manual-graph src/manual/graph.cc)

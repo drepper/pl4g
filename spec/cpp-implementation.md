@@ -49,7 +49,13 @@ Toolchain
 ---------
 
 Building: `cmake -S . -B build/cpp -G Ninja && cmake --build build/cpp && (cd build/cpp && ctest)`.  `ctest -L fuzz` runs only the
-fuzzing, for `PL4G_FUZZ_SECONDS` (30 by default) per entry point; `ctest -LE fuzz` everything else.  The characters' classes are
+fuzzing, for `PL4G_FUZZ_SECONDS` (30 by default) per entry point; `ctest -LE fuzz` everything else.
+`-DPL4G_LIBRARIES_ONLY=ON` builds the two libraries a program embeds and nothing else: `libpl4g-embed.so` and `libpl4g-embed.a`,
+the interpreter (`src/lib/embed/pl4g-embed.h` and `pl4g-embed.hh` for loading it, `embed.hh` for linking it), and
+`libpl4g-manual.so` and `libpl4g-manual.a`, the manual (`src/manual/manual.hh`) -- with no compiler, language server, tools,
+sanitizer variants, examples or tests, so ctest has nothing to run in such a tree.  It still needs what those two need: GCC 16,
+simdjson and libunistring (and `pl4g-gen-diag`, built first, for the diagnostics), libffi, tree-sitter, libedit, and Python with
+`bin/pl4g-manual` for the manual's text; fstrcmp is linked by the shared manual and left to what links the archive.  The characters' classes are
 libunistring's (1.1, Unicode 15; Python has 16, which differs only in the letters of the scripts 16 added).
 
 GCC 16.2 is the compiler: it has contracts, reflection and the sanitizers.  Clang 22 has neither contracts nor reflection, so its

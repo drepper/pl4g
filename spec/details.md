@@ -1237,7 +1237,11 @@ the declaration, on the error device, and status 92.  `NAME` is the function the
 of one taking a `str`.  The embedding program is not ended with it: the stop unwinds the interpreter, as every stop of a run does,
 and `run_source` or `run_file` answers 92.  **The interpreter is an archive too.**  The objects of `libpl4g-embed.so` are compiled once and are also `libpl4g-embed.a`,
 the same C entry and the same C++ interface for a program that carries the interpreter rather than loading it; the archive
-passes on what it is linked with to what links it, and `embed-host` is linked with it.  **Every object of the build is
+passes on what it is linked with to what links it, and `embed-host` is linked with it.  **The two libraries can be built
+alone**: CMake's `PL4G_LIBRARIES_ONLY` (off by default) defines the interpreter's and the manual's shared objects and archives,
+and returns before the compiler's programs, its tools, the sanitizer variants, the examples and the tests
+(spec/cpp-implementation.md, Toolchain).  The two are defined ahead of everything else for that, and after the fuzzing build's
+own return, which builds neither.  **Every object of the build is
 `-fPIC`**, a program's own included, set once with `add_compile_options`: CMake's `POSITION_INDEPENDENT_CODE` says `-fPIE` of a
 program's objects after it, which would win.  **What the host hands over by name is asked first.**  `interp::Options::defined`, a map from a symbol to the address of a
 function and a context, is consulted when a host function is first called, and `dlsym(RTLD_DEFAULT, ...)` only where it holds nothing of
