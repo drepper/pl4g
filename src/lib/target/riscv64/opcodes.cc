@@ -205,6 +205,10 @@ namespace pl4g::target::riscv64 {
         add("clz", { r(), r() }, 0x60001013, { reg(0, rd), reg(1, rs1) });
         add("ctz", { r(), r() }, 0x60101013, { reg(0, rd), reg(1, rs1) });
         add("cpop", { r(), r() }, 0x60201013, { reg(0, rd), reg(1, rs1) });
+        // The lower and the upper half of the product without carries: Zbc's
+        // and Zbkc's, which no application profile requires.
+        rrr("clmul", 0x0A001033);
+        rrr("clmulh", 0x0A003033);
         rrr("mulhu", 0x02003033);
         rrr("div", 0x02004033);
         rrr("divu", 0x02005033);

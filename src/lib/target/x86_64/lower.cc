@@ -8,6 +8,7 @@
 #include "ir/layout.hh"
 #include "util/reflect.hh"
 #include "target/bitcount.hh"
+#include "target/carryless.hh"
 #include "target/branches.hh"
 #include "target/globals.hh"
 #include "target/narrow.hh"
@@ -1165,6 +1166,19 @@ namespace pl4g::target::x86_64 {
     {
       auto op = inst->bin;
       auto operand = [&](std::size_t at) { return inst->operands[at]; };
+      if (is_carryless(op)) {
+        // The same two halves of a product with no carries in it, with the
+        // instruction where the program was built for one.
+        auto& r = registers();
+        auto high = r.info.new_virtual(r.gpr, 64);
+        auto low = r.info.new_virtual(r.gpr, 64);
+        held[inst] = high;
+        extra[inst] = { low };
+        auto left = value(operand(0), inst->span);
+        auto right = value(operand(1), inst->span);
+        lower_carryless(asm_, low, high, left, right, *this, inst->span);
+        return true;
+      }
       if (op == ir::BinOp::wide_mul) {
         // Both halves at once, the upper one first as the tuple has them: one
         // instruction answers both here.

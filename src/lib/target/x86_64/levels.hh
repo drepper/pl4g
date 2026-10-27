@@ -35,6 +35,9 @@ namespace pl4g::target::x86_64::levels {
 
   // Whether a level's processors hold a run in a register twice as wide.
   bool wide(std::string_view level) noexcept;
+  // Whether a level has the product without carries, which this compiler has
+  // the third ask the processor for beside what the table lists.
+  bool carryless(std::string_view level) noexcept;
   // Whether `level` is one of them.
   bool known(std::string_view level) noexcept;
 

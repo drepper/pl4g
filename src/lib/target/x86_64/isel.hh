@@ -37,9 +37,11 @@ namespace pl4g::target::x86_64 {
     // `rounds` says whether the level has the rounding instruction (SSE4.1),
     // `counts_ones` and `counts_leading` whether it promises `popcnt` and
     // `lzcnt`.
+    // `multiplies_carryless` whether it has `pclmulqdq`.
     X86Selector(const mc::InstrTable& table, bool rounds = true, bool counts_ones = false,
-                bool counts_leading = false)
-      : table(table), rounds(rounds), counting_ones(counts_ones), counting_leading(counts_leading) {}
+                bool counts_leading = false, bool multiplies_carryless = false)
+      : table(table), rounds(rounds), counting_ones(counts_ones), counting_leading(counts_leading),
+        multiplying_carryless(multiplies_carryless) {}
 
     mc::Insts select_move(mc::Reg dst, const mc::MCOperand& src, Span span) override;
     mc::Insts select_op(const mc::Op* op, mc::Reg dst, std::span<const mc::MCOperand> sources, Span span) override;
@@ -97,6 +99,7 @@ namespace pl4g::target::x86_64 {
     // There is no unsigned conversion short of AVX-512, which no level here
     // assumes; the lowering stands in for both.
     bool converts_unsigned() const override { return false; }
+    bool multiplies_carryless() const override { return multiplying_carryless; }
     mc::Insts select_count_ones(mc::Reg dst, const mc::MCOperand& src, Span span) override;
     mc::Insts select_count_leading(mc::Reg dst, const mc::MCOperand& src, Span span) override;
     mc::Insts select_count_trailing(mc::Reg dst, const mc::MCOperand& src, Span span) override;
@@ -108,6 +111,10 @@ namespace pl4g::target::x86_64 {
                             bool remainder, int bits, Span span) override;
     mc::Insts select_wide_product(mc::Reg low, mc::Reg high, const mc::MCOperand& left, const mc::MCOperand& right,
                                   bool is_signed, Span span) override;
+    // `pclmulqdq` multiplies a quadword of each of two vector registers, so the factors are moved over and
+    // the product moved back a half at a time.
+    mc::Insts select_carryless_product(mc::Reg low, mc::Reg high, const mc::MCOperand& left,
+                                       const mc::MCOperand& right, Span span) override;
     std::int64_t link_slot_size() override { return 0; }
     // How large a frame of `total` bytes is made, the stack aligned as the
     // system's convention says.
@@ -143,6 +150,7 @@ namespace pl4g::target::x86_64 {
     bool rounds;
     bool counting_ones;
     bool counting_leading;
+    bool multiplying_carryless;
   };
 
 

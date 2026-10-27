@@ -706,6 +706,13 @@ namespace pl4g::target::x86_64 {
             .modrm(ModRMUse::reg_rm)
           .reg_op(0).rm_op(1).imm_op(2).imm_bits(8).est_size(5)
           .roles({ OperandRole::def, OperandRole::use, OperandRole::use }),
+        // The product of two quadwords without carries, all 128 bits of it, in
+        // the register the first factor was in; the immediate picks the halves.
+        // pclmulqdq xmm, xmm/m128, imm8     66 0F 3A 44 /r ib
+        row("pclmulqdq", { x(), xm(128), imm(8) }).opcode(0x44).map(OpMap::m0f3a).mandatory_prefix(0x66)
+            .modrm(ModRMUse::reg_rm)
+          .reg_op(0).rm_op(1).imm_op(2).imm_bits(8).est_size(6)
+          .roles({ OperandRole::def_use, OperandRole::use, OperandRole::use }),
         // -- the same, thirty-two bytes at a time -----------------------------------
         // These are AVX2, which the architecture's third level includes.  They are
         // the same operations over twice as many lanes, with two differences that

@@ -1139,6 +1139,13 @@ namespace pl4g::interp {
         dst[1] = Cell(whole);
         return;
       }
+      if (bin == BinOp::clmul) {
+        // And the product without carries, the same two halves of it.
+        auto whole = ir::carryless_product(std::uint64_t(a[0]), std::uint64_t(b[0]));
+        dst[0] = Cell(whole >> 64);
+        dst[1] = Cell(whole);
+        return;
+      }
       if (op.arith == Arith::floating) {
         unsigned bits = op.scalar.bits;
         auto one = [&](Cell x, Cell y, Cell& out) {

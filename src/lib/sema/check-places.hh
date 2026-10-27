@@ -172,7 +172,9 @@
     // The element `at` places along, read where the elements are.
     ir::Value* element_of(ir::Builder& builder, ir::Value* elements, const ir::ListType* ty, ir::Value* at, Span span, const ast::Expr* expr = nullptr);  // check.py:16429
     // Check `†l⟦i⟧`, which takes one element out and answers what it was.
-    ir::Value* lower_take_at(ir::Builder& builder, const ast::TakeAt* expr, const ir::Type* expected);  // check.py:16438
+    ir::Value* lower_take_at(ir::Builder& builder, const ast::TakeAt* expr, const ir::Type* expected);
+    // Lower `†l⟦i…j⟧`, which takes a run of elements out and answers nothing: a statement only.
+    void lower_take_run(ir::Builder& builder, const ast::TakeAt* expr);  // check.py:_lower_take_run  // check.py:16438
     // Room in the list at `place` for `more` elements after the ones it has.
     Room room_made(ir::Builder& builder, ir::Value* place, const ir::ListType* ty, ir::Value* more, Span span);  // check.py:16468
     // The list at `place` written back with `count` elements in the room `_room_made` made, and the room

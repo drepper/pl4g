@@ -83,7 +83,8 @@ namespace pl4g::target {
         {
           // Whether the level has SSE4.1, which is what rounds a
           // floating-point number without going through an integer.
-          selector = std::make_unique<X86Selector>(table, mclevel != "v1", mclevel != "v1", levels::wide(mclevel));
+          selector = std::make_unique<X86Selector>(table, mclevel != "v1", mclevel != "v1", levels::wide(mclevel),
+                                                  levels::carryless(mclevel));
           passes = passes_for(table, opt_level);
           auto& regs = x86_64::registers();
           mc::AssemblerOptions options;

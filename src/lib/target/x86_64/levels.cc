@@ -36,6 +36,10 @@ namespace pl4g::target::x86_64::levels {
         return {
           // FMA, MOVBE, OSXSAVE, AVX, F16C
           { 1, 0, "ecx", bits_of({ 12, 22, 27, 28, 29 }), { "FMA", "MOVBE", "OSXSAVE", "AVX", "F16C" } },
+          // PCLMULQDQ, which the architecture's table leaves out of every level
+          // and every processor with AVX2 has; asked here so that a carry-less
+          // product is the one instruction it is.
+          { 1, 0, "ecx", bits_of({ 1 }), { "PCLMULQDQ" } },
           // BMI1, AVX2, BMI2
           { 7, 0, "ebx", bits_of({ 3, 5, 8 }), { "BMI1", "AVX2", "BMI2" } },
           // LZCNT, which the architecture counts under ABM
@@ -66,6 +70,12 @@ namespace pl4g::target::x86_64::levels {
 
 
   bool wide(std::string_view level) noexcept
+  {
+    return level == "v3" || level == "v4";
+  }
+
+
+  bool carryless(std::string_view level) noexcept
   {
     return level == "v3" || level == "v4";
   }

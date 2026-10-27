@@ -83,6 +83,7 @@ namespace pl4g::names {
   inline constexpr std::string_view lead_name = "\N{APL FUNCTIONAL SYMBOL QUAD}lead";
   inline constexpr std::string_view trail_name = "\N{APL FUNCTIONAL SYMBOL QUAD}trail";
   inline constexpr std::string_view wide_mul_name = "\N{APL FUNCTIONAL SYMBOL QUAD}wide_mul";
+  inline constexpr std::string_view clmul_name = "\N{APL FUNCTIONAL SYMBOL QUAD}clmul";
   inline constexpr std::string_view float_name = "\N{APL FUNCTIONAL SYMBOL QUAD}float";
   inline constexpr std::string_view trunc_name = "\N{APL FUNCTIONAL SYMBOL QUAD}trunc";
   inline constexpr std::string_view bits_name = "\N{APL FUNCTIONAL SYMBOL QUAD}bits";

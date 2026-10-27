@@ -28,9 +28,13 @@ namespace pl4g::sema::lists {
   inline constexpr std::string_view join_symbol = "__pl4g_list_join";
   inline constexpr std::string_view allocator_symbol = "__pl4g_list_allocator";
   inline constexpr std::string_view erase_symbol = "__pl4g_list_erase";
+  inline constexpr std::string_view erase_run_symbol = "__pl4g_list_erase_run";
 
   // `__pl4g_list_erase(at, stride, count, which)`: one element out.
   ir::Function* erase_function(ir::Module& module);
+  // `__pl4g_list_erase_run(at, stride, count, first, end)`: the elements from `first` up to and not including
+  // `end` out, what follows moved down.
+  ir::Function* erase_run_function(ir::Module& module);
   // `__pl4g_list_room(allocator, capacity, stride)`: room, the header written.
   ir::Function* room_function(ir::Module& module);
   // `__pl4g_list_capacity(where, allocator)`: how many elements there is room for.

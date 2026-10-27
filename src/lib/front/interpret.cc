@@ -374,6 +374,12 @@ namespace pl4g::macro {
       return MValue(std::vector<MValue>{ in_range(__int128(whole >> 64), upper),
                                          __int128(whole & mask_of(64)) });
     }
+    if (inst->bin == BinOp::clmul) {
+      // The same two halves of a product with no carries in it, both of them
+      // unsigned.
+      auto whole = ir::carryless_product(std::uint64_t(left), std::uint64_t(right));
+      return MValue(std::vector<MValue>{ __int128(whole >> 64), __int128(whole & mask_of(64)) });
+    }
     if (ty == ir::bool_type()) {
       auto found = arithmetic(inst->bin, left, right, known);
       if (! known) [[unlikely]]

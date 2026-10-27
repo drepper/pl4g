@@ -1106,6 +1106,32 @@ namespace pl4g::target::x86_64 {
   }
 
 
+  Insts X86Selector::select_carryless_product(Reg low, Reg high, const MCOperand& left, const MCOperand& right,
+                                              Span span)
+  {
+    auto& r = registers();
+    Insts held;
+    std::vector<Reg> factors;
+    for (const auto* factor : { &left, &right }) {
+      auto [word, before] = in_register(*factor, 64, span);
+      extend(held, before);
+      auto into = r.info.new_virtual(r.vec, float_register_bits);
+      held.push_back(inst("movq", { MCReg{ into, 128 }, word }, span));
+      factors.push_back(into);
+    }
+    auto product = factors[0];
+    auto other = factors[1];
+    held.push_back(inst("pclmulqdq", { MCReg{ product, 128 }, MCReg{ other, 128 }, MCImm{ 0, 8, false } }, span));
+    held.push_back(inst("movq", { MCReg{ low, 64 }, MCReg{ product, 128 } }, span));
+    // The upper quadword copied into both halves, so that the move that reads
+    // the lower one reads it.
+    auto upper = r.info.new_virtual(r.vec, float_register_bits);
+    held.push_back(inst("pshufd", { MCReg{ upper, 128 }, MCReg{ product, 128 }, MCImm{ 0xEE, 8, false } }, span));
+    held.push_back(inst("movq", { MCReg{ high, 64 }, MCReg{ upper, 128 } }, span));
+    return held;
+  }
+
+
   std::pair<MCReg, Insts> X86Selector::in_register(const MCOperand& operand, int bits, Span span)
   {
     if (auto reg = std::get_if<MCReg>(&operand))

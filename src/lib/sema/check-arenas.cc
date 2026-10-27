@@ -1895,6 +1895,10 @@ namespace pl4g::sema {
         // A `match` written as a statement of its own produces no value, and
         // its arms are runs of statements like any other body.
         lower_match(builder, one, func, nullptr, false);
+      else if (auto take = ast::as<ast::TakeAt>(value); take != nullptr && ast::is<ast::Range>(take->index))
+        // A run taken out of a list answers nothing, which is why it is
+        // written here and nowhere a value is wanted.
+        lower_take_run(builder, take);
       else if (session != nullptr && stmt == session->answer) {
         // What the session shows: lowered for what it is, and kept.
         ir::Value* found = lower_expr(builder, value, nullptr);

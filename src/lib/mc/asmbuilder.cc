@@ -132,6 +132,10 @@ namespace pl4g::mc {
   {
     missing("select_wide_product");
   }
+  Insts InstructionSelector::select_carryless_product(Reg, Reg, const MCOperand&, const MCOperand&, Span)
+  {
+    missing("select_carryless_product");
+  }
   std::int64_t InstructionSelector::link_slot_size() { missing("link_slot_size"); }
   std::int64_t InstructionSelector::frame_size(std::int64_t, bool) { missing("frame_size"); }
   std::pair<std::optional<std::int64_t>, std::int64_t> InstructionSelector::frame_walk(std::int64_t, std::int64_t,
@@ -780,6 +784,12 @@ namespace pl4g::mc {
                                Span span)
   {
     emit(selector_.select_wide_product(low, high, left, right, is_signed, span));
+  }
+
+
+  void Assembler::carryless_product(Reg low, Reg high, const MCOperand& left, const MCOperand& right, Span span)
+  {
+    emit(selector_.select_carryless_product(low, high, left, right, span));
   }
 
 

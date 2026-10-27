@@ -91,6 +91,9 @@ namespace pl4g::target::riscv64 {
     bool counts_ones() const override { return isa.has("zbb"); }
     bool counts_leading() const override { return isa.has("zbb"); }
     bool counts_trailing() const override { return isa.has("zbb"); }
+    // The product without carries is two instructions where the program is
+    // built for Zbc or for Zbkc, neither of which the profiles require.
+    bool multiplies_carryless() const override { return isa.has("zbc") || isa.has("zbkc"); }
     mc::Insts select_count_ones(mc::Reg dst, const mc::MCOperand& src, Span span) override;
     mc::Insts select_count_leading(mc::Reg dst, const mc::MCOperand& src, Span span) override;
     mc::Insts select_count_trailing(mc::Reg dst, const mc::MCOperand& src, Span span) override;
@@ -104,6 +107,8 @@ namespace pl4g::target::riscv64 {
                            int bits, Span span) override;
     mc::Insts select_wide_product(mc::Reg low, mc::Reg high, const mc::MCOperand& left, const mc::MCOperand& right,
                                   bool is_signed, Span span) override;
+    mc::Insts select_carryless_product(mc::Reg low, mc::Reg high, const mc::MCOperand& left,
+                                       const mc::MCOperand& right, Span span) override;
     mc::Insts select_divide(mc::Reg dst, const mc::MCOperand& left, const mc::MCOperand& right, bool is_signed,
                             bool remainder, int bits, Span span) override;
     std::int64_t link_slot_size() override { return 16; }

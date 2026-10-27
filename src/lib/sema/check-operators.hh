@@ -83,6 +83,9 @@
     // Lower `⎕wide_mul(A, B)`: the whole product of two 64-bit numbers, as a tuple of its upper half and
     // its lower half.
     ir::Value* lower_wide_mul(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:24971
+    // Lower `⎕clmul(A, B)`: the product of two 64-bit words with no carries, as a tuple of its upper half
+    // and its lower half.
+    ir::Value* lower_clmul(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected);  // check.py:_lower_clmul
     // The type the last argument of one of the crossings between whole and floating-point numbers lifts,
     // or a report that it lifts none.
     const ir::Type* numeric_target(const ast::Expr* written, std::string_view name);  // check.py:25047

@@ -201,6 +201,7 @@ set(PL4G_LIB_SOURCES
   src/lib/target/allocator.cc
   src/lib/target/backtrace.cc
   src/lib/target/bitcount.cc
+  src/lib/target/carryless.cc
   src/lib/target/branches.cc
   src/lib/target/callconv.cc
   src/lib/target/faults.cc

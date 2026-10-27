@@ -9,6 +9,7 @@
 // dispatching on it wants and what keeps the passes from casting.
 #pragma once
 
+#include <bit>
 #include <cstdint>
 #include <deque>
 #include <map>
@@ -158,7 +159,23 @@ namespace pl4g::ir {
     // upper and lower halves: the one operation whose answer is not of its
     // operands' type.
     wide_mul [[=Describe("wide.mul")]],
+    // And the product of two 64-bit words with no carries in it, answered
+    // the same way and unsigned always.
+    clmul [[=Describe("clmul")]],
   };
+
+  // What `clmul` answers for two words written down, as one 128-bit number:
+  // the schoolbook product with exclusive or where the sum would be.  The
+  // checker folds two numbers written down with it and the interpreters answer
+  // with it, so the three agree by being one function.  ir/inst.py's
+  // `carryless_product`.
+  constexpr unsigned __int128 carryless_product(std::uint64_t left, std::uint64_t right) noexcept
+  {
+    unsigned __int128 whole = 0;
+    for (; right != 0; right &= right - 1)
+      whole ^= (unsigned __int128) left << std::countr_zero(right);
+    return whole;
+  }
 
   enum class UnOp : std::uint8_t {
     neg [[=Describe("neg")]], not_ [[=Describe("not")]], count_ones [[=Describe("ones")]],

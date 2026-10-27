@@ -1423,6 +1423,58 @@ namespace pl4g::sema {
   }
 
 
+  ir::Value* Checker::lower_clmul(ir::Builder& builder, const ast::Call* expr, const ir::Type* expected)
+  {
+    if (expr->args.size() != 2) [[unlikely]] {
+      diags.emit(D::LANG_CALL_WRONG_ARGUMENT_COUNT, expr->span,
+                 { { "name", names::clmul_name }, { "expected", 2 }, { "found", expr->args.size() } });
+      return error_value(module);
+    }
+    // The two are operands of one multiplication, as `⎕wide_mul`'s are.
+    auto context = hint_of(expr->args[0]);
+    if (context == nullptr)
+      context = hint_of(expr->args[1]);
+    ir::Value* left = nullptr;
+    ir::Value* right = nullptr;
+    const ir::IntType* found = nullptr;
+    const ir::Type* other = nullptr;
+    {
+      Setting outer(operand_of, std::optional<std::string>(names::clmul_name));
+      left = lower_expr(builder, expr->args[0], context);
+      auto found_ty = value_type_of(left);
+      if (found_ty == ir::error_type())
+        return error_value(module);
+      found = ir::as<ir::IntType>(found_ty);
+      // A word of bits: sixty-four of them, and no sign (4020).
+      if (found == nullptr || found->bits != 64 || found->is_signed) [[unlikely]] {
+        diags.emit(D::LANG_CLMUL_NOT_A_WORD, expr->args[0]->span, { { "found", found_ty->written() } });
+        return error_value(module);
+      }
+      auto told = diags.error_count;
+      right = lower_expr(builder, expr->args[1], found);
+      other = value_type_of(right);
+      if (other != found && other != ir::error_type() && diags.error_count == told) [[unlikely]]
+        report_mismatch(expr->args[1]->span, other, found);
+    }
+    if (other != found) [[unlikely]]
+      return error_value(module);
+    auto answer = ir::tuple_type({ ir::u64(), ir::u64() });
+    if (! accepts(expected, answer)) [[unlikely]] {
+      report_mismatch(expr->span, answer, expected);
+      return error_value(module);
+    }
+    if (is_int_const(left) && is_int_const(right)) {
+      // Two words written down are multiplied here.
+      auto whole = ir::carryless_product(std::uint64_t(static_cast<const ir::IntConst*>(left)->value),
+                                         std::uint64_t(static_cast<const ir::IntConst*>(right)->value));
+      std::vector<ir::Value*> halves{ builder.int_const(ir::u64(), std::uint64_t(whole >> 64)),
+                                      builder.int_const(ir::u64(), std::uint64_t(whole)) };
+      return builder.make_tuple(halves, answer, expr->span);
+    }
+    return builder.binary(ir::BinOp::clmul, left, right, expr->span, answer);
+  }
+
+
   const ir::Type* Checker::numeric_target(const ast::Expr* written, std::string_view name)
   {
     auto lifted = ast::as<ast::Lifted>(written);
@@ -1643,6 +1695,8 @@ namespace pl4g::sema {
         return lower_mask(builder, expr, expected);
       if (given == names::wide_mul_name)
         return lower_wide_mul(builder, expr, expected);
+      if (given == names::clmul_name)
+        return lower_clmul(builder, expr, expected);
       if (given == names::float_name)
         return lower_to_float(builder, expr, expected);
       if (given == names::trunc_name)

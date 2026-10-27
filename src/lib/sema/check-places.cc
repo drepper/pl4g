@@ -1394,6 +1394,12 @@ namespace pl4g::sema {
 
   ir::Value* Checker::lower_take_at(ir::Builder& builder, const ast::TakeAt* expr, const ir::Type* expected)
   {
+    if (ast::is<ast::Range>(expr->index)) [[unlikely]] {
+      // A run taken out answers nothing, and here something is wanted of it
+      // (4021).
+      diags.emit(D::LANG_TAKE_RUN_NOT_A_VALUE, expr->span);
+      return undef_error(module);
+    }
     auto found = list_place(builder, expr->base, expr->base->span);
     if (! found)
       return undef_error(module);
@@ -1414,6 +1420,53 @@ namespace pl4g::sema {
     ir::Value* gone = element_of(builder, elements, ty, at, expr->span);
     erased(builder, place, ty, elements, count, at, expr->span);
     return gone;
+  }
+
+
+  void Checker::lower_take_run(ir::Builder& builder, const ast::TakeAt* expr)
+  {
+    auto written = ast::as<ast::Range>(expr->index);
+    auto found = list_place(builder, expr->base, expr->base->span);
+    if (! found)
+      return;
+    auto [place, ty] = *found;
+    if (written->step != nullptr) [[unlikely]] {
+      // A run is one piece; every other element is a filter (4022).
+      diags.emit(D::LANG_TAKE_RUN_HAS_A_STEP, written->step->span);
+      return;
+    }
+    ir::Value* first = index_into(builder, written->start, expr->span);
+    if (first == nullptr)
+      return;
+    // The end may be the length itself, and is read as a slice's end is.
+    auto last = on_its_own(builder, written->stop);
+    auto reaching = value_type_of(last);
+    if (reaching == ir::error_type())
+      return;
+    auto reaching_int = ir::as<ir::IntType>(reaching);
+    if (reaching_int == nullptr) [[unlikely]] {
+      diags.emit(D::LANG_ARRAY_INDEX_NOT_A_NUMBER, written->stop->span, { { "found", reaching->written() } });
+      return;
+    }
+    ir::Value* end = as_count(builder, last, reaching_int, expr->span);
+    if (! made_here(place))
+      an_effect(D::LANG_PURE_WRITES_ELSEWHERE, expr->span);
+    made_writable(builder, place, ty, expr->span, expr->base);
+    auto [elements, count, held] = list_at(builder, place, ty, expr->span);
+    builder.check(builder.compare(ir::CmpPred::ule, end, count, expr->span), "a run reaching past the end of its list",
+                  target::statuses::OUT_OF_RANGE, expr->span);
+    builder.check(builder.compare(ir::CmpPred::ule, first, end, expr->span), "a run that ends before it begins",
+                  target::statuses::OUT_OF_RANGE, expr->span);
+    auto stride = std::int64_t(ir::stride_of(ty->element, layout()));
+    auto erase = lists::erase_run_function(module);
+    ir::Value* bytes = builder.cast(ir::CastKind::bitcast, elements, ir::ptr_type(ir::u8(), true), expr->span);
+    builder.call(erase, std::vector<ir::Value*>{ bytes, builder.int_const(ir::u64(), stride), count, first, end },
+                 ir::void_type(), expr->span);
+    ir::Value* taken = builder.binary(ir::BinOp::wrap_sub, end, first, expr->span);
+    ir::Value* fewer = builder.binary(ir::BinOp::wrap_sub, count, taken, expr->span);
+    ir::Value* from = builder.extract(held, 2, ir::parts_of(ty)[2], expr->span);
+    builder.store(place, builder.make_tuple(std::vector<ir::Value*>{ elements, fewer, from }, ty, expr->span),
+                  expr->span);
   }
 
 

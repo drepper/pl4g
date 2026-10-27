@@ -10,6 +10,7 @@
 #include "ir/layout.hh"
 #include "mc/desc.hh"
 #include "target/bitcount.hh"
+#include "target/carryless.hh"
 #include "target/branches.hh"
 #include "target/globals.hh"
 #include "target/narrow.hh"
@@ -757,6 +758,21 @@ namespace pl4g::target::riscv64 {
     held.insert(held.end(), before_second.begin(), before_second.end());
     held.push_back(inst(is_signed ? "mulh" : "mulhu", { mcreg(high), first, second }, span));
     held.push_back(inst("mul", { mcreg(low), first, second }, span));
+    return held;
+  }
+
+
+  Insts RVSelector::select_carryless_product(Reg low, Reg high, const MCOperand& left, const MCOperand& right,
+                                             Span span)
+  {
+    // The upper half first, as `select_wide_product` has it.
+    Insts held;
+    auto [first, before_first] = as_register(left, span);
+    held.insert(held.end(), before_first.begin(), before_first.end());
+    auto [second, before_second] = as_register(right, span);
+    held.insert(held.end(), before_second.begin(), before_second.end());
+    held.push_back(inst("clmulh", { mcreg(high), first, second }, span));
+    held.push_back(inst("clmul", { mcreg(low), first, second }, span));
     return held;
   }
 
@@ -1791,6 +1807,18 @@ namespace pl4g::target::riscv64 {
         lower_return(inst, span);
         return;
       case InstKind::BinaryInst:
+        if (target::is_carryless(inst->bin)) {
+          // The same two halves of a product with no carries in it, with the
+          // two instructions where the program was built for them.
+          Reg high = info.new_virtual(registers().gpr, 64);
+          Reg low = info.new_virtual(registers().gpr, 64);
+          held[inst] = high;
+          extra[inst] = { low };
+          auto left = value(inst->operands[0], inst->span);
+          auto right = value(inst->operands[1], inst->span);
+          target::lower_carryless(asm_, low, high, left, right, *this, inst->span);
+          return;
+        }
         if (inst->bin == ir::BinOp::wide_mul) {
           // Both halves, the upper one first as the tuple has them.
           Reg high = info.new_virtual(registers().gpr, 64);

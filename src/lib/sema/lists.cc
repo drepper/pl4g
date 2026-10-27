@@ -125,6 +125,53 @@ namespace pl4g::sema::lists {
   }
 
 
+  ir::Function* erase_run_function(ir::Module& module)
+  {
+    auto bytes = bytes_type();
+    auto [func, fresh] = tables::generated(module, erase_run_symbol,
+                                           Types{ bytes, ir::u64(), ir::u64(), ir::u64(), ir::u64() },
+                                           ir::void_type());
+    if (! fresh)
+      return func;
+    auto entry = func->add_block();
+    auto walk = func->add_block("walk");
+    auto move = func->add_block("move");
+    auto done = func->add_block("done");
+    ir::Builder builder(module, *func);
+
+    builder.position_at(entry);
+    auto at = entry->add_param(bytes, "at");
+    auto stride = entry->add_param(ir::u64(), "stride");
+    auto count = entry->add_param(ir::u64(), "count");
+    auto first = entry->add_param(ir::u64(), "first");
+    auto end = entry->add_param(ir::u64(), "end");
+    // Where the bytes that move go, how far they move, and how many of them
+    // there are: every element after the run.
+    auto start = builder.binary(BinOp::wrap_mul, first, stride);
+    auto gap = builder.binary(BinOp::wrap_mul, builder.binary(BinOp::wrap_sub, end, first), stride);
+    auto moving = builder.binary(BinOp::wrap_mul, builder.binary(BinOp::wrap_sub, count, end), stride);
+    builder.br(walk, Args{ number(builder, 0), builder.memory() });
+
+    builder.position_at(walk);
+    auto step = walk->add_param(ir::u64(), "step");
+    auto token = walk->add_param(ir::mem_type(), "mem");
+    builder.set_memory(token);
+    builder.condbr(builder.compare(CmpPred::ult, step, moving), move, done);
+
+    // One byte down by the run's length, from the front.
+    builder.position_at(move);
+    auto where = builder.binary(BinOp::wrap_add, start, step);
+    auto place = builder.binary(BinOp::add, at, where);
+    builder.store(place, builder.load(builder.binary(BinOp::add, at, builder.binary(BinOp::wrap_add, where, gap))));
+    builder.br(walk, Args{ builder.binary(BinOp::wrap_add, step, number(builder, 1)), builder.memory() });
+
+    builder.position_at(done);
+    builder.set_memory(token);
+    builder.ret();
+    return func;
+  }
+
+
   ir::Function* room_function(ir::Module& module)
   {
     auto [func, fresh] = tables::generated(module, room_symbol, Types{ allocator_type(), ir::u64(), ir::u64() },

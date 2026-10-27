@@ -14,6 +14,7 @@
 #include "target/aarch64/regs.hh"
 #include "target/aarch64/startup.hh"
 #include "target/bitcount.hh"
+#include "target/carryless.hh"
 #include "target/branches.hh"
 #include "target/emit.hh"
 #include "target/globals.hh"
@@ -1810,6 +1811,18 @@ namespace pl4g::target::aarch64 {
         auto left = operands.operand(inst->operands[0], inst->span);
         auto right = operands.operand(inst->operands[1], inst->span);
         asm_.run_op(operation, made, left, right, width_of(vec->element), inst->span);
+        return;
+      }
+      if (target::is_carryless(op)) {
+        // The same two halves of a product with no carries in it, made of
+        // ordinary multiplications: nothing says this machine has `pmull`.
+        auto high = registers.new_virtual(regs().gpr, 64);
+        auto low = registers.new_virtual(regs().gpr, 64);
+        held[inst] = high;
+        extra[inst] = { low };
+        auto left = operands.operand(inst->operands[0], inst->span);
+        auto right = operands.operand(inst->operands[1], inst->span);
+        target::lower_carryless(asm_, low, high, left, right, operands, inst->span);
         return;
       }
       if (op == ir::BinOp::wide_mul) {

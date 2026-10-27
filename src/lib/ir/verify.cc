@@ -242,13 +242,14 @@ namespace pl4g::ir {
               fail(where, "moving an address by " + render(ops[1]));
             break;
           }
-          if (inst.bin == BinOp::wide_mul) {
+          if (inst.bin == BinOp::wide_mul || inst.bin == BinOp::clmul) {
             // Two 64-bit numbers of one type, and the two halves of their
             // product: the upper one of the operands' type and the lower one
-            // unsigned, the bits below the top half having no sign.
+            // unsigned, the bits below the top half having no sign.  A
+            // carry-less product is of words of bits, which have none.
             auto integer = as<IntType>(ops[0]->ty);
             auto tuple = as<TupleType>(inst.ty);
-            if (integer == nullptr || integer->bits != 64
+            if (integer == nullptr || integer->bits != 64 || (inst.bin == BinOp::clmul && integer->is_signed)
                 || ! same(without_units(ops[0]->ty), without_units(ops[1]->ty)))
               fail(where, "'" + inst.opcode() + "' of " + render(ops[0]) + " and " + render(ops[1]));
             else if (tuple == nullptr || tuple->members.size() != 2

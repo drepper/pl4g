@@ -131,6 +131,10 @@ namespace pl4g::mc {
                                 bool remainder, int bits, Span span);
     virtual Insts select_wide_product(Reg low, Reg high, const MCOperand& left, const MCOperand& right,
                                       bool is_signed, Span span);
+    // Both halves of the product of `left` and `right` without carries; asked only of a selector that says
+    // `multiplies_carryless`, the sequence that stands in for it being target/carryless's.
+    virtual Insts select_carryless_product(Reg low, Reg high, const MCOperand& left, const MCOperand& right,
+                                           Span span);
     // How much room a function that calls sets aside for its return address.
     virtual std::int64_t link_slot_size();
     // How large a frame of `total` bytes has to be made, for the stack to be as
@@ -164,6 +168,9 @@ namespace pl4g::mc {
     // Whether the target converts an unsigned 64-bit number to and from a
     // floating-point one in one instruction.
     virtual bool converts_unsigned() const { return false; }
+    // Whether the target has the product of two words without carries as an
+    // instruction, which on two of the three is what the program was built for.
+    virtual bool multiplies_carryless() const { return false; }
     virtual Insts select_count_ones(Reg dst, const MCOperand& src, Span span);
     virtual Insts select_count_leading(Reg dst, const MCOperand& src, Span span);
     virtual Insts select_count_trailing(Reg dst, const MCOperand& src, Span span);
@@ -292,6 +299,7 @@ namespace pl4g::mc {
     bool counts_leading() const { return selector_.counts_leading(); }
     bool counts_trailing() const { return selector_.counts_trailing(); }
     bool converts_unsigned() const { return selector_.converts_unsigned(); }
+    bool multiplies_carryless() const { return selector_.multiplies_carryless(); }
     void count_ones(Reg dst, const MCOperand& src, Span span = invalid_span);
     void count_leading(Reg dst, const MCOperand& src, Span span = invalid_span);
     void count_trailing(Reg dst, const MCOperand& src, Span span = invalid_span);
@@ -325,6 +333,9 @@ namespace pl4g::mc {
                 Span span = invalid_span);
     void wide_product(Reg low, Reg high, const MCOperand& left, const MCOperand& right, bool is_signed,
                       Span span = invalid_span);
+    // Multiply `left` by `right` without carries into `high`:`low`.
+    void carryless_product(Reg low, Reg high, const MCOperand& left, const MCOperand& right,
+                           Span span = invalid_span);
     void select(Reg dst, const MCOperand& chooser, const MCOperand& if_true, const MCOperand& if_false,
                 bool floating, int bits, Span span = invalid_span);
     void clamp(Condition cond, Reg dst, const MCOperand& lhs, const MCOperand& rhs, const MCOperand& bound,
