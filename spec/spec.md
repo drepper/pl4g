@@ -3170,9 +3170,9 @@ moving ← &mut m               ※ binds the name to another place
 `mut` before the type says the name may move; `mut` inside the reference says the place may be written.  A `&T` refuses the first
 line (4535) and a name without `mut` refuses the second.
 
-**`&` is written before a place** (4533): a name, a variable at the top level, an element of an array.  A value the program worked
-out is in no particular place -- it may be in a register and it may be nowhere at all -- so there is nothing for a reference to
-name.  A reference that allows writing further needs a place the program could have written where it stands (4537), since it is a
+**`&` is written before a place** (4533): a name, a variable at the top level, an element of an array or of a list.  A value the
+program worked out is in no particular place -- it may be in a register and it may be nowhere at all -- so there is nothing for a
+reference to name.  A reference that allows writing further needs a place the program could have written where it stands (4537), since it is a
 way to write it.
 
 **Whether it may be written is part of the type, so the context says it.**  `&x` where a `&mut T` is wanted is a reference that
@@ -4645,6 +4645,14 @@ left is a place (3027), a list's (4929) -- an array's length is in its type, and
 length is not in its type -- and written as an array's are.  A list in the image is read-only, so the first change made to one
 where it stands copies it out, into the arena in force; what is in the image is as it was.
 
+**`&l⟦i⟧` and `&mut l⟦i⟧` refer to an element where it is**, and lend the list -- the whole list, whichever element -- for as long
+as the reference is kept, as a view of it does: joining onto it, taking one out or giving it a new value may move every element
+into new room and give the old room back, so none of them is allowed while the reference is out, and while a `&mut` is out the
+list is not read by name either (4566).  A reference that writes has the list in its place given room of its own first, as
+`l⟦i⟧ ← v` has -- a list in the image copied out, one another name shares copied -- and the place has to allow writing (4537).
+Compare **Rust**, whose `&mut v[i]` borrows the whole vector; **C++**, whose `int& r = v[i]` dangles after a `push_back` that
+reallocates, with nothing said; **Go**, whose `&s[i]` goes on naming the old array after an `append` moved the slice.
+
 **A part of an element is written where the element is**: `l⟦i⟧.name ← v` writes one field of a list of records, and the rest
 of the element is not read or written.  It is held to what writing the element whole is held to -- the list in a place that may be
 changed, the index checked, a list in the image copied out first -- and what points somewhere, text or a list, is copied into the
@@ -4678,7 +4686,9 @@ the list itself copies it out first where it has to -- a view is handed where th
 copy out before a write through it.  An element is written through the list, `l⟦i⟧ ← v`.
 
 **What is joined onto a list may be an array of its elements**, of one dimension -- a view, a slice, an array whose type says its
-shape -- and so may either side of a `⧺` whose other side is a list, which makes a new list of the two in the arena in force.
+shape, an `if` or a `match` every arm of which is one of those or an array written out, joined on as the view its arms meet as --
+and so may either side of a `⧺` whose other side is a list, which makes a new list of the two in the arena in force.  Anywhere
+else an array written out is not a list (4203).
 
 ```
 l ⧺← row                              ※ row: u16⟦⟧, its elements copied in
@@ -4749,7 +4759,8 @@ nobody else's, and the call ending leaves the caller the only one holding it.  S
 answered, is answered without a copy.  The variable has to be bound once and given only lists made where it is given them -- a list
 written out, a join, what a function of the program answers -- and be reached no other way and named by nothing put off with
 `defer`, which runs after the answer is worked out.  Anything else is copied as before: a variable given another name's list may
-share that name's room.  Compare **C++**'s implicit move of a returned local, **Rust**'s move of a returned `Vec`.
+share that name's room.  **The same holds of a list answered in a result**, `→ [u8] ? E`: the answer is kept where the signature
+says as it would be answered alone, and the result made of it.  Compare **C++**'s implicit move of a returned local, **Rust**'s move of a returned `Vec`.
 
 ```
 let l: mut [u8] = [1u8, 2u8, 3u8]
@@ -5421,7 +5432,9 @@ arms.
 **`if` is an expression, and a statement where nothing wants its value**, exactly as `match` is.  Where a value is wanted of it,
 every arm produces one and they are all of one type, and **there has to be an `else`** (4428) -- an `if` without one has a way
 through that runs no arm, and that way would owe a value it has nowhere to get.  An arm ending in `return` owes none, leaving the
-function rather than reaching the place the arms join.
+function rather than reaching the place the arms join.  **Each arm is lowered into what is wanted**, so where that is a view the
+arms may be arrays of different lengths, views and slices, each the view it stands for: `let v: u8⟦⟧ = if c: ⟦1u8⟧ else: ⟦2u8,
+3u8⟧`.
 
 ```
 let first: u8 = if a < b:

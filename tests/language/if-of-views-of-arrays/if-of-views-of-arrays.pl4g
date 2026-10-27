@@ -1,0 +1,45 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ An `if` where a view is wanted lowers each arm into the view, so arms that
+※ are arrays of different lengths meet as one: `let v: u8⟦⟧ = if c: ⟦1u8⟧
+※ else: ⟦2u8, 3u8⟧`.  The `if` used to take its type from the first arm, an
+※ array of one, and refuse the second (4452).  Views and arrays mixed meet the
+※ same way, and so do the arms of a `match`.
+
+let std := ⎕import("std")
+
+enum Side : u8:
+    left ;
+    right
+
+@[opaque]
+fn which(n: u64 ¤size) → bool:
+    n > 0
+
+fn longest(a: u8⟦⟧, b: u8⟦⟧) → u64 ¤size:
+    #a ⌈ #b
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let c: bool = which(#init.args)
+    let v: u8⟦⟧ = if c: ⟦1u8⟧ else: ⟦2u8, 3u8⟧
+    if #v ≠ 1 ∨ v⟦0⟧ ≠ 1u8:
+        return 1u6
+    let w: u8⟦⟧ = if ¬c: ⟦1u8⟧ else: ⟦2u8, 3u8⟧
+    if #w ≠ 2 ∨ w⟦1⟧ ≠ 3u8:
+        return 2u6
+    let x: u8⟦⟧ = ⎕bytes("ab")
+    let y: u8⟦⟧ = if c: x else: ⟦9u8, 9u8, 9u8⟧
+    if #y ≠ 2:
+        return 3u6
+    let side: Side = if c: Side.left else: Side.right
+    let z: u8⟦⟧ = match side:
+        left:
+            ⟦4u8, 5u8, 6u8, 7u8⟧
+        right:
+            x
+    if #z ≠ 4:
+        return 4u6
+    if longest((if c: ⟦1u8⟧ else: x), ⟦1u8, 2u8, 3u8⟧) ≠ 3:
+        return 5u6
+    0u6

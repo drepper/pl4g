@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4566
+
+※ A reference to an element of a list lends the whole list for as long as the
+※ reference is kept, whichever element it names: joining onto the list may
+※ move every element into new room and give the old room back, which would
+※ leave `r` naming room nobody holds.  So the join is refused while `r` is
+※ still used below it, as it is while a view of the list is out.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: mut [u8] = [1u8, 2u8] in ⎕heap
+    let r: &mut u8 = &mut l⟦0⟧
+    l ⧺← [3u8]
+    r⌖ ← 5u8
+    0u6

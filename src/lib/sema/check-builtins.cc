@@ -1597,8 +1597,13 @@ namespace pl4g::sema {
 
   ir::Value* Checker::spread(ir::Builder& builder, const ast::Expr* expr, const ir::ArrayType* expected, Span span)
   {
-    auto value =
-      lower_expr(builder, expr, ast::is<ast::ArrayLit>(expr) || in_the_image(expr) ? expected : nullptr);
+    // An `if` or a `match` is told too, so that each arm is lowered into the
+    // view and arms of different lengths meet as one.
+    auto value = lower_expr(builder, expr,
+                            ast::is<ast::ArrayLit>(expr) || in_the_image(expr) || ast::is<ast::If>(expr)
+                                || ast::is<ast::Match>(expr)
+                              ? expected
+                              : nullptr);
     auto found = value_type_of(value);
     if (found == expected || found == ir::error_type())
       return value;

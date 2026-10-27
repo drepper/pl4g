@@ -1,0 +1,38 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ What is joined onto a list may be an `if` or a `match` whose arms are arrays
+※ -- written out, views, slices, an arm of any of them -- and it is joined on as
+※ the view the arms meet as, whatever their lengths: `l ⧺← (if c: ⟦1u8⟧ else: ⟦2u8, 3u8⟧)`.
+※ The arms used to be lowered into the list's type, which an array written out
+※ is not, and the back end was handed an array where a list was promised.  An
+※ `if` whose arms are lists is joined on as the list it is, as before.
+
+let std := ⎕import("std")
+
+enum Side : u8:
+    left ;
+    right
+
+@[opaque]
+fn which(n: u64 ¤size) → bool:
+    n > 0
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: mut [u8] = [] in ⎕heap
+    let c: bool = which(#init.args)
+    l ⧺← (if c: ⟦1u8⟧ else: ⟦2u8, 3u8⟧)
+    if #l ≠ 1 ∨ l⟦0⟧ ≠ 1u8:
+        return 1u6
+    l ⧺← (if ¬c: ⟦1u8⟧ else: ⟦2u8, 3u8⟧)
+    if #l ≠ 3 ∨ l⟦2⟧ ≠ 3u8:
+        return 2u6
+    let text: u8⟦⟧ = ⎕bytes("abcd")
+    let side: Side = if c: Side.right else: Side.left
+    l ⧺← (if side = Side.left: text⟦0…1⟧ elif ¬c: ⟦0u8⟧ else: text⟦1…4⟧)
+    if #l ≠ 6 ∨ l⟦5⟧ ≠ 100u8:
+        return 3u6
+    l ⧺← (if c: [7u8] else: [8u8, 9u8])
+    if #l ≠ 7 ∨ l⟦6⟧ ≠ 7u8:
+        return 4u6
+    0u6

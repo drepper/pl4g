@@ -1,0 +1,22 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A function calling itself last is a loop whatever it is handed, and that
+※ includes an arena lent to it: `count` takes `&mut arena` and calls itself ten
+※ million times, which as real calls would be far past what the stack holds.
+※ The reference is handed on as it is, so the jump back to the start has
+※ nothing to give back on the way.  The `json` module wrote around this once,
+※ the arena parameter having kept the call a call.
+
+let std := ⎕import("std")
+
+fn count(n: u64, pool: &mut arena, acc: u64) → u64:
+    if n = 0u64:
+        return acc
+    count(n - 1u64, pool, acc + 1u64)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let pool: mut arena = ⎕arena
+    if count(10000000u64, &mut pool, 0u64) ≠ 10000000u64:
+        return 1u6
+    0u6

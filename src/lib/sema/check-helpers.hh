@@ -52,7 +52,10 @@ namespace pl4g::sema {
   // Every name assigned anywhere in `block`, in the order they appear.
   std::vector<std::string> assigned_in(const ast::Block* block);  // check.py:377
   // Add to `into` every name `block` assigns, looking through nested bodies.
-  void collect_assigned(const ast::Block* block, std::vector<std::string>& into);  // check.py:391
+  // Every name *block* assigns together with another, `a, b ← …`, looking
+  // through nested bodies as `assigned_in` does.
+  std::vector<std::string> assigned_apart_in(const ast::Block* block);  // check.py:412
+  void collect_assigned(const ast::Block* block, std::vector<std::string>& into, bool only_apart = false);  // check.py:391
   // Add to `into` every name `&` is written in front of, anywhere below `node`.
   // The name a path through an element starts from -- `l` of `l⟦i⟧.name` --
   // and nothing for any other path.

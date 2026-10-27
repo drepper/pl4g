@@ -56,7 +56,8 @@ from ..ir.layout import (DataLayout, member_offsets_of, offsets_of,
 from ..ir.inst import (AddressInst, BinaryInst, BinOp, CallInst, CastInst,
                        CastKind, CmpPred,
                        ExtractInst, FrameInst, Instruction, LoadInst, MemStartInst, RetInst,
-                       Ordering, StoreInst, Terminator, TupleInst, UnOp)
+                       Ordering, StoreInst, Terminator, TupleInst, UnOp,
+                       WrapInst)
 from ..target.registry import architecture_of, conventions_of
 from ..target.syscalls import KNOWN as SYSCALL_NAMES, number_of
 from ..runtime import names as runtime_names
@@ -411,25 +412,59 @@ def _assigned_in(block: ast.Block) -> list[str]:
     return found
 
 
-def _collect_assigned(block: ast.Block, into: list[str]) -> None:
-    """Add to *into* every name *block* assigns, looking through nested bodies."""
+def _assigned_apart_in(block: ast.Block) -> list[str]:
+    """Every name *block* assigns together with another, `a, b ← …`, looking
+    through nested bodies as `_assigned_in` does."""
+    found: list[str] = []
+    _collect_assigned(block, found, only_apart=True)
+    return found
+
+
+def _collect_assigned(block: ast.Block, into: list[str],
+                      only_apart: bool = False) -> None:
+    """Add to *into* every name *block* assigns, looking through nested bodies
+    -- only those assigned together with another where *only_apart* says so."""
     for stmt in block.stmts:
         match stmt:
             case ast.AssignStmt():
-                into.append(stmt.name)
+                if not only_apart or stmt.more:
+                    into.append(stmt.name)
                 into.extend(name for name, _ in stmt.more)
             case ast.ExprStmt(value=(ast.While() | ast.ForEach()) as looped):
-                _collect_assigned(looped.body, into)
+                _collect_assigned(looped.body, into, only_apart)
                 if looped.alternative is not None:
-                    _collect_assigned(looped.alternative, into)
+                    _collect_assigned(looped.alternative, into, only_apart)
             case ast.ExprStmt(value=ast.If() as asked):
                 for arm in asked.arms:
-                    _collect_assigned(arm.body, into)
+                    _collect_assigned(arm.body, into, only_apart)
             case ast.ExprStmt(value=ast.Match() as matched):
                 for arm in matched.arms:
-                    _collect_assigned(arm.body, into)
+                    _collect_assigned(arm.body, into, only_apart)
             case _:
                 pass
+
+
+def _arm_ends(expr: ast.Expr) -> list[ast.Expr] | None:
+    """The expression each arm of an `if` with an `else`, or of a `match`, ends
+    in, an arm ending in another of either reaching into that one's; nothing
+    where *expr* is neither, or where an arm ends in no expression."""
+    match expr:
+        case ast.If():
+            if not expr.arms or expr.arms[-1].condition is not None:
+                return None
+            bodies = [arm.body for arm in expr.arms]
+        case ast.Match():
+            bodies = [arm.body for arm in expr.arms]
+        case _:
+            return None
+    ends: list[ast.Expr] = []
+    for body in bodies:
+        last = body.stmts[-1] if body.stmts else None
+        if not isinstance(last, ast.ExprStmt):
+            return None
+        deeper = _arm_ends(last.value)
+        ends.extend(deeper if deeper is not None else (last.value,))
+    return ends
 
 
 def _named_through_an_element(expr: object) -> str | None:
@@ -492,6 +527,11 @@ def _addressed_here(node: ast.Node, into: set[str]) -> None:
             changed = node.base
         case ast.JoinAssign():
             changed = node.target
+        case ast.AddressOf():
+            # And a reference taken of an element of one, which may write it.
+            # A name of an array is given no storage for it, a reference never
+            # naming a place that holds an array.
+            changed = node.operand
         case ast.Call() if isinstance(node.callee, ast.NameRef) \
                 and node.callee.name in (RESERVE_NAME, ITER_NAME) and node.args:
             changed = node.args[0]
@@ -11207,7 +11247,7 @@ class Checker:
                     local.gone_with = "".join((_REPLACED, name))
 
     def _answered(self, builder: IRBuilder, written: ast.Expr, value: Value,
-                  func: Function, span: Span) -> Value:
+                  func: Function, span: Span, as_: Type | None = None) -> Value:
         """What a function answers, kept in the allocator its signature names.
 
         `→ T in a` names `a`, `→ T in ⎕heap` the heap, and saying nothing names
@@ -11220,14 +11260,32 @@ class Checker:
         Text in the image is answered as it is where the signature says nothing.
         Where it names one allocator it is copied in too: the answer then travels
         without its allocator, which the caller adds, and has to be in it.
+
+        *as_* is the type answered where it is not the function's: the answer of
+        a result, which is kept as it would be answered on its own.
         """
-        ty = func.ty.ret
+        ty = func.ty.ret if as_ is None else as_
         answering = self._node_of_func.get(id(func))
-        if answering is not None:
+        if answering is not None and as_ is None:
             self._flow(("answer", id(answering)), written)
         said = self._answer_made_in
         if said is None or self._value_type_of(value) is ERROR:
             return value
+        if isinstance(ty, ResultType) and isinstance(value, WrapInst) \
+                and isinstance(value.operands[1], BoolConst) \
+                and not value.operands[1].value \
+                and self._value_type_of(value.operands[0]) is ty.ok:
+            # A result made here of its answer, which is what an answer written
+            # where a result is answered comes to: the answer is kept where the
+            # signature says, as it would be answered on its own, and the result
+            # made of what that comes to.  A result cannot be copied, and an
+            # answer can.
+            inner = value.operands[0]
+            kept = self._answered(builder, written, inner, func, span, ty.ok)
+            if self._value_type_of(kept) is ERROR or kept is inner:
+                return kept if kept is not inner else value
+            return builder.wrap(kept, builder.bool_const(False), ty, span,
+                                None if ty.err is None else UndefConst(ty.err))
         if _holds_a_lambda(ty) and not _lambdas_last(ty) \
                 and not self._lambda_may_leave(written, said[0] | {_HEAP},
                                                func.name, span):
@@ -12321,6 +12379,14 @@ class Checker:
         """
         ty, ready = self._array_written(builder, expr, expected)
         if ty is None:
+            return UndefConst(ERROR)
+        aim = self._aiming_at(expected)
+        if isinstance(aim, ListType):
+            # A list is not an array, and where one is wanted an array written
+            # out is a mistake said here -- in an arm of an `if` as anywhere --
+            # and not a value of the wrong type handed on.  `l ⧺← ⟦a, b⟧` is the
+            # one place it is the list of its elements, and says so itself.
+            self._report_mismatch(expr.span, ty, aim)
             return UndefConst(ERROR)
         if ready is not None and len(ready) != ty.count:
             # The writing is not the same width all the way along, so what was
@@ -16326,7 +16392,11 @@ class Checker:
                     seen = seen.base
                 case ast.Element():
                     at = [self._index_known(one) for one in seen.indices]
-                    if any(one is None for one in at):
+                    # An element of a list is the whole list: what moves its
+                    # room moves every element, so no two of them are places
+                    # apart.
+                    if isinstance(self._said_to_be(seen.base), ListType) \
+                            or any(one is None for one in at):
                         # The whole array, whichever element: what was below it
                         # is part of that.
                         fields.clear()
@@ -16420,7 +16490,7 @@ class Checker:
                    borrowed[1] if borrowed is not None else ())
         outer, self._taking_a_reference = self._taking_a_reference, lent
         try:
-            found = self._place_written(builder, expr.operand)
+            found = self._place_written(builder, expr.operand, writes)
         finally:
             self._taking_a_reference = outer
         if found is None:
@@ -16458,7 +16528,7 @@ class Checker:
             case ast.NameRef():
                 return self._place_of_a_name(builder, expr)
             case ast.Element():
-                return self._place_of_an_element(builder, expr)
+                return self._place_of_an_element(builder, expr, writing=writing)
             case ast.Member():
                 return self._place_of_a_field(builder, expr, writing)
             case ast.Deref():
@@ -17123,16 +17193,32 @@ class Checker:
                 self._lasting(where))
 
     def _place_of_an_element(self, builder: IRBuilder, expr: ast.Element,
-                             of_a_list: bool = False
+                             of_a_list: bool = False, writing: bool = False
                              ) -> tuple[Value, Type, bool, str, bool] | None:
-        """Where one element of an array is, for a reference being taken of it.
+        """Where one element of an array or a list is, for a reference being
+        taken of it -- one that writes where *writing* says so.
 
         Or of a list, where *of_a_list* says the place is only read from, there
         and then: a record that is an element is read a field at a time, so
-        `l⟦i⟧.name` asks for where the element is.  A reference into a list is
-        not taken this way -- the run moves when the list grows -- and nor is a
-        field written: what the list holds may be shared until it is written,
-        and that is `l⟦i⟧ ← v`'s business."""
+        `l⟦i⟧.name` asks for where the element is.  A field is not written this
+        way: what the list holds may be shared until it is written, and that is
+        `l⟦i⟧ ← v`'s business.
+
+        A reference that writes into a list has the list in its place given
+        room of its own first, as `l⟦i⟧ ← v` has, so that what it writes is this
+        list's alone; one that reads, or one the list may not be written for,
+        is where the element is now.  The list is lent for as long as the
+        reference is kept (`_borrowed_name`), which is what keeps the room from
+        moving under it."""
+        if not of_a_list and isinstance(self._said_to_be(expr.base), ListType) \
+                and len(expr.indices) == 1 \
+                and not isinstance(expr.indices[0], ast.Range):
+            if writing and self._may_write(expr.base):
+                written = self._list_element_written(builder, expr)
+                if written is None:
+                    return None
+                return (written[0], written[1], True, "an element", False)
+            return self._place_of_an_element(builder, expr, of_a_list=True)
         base = self._lower_expr(builder, expr.base, None)
         ty = self._value_type_of(base)
         if ty is ERROR:
@@ -17780,9 +17866,11 @@ class Checker:
         # A view of its elements may be out, which changing it in place could
         # leave pointing at room given back: the list is lent for as long as
         # one is kept (`_as_a_view`).
+        # Not the reference being taken of an element of it, which lent it
+        # just now.
         borrowed = self._borrowed_name(expr)
-        if borrowed is not None and self._lent_out(borrowed[0], span, True,
-                                                   borrowed[1]):
+        if borrowed is not None and borrowed[0] != self._taking_a_reference \
+                and self._lent_out(borrowed[0], span, True, borrowed[1]):
             return None
         return (builder.cast(CastKind.BITCAST, address,
                              self._module.types.ptr_type(held, mutable=True),
@@ -18176,7 +18264,14 @@ class Checker:
         stride = stride_of(ty.element, _LAYOUT)
         span = stmt.span
         if self._may_be_an_array(written):
-            given = self._lower_expr(builder, written, None)
+            # An `if` or a `match` of arrays is lowered as the view its arms
+            # meet as.
+            given = (self._lower_into(builder, written,
+                                      self._module.types.array_type(ty.element,
+                                                                    (None,)),
+                                      written.span)
+                     if isinstance(written, (ast.If, ast.Match))
+                     else self._lower_expr(builder, written, None))
             held = self._value_type_of(given)
             if held is ERROR:
                 return
@@ -18292,6 +18387,13 @@ class Checker:
         what lets `[]` and the arms of an `if` take the list's type."""
         if isinstance(self._said_to_be(written), ArrayType):
             return True
+        # An `if` or a `match` every arm of which ends in an array, one written
+        # out among them: what it comes to is an array, and not the list a
+        # list's arms would be lowered into.
+        ends = _arm_ends(written)
+        if ends is not None:
+            return all(isinstance(one, ast.ArrayLit) or self._may_be_an_array(one)
+                       for one in ends)
         match written:
             case ast.Element():
                 return any(isinstance(one, ast.Range) for one in written.indices)
@@ -22472,15 +22574,23 @@ class Checker:
         """
         found: dict[int, _Local] = {}
         names = list(_assigned_in(body))
+        apart = set(_assigned_apart_in(body))
         if alternative is not None:
             names.extend(_assigned_in(alternative))
+            apart.update(_assigned_apart_in(alternative))
         for name in names:
             local = self._find_local(name)
             # A name with storage of its own stands for the same place at every
             # turn: what a turn changes is what is in the place, which is read
-            # where it is read and carried nowhere.
-            if local is not None and not local.placed:
-                found.setdefault(id(local), local)
+            # where it is read and carried nowhere.  So does a name of an array:
+            # `a ← v` copies into the elements `a` names, and `a` goes on naming
+            # them -- except where it is assigned together with another name,
+            # which binds it.
+            if local is None or local.placed:
+                continue
+            if isinstance(self._held_by(local), ArrayType) and name not in apart:
+                continue
+            found.setdefault(id(local), local)
         return list(found.values())
 
     # -- match -----------------------------------------------------------------
@@ -30955,8 +31065,11 @@ class Checker:
         what comes back still has one and is let go of below.  Everything else
         is a value with a type of its own and is lowered with nothing expected.
         """
+        # An `if` or a `match` is told too, so that each arm is lowered into
+        # the view and arms of different lengths meet as one.
         value = self._lower_expr(builder, expr,
-                                 expected if isinstance(expr, ast.ArrayLit)
+                                 expected if isinstance(expr, (ast.ArrayLit, ast.If,
+                                                               ast.Match))
                                  or _in_the_image(expr) else None)
         found = self._value_type_of(value)
         if found is expected or found is ERROR:

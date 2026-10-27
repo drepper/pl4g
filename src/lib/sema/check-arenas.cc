@@ -891,13 +891,32 @@ namespace pl4g::sema {
 
 
   ir::Value* Checker::answered(ir::Builder& builder, const ast::Expr* written, ir::Value* value, ir::Function* func,
-                               Span span)
+                               Span span, const ir::Type* as)
   {
-    const ir::Type* ty = func->fty->ret;
-    if (auto answering_node = node_of_func.get(id_of(func)); answering_node != nullptr)
-      flow(slot_key("answer", id_of(*answering_node)), written);
+    const ir::Type* ty = as != nullptr ? as : func->fty->ret;
+    if (as == nullptr)
+      if (auto answering_node = node_of_func.get(id_of(func)); answering_node != nullptr)
+        flow(slot_key("answer", id_of(*answering_node)), written);
     if (! answer_made_in || value_type_of(value) == ir::error_type())
       return value;
+    // A result made here of its answer, which is what an answer written where a
+    // result is answered comes to: the answer is kept where the signature says,
+    // as it would be answered on its own, and the result made of what that
+    // comes to.  A result cannot be copied, and an answer can.
+    if (auto result = ir::as<ir::ResultType>(ty); result != nullptr && value->vkind == ir::ValueKind::instruction) {
+      auto wrapped = static_cast<ir::Instruction*>(value);
+      if (wrapped->kind == ir::InstKind::WrapInst && wrapped->operands[1]->vkind == ir::ValueKind::bool_const
+          && ! static_cast<const ir::BoolConst*>(wrapped->operands[1])->value
+          && value_type_of(wrapped->operands[0]) == result->ok) {
+        ir::Value* kept = answered(builder, written, wrapped->operands[0], func, span, result->ok);
+        if (value_type_of(kept) == ir::error_type())
+          return kept;
+        if (kept == wrapped->operands[0])
+          return value;
+        return builder.wrap(kept, builder.bool_const(false), ty, span,
+                            result->err != nullptr ? undef(module, result->err) : nullptr);
+      }
+    }
     const KeySet allowed = std::get<0>(*answer_made_in);
     const std::string named = std::get<1>(*answer_made_in);
     if (holds_a_lambda(ty) && ! lambdas_last(ty)
@@ -2045,6 +2064,14 @@ namespace pl4g::sema {
     auto [ty, ready] = array_written(builder, expr, expected);
     if (ty == nullptr)
       return undef(module, ir::error_type());
+    if (auto aim = aiming_at(expected); ir::is<ir::ListType>(aim)) [[unlikely]] {
+      // A list is not an array, and where one is wanted an array written out
+      // is a mistake said here -- in an arm of an `if` as anywhere -- and not a
+      // value of the wrong type handed on.  `l ⧺← ⟦a, b⟧` is the one place it
+      // is the list of its elements, and says so itself.
+      report_mismatch(expr->span, ty, aim);
+      return undef(module, ir::error_type());
+    }
     if (ready && (! ty->count() || ready->size() != *ty->count()))
       // The writing is not the same width all the way along, so what was
       // lowered does not line up with the run: `fill` says which list is the

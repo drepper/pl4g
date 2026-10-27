@@ -1,0 +1,52 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A list a body made in an arena of the caller's is answered in a result,
+※ `[u8] ? E in pool`, as it is answered on its own: the answer is the list,
+※ and the error carries a value of its own.  So is one made in the heap.  The `json` module once answered a
+※ list handed in instead, a result having been refused here (4624).
+
+let std := ⎕import("std")
+
+enum E : u8:
+    bad ;
+    worse
+
+fn make(n: u8, pool: &mut arena) → [u8] ? E in pool:
+    if n = 0u8:
+        return ⊥ E.bad
+    let l: mut [u8] = [] in pool
+    l ⧺← ⟦n, n⟧
+    l
+
+※ The same in the heap, where nothing says where the answer is made.
+fn heaped(n: u8) → [u8] ? E:
+    if n = 0u8:
+        return ⊥ E.worse
+    let l: mut [u8] = []
+    l ⧺← ⟦n⟧
+    l
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let pool: mut arena = ⎕arena
+    let got: [u8] ? E = make(3u8, &mut pool)
+    match got:
+        [u8](l):
+            if #l ≠ 2 ∨ l⟦1⟧ ≠ 3u8:
+                return 1u6
+        ⊥(_):
+            return 2u6
+    let none: [u8] ? E = make(0u8, &mut pool)
+    match none:
+        [u8](_):
+            return 3u6
+        ⊥(e):
+            if e ≠ E.bad:
+                return 4u6
+    let one: [u8] = heaped(5u8) ?? []
+    if #one ≠ 1 ∨ one⟦0⟧ ≠ 5u8:
+        return 5u6
+    let empty: [u8] = heaped(0u8) ?? [9u8, 9u8, 9u8]
+    if #empty ≠ 3:
+        return 6u6
+    0u6
