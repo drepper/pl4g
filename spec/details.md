@@ -5940,6 +5940,25 @@ number-reading body of `std.string` for a program whose one macro called nothing
 macros are checked (`entry.node.is_macro`), the expander running them by a name nothing in a body writes.  The C++ keeps
 `Checker::imported`, set on the module's checker before `run`.
 
+**A generic's body is asked for by its instances** (since 2026-10-27).  `want` takes a generic as it takes a function, by its name
+or because it is an operator, and checks it where it is written (`_check_generic`), but adds only what its *signature* mentions
+(`_mentioned_but_the_body`: the parameters, the answer, the clauses, which every call reads).  What the body mentions outside the
+arms of a `comptime if` (`_mentioned_but_the_arms`) is kept on the generic (`_Generic.body_names`) and asked for by the first
+instance, in `_make_instance` before anything of it is lowered; what a `comptime if`'s arm mentions is asked for where an
+instance takes the arm (`_ask_for_the_arms`, from `_lower_if` once `_chosen_arms` has settled it), once an arm
+(`_Generic.asked_arms`).  Who is asked is the file that wrote the generic: `_Generic.asks` is its checker's
+`_wanted_by_an_instance`, which runs `want(names, everywhere=True)` -- every module that file reads is asked whatever the file
+itself has, the names having been written there -- with the body being lowered set aside (`_body_set_aside(fresh=True)`, the
+`_BODY_STATE` a generator's instance sets aside, and the bound types, the requirements, the lifetime scopes, the generator and the
+generic being asked for besides): an instance is made where a call is lowered, which may be in the middle of a body of the same
+file's, as `std.json`'s `tree_at` makes one.  Checking a generic where it is written lowers no call of a function by its body --
+a call is lowered against the callee's signature, and one of another generic over the opaque types makes no instance -- so
+nothing it calls needs a body yet; an instance made while a body is checked there (`_abstract` set) asks for nothing, being
+thrown away with everything that check made.  Before, the whole body was mentioned where the generic was taken: `std`'s `⍕`, an
+operator and so taken by every program, reaches `text`, whose arm for a floating-point number names `string.numeral_f64`, and
+every program lowered Schubfach and worked out its tables, about 50 ms of an `exit0`, and dropped them again.  A file lowered
+whole has nothing to ask: every name its units mention was asked for before any body, and `run` clears `asks` of its generics.
+
 **A function's body is a job** (`parser.BodyJob`, `ast.DeferredBlock`).  The parser reads every definition's signature -- the
 parameters, the answer, the clauses, which a generic function's requirements are -- and, where the body is a braced block or an
 indented one, finds where it ends from the tokens the lexer already counted (a brace and the one closing it; an indent and the

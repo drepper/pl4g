@@ -1022,6 +1022,18 @@ class _Generic:
     #: function every instance is, and these are what a call reads its
     #: arguments against.  Nothing where there are none.
     written_params: tuple[ast.Param, ...] | None = None
+    #: What the body names outside the arms of a `comptime if`, where the file
+    #: that wrote it is lowered as far as it is named and has not been asked for
+    #: these yet: they are asked for when the first instance is made, and not
+    #: when the definition is taken.  Nothing where they have been asked for,
+    #: or never have to be.
+    body_names: set[str] | None = None
+    #: Who asks for them, and for what an arm an instance takes names: the
+    #: `want` of the file that wrote it, with what is being lowered there set
+    #: aside.  Nothing where that file is lowered whole.
+    asks: Callable[[set[str]], None] | None = None
+    #: The arms whose names have been asked for, by the identity of the body.
+    asked_arms: set[int] = field(default_factory=set)
 
 
 @dataclass(slots=True)
@@ -1714,6 +1726,41 @@ def _mentioned(node: object, into: set[str]) -> None:
                 into.add(one.glyph)
             case ast.ForEach() | ast.Yield() | ast.Call():
                 into.add(EACH_NAME)
+
+
+def _mentioned_but_the_body(node: ast.FuncDef, into: set[str]) -> None:
+    """What `_mentioned` finds in *node*, its body apart: the parameters, what
+    it answers, its clauses -- what a call reads, wherever an instance is
+    made."""
+    for name in _children(node):
+        if name != "body":
+            _mentioned(getattr(node, name), into)
+
+
+def _mentioned_but_the_arms(node: object, into: set[str]) -> None:
+    """What `_mentioned` finds below *node*, but for the bodies of the arms of a
+    `comptime if`: what every instance of a generic body lowers.  An arm is
+    lowered by the instances whose types take it, and asks for its own names
+    there."""
+    stack: list[object] = [node]
+    while stack:
+        one = stack.pop()
+        if isinstance(one, ast.IfArm) and one.comptime:
+            stack.append(one.condition)
+            continue
+        if isinstance(one, ast.Node):
+            match one:
+                case ast.NameRef():
+                    into.add(one.name)
+                case ast.Member():
+                    into.add(one.name)
+                case ast.Fresh():
+                    into.add(one.glyph)
+                case ast.ForEach() | ast.Yield() | ast.Call():
+                    into.add(EACH_NAME)
+            stack.extend(getattr(one, name) for name in _children(one))
+        elif isinstance(one, (list, tuple)):
+            stack.extend(one)
 
 
 def _variables_reached(init: Initializer) -> list[GlobalVar]:
@@ -4557,6 +4604,10 @@ class Checker:
         #: function is being checked.  Empty everywhere else, a type parameter
         #: being a thing only a call gives a meaning to.
         self._bound: dict[str, Type] = {}
+        #: The generic function whose instance is being lowered, where the file
+        #: that wrote it asks for what an arm of a `comptime if` names only
+        #: where an instance takes the arm.  Nothing anywhere else.
+        self._asking: _Generic | None = None
         #: Whether an array stands where one of its elements is wanted, which
         #: is so while the arguments of a call to a function marked `listable`
         #: are lowered and nowhere else.
@@ -5029,6 +5080,10 @@ class Checker:
             wanted: set[str] = set()
             _mentioned(units, wanted)
             self._ask_the_modules(wanted)
+            for one in self._generics_here:
+                # Every name a body here writes has just been asked for, a
+                # generic's arms with the rest: an instance has nothing to ask.
+                one.asks = None
             for entry in _callees_first(collected):
                 self._lower_function(entry)
             for one in self._generics_here:
@@ -5072,7 +5127,7 @@ class Checker:
             self._check_program()
         return self._module
 
-    def want(self, names: set[str]) -> None:
+    def want(self, names: set[str], everywhere: bool = False) -> None:
         """Lower every function of this module that one of *names* may name, and
         everything those reach.
 
@@ -5083,7 +5138,14 @@ class Checker:
         ask it by.  The modules this one reads are asked first, and what is
         lowered here goes callees before callers, as a whole file would.  A
         module this one hands on is asked whatever this one has, the names
-        having been written through it.
+        having been written through it -- and, *everywhere*, every module this
+        one reads is, whatever this one has: the names were written here.
+
+        What a generic function's body names is not asked for where the
+        function is taken but where an instance of it is made
+        (`_wanted_by_an_instance`): a body that branches on its types names
+        what every type would need, and an instance needs one arm of it -- whose
+        names are asked for where the instance takes it (`_ask_for_the_arms`).
         """
         names = set(names)
         chosen: list[_Collected] = []
@@ -5107,7 +5169,13 @@ class Checker:
                 if one.node.name in names or not one.node.name.isidentifier():
                     self._waiting_generics.remove(one)
                     generics.append(one)
-                    _mentioned(one.node, names)
+                    # The signature is read at every call, and the body only
+                    # where an instance is made: what the body names is asked
+                    # for then.  Checking it where it is written lowers no
+                    # call it makes, so what it calls needs no body yet.
+                    _mentioned_but_the_body(one.node, names)
+                    one.body_names = set()
+                    _mentioned_but_the_arms(one.node.body, one.body_names)
                     if one.written_params is not None:
                         _mentioned(one.written_params, names)
                     grew = True
@@ -5115,7 +5183,7 @@ class Checker:
                 break
         for name in [one for one in self._waiting_images if one in names]:
             self._image_now(name)
-        if not chosen and not generics and not initialized:
+        if not chosen and not generics and not initialized and not everywhere:
             for name in self._exported_imports:
                 held = self._top.get(name)
                 if isinstance(held, LoadedModule) and held.want is not None:
@@ -5127,6 +5195,18 @@ class Checker:
         for one in generics:
             self._check_generic(one)
         self._lower_initializers(initialized)
+
+    def _wanted_by_an_instance(self, names: set[str]) -> None:
+        """Lower what the body of a generic function written here names, before
+        the first instance of it is lowered: callees before their caller, as
+        everything else is.
+
+        An instance is made where a call is lowered, which may be a body of this
+        very file's, half done: that one is set aside while these are lowered,
+        as a generator's instance sets it aside.
+        """
+        with self._body_set_aside(fresh=True):
+            self.want(names, everywhere=True)
 
     def _image_now(self, name: str) -> None:
         """Work out the variable *name* in the image whose value is a call, where
@@ -7919,7 +7999,25 @@ class Checker:
 
     def _lower_set_aside(self, entry: _Collected) -> None:
         """Lower a body in the middle of another, with that one set aside."""
+        with self._body_set_aside():
+            self._lower_function(entry)
+
+    @contextmanager
+    def _body_set_aside(self, fresh: bool = False) -> Iterator[None]:
+        """Set aside what the checker keeps of the body it is lowering, for
+        another to be lowered in the middle of it, and put it back after.
+
+        *fresh* where what is lowered is no part of the body set aside -- a
+        function this file has, asked for by an instance -- so that nothing of
+        the types, the requirements or the walk that body was in reaches it.
+        """
         saved = {name: getattr(self, name) for name in self._BODY_STATE}
+        kept = (self._bound, self._abstract, self._lifetime_scopes,
+                self._generating, self._generating_out, self._asking) \
+            if fresh else None
+        if fresh:
+            self._bound, self._abstract, self._lifetime_scopes = {}, None, []
+            self._generating = self._generating_out = self._asking = None
         self._scopes, self._addressed = [], set()
         self._deferred, self._emptied = [], []
         self._rooms = {}
@@ -7935,10 +8033,13 @@ class Checker:
         self._out_of_arena, self._out_of_arenas = None, frozenset({_HEAP})
         self._made_from = {}
         try:
-            self._lower_function(entry)
+            yield
         finally:
             for name, value in saved.items():
                 setattr(self, name, value)
+            if kept is not None:
+                (self._bound, self._abstract, self._lifetime_scopes,
+                 self._generating, self._generating_out, self._asking) = kept
 
     def _generator_instance(self, template: _Generator, bound: dict[str, Type],
                             span: Span) -> _Generator | None:
@@ -8701,7 +8802,7 @@ class Checker:
                         exported=self._is_export(attrs),
                         scope=self._top, siblings=self._bundles,
                         stands=self._stands, units=self._unit_scopes[0],
-                        written_params=handed)
+                        written_params=handed, asks=self._wanted_by_an_instance)
         if node.held is None:
             self._top[node.name] = made
         else:
@@ -14825,6 +14926,14 @@ class Checker:
         node = written.node
         if written.refused:
             return None
+        if written.body_names is not None and written.asks is not None:
+            # The first instance: what the body names is lowered now, in the
+            # file that wrote it, before the body that calls it is.
+            names, written.body_names = written.body_names, None
+            written.asks(names)
+        outer_asking = self._asking
+        self._asking = written if written.asks is not None \
+            and self._abstract is None else None
         outer_bound, self._bound = self._bound, dict(bound)
         outer_discard = self._discard_function
         self._discard_function = False
@@ -14895,6 +15004,7 @@ class Checker:
         finally:
             self._bound = outer_bound
             self._discard_function = outer_discard
+            self._asking = outer_asking
 
     def _lower_instance(self, func: Function, node: ast.FuncDef,
                         span: Span) -> None:
@@ -19770,6 +19880,22 @@ class Checker:
                 break
         return tuple(found)
 
+    def _ask_for_the_arms(self, written: _Generic,
+                          arms: Sequence[ast.IfArm]) -> None:
+        """Have the file that wrote the generic function *written* lower what
+        the arms of a `comptime if` an instance of it takes name, before they
+        are lowered: an arm another type takes is nothing this one reaches.
+
+        Once an arm, whichever instance took it first.
+        """
+        names: set[str] = set()
+        for arm in arms:
+            if id(arm.body) not in written.asked_arms:
+                written.asked_arms.add(id(arm.body))
+                _mentioned_but_the_arms(arm.body, names)
+        if names and written.asks is not None:
+            written.asks(names)
+
     def _lower_scoped(self, builder: IRBuilder, expr: ast.Scoped,
                       wanted: Type | None) -> Value:
         """Lower statements a macro wrote where a value stands.
@@ -19815,6 +19941,8 @@ class Checker:
             arms = self._chosen_arms(stmt)
             if arms is None:
                 return UndefConst(ERROR)
+            if self._asking is not None:
+                self._ask_for_the_arms(self._asking, arms)
             if not arms:
                 # Every arm the compiler settled was false and there was no
                 # `else`: the `if` does nothing, which is a thing to do.

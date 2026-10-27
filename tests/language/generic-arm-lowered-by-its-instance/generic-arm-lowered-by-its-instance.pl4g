@@ -1,0 +1,22 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=33 diag=none
+
+※ What an arm of a `comptime if` in a generic function names is lowered where an
+※ instance takes the arm, and not where the function is taken: a module is lowered
+※ as far as it is named, and an arm no instance takes names nothing anything
+※ reaches.  `worth` has an arm for a truth value, one for a `u8` and one for a
+※ character, each calling a function of the module's own; this program makes the
+※ first two -- one by itself, the other through `both`, an instance made in the
+※ middle of a body of the module's -- and never the third, whose callee is never
+※ lowered.  What each instance calls is lowered before the instance is.
+※
+※ 3 from `yes` for `true`; `both` is 4 from `yes` and 10 + 2 from `digits`; 10 + 7
+※ from the `u8` instance again, less 4; and 1 for a string, which takes the `else`.
+
+let a := ⎕import("arms")
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let n: u8 = a.worth(true) + a.both() + a.worth(7u8) - 4u8 + a.worth("x")
+    ⎕narrow(n, ⌜u6⌝) ?? 1u6

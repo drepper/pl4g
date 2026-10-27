@@ -1,0 +1,34 @@
+※ pl4g-test: module
+※※ A generic function whose arms each call something of this file's alone.
+
+※※ Reached only from the arm a truth value takes.
+fn yes(v: bool) → u8:
+    if v: 3u8 else: 4u8
+
+※※ Reached only from the arm a whole number takes, with a text of its own.
+fn digits(v: u8) → u8:
+    let said: str = "0123456789"
+    ⎕narrow(⎕drop(#said), ⌜u8⌝) ?? v
+
+※※ Reached from no arm any instance takes here.
+fn never() → u8:
+    let said: str = "never"
+    ⎕narrow(⎕drop(#said), ⌜u8⌝) ?? 0u8
+
+※※ What a value counts for, by its type.
+@[export]
+fn worth(v: T') → u8:
+    comptime if ⎕typeof(⌜v⌝) = ⌜bool⌝:
+        yes(v)
+    comptime elif ⎕typeof(⌜v⌝) = ⌜u8⌝:
+        digits(v) + v
+    comptime elif ⎕typeof(⌜v⌝) = ⌜char⌝:
+        never()
+    else:
+        1u8
+
+※※ An instance made in the middle of a body of this file's, for a type the
+※※ program asks for too, and one for a type it does not.
+@[export]
+fn both() → u8:
+    worth(false) + worth(2u8)

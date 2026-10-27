@@ -28,11 +28,12 @@ fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
 """
 
 
-def _checked(whole: bool) -> tuple[Module, list[str]]:
-    """The module a program naming nothing of `std` comes to, and its errors."""
+def _checked(whole: bool, program: str = PROGRAM) -> tuple[Module, list[str]]:
+    """The module *program* -- by default one naming nothing of `std` -- comes
+    to, and its errors."""
     sources = SourceManager()
     engine, collected = collecting_engine(None)
-    unit = parse(tokenize(sources.add(Path("probe.pl4g"), PROGRAM), engine),
+    unit = parse(tokenize(sources.add(Path("probe.pl4g"), program), engine),
                  "probe.pl4g", engine)
     module = Module("probe")
     check(module, [unit], engine,
@@ -61,6 +62,33 @@ def test_a_program_compiles_only_what_it_names() -> None:
                                          for one in lowered), lowered
     assert not any("read_lines" in one for one in lowered), lowered
     assert not any("error_name" in one for one in lowered), lowered
+
+
+#: A program writing a whole number with `⍕`, and one writing an `f64`.
+WHOLE = """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[startup]
+fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:
+    if \N{APL FUNCTIONAL SYMBOL UP TACK JOT}42u8 = "42": 0u6 else: 1u6
+"""
+FLOAT = WHOLE.replace("42u8", "2.5f64").replace('"42"', '"2.5"')
+
+#: What `std.string` works out the shortest digits of an `f64` with.
+SCHUBFACH = {"numeral_f64", "shortest", "to_odd", "tenth", "decimal_count"}
+
+
+def test_a_generic_s_body_is_asked_for_by_an_instance() -> None:
+    """What the body of a generic function names is lowered where an instance of
+    it is made, and not where the function is taken: `⍕`, which every program
+    has, is `text`, whose body names Schubfach for an `f64` -- and a program
+    writing no `f64` lowers none of it, nor works out its tables."""
+    for program, wanted in ((PROGRAM, False), (WHOLE, False), (FLOAT, True)):
+        module, errors = _checked(False, program)
+        assert errors == [], errors
+        lowered = {f.name for f in module.functions.values() if f.blocks}
+        assert (SCHUBFACH <= lowered) if wanted else not SCHUBFACH & lowered, \
+            (program, lowered)
 
 
 def _untyped(node: object, found: list[str], path: str) -> None:
