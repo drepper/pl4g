@@ -307,7 +307,16 @@ namespace pl4g::sema {
       auto ref = static_cast<const ast::NameRef*>(node);
       Local* local = find_local(ref->name);
       if (local == nullptr) {
-        if (ref->name == names::heap_name)
+        if (ref->name == names::heap_name) {
+          into.insert(heap_key);
+          return;
+        }
+        auto held = top->get(std::string(ref->name));
+        if (auto global = held != nullptr ? held->get<ir::GlobalVar>() : nullptr;
+            global != nullptr && (global->is_mutable() || global->relro) && owned::points(global->value_type))
+          // A variable at the top level written while running holds what the
+          // heap made for it, and goes on holding it: what is read out of it is
+          // the heap's and nobody's alone.
           into.insert(heap_key);
         return;
       }
@@ -946,7 +955,8 @@ namespace pl4g::sema {
         answer_kinds.emplace_back("static");
         return value;
       }
-      if (made.contains(image_key) && within_keys(without(made, { image_key }), allowed)) {
+      if (made.contains(image_key) && within_keys(without(made, { image_key }), allowed)
+          && ! (made.contains(heap_key) && shared_heap(written))) {
         answer_kinds.emplace_back("maybe");
         return value;
       }
@@ -1238,6 +1248,12 @@ namespace pl4g::sema {
 
   void Checker::lower_deferred(ir::Builder& builder, ir::Function* func, Deferred* entry)
   {
+    if (entry->room != nullptr) {
+      // What the compiler put off for itself: the room of a variable given
+      // back, which is nothing the program wrote and nothing to report on.
+      give_back_room(builder, entry->room, room_now(builder, entry->room, entry->node->span), entry->node->span);
+      return;
+    }
     bool told = defer_told.contains(id_of(entry->node));
     defer_told.insert(id_of(entry->node));
     auto kept_in_deferred = in_deferred;
@@ -1269,7 +1285,7 @@ namespace pl4g::sema {
   {
     std::vector<Deferred*> pending;
     for (auto entry : deferred[frame])
-      if (! defer_told.contains(id_of(entry->node)))
+      if (! defer_told.contains(id_of(entry->node)) && entry->room == nullptr)
         pending.push_back(entry);
     if (pending.empty())
       return;
@@ -1565,6 +1581,7 @@ namespace pl4g::sema {
           body = copy;
         }
     }
+    rooms_pending = std::pair(body, owned_params(node, func));
     lower_block(builder, body, func, generating_here == nullptr);
     // Before the scope goes: a parameter a reference was taken of lives in the
     // frame, and the name is what still knows where.
@@ -1628,9 +1645,19 @@ namespace pl4g::sema {
                                   const ir::Type* wanted, bool produces)
   {
     deferred.emplace_back();
+    if (auto pending = std::exchange(rooms_pending, std::nullopt)) {
+      if (pending->first == block)
+        // The parameters a body takes as its own give their room back where
+        // it ends, on every way out of it.
+        for (auto local : pending->second)
+          room_kept_by(local, true, block->stmts());
+      else
+        rooms_pending = std::move(pending);
+    }
     auto outer_live = current_live;
     auto outer_reach = current_reach;
     auto outer_stmt = current_stmt;
+    auto outer_rest = rest_of_block;
     // To the end of its last statement: a block's own span runs on to the
     // next statement.
     block_spans.push_back(Span{ block->span.start, std::max(block->span.start, end_of(block)) });
@@ -1644,6 +1671,7 @@ namespace pl4g::sema {
       current_live = std::move(outer_live);
       current_reach = std::move(outer_reach);
       current_stmt = outer_stmt;
+      rest_of_block = outer_rest;
       last_emptied = std::move(emptied.back());
       emptied.pop_back();
     });
@@ -1672,6 +1700,7 @@ namespace pl4g::sema {
         reach_here();
       }
       current_stmt = stmt;
+      rest_of_block = std::pair(std::span<const ast::Stmt* const>(stmts.begin(), stmts.end()), index + 1);
       if (is_last && produces)
         answer = lower_yielding(builder, stmt, func, wanted);
       else
@@ -1709,10 +1738,13 @@ namespace pl4g::sema {
     // hands the answering down to that one's arms.
     ir::Function* answering_here = std::exchange(yield_answer, nullptr);
     ir::Function* outer_arms = answer_arms;
+    auto flags = room_flags_now();
+    let_go(stmt);
     if (auto expr = ast::as<ast::ExprStmt>(stmt); answering_here != nullptr && expr != nullptr
         && (ast::is<ast::If>(expr->value) || ast::is<ast::Match>(expr->value)))
       answer_arms = answering_here;
     Finally restore([&] {
+      room_flags_back(builder, flags);
       answer_arms = outer_arms;
       end_expecting(expectation);
       if (settle_expecting(expectation, pairs))
@@ -1753,7 +1785,9 @@ namespace pl4g::sema {
       if (! carried && settle_expecting(expectation, pairs))
         discard_function = true;
     });
+    auto flags = room_flags_now();
     lower_stmt(builder, stmt, func, is_last);
+    room_flags_back(builder, flags);
     if (auto def = ast::as<ast::VarDef>(stmt); def != nullptr && expectation != nullptr)
       if (Local* local = find_local(def->name); local != nullptr) {
         local->expectation = expectation;
@@ -1765,6 +1799,9 @@ namespace pl4g::sema {
 
   void Checker::lower_stmt(ir::Builder& builder, const ast::Stmt* stmt, ir::Function* func, bool is_last)
   {
+    if (! rooms.empty() && ! ast::is<ast::VarDef>(stmt) && ! ast::is<ast::AssignStmt>(stmt)
+        && ! ast::is<ast::EntryAssign>(stmt) && ! ast::is<ast::ElementAssign>(stmt) && ! ast::is<ast::MemberAssign>(stmt))
+      let_go(stmt);
     if (auto one = ast::as<ast::MemberAssign>(stmt))
       stored_into[id_of(one->value)] = "a field";
     else if (auto one = ast::as<ast::ElementAssign>(stmt))
@@ -1790,15 +1827,21 @@ namespace pl4g::sema {
     case ast::NodeKind::VarDef: {
       auto def = static_cast<const ast::VarDef*>(stmt);
       if (def->made_in) {
+        let_go(stmt);
         lower_receiving(builder, def);
         report_inferred(inferred(def), def->type);
         break;
       }
       bool owns = copied_where_shared(def->value, def->mutable_);
+      let_go(stmt);
       lower_local(builder, def);
       owning_room(def->name, owns && def->more.empty());
       variable_slot(def);
       made_in(def->name, def->value, def->span);
+      if (Local* local = find_local(def->name); local != nullptr && def->more.empty() && rest_of_block) {
+        auto [within, at] = *rest_of_block;
+        room_kept_by(local, owns_what_it_is_given(def->value, owns), within.subspan(at), def->value);
+      }
       report_inferred(inferred(def), def->type);
       if (session != nullptr && session->kept.contains(def->name_span.start))
         for (const auto& [name, span] : inferred(def))
@@ -1812,8 +1855,13 @@ namespace pl4g::sema {
       auto assign = static_cast<const ast::AssignStmt*>(stmt);
       bool wants_value = is_last && func->fty->ret != ir::void_type();
       bool owns = assign->more.empty() && copied_where_shared(assign->value, true);
+      let_go(stmt);
       ir::Value* result = lower_assignment(builder, assign, wants_value);
       owning_room(assign->name, owns);
+      if (assign->more.empty())
+        // What it holds now is its own to give back -- unless it is what the
+        // function answers, which is the caller's.
+        room_given(assign->name, ! wants_value && owns_what_it_is_given(assign->value, owns));
       if (assign->more.empty())
         made_in(assign->name, assign->value, assign->span, true);
       if (wants_value && result != nullptr) {
@@ -1831,6 +1879,7 @@ namespace pl4g::sema {
     case ast::NodeKind::EntryAssign: {
       auto assign = static_cast<const ast::EntryAssign*>(stmt);
       copied_where_shared(assign->value, true);
+      let_go(stmt);
       lower_entry_assign(builder, assign);
       made_in_part(assign->base, assign->value, assign->span);
       break;
@@ -1843,10 +1892,12 @@ namespace pl4g::sema {
     case ast::NodeKind::ElementAssign: {
       auto assign = static_cast<const ast::ElementAssign*>(stmt);
       if (marked(assign->base)) {
+        let_go(stmt);
         assign_each(builder, stmt, func);
         break;
       }
       copied_where_shared(assign->value, true);
+      let_go(stmt);
       lower_element_assign(builder, assign);
       made_in_part(assign->base, assign->value, assign->span, true);
       break;
@@ -1857,10 +1908,12 @@ namespace pl4g::sema {
     case ast::NodeKind::MemberAssign: {
       auto assign = static_cast<const ast::MemberAssign*>(stmt);
       if (marked(assign->base)) {
+        let_go(stmt);
         assign_each(builder, stmt, func);
         break;
       }
       copied_where_shared(assign->value, true);
+      let_go(stmt);
       lower_member_assign(builder, assign);
       made_in_part(assign->base, assign->value, assign->span);
       break;

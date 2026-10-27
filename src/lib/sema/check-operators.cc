@@ -150,6 +150,13 @@ namespace pl4g::sema {
       report_mismatch(expr->span, ir::str_type(), expected);
       return error_value(module);
     }
+    for (auto [side, value] : { std::pair{ expr->left, left }, std::pair{ expr->right, right } })
+      if (is_temporary(side) && text_made_here(side) && ! pool_made(side))
+        // A join of three is a join of two joined again: what the inner one
+        // made is read once, here, and nobody else names it.  Text that may be
+        // the image's -- `⎕text(b) ?? ""` -- is asked.
+        owned::give_back(builder, value, ir::str_type(),
+                         freshly_heap(side) ? std::optional<std::string_view>("heap") : std::nullopt);
     return found;
   }
 

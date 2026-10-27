@@ -12330,6 +12330,87 @@ is not carried by the loop**: `a ← v` copies into the elements and `a` goes on
 parameter of the loop nobody could tell was the frame, so a pure function writing its own array was told it wrote memory it did
 not make (4479).  **A local list is answered in a result in the heap**, `→ [u8] ? E`: the answer of a result made here is kept as
 it would be on its own, and the result made of that -- a result cannot be copied, and its answer can (4624 before).
+## 2026-10-27T18:00+01:00 — language and compiler
+
+### A list of the heap's whose room is its own is given back where its scope ends
+
+What `⎕heap` held lasted as long as the program, so a list made in it over and over was never given back: a function building a
+list of a hundred and twenty-eight words, called a million times, ran out of memory at once under the tests' limit, and the `json`
+module made everything in arenas for that reason (TODO-language.md, the `json` entry).  Asked what to do about it, **the user
+decided "Give back own room"**: a heap list whose room is its own is given back with `⎕heap`'s sized free when its scope ends,
+unless the room was handed over -- answered, moved into another place (bound, assigned, put in a field, element or table entry,
+handed to a parameter that keeps it), or kept by a lambda's environment -- and strings, records and tuples holding such lists
+follow, part by part.
+
+**"Its own" is the hand-over's own.**  The compiler already knew when a local's room was nobody else's -- made where it was bound, a
+copy made for it, or handed to it by a name done with (`_Local.owns_room`) -- because that is when a list read into another place
+is handed over rather than copied.  That is the room given back, and a parameter the body takes as its own -- a `mut` one it
+changes in place or threads through calls, which its caller copied or handed over -- is the callee's room in the same sense: the
+list in a `mut` parameter is a copy, and the copy is the callee's to give back.  The size is what the list's header says; text is
+given back by its length, which is what the heap was asked for.
+
+**Every way out gives it back, by the path an arena already takes.**  The give-back is put off as a `defer` written right after the
+definition would be (`_Deferred.room`), so `return`, `break`, `continue`, `?` and running off the end all reach it, after what the
+block put off later and after what the block comes to is worked out.  A name given another list gives back the one it held once
+the new one is worked out; a list of lists gives back each list and then its own room (`__pl4g_disown.T`, which a container
+replacing an element already called); a record gives back each part.
+
+**Whether the room is still its own is a value along each way through the body.**  The decision said "unless the room was handed
+over", and a hand-over may be on one way of a branch and not the other, or in a loop.  Two ways of saying it were weighed:
+
+1. **A rule over the whole scope**: a name that may hand its room on anywhere gives back nothing anywhere.  Simple to state, and it
+   gives back nothing in the commonest shape there is, a body answering its list down one arm and dropping it down another.
+2. **A flag beside the variable, cleared where a statement may hand the room on** -- a local of the compiler's own, carried through
+   every `if`, `match` and loop as the variable is, and read where the scope ends.  It is a constant almost everywhere, and then
+   nothing is asked while running.
+
+The second, which is **Rust's drop flag**: Rust keeps one for a value moved on some ways and not others, and asks it at the end of
+the scope.  Swift asks the same question of a reference count, every time; C++ asks it of the moved-from object, whose destructor
+runs on nothing.
+
+**What hands the room on is anything that may keep it.**  Rather than list the ways a list can be kept -- which is every way a value
+can go anywhere -- the compiler lists the ways a name is read that keep nothing, and takes every other to hand the room on: its
+length; an element, field or slice read for what points nowhere; a comparison; a join, `⧺←`, `⎕text` or `⎕bytes` that copies it;
+the place a statement changes in place; a reference, which cannot outlive it; a walk whose turns keep nothing; and a call of a
+function of the program that cannot keep what it is handed.  That last is asked of the function's type: nothing it answers and
+nothing it is handed may hold a loan -- a view, a table (whose keys and values go in as they are), a lambda, a walk, a cursor, an
+answered reference -- and one that may change the program's own variables is not handed text or a view, which a table at the top
+level would keep as they are.  Where a statement that may hand the room on copies what it reads -- a name given to a place that may
+change it -- nothing was handed on.  Getting one of these wrong one way is a list nothing gives back, which every list was before;
+the other way is room read after it was given back, so every case not listed is the first.
+
+What the decision left open, and how it was settled:
+
+- **Text is in.**  A string made in the heap -- a join, `⎕text`, `⎕str`, what a function answers -- and held by a name of its own
+  is given back the same way; the machinery covers it, the flag and the reads being the same, and text being what a loop building
+  output makes most of.  `t ← t ⧺ s` gives back the old `t`, and a join gives back a temporary it joined out of: `a ⧺ b ⧺ c` made `a
+  ⧺ b` and nobody held it.  Text the heap made for certain is given back to the heap straight away; text that may be the image's --
+  a function answering a literal on one way -- is asked, its allocator saying nought for the image. - **Two names sharing one list,
+  neither able to change it** -- `let m: [u8] = l` with `l` used after -- give back nothing: `l` handed its room on, and `m` was
+  not given room of its own.  Copying there instead would cost what not copying was for. - **A variable given something later holds
+  room of its own from then on** even where it starts with text in the image, `let t: mut str = ""`; one given nothing but what a
+  pool made gives nothing back. - **Tables and sets are out**: they have their own machinery, and their keys and values go in as
+  they are, which is a question of its own.  **An environment is still never given back**, and neither is what a lambda brought
+  in.  **A generator's body** gives nothing back: what it holds lives in the walk's frame across its yields. - **Nothing is refused
+  that was accepted.**  The rule only gives back what was never given back before, where nothing else can be holding it; it takes
+  no diagnostic.  4010 to 4019 stay free. - **What the kernel reads after a call has returned is the program's to keep.**
+  `std.write` starts a request the kernel reads later, and a view of a list given back before then is read after it is gone -- the
+  case an arena given back already had.  The specification says so; nothing checks it, an address handed to the kernel being a
+  number. - **Where the old rules shared what the heap made, the room now goes to whoever gives it back last**, so the places the
+  heap's "lasts as long as the program" let a value be shared were looked for and changed: a variable at the top level the program
+  writes is the heap's (an answer of one is copied, where it used to be handed out as text in the image is); what goes into a place
+  from outside the call is copied unless nothing else holds it; an answer the callee fixed in the image is not "fresh" from the
+  heap; and a list written out of temporaries, joined onto a heap list, moves its elements in rather than copying them and leaving
+  the temporary behind. - **`json` gathers an escaped string's bytes in a list of the heap's**, given back once the text is made in
+  the caller's arena, so that the arena holds the text and not its bytes as well -- measurably not slower.  The rest of the module
+  keeps its arenas: a document read into one arena and given back at once is what simdjson's and yyjson's documents are, and the
+  caller names it.
+
+Compare: **Rust**'s `Vec` drop at the end of its scope, a moved-out vector dropping nothing and a drop flag deciding where it was
+moved on one way only -- which this is; **C++**'s `std::vector` destructor, run at every way out of a scope and on a moved-from
+vector as well, where it does nothing; **Swift**'s ARC, which counts while running what this follows while compiling, and gives the
+array back when the count reaches nought; **Go**'s collector, which finds it some time later and costs a collector; **Zig** and
+**Odin**, whose explicit allocators make `defer list.deinit(allocator)` the program's to write, and forgetting it a leak.
 
 Open questions
 --------------

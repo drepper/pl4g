@@ -1,0 +1,164 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **What another thing may still hold is not given back.**  A variable gives back its room only
+※ where nothing it did can have left that room with something else, and every way a list or a
+※ string can be kept counts: a lambda that brought it in, another name that shares it where
+※ neither may change it, a view of it put in a record, a key of a table, the arm of an `if` it
+※ was the answer of, an element read out of it and joined onto another list as it is.  Each of
+※ those is room another holds, so the variable leaves it where it is -- which is a list nothing
+※ gives back, the one thing every list was before.  What is handed to a function that cannot
+※ keep it (`put` copies what it writes through the reference; `keyed` is handed a table, so it
+※ might) is given back, or not, by the same reckoning.
+※
+※ A variable at the top level the program writes holds what the heap made for it, so `get`
+※ answers a copy of it rather than the room itself, which its caller would give back.
+※
+※ Compare: **Rust**, which refuses most of these until the borrow is gone and makes the rest
+※ clones; **Swift**, where each is one more reference and the count says when the last goes;
+※ **Go**, where the collector asks the same question while running.
+
+let std := ⎕import("std")
+
+type Box = items : [u64] ; n : u64
+type View = w : u64⟦⟧
+
+@[opaque]
+fn churn() → u64:
+    let total: mut u64 = 0u64
+    foreach n: u64 = 1u64…40u64:
+        let junk: mut [u64] = []
+        foreach _: u64 = 0u64…n:
+            junk ⧺← ⟦77u64⟧
+        total ← total + ⎕drop(#junk)
+    total
+
+@[opaque]
+fn made(n: u64) → [u64]:
+    let l: mut [u64] = []
+    foreach i: u64 = 0u64…n:
+        l ⧺← ⟦i⟧
+    l
+
+@[opaque]
+fn intact(l: [u64], n: u64) → bool:
+    let want: mut u64 = 0u64
+    foreach x := l:
+        if x ≠ want:
+            return false
+        want ← want + 1u64
+    want = n
+
+let G: mut [u64] = []
+
+@[opaque, impure]
+fn fill():
+    G ← made(12u64)
+
+@[opaque]
+fn get() → [u64]:
+    G
+
+@[opaque]
+fn adder(n: u64) → fn(u64) in ⎕heap → u64:
+    let l: [u64] = made(n)
+    λ x: u64 [l] in ⎕heap → u64 { x + ⎕drop(#l) }
+
+@[opaque]
+fn shared(n: u64) → Box:
+    let l: [u64] = made(n)
+    let m: [u64] = l
+    let b: Box = Box(.items ← m, .n ← ⎕drop(#l))
+    b
+
+@[opaque]
+fn text() → str:
+    let s: str = "abc" ⧺ "def"
+    let t: str = s
+    t
+
+@[opaque, impure]
+fn put(x: &mut Box, l: [u64]):
+    x⌖.items ← l
+
+@[opaque, impure]
+fn put_global(x: &mut Box):
+    x⌖.items ← G
+
+@[opaque]
+fn keyed(d: mut ⸨str: u8⸩, k: str):
+    d⸨k⸩ ← 1u8
+
+@[opaque]
+fn pick(c: bool) → [u64]:
+    let m: [u64] = if c:
+        let t: [u64] = made(3u64)
+        t
+    else:
+        made(4u64)
+    m
+
+@[opaque]
+fn strings() → [str]:
+    let all: mut [str] = []
+    let words: [str] = ["one" ⧺ "1", "two" ⧺ "2"]
+    foreach w := words:
+        all ⧺← [w]
+    all
+
+@[opaque]
+fn viewed() → u64:
+    let none: [u64] = made(2u64)
+    let r: mut View = View(.w ← none⟦0…1⟧)
+    if true:
+        let l: [u64] = made(4u64)
+        r.w ← l⟦0…2⟧
+    _ ← churn()
+    r.w⟦1⟧
+
+@[startup, impure]
+fn main(init: std.Init) → u6:
+    let f: fn(u64) in ⎕heap → u64 = adder(5u64)
+    let b: Box = shared(6u64)
+    let t: str = text()
+    let outer: mut Box = Box(.items ← [], .n ← 0u64)
+    let outer2: mut Box = Box(.items ← [], .n ← 0u64)
+    if true:
+        let l: [u64] = made(7u64)
+        put(&mut outer, l)
+    let d: mut ⸨str: u8⸩ = ⸨⸩
+    if true:
+        let k: str = "key" ⧺ "one"
+        keyed(d, k)
+    let p: [u64] = pick(true)
+    let ss: [str] = strings()
+    fill()
+    let g: mut [u64] = get()
+    g⟦0⟧ ← 99u64
+    put_global(&mut outer2)
+    if true:
+        let o3: mut Box = Box(.items ← [], .n ← 0u64)
+        put_global(&mut o3)
+        _ ← #o3.items
+    _ ← churn()
+    let s2: str = "zzzzzzzzzz" ⧺ "zzzzzzzzzzz"
+    let s3: str = "yyyyyyyyyy" ⧺ "yyyyyyyyyyy"
+    if f(1u64) ≠ 6u64:
+        1u6
+    elif ¬intact(b.items, 6u64):
+        2u6
+    elif t ≠ "abcdef":
+        3u6
+    elif ¬intact(outer.items, 7u64) ∨ ¬intact(outer2.items, 12u64):
+        4u6
+    elif (d⸨"keyone"⸩ ?? 0u8) ≠ 1u8:
+        5u6
+    elif ¬intact(p, 3u64):
+        6u6
+    elif ss⟦0⟧ ≠ "one1" ∨ ss⟦1⟧ ≠ "two2" ∨ s2 = s3:
+        7u6
+    elif ¬intact(G, 12u64) ∨ g⟦0⟧ ≠ 99u64:
+        8u6
+    elif viewed() ≠ 1u64:
+        9u6
+    else:
+        0u6

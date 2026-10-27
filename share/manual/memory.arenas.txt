@@ -29,10 +29,13 @@ arena in force** -- the one its `in` names, or `⎕heap` -- so `std.text(v)`
 inside `… in scratch` is made in `scratch`.
 
 **`⎕heap`** is the allocator everything comes from that names no other, and
-gives back one object at a time: what is made there lasts as long as the
-program, unless what holds it gives it back -- a list or a container in the
-heap replacing an element, say.  A function answering text it made answers it
-in the heap unless its signature names an arena ([[memory.answers]]).
+gives back one object at a time.  **A variable whose list, text or record of
+them is its own gives it back where its scope ends**, by every way out, unless
+it handed it on first -- answered it, gave it to another name or a field, a
+table or a parameter the callee takes as its own, or a lambda brought it in --
+and one given something new gives back what it held.  What another may still
+hold is left where it is.  A function answering text it made answers it in the
+heap unless its signature names an arena ([[memory.answers]]).
 
 **A value made in an arena does not outlive it**: a name bound further out may
 not be given one (4614), and what a function answers out of an arena of its

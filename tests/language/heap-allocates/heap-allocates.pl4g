@@ -8,9 +8,10 @@
 ※ This grows one string past every class and well past the largest, and makes enough small
 ※ ones to run through more than one slab.
 
-※ Each turn joins a new string and the old one stays where it was -- nothing gives back
-※ what a local held -- so the turns are few and long: seventy of a thousand bytes come to
-※ 70000, past the largest class, and to about two and a half megabytes in all.
+※ Each turn joins a new string and gives back the one it replaces, which was the variable's
+※ own: seventy of a thousand bytes come to 70000, past the largest class, so the last turns
+※ map room of their own and give it back to the system, and the small ones before them take
+※ what the classes were given back.
 fn grown(n: u64) → u64:
     let piece: mut str = ""
     let j: mut u64 = 0u64

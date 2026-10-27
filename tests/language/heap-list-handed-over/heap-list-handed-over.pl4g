@@ -1,0 +1,113 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **Room that is handed over is not given back by the one who handed it.**  A list a function
+※ answers is its caller's, one bound or assigned to another name that the giver is done with
+※ is that name's, one put in a field of a record, in an entry of a table or into a parameter
+※ the callee takes as its own goes with it -- and along a way out that hands it over nothing is
+※ given back, while along one that does not, it is: `early` answers the first list where it
+※ stops and the second where it does not, and gives back the one it did not answer.
+※
+※ What shows it is `churn`, which makes and gives back lists of every size up to forty words,
+※ so that room given back too soon is taken again and written over: every list checked after it
+※ would hold sevens where it should count up.
+※
+※ Compare: **Rust**, where a value moved out of a variable is not dropped by it and a move on
+※ one way of a branch leaves the variable dropped on the other; **C++**, where
+※ `std::move` leaves the source empty and its destructor runs on nothing; **Swift**, where
+※ handing an array on is another reference counted and nothing is released.
+
+let std := ⎕import("std")
+
+type Box = items : [u64] ; n : u64
+
+※ Makes and gives back lists of many sizes, so that room given back is taken again.
+@[opaque]
+fn churn() → u64:
+    let total: mut u64 = 0u64
+    foreach n: u64 = 1u64…40u64:
+        let junk: mut [u64] = []
+        foreach _: u64 = 0u64…n:
+            junk ⧺← ⟦77u64⟧
+        total ← total + ⎕drop(#junk)
+    total
+
+@[opaque]
+fn made(n: u64) → [u64]:
+    let l: mut [u64] = []
+    foreach i: u64 = 0u64…n:
+        l ⧺← ⟦i⟧
+    l
+
+※ Whether *l* is 0, 1, …, n − 1.
+@[opaque]
+fn intact(l: [u64], n: u64) → bool:
+    let want: mut u64 = 0u64
+    foreach x := l:
+        if x ≠ want:
+            return false
+        want ← want + 1u64
+    want = n
+
+@[opaque]
+fn boxed(n: u64) → Box:
+    let l: [u64] = made(n)
+    Box(.items ← l, .n ← n)
+
+@[opaque]
+fn pushed(v: mut [u64], x: u64) → [u64]:
+    v ⧺← ⟦x⟧
+    v
+
+@[opaque]
+fn early(n: u64, stop: bool) → [u64]:
+    let l: [u64] = made(n)
+    if stop:
+        return l
+    let m: [u64] = made(n)
+    m
+
+@[opaque]
+fn looped(n: u64) → [u64]:
+    let l: [u64] = made(5u64)
+    let out: mut [u64] = []
+    foreach §turns k: u64 = 0u64…n:
+        if k = 3u64:
+            out ← l
+            break §turns
+    out
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let a: [u64] = made(10u64)
+    let b: Box = boxed(7u64)
+    let d: mut ⸨u8: [u64]⸩ = ⸨⸩
+    let outer: mut [u64] = []
+    if #a = 10:
+        let l: [u64] = made(6u64)
+        d⸨1u8⸩ ← l
+        let k: [u64] = made(5u64)
+        outer ← k
+    let v: mut [u64] = []
+    foreach i: u64 = 0u64…9u64:
+        v ← pushed(v, i)
+    let e: [u64] = early(4u64, true)
+    let f: [u64] = early(3u64, false)
+    let g: [u64] = looped(10u64)
+    let h: [u64] = looped(2u64)
+    _ ← churn()
+    if ¬intact(a, 10u64):
+        1u6
+    elif ¬intact(b.items, 7u64):
+        2u6
+    elif ¬intact(d⸨1u8⸩ ?? [], 6u64):
+        3u6
+    elif ¬intact(outer, 5u64):
+        4u6
+    elif ¬intact(v, 9u64):
+        5u6
+    elif ¬intact(e, 4u64) ∨ ¬intact(f, 3u64):
+        6u6
+    elif ¬intact(g, 5u64) ∨ #h ≠ 0:
+        7u6
+    else:
+        0u6

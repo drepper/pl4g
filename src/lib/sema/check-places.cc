@@ -7,13 +7,16 @@
 
 #include <algorithm>
 #include <format>
+#include <ranges>
 
 #include "diag/ids.hh"
+#include "front/names.hh"
 #include "front/token.hh"
 #include "sema/lists.hh"
 #include "sema/owned.hh"
 #include "sema/strings.hh"
 #include "sema/tables.hh"
+#include "sema/walk.hh"
 #include "target/statuses.hh"
 
 
@@ -1615,6 +1618,621 @@ namespace pl4g::sema {
   }
 
 
+  // -- room given back where its scope ends -----------------------------------
+
+  namespace {
+
+    // Whether `node`, or anything below it, names `name` or brings it in.
+    bool names_or_brings_in(const ast::Node* node, std::string_view name)
+    {
+      if (node == nullptr)
+        return false;
+      if (auto ref = ast::as<ast::NameRef>(node); ref != nullptr && ref->name == name)
+        return true;
+      if (auto capture = ast::as<ast::Capture>(node); capture != nullptr && capture->name == name)
+        return true;
+      bool found = false;
+      ast::for_each_child(node, [&](const ast::Node* one) { found = found || names_or_brings_in(one, name); });
+      return found;
+    }
+
+    // Whether `node`, or anything below it, is an assignment to `name` that
+    // `wanted` accepts.
+    template<typename F>
+    bool assigns(const ast::Node* node, std::string_view name, F& wanted)
+    {
+      if (node == nullptr)
+        return false;
+      if (auto assign = ast::as<ast::AssignStmt>(node)) {
+        bool named = assign->name == name
+          || std::ranges::any_of(assign->more, [&](const ast::NameAt& one) { return one.name == name; });
+        if (named && wanted(assign))
+          return true;
+      }
+      bool found = false;
+      ast::for_each_child(node, [&](const ast::Node* one) { found = found || assigns(one, name, wanted); });
+      return found;
+    }
+
+    // Every node below `node`, by identity, `node` among them.
+    void every_node(const ast::Node* node, KeySet& into)
+    {
+      if (node == nullptr)
+        return;
+      into.insert(id_of(node));
+      ast::for_each_child(node, [&](const ast::Node* one) { every_node(one, into); });
+    }
+
+  } // namespace
+
+
+  OwnedRoom* Checker::room_kept_by(Local* local, bool mine, std::span<const ast::Stmt* const> stmts,
+                                   const ast::Expr* given)
+  {
+    ir::Function* func = std::get<1>(demanding);
+    if (func == nullptr || generating != nullptr || abstract != nullptr || deferred.empty() || in_deferred)
+      return nullptr;
+    // A variable given something else later may hold room of its own then,
+    // whatever it starts with: `let t: mut str = ""` and `t ← t ⧺ s`.
+    auto not_pooled = [&](const ast::AssignStmt* assign) { return ! pool_made(assign->value); };
+    bool later = false;
+    if (local->is_mutable)
+      for (auto one : stmts)
+        if (assigns(one, local->name, not_pooled)) {
+          later = true;
+          break;
+        }
+    if (! mine && ! later)
+      return nullptr;
+    if (local->handed_out || ! local->closer.empty() || local->iterable != nullptr
+        || (local->is_parameter && ! local->named_parameter))
+      return nullptr;
+    const ir::Type* ty = held_by(local);
+    // A view, a table, a lambda held anywhere in it is room somebody else's, or
+    // nothing this gives back: such a value is left as it was.  Made in an
+    // arena or in the image, there is nothing to give back one at a time; a
+    // parameter the body takes as its own was handed what the caller had.
+    if (ty == ir::error_type() || ir::is<ir::ArrayType>(ty) || ! owned::points(ty) || ! owned::can_own(ty)
+        || keeps_a_loan(ty, false)
+        || (! local->arenas.contains(heap_key) && ! local->named_parameter && ! (later && local->arenas.empty())))
+      return nullptr;
+    auto hands = room_hands(local->name, ty, stmts);
+    if (! hands)
+      return nullptr;
+    auto flag = make<Local>();
+    flag->name = local->name + std::string(room_suffix);
+    flag->value = const_cast<ir::BoolConst*>(module.bool_const(mine));
+    flag->span = local->span;
+    flag->read = true;
+    flag->depth = local->depth;
+    bool placed = false;
+    for (auto& scope : std::views::reverse(scopes))
+      if (auto found = scope.get(local->name); found != nullptr && *found == local) {
+        scope[flag->name] = flag;
+        placed = true;
+        break;
+      }
+    if (! placed)
+      return nullptr;
+    room_flags.insert(id_of(flag));
+    std::optional<std::string> known;
+    if (auto list = ir::as<ir::ListType>(ty); list != nullptr && ! owned::points(list->element))
+      // A list's room is given back by the size its header says, asked of the
+      // allocator the list carries: right for the heap, nothing for a pool or
+      // the image, so it is never wrong to say so.
+      known = "heap";
+    else if (ir::is<ir::StrType>(ty) && given != nullptr && freshly_heap(given) && ! later)
+      known = "heap";
+    auto room = make<OwnedRoom>();
+    room->local = local;
+    room->owns = flag;
+    room->hands = std::move(*hands);
+    room->known = known;
+    rooms[id_of(local)] = room;
+    auto empty = syntax.make<ast::EmptyStmt>(local->span);
+    auto defer = syntax.make<ast::Defer>(local->span);
+    defer->stmt = empty;
+    auto entry = make<Deferred>();
+    entry->node = defer;
+    entry->depth = static_cast<std::int64_t>(scopes.size());
+    entry->block = block_spans.empty() ? Span{} : block_spans.back();
+    entry->room = room;
+    deferred.back().push_back(entry);
+    return room;
+  }
+
+
+  std::vector<Local*> Checker::owned_params(const ast::FuncDef* node, ir::Function* func)
+  {
+    std::vector<Local*> found;
+    if (node->body == nullptr)
+      return found;
+    for (std::size_t at = 0; at < node->params.size(); ++at) {
+      const ast::Param* param = node->params[at];
+      Local* local = find_local(param->name);
+      if (local == nullptr || ! local->named_parameter)
+        continue;
+      bool taken = std::ranges::find(func->takes_owned, int(at)) != func->takes_owned.end();
+      if (taken || (param->mutable_ && holds_a_list(held_by(local)) && changed_in_place(param->name, node->body)))
+        found.push_back(local);
+    }
+    return found;
+  }
+
+
+  std::optional<RoomHands> Checker::room_hands(std::string_view name, const ir::Type* ty,
+                                               std::span<const ast::Stmt* const> stmts)
+  {
+    RoomHands hands;
+    std::unordered_map<std::int64_t, const ast::Node*> parents;
+    std::vector<std::pair<const ast::NameRef*, const ast::Stmt*>> found;
+    std::vector<std::pair<const ast::Node*, const ast::Stmt*>> stack;
+    for (auto one : stmts | std::views::reverse)
+      stack.emplace_back(one, nullptr);
+    while (! stack.empty()) {
+      auto [node, stmt] = stack.back();
+      stack.pop_back();
+      if (is_stmt(node))
+        stmt = static_cast<const ast::Stmt*>(node);
+      switch (node->tag) {
+      case ast::NodeKind::Lambda:
+      case ast::NodeKind::Invoke:
+      case ast::NodeKind::Quote:
+      case ast::NodeKind::Hole:
+        if (names_or_brings_in(node, name))
+          return std::nullopt;
+        continue;
+      case ast::NodeKind::NameRef:
+        if (static_cast<const ast::NameRef*>(node)->name == name && stmt != nullptr)
+          found.emplace_back(static_cast<const ast::NameRef*>(node), stmt);
+        break;
+      case ast::NodeKind::MemberAssign: {
+        auto assign = static_cast<const ast::MemberAssign*>(node);
+        if (rooted_at(assign->base, name) && ! is_temporary(assign->value))
+          // Something that is not room of its own put in a field: the record
+          // would give it back as if it were.
+          hands[id_of(node)].emplace_back(std::vector<RoomStep>{ { assign->value, nullptr } }, false);
+        break;
+      }
+      default:
+        break;
+      }
+      std::vector<const ast::Node*> children;
+      ast::for_each_child(node, [&](const ast::Node* one) { children.push_back(one); });
+      for (auto child : children) {
+        parents[id_of(child)] = node;
+        stack.emplace_back(child, stmt);
+      }
+    }
+    for (auto [ref, stmt] : found) {
+      std::unordered_map<std::int64_t, const ir::Type*> path;
+      auto use = room_use(ref, ty, parents, path);
+      if (use == "kept")
+        continue;
+      std::vector<RoomStep> chain;
+      const ast::Node* one = ref;
+      while (one != nullptr && one != stmt) {
+        auto at = path.find(id_of(one));
+        chain.emplace_back(one, at == path.end() ? nullptr : at->second);
+        auto up = parents.find(id_of(one));
+        one = up == parents.end() ? nullptr : up->second;
+      }
+      hands[id_of(stmt)].emplace_back(std::move(chain), use == "moved");
+    }
+    return hands;
+  }
+
+
+  std::string Checker::room_use(const ast::NameRef* ref, const ir::Type* ty,
+                                const std::unordered_map<std::int64_t, const ast::Node*>& parents,
+                                std::unordered_map<std::int64_t, const ir::Type*>& path)
+  {
+    const ast::Node* node = ref;
+    const ir::Type* held = ty;
+    auto parent_of = [&](const ast::Node* one) -> const ast::Node* {
+      auto at = parents.find(id_of(one));
+      return at == parents.end() ? nullptr : at->second;
+    };
+    while (true) {
+      path[id_of(node)] = held;
+      if (held != nullptr && ! points_somewhere(held))
+        return "kept";
+      const ast::Node* parent = parent_of(node);
+      if (parent == nullptr)
+        return "handed";
+      switch (parent->tag) {
+      case ast::NodeKind::Element: {
+        auto element = static_cast<const ast::Element*>(parent);
+        if (element->base != node)
+          return "kept";
+        held = room_element(held, element);
+        break;
+      }
+      case ast::NodeKind::Member: {
+        auto member = static_cast<const ast::Member*>(parent);
+        if (member->base != node)
+          return "handed";
+        held = room_member(held, member->name);
+        break;
+      }
+      case ast::NodeKind::Unary: {
+        auto op = static_cast<const ast::Unary*>(parent)->op;
+        if (op != ast::UnaryOp::max && op != ast::UnaryOp::min)
+          return "kept";
+        held = room_elements(held);
+        break;
+      }
+      case ast::NodeKind::Binary: {
+        auto op = static_cast<const ast::Binary*>(parent)->op;
+        if (room_asks(op))
+          return "kept";
+        if (op != ast::BinaryOp::concat)
+          return "handed";
+        const ir::Type* inner = room_elements(held);
+        return ir::is<ir::StrType>(held) || (inner != nullptr && ! points_somewhere(inner)) ? "kept" : "handed";
+      }
+      case ast::NodeKind::JoinAssign:
+        // The place joined onto, or what is copied onto it.
+        return "kept";
+      case ast::NodeKind::ListLit:
+      case ast::NodeKind::ArrayLit: {
+        // An element of a list written out and joined onto a list that is not
+        // a pool's is copied in deep, there being a name among them; a pool's
+        // takes it as it is.
+        auto grand = ast::as<ast::JoinAssign>(parent_of(parent));
+        if (grand != nullptr && grand->value == parent && ! pool_joined_onto(grand->target))
+          return "kept";
+        return "handed";
+      }
+      case ast::NodeKind::ElementAssign:
+        return static_cast<const ast::ElementAssign*>(parent)->base == node ? "kept" : "handed";
+      case ast::NodeKind::MemberAssign:
+        return static_cast<const ast::MemberAssign*>(parent)->base == node ? "kept" : "handed";
+      case ast::NodeKind::EntryAssign:
+        return static_cast<const ast::EntryAssign*>(parent)->base == node ? "kept" : "handed";
+      case ast::NodeKind::TakeAt:
+        return static_cast<const ast::TakeAt*>(parent)->base == node ? "kept" : "handed";
+      case ast::NodeKind::Take:
+        return static_cast<const ast::Take*>(parent)->base == node ? "kept" : "handed";
+      case ast::NodeKind::Index:
+        return "kept";
+      case ast::NodeKind::AddressOf: {
+        if (! static_cast<const ast::AddressOf*>(parent)->mutable_)
+          return "kept";
+        // Somewhere else may write the place: only a call that is held to
+        // copying what it writes there.
+        const ast::Node* given = parent;
+        const ast::Node* grand = parent_of(parent);
+        std::optional<std::string_view> named;
+        if (auto one = ast::as<ast::Named>(grand)) {
+          named = std::string_view(one->name);
+          given = grand;
+          grand = parent_of(grand);
+        }
+        auto call = ast::as<ast::Call>(grand);
+        if (call == nullptr)
+          return "handed";
+        auto verdict = room_argument(call, given, named, held);
+        auto said = std::get_if<std::string>(&verdict);
+        return said != nullptr && *said == "kept" ? "kept" : "handed";
+      }
+      case ast::NodeKind::ForEach: {
+        auto loop = static_cast<const ast::ForEach*>(parent);
+        if (loop->iterable != node)
+          return "handed";
+        return room_walked(loop, held);
+      }
+      case ast::NodeKind::Named: {
+        auto named = static_cast<const ast::Named*>(parent);
+        if (named->value != node)
+          return "handed";
+        auto call = ast::as<ast::Call>(parent_of(parent));
+        if (call == nullptr || makes_a_record(call->callee))
+          return "handed";
+        auto verdict = room_argument(call, parent, std::string_view(named->name), held);
+        if (auto said = std::get_if<std::string>(&verdict))
+          return *said;
+        held = std::get<const ir::Type*>(verdict);
+        node = call;
+        continue;
+      }
+      case ast::NodeKind::Call: {
+        auto call = static_cast<const ast::Call*>(parent);
+        if (call->callee == node)
+          return "handed";
+        if (makes_a_record(call->callee))
+          return "handed";
+        auto verdict = room_argument(call, node, std::nullopt, held);
+        if (auto said = std::get_if<std::string>(&verdict))
+          return *said;
+        held = std::get<const ir::Type*>(verdict);
+        break;
+      }
+      default:
+        return "handed";
+      }
+      node = parent;
+    }
+  }
+
+
+  const ir::Type* Checker::room_element(const ir::Type* held, const ast::Element* expr)
+  {
+    const ir::Type* inner = room_elements(held);
+    if (inner == nullptr)
+      return nullptr;
+    if (std::ranges::any_of(expr->indices, [](const ast::Expr* one) { return ast::is<ast::Range>(one); }))
+      return ir::array_type(inner, { std::nullopt });
+    if (auto array = ir::as<ir::ArrayType>(held); array != nullptr && expr->indices.size() != array->rank())
+      return nullptr;
+    return inner;
+  }
+
+
+  std::string Checker::room_walked(const ast::ForEach* loop, const ir::Type* held)
+  {
+    const ir::Type* inner = ir::is<ir::StrType>(held) ? ir::char_type() : room_elements(held);
+    if (inner == nullptr)
+      return "handed";
+    if (! points_somewhere(inner))
+      return "kept";
+    if (! loop->more.empty())
+      return "handed";
+    auto kept = room_hands(loop->name, inner, loop->body->stmts());
+    return kept && kept->empty() ? "kept" : "handed";
+  }
+
+
+  std::variant<std::string, const ir::Type*> Checker::room_argument(const ast::Call* call, const ast::Node* given,
+                                                                     std::optional<std::string_view> name,
+                                                                     const ir::Type* held)
+  {
+    if (auto callee = ast::as<ast::NameRef>(call->callee); callee != nullptr
+        && callee->name.starts_with(names::builtin_glyph)) {
+      if (find_local(callee->name) != nullptr)
+        return std::string("handed");
+      if (callee->name == names::text_name || callee->name == names::iter_name || callee->name == names::reserve_name)
+        return std::string("kept");
+      if (callee->name == names::bytes_name || callee->name == names::one_run_name)
+        return ir::is<ir::StrType>(held) ? static_cast<const ir::Type*>(ir::array_type(ir::u8(), { std::nullopt }))
+                                         : held;
+      if (callee->name == names::drop_name)
+        return held;
+      return std::string("handed");
+    }
+    ir::Function* func = room_callee(call->callee);
+    if (func == nullptr || func->cconv != ir::default_cconv)
+      return std::string("handed");
+    std::size_t at = 0;
+    if (name) {
+      auto found = std::ranges::find(func->param_names, *name);
+      if (found == func->param_names.end())
+        return std::string("handed");
+      at = std::size_t(found - func->param_names.begin());
+    } else {
+      auto found = std::ranges::find(call->args, given);
+      if (found == call->args.end())
+        return std::string("handed");
+      at = std::size_t(found - call->args.begin());
+    }
+    if (at >= func->fty->params.size())
+      return std::string("handed");
+    if (std::ranges::find(func->takes_owned, int(at)) != func->takes_owned.end())
+      return std::string("moved");
+    if (keeps_a_loan(func->fty->ret, true)
+        || std::ranges::any_of(func->fty->params, [](const ir::Type* one) { return keeps_a_loan(one, false); }))
+      return std::string("handed");
+    if (func->attrs.impure && bare_text(held))
+      return std::string("handed");
+    return std::string("kept");
+  }
+
+
+  ir::Function* Checker::room_callee(const ast::Expr* callee)
+  {
+    if (auto name = ast::as<ast::NameRef>(callee)) {
+      if (find_local(name->name) != nullptr)
+        return nullptr;
+      auto found = top->get(std::string(name->name));
+      return found == nullptr ? nullptr : found->get<ir::Function>();
+    }
+    if (auto member = ast::as<ast::Member>(callee)) {
+      if (auto inside = member_named(callee).get<ir::Function>())
+        return inside;
+      auto held = module_at(member->base);
+      if (held == nullptr)
+        return nullptr;
+      auto found = held->exports.get(std::string(member->name));
+      return found == nullptr ? nullptr : found->get<ir::Function>();
+    }
+    return nullptr;
+  }
+
+
+  void Checker::let_go(const ast::Stmt* stmt)
+  {
+    if (rooms.empty())
+      return;
+    std::vector<OwnedRoom*> all;
+    for (const auto& [_, room] : rooms)
+      all.push_back(room);
+    for (auto room : all) {
+      auto found = room->hands.get(id_of(stmt));
+      if (found == nullptr)
+        continue;
+      bool handed = std::ranges::any_of(*found, [&](const auto& one) {
+        return ! one.second && std::ranges::none_of(one.first, [&](const RoomStep& step) {
+          return copied_whole(step.first, step.second);
+        });
+      });
+      if (handed)
+        room_handed_on(room);
+    }
+  }
+
+
+  bool Checker::copied_whole(const ast::Node* node, const ir::Type* held)
+  {
+    if (! copying.contains(id_of(node)))
+      return false;
+    if (held == nullptr)
+      // Only an expression is ever noted to be copied.
+      held = said_to_be(static_cast<const ast::Expr*>(node));
+    return held != nullptr && holds_a_list(held) && owned::can_own(held);
+  }
+
+
+  std::vector<std::pair<Local*, ir::Value*>> Checker::room_flags_now()
+  {
+    std::vector<std::pair<Local*, ir::Value*>> flags;
+    for (const auto& [_, room] : rooms)
+      flags.emplace_back(room->owns, room->owns->value);
+    return flags;
+  }
+
+
+  void Checker::room_flags_back(ir::Builder& builder, const std::vector<std::pair<Local*, ir::Value*>>& flags)
+  {
+    if (builder.is_terminated())
+      for (const auto& [flag, value] : flags)
+        flag->value = value;
+  }
+
+
+  void Checker::room_handed_on(OwnedRoom* room)
+  {
+    room->owns->value = const_cast<ir::BoolConst*>(module.bool_const(false));
+  }
+
+
+  OwnedRoom* Checker::room_named(std::string_view name)
+  {
+    Local* local = find_local(name);
+    if (local == nullptr)
+      return nullptr;
+    auto found = rooms.get(id_of(local));
+    return found == nullptr ? nullptr : *found;
+  }
+
+
+  ir::Value* Checker::room_now(ir::Builder& builder, OwnedRoom* room, Span span)
+  {
+    Local* local = room->local;
+    const ir::Type* ty = held_by(local);
+    if (! local->placed)
+      return local->value;
+    if (ir::held_in_memory(ty))
+      return builder.cast(ir::CastKind::bitcast, local->value, ty, span);
+    if (auto record = ir::as<ir::ProductType>(ty))
+      return record_from(builder, local->value, record, span);
+    return builder.load(local->value, span);
+  }
+
+
+  void Checker::give_back_room(ir::Builder& builder, OwnedRoom* room, ir::Value* value, Span span)
+  {
+    ir::Value* owns = room->owns->value;
+    bool constant = owns->vkind == ir::ValueKind::bool_const;
+    if (constant && ! static_cast<const ir::BoolConst*>(owns)->value)
+      return;
+    const ir::Type* ty = value_type_of(value);
+    if (ty == ir::error_type())
+      return;
+    std::optional<std::string_view> known;
+    if (room->known)
+      known = *room->known;
+    if (constant) {
+      owned::give_back(builder, value, ty, known);
+      return;
+    }
+    ir::BasicBlock* give = builder.new_block("give_back");
+    ir::BasicBlock* kept = builder.new_block("given_back");
+    std::vector<ir::Value*> args{ builder.memory() };
+    builder.condbr(owns, give, kept, args, args, span);
+    builder.position_at(give);
+    builder.set_memory(give->add_param(ir::mem_type(), "mem"));
+    owned::give_back(builder, value, ty, known);
+    builder.br(kept, std::vector<ir::Value*>{ builder.memory() }, span);
+    builder.position_at(kept);
+    builder.set_memory(kept->add_param(ir::mem_type(), "mem"));
+  }
+
+
+  void Checker::room_replaced(ir::Builder& builder, Local* local, Span span)
+  {
+    auto found = rooms.get(id_of(local));
+    if (found == nullptr)
+      return;
+    give_back_room(builder, *found, room_now(builder, *found, span), span);
+    room_handed_on(*found);
+  }
+
+
+  void Checker::room_given(std::string_view name, bool owns)
+  {
+    if (OwnedRoom* room = room_named(name))
+      room->owns->value = const_cast<ir::BoolConst*>(module.bool_const(owns));
+  }
+
+
+  bool Checker::owns_what_it_is_given(const ast::Expr* written, bool owns)
+  {
+    if (pool_made(written))
+      return false;
+    const ir::Type* ty = said_to_be(written);
+    if (ty != nullptr && holds_a_list(ty))
+      return owns;
+    return text_made_here(written);
+  }
+
+
+  bool Checker::text_made_here(const ast::Expr* written)
+  {
+    while (auto allocated = ast::as<ast::Allocated>(written))
+      written = allocated->value;
+    if (auto call = ast::as<ast::Call>(written))
+      if (auto callee = ast::as<ast::NameRef>(call->callee); callee != nullptr
+          && (callee->name == names::text_name || callee->name == names::str_of_name)
+          && find_local(callee->name) == nullptr)
+        return true;
+    if (auto binary = ast::as<ast::Binary>(written); binary != nullptr && binary->op == ast::BinaryOp::or_else)
+      return text_made_here(binary->left)
+        && (ast::is<ast::StringLit>(binary->right) || text_made_here(binary->right));
+    return room_made_here(written);
+  }
+
+
+  bool Checker::pool_made(const ast::Expr* written)
+  {
+    KeySet made = arenas_in(written);
+    return ! made.empty() && std::ranges::all_of(made, [&](std::int64_t one) { return arena_by_id.contains(one); });
+  }
+
+
+  void Checker::rooms_in(const ast::Block* body, const ast::Block* alternative, Dict<std::int64_t, Local*>& found)
+  {
+    if (rooms.empty())
+      return;
+    KeySet inside;
+    every_node(body, inside);
+    if (alternative != nullptr)
+      every_node(alternative, inside);
+    for (const auto& [_, room] : rooms) {
+      if (room->owns->placed)
+        continue;
+      bool moves = found.contains(id_of(room->local));
+      if (! moves)
+        for (const auto& [at, _] : room->hands)
+          if (inside.contains(at)) {
+            moves = true;
+            break;
+          }
+      if (moves && ! found.contains(id_of(room->owns)))
+        found[id_of(room->owns)] = room->owns;
+    }
+  }
+
+
   bool Checker::room_made_here(const ast::Expr* written)
   {
     while (auto allocated = ast::as<ast::Allocated>(written))
@@ -1667,6 +2285,10 @@ namespace pl4g::sema {
         continue;
       const ast::Expr* one = written.get_or(at, nullptr);
       if (one != nullptr && movable(one, &builder.function())) {
+        if (auto name = ast::as<ast::NameRef>(one))
+          // Handed over: the room is the callee's to give back now.
+          if (OwnedRoom* room = room_named(name->name))
+            room_handed_on(room);
         module.record("copy-into-allocator", func->name,
                       "'" + written_as(one) + "' is handed to '" + func->name
                         + "' as it is: nothing reads it again, and the callee changes it in place",
@@ -1885,7 +2507,18 @@ namespace pl4g::sema {
     ir::Value* joined = builder.extract(more, 1, ir::u64(), span);
     Room made = room_made(builder, place, ty, joined, span);
     ir::Value* source = more;
-    if (owned::points(ty->element))
+    // A list made here of nothing but what the heap made here, joined onto a
+    // list of the heap's: its elements are nobody else's, and they move.
+    bool moved = false;
+    if (owned::points(ty->element) && made_of_its_own(written) && arenas_in(written) == KeySet{ heap_key })
+      if (ast::is<ast::NameRef>(stmt->target)) {
+        KeySet target;
+        for (auto one : arenas_in(stmt->target))
+          if (! is_container_key(one))
+            target.insert(one);
+        moved = target == KeySet{ heap_key };
+      }
+    if (owned::points(ty->element) && ! moved)
       // Into the list's own allocator, which is known only while running.
       source = builder.call(owned::own_function(module, ty), std::vector<ir::Value*>{ made.into, more }, ty, span);
     const ir::PtrType* bytes = ir::ptr_type(ir::u8(), true);
@@ -1895,13 +2528,44 @@ namespace pl4g::sema {
     ir::Value* from = builder.cast(ir::CastKind::bitcast, first, bytes, span);
     ir::Value* length = builder.binary(ir::BinOp::wrap_mul, joined, size, span);
     strings::copy_bytes(builder, made.grown, offset, from, length);
-    if (owned::points(ty->element))
-      // Its elements are the list's now, and the run they were in is spare.
+    if (owned::points(ty->element) && ! moved) {
+      // Its elements are the list's now, and the run they were in is spare --
+      // and so is the run of a temporary they were copied out of, whose
+      // elements are somebody else's.
       owned::give_back_storage(builder, source, ty, std::nullopt);
-    else if (is_temporary(written))
+      if (is_temporary(written))
+        owned::give_back_storage(builder, more, ty, std::nullopt);
+    } else if (is_temporary(written))
       owned::give_back_storage(builder, more, ty,
                                freshly_heap(written) ? std::optional<std::string_view>("heap") : std::nullopt);
     room_kept(builder, place, ty, made, builder.binary(ir::BinOp::wrap_add, made.count, joined, span), span);
+  }
+
+
+  bool Checker::made_of_its_own(const ast::Expr* written)
+  {
+    while (auto allocated = ast::as<ast::Allocated>(written))
+      written = allocated->value;
+    if (auto list = ast::as<ast::ListLit>(written))
+      return std::ranges::all_of(list->elements, [](const ast::Expr* one) { return is_temporary(one); });
+    if (auto array = ast::as<ast::ArrayLit>(written))
+      return std::ranges::all_of(array->elements, [](const ast::Expr* one) { return is_temporary(one); });
+    if (auto call = ast::as<ast::Call>(written))
+      return room_made_here(written) && ! makes_a_record(call->callee);
+    return false;
+  }
+
+
+  bool Checker::shared_heap(const ast::Expr* written)
+  {
+    if (is_temporary(written))
+      return false;
+    if (auto name = ast::as<ast::NameRef>(written)) {
+      Local* local = find_local(name->name);
+      if (local != nullptr && rooms.contains(id_of(local)) && ! used_after(local))
+        return false;
+    }
+    return true;
   }
 
 

@@ -2077,6 +2077,126 @@ namespace pl4g::sema {
     return array != nullptr && owned::points(array->element);
   }
 
+  bool room_asks(ast::BinaryOp op)
+  {
+    using B = ast::BinaryOp;
+    switch (op) {
+    case B::equal: case B::not_equal: case B::less: case B::greater: case B::less_equal: case B::greater_equal:
+    case B::alike: case B::unalike: case B::below_or_alike: case B::above_or_alike: case B::below_not_alike:
+    case B::above_not_alike:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+
+  const ir::Type* room_elements(const ir::Type* held)
+  {
+    if (auto list = ir::as<ir::ListType>(held))
+      return list->element;
+    if (auto array = ir::as<ir::ArrayType>(held))
+      return array->element;
+    return nullptr;
+  }
+
+
+  const ir::Type* room_member(const ir::Type* held, std::string_view name)
+  {
+    if (auto product = ir::as<ir::ProductType>(held))
+      for (const auto& [one, part] : product->fields)
+        if (one == name)
+          return part;
+    return nullptr;
+  }
+
+
+  bool rooted_at(const ast::Expr* expr, std::string_view name)
+  {
+    while (true)
+      if (auto member = ast::as<ast::Member>(expr))
+        expr = member->base;
+      else if (auto element = ast::as<ast::Element>(expr))
+        expr = element->base;
+      else
+        break;
+    auto ref = ast::as<ast::NameRef>(expr);
+    return ref != nullptr && ref->name == name;
+  }
+
+
+  bool keeps_a_loan(const ir::Type* ty, bool answered, const KeySet& seen)
+  {
+    if (seen.contains(id_of(ty)))
+      return false;
+    auto deeper = deeper_than(seen, ty);
+    switch (ty->kind) {
+    case ir::TypeKind::ptr:
+      return answered || keeps_a_loan(ir::as<ir::PtrType>(ty)->pointee, answered, deeper);
+    case ir::TypeKind::set:
+    case ir::TypeKind::dict:
+    case ir::TypeKind::cursor:
+    case ir::TypeKind::iter:
+    case ir::TypeKind::running:
+    case ir::TypeKind::opaque:
+    case ir::TypeKind::frame:
+      return true;
+    case ir::TypeKind::func:
+      return ! static_cast<const ir::FuncType*>(ty)->system();
+    case ir::TypeKind::array: {
+      auto array = ir::as<ir::ArrayType>(ty);
+      return ! array->fixed() || keeps_a_loan(array->element, answered, deeper);
+    }
+    case ir::TypeKind::list:
+      return keeps_a_loan(ir::as<ir::ListType>(ty)->element, answered, deeper);
+    case ir::TypeKind::tuple:
+      return std::ranges::any_of(ir::as<ir::TupleType>(ty)->members,
+                                 [&](auto m) { return keeps_a_loan(m, answered, deeper); });
+    case ir::TypeKind::result: {
+      auto r = ir::as<ir::ResultType>(ty);
+      return keeps_a_loan(r->ok, answered, deeper) || (r->err != nullptr && keeps_a_loan(r->err, answered, deeper));
+    }
+    case ir::TypeKind::product:
+      return std::ranges::any_of(ir::as<ir::ProductType>(ty)->fields,
+                                 [&](const auto& f) { return keeps_a_loan(f.second, answered, deeper); });
+    case ir::TypeKind::sum:
+      return std::ranges::any_of(ir::as<ir::SumType>(ty)->variants,
+                                 [&](const auto& v) { return keeps_a_loan(v.second, answered, deeper); });
+    default:
+      return false;
+    }
+  }
+
+
+  bool bare_text(const ir::Type* ty)
+  {
+    if (ty == nullptr)
+      return true;
+    switch (ty->kind) {
+    case ir::TypeKind::str:
+      return true;
+    case ir::TypeKind::array: {
+      auto array = ir::as<ir::ArrayType>(ty);
+      return ! array->fixed() || bare_text(array->element);
+    }
+    case ir::TypeKind::tuple:
+      return std::ranges::any_of(ir::as<ir::TupleType>(ty)->members, [](auto m) { return bare_text(m); });
+    case ir::TypeKind::result: {
+      auto r = ir::as<ir::ResultType>(ty);
+      return bare_text(r->ok) || (r->err != nullptr && bare_text(r->err));
+    }
+    case ir::TypeKind::product:
+      return std::ranges::any_of(ir::as<ir::ProductType>(ty)->fields,
+                                 [](const auto& f) { return bare_text(f.second); });
+    case ir::TypeKind::sum:
+      return std::ranges::any_of(ir::as<ir::SumType>(ty)->variants,
+                                 [](const auto& v) { return bare_text(v.second); });
+    default:
+      return false;
+    }
+  }
+
+
   bool is_temporary(const ast::Expr* written)
   {
     while (auto allocated = ast::as<ast::Allocated>(written))

@@ -1373,7 +1373,7 @@ Runtime
     on the next line at the `if`'s indentation, as Python has it (`tests/language/if-one-line-arms-on-lines-of-their-own`).
 
 
-[ ] what the `json` module ran into and wrote around (2026-10-22), each still so:
+[x] what the `json` module ran into and wrote around (2026-10-22), each still so -- all done 2026-10-27:
     - [x] a result whose answer is a generic of another module, `string.Parsed(Value) ? Error`, looks the error type up in the
       answer's module and not where it is written.  Done 2026-10-27: a name alone is the file's own first
       (`result-error-beside-another-modules-generic`); and a module importing `std` no longer exports `std`'s `⍕` as its own
@@ -1389,7 +1389,10 @@ Runtime
     - [x] a result cannot be copied, so a local list cannot be answered in `[u8] ? E` (4624) -- the encoder answers `[u8]?` of a
       list handed in instead.  Found done for `[u8] ? E in pool`; done 2026-10-27 for the heap, the answer of a result kept as it
       would be on its own (`result-of-a-local-list-in-an-arena`);
-    - [ ] a list of the heap's is never given back, so everything a program makes over and over must be made in an arena;
+    - [x] a list of the heap's is never given back, so everything a program makes over and over must be made in an arena.
+      Done 2026-10-27: a list, text or record of them whose room is a variable's own is given back where its scope ends (the
+      decisions entry of that day, `heap-list-given-back`); `escaped` gathers its bytes in the heap's, and the document and
+      what is written stay in the caller's arena, which is what simdjson's documents are;
     - [x] `&l⟦i⟧` of a list's element is refused, and a list cannot be cut short in place.  Done 2026-10-27: the reference
       lends the whole list, and one that writes makes the list's room its own first (`reference-to-an-element-of-a-list`,
       `reference-to-an-element-of-a-list-held`); `†l⟦i…j⟧` takes a run out and `†l⟦n…#l⟧` cuts a list short, a statement

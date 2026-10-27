@@ -2968,6 +2968,7 @@ namespace pl4g::sema {
         continue;
       found.setdefault(id_of(local), local);
     }
+    rooms_in(body, alternative, found);
     std::vector<Local*> locals;
     for (const auto& [_, local] : found)
       locals.push_back(local);

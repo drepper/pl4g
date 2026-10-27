@@ -478,18 +478,19 @@ namespace pl4g::sema {
                             std::move(answer_kinds), thin_to, answer_arms, yield_answer, std::move(hands_out),
                             hands_out_local, std::move(receiving), unscanned, std::move(borrows), std::move(places),
                             std::move(iterator_loans), pick_in, std::move(pick_walked), demanding,
-                            std::move(writing_in), std::move(block_spans), std::move(filling));
+                            std::move(writing_in), std::move(block_spans), std::move(filling), std::move(rooms));
     Finally restore{ [&] {
       std::tie(scopes, addressed, answering, impure, carried, loops, outside, initializing, assigning, operand_of,
                handing_over, deferred, emptied, answer_made_in, out_of_arena, out_of_arenas, made_from, answer_kinds,
                thin_to, answer_arms, yield_answer, hands_out, hands_out_local, receiving, unscanned, borrows, places,
-               iterator_loans, pick_in, pick_walked, demanding, writing_in, block_spans, filling)
+               iterator_loans, pick_in, pick_walked, demanding, writing_in, block_spans, filling, rooms)
         = std::move(saved);
     } };
     scopes.clear();
     addressed.clear();
     deferred.clear();
     emptied.clear();
+    rooms.clear();
     block_spans.clear();
     carried.clear();
     loops.clear();
@@ -1091,7 +1092,7 @@ namespace pl4g::sema {
     made_from[id_of(expr)] = std::tuple(static_cast<const ast::Expr*>(expr), *last_made_in);
     // An answer whose allocator the callee fixed is in it, never text in the
     // image: where that is the heap, it is fresh.
-    if ((func->answer_from || func->made_in == std::vector<int>{ int(heap_at) })
+    if (((func->answer_from && func->answer_from->first == "heap") || func->made_in == std::vector<int>{ int(heap_at) })
         && *last_made_in == KeySet{ heap_key })
       fresh_heap.insert(id_of(expr));
     callee_of[id_of(expr)] = func;

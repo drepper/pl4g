@@ -29,7 +29,9 @@ Changing a list in place needs a `mut` name (4004).
 is done to the first: the compiler copies where either may change in place,
 and hands the room over without a copy where the first is not used again.
 So a function may take a list in and answer it grown, `out ← f(x, out)`,
-copying nothing -- which is how [[std.string]]'s writers work.
+copying nothing -- which is how [[std.string]]'s writers work.  The heap's
+room a name holds as its own is given back where the name goes
+([[memory.arenas]]).
 
 **A list stands where a view `T⟦⟧` is wanted**, and is sliced, `l⟦i…j⟧`.  A
 view of a list borrows it: the list is not changed while the view is used.
