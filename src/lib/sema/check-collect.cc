@@ -469,6 +469,12 @@ namespace pl4g::sema {
 
   void Checker::lower_set_aside(Collected* entry)
   {
+    body_set_aside([&] { lower_function(entry); });
+  }
+
+
+  void Checker::body_set_aside(std::function_ref<void()> then, bool fresh)
+  {
     // What the checker keeps about the body it is lowering, which a body
     // lowered in the middle of another sets aside and puts back.
     auto saved = std::tuple(std::move(scopes), std::move(addressed), answering, impure, std::move(carried),
@@ -514,7 +520,23 @@ namespace pl4g::sema {
     out_of_arena = nullptr;
     out_of_arenas = KeySet{ heap_key };
     made_from.clear();
-    lower_function(entry);
+    if (! fresh) {
+      then();
+      return;
+    }
+    // Where what is lowered is no part of the body set aside, nothing of the
+    // types, the requirements or the walk that body was in reaches it.
+    auto kept = std::tuple(std::move(bound), abstract, std::move(lifetime_scopes), generating, generating_out, asking);
+    Finally put_back{ [&] {
+      std::tie(bound, abstract, lifetime_scopes, generating, generating_out, asking) = std::move(kept);
+    } };
+    bound.clear();
+    abstract = nullptr;
+    lifetime_scopes.clear();
+    generating = nullptr;
+    generating_out = nullptr;
+    asking = nullptr;
+    then();
   }
 
 
@@ -1290,6 +1312,7 @@ namespace pl4g::sema {
     made->stands = stands;
     made->units = unit_scopes.front();
     made->written_params = handed;
+    made->asks = this;
     if (! node->held)
       (*top)[std::string(node->name)] = Held(made);
     else

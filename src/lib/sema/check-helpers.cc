@@ -1440,6 +1440,33 @@ namespace pl4g::sema {
       mentioned(unit, into);
   }
 
+  void mentioned_but_the_body(const ast::FuncDef* node, NameSet& into)
+  {
+    ast::for_each_child(node, [&](const ast::Node* one) {
+      if (one != node->body)
+        mentioned(one, into);
+    });
+  }
+
+  void mentioned_but_the_arms(const ast::Node* node, NameSet& into)
+  {
+    if (node == nullptr)
+      return;
+    if (auto arm = ast::as<ast::IfArm>(node); arm != nullptr && arm->comptime) {
+      mentioned(arm->condition, into);
+      return;
+    }
+    if (auto name = ast::as<ast::NameRef>(node))
+      into.emplace(name->name);
+    else if (auto member = ast::as<ast::Member>(node))
+      into.emplace(member->name);
+    else if (auto fresh = ast::as<ast::Fresh>(node))
+      into.emplace(fresh->glyph);
+    else if (ast::is<ast::ForEach>(node) || ast::is<ast::Yield>(node) || ast::is<ast::Call>(node))
+      into.emplace(each_name);
+    ast::for_each_child(node, [&](const ast::Node* one) { mentioned_but_the_arms(one, into); });
+  }
+
   std::vector<std::string> called_in(const ast::Node* node)
   {
     std::vector<std::string> found;

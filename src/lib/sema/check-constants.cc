@@ -1483,6 +1483,15 @@ namespace pl4g::sema {
     auto node = written->node;
     if (written->refused)
       return nullptr;
+    if (written->body_names && written->asks != nullptr && abstract == nullptr) {
+      // The first instance: what the body names is lowered now, in the file
+      // that wrote it, before the body that calls it is.  Not for one made
+      // while a body is checked where it is written, which is thrown away.
+      auto names = std::move(*written->body_names);
+      written->body_names.reset();
+      written->asks->wanted_by_an_instance(names);
+    }
+    auto outer_asking = std::exchange(asking, written->asks != nullptr && abstract == nullptr ? written : nullptr);
     auto outer_bound = std::move(bound);
     bound = bound_now;
     auto outer_discard = discard_function;
@@ -1490,6 +1499,7 @@ namespace pl4g::sema {
     Finally restore([&] {
       bound = std::move(outer_bound);
       discard_function = outer_discard;
+      asking = outer_asking;
     });
     std::vector<const ir::Type*> params;
     const ir::Type* answer;

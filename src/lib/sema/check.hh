@@ -148,6 +148,10 @@ namespace pl4g::sema {
     // than the files the checker was started on: lowered as far as it is named,
     // for the macros as for the program.
     bool imported = false;  // check.py:_imported
+    // What brings the module's list of what it owns up to date, where something
+    // else imported it: run after `want`, whoever asked.  Python hands the list
+    // itself on, so has nothing to run.
+    std::function<void()> owned_settled;
     // The trees quoted in the macros, in the order they were written, and the
     // holes each has.  The expander reads them: a quote lowers to a call that
     // names one by its place here and fills its holes with what the macro
@@ -277,6 +281,10 @@ namespace pl4g::sema {
     // function is being checked.  Empty everywhere else, a type parameter
     // being a thing only a call gives a meaning to.
     Dict<std::string, const ir::Type*> bound;  // check.py:3916
+    // The generic function whose instance is being lowered, where the file that
+    // wrote it asks for what an arm of a `comptime if` names only where an
+    // instance takes the arm.  Nothing anywhere else.
+    Generic* asking = nullptr;
     // Whether an array stands where one of its elements is wanted, which
     // is so while the arguments of a call to a function marked `listable`
     // are lowered and nowhere else.

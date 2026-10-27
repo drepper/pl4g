@@ -311,6 +311,17 @@ namespace pl4g::sema {
     OrderedSet<Types> making;
     bool refused = false;
     std::optional<std::vector<const ast::Param*>> written_params;
+    // What the body names outside the arms of a `comptime if`, where the file
+    // that wrote it is lowered as far as it is named and has not been asked for
+    // these yet: they are asked for when the first instance is made, and not
+    // when the definition is taken.
+    std::optional<NameSet> body_names;
+    // Who asks for them, and for what an arm an instance takes names: the
+    // checker of the file that wrote it, with what is being lowered there set
+    // aside.  Nothing where that file is lowered whole.
+    Checker* asks = nullptr;
+    // The arms whose names have been asked for, by their bodies.
+    std::set<const ast::Block*> asked_arms;
   };
 
   // A name for a set of requirements, kept to be substituted into.

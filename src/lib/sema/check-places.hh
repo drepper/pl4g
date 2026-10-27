@@ -346,6 +346,9 @@
     const ir::Type* type_of_a_lift(const ast::Expr* asked);  // check.py:17128
     // The arms left once every one the compiler settled has been answered.
     std::optional<std::vector<const ast::IfArm*>> chosen_arms(const ast::If* stmt);  // check.py:17163
+    // Have the file that wrote the generic function `written` lower what the arms of a `comptime if` an
+    // instance of it takes name, before they are lowered; once an arm.
+    void ask_for_the_arms(Generic* written, std::span<const ast::IfArm* const> arms);  // check.py:_ask_for_the_arms
     // Lower statements a macro wrote where a value stands.
     ir::Value* lower_scoped(ir::Builder& builder, const ast::Scoped* expr, const ir::Type* wanted);  // check.py:17187
     // Check and lower an `if`, its `elif`s and its `else`.

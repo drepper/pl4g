@@ -7,7 +7,11 @@
 
     // -- the program's units have had them taken out -- and what -----------------
     // Lower every function of this module that one of `names` may name, and everything those reach.
-    void want(const NameSet& names);  // check.py:4383
+    // `everywhere`, every module this one reads is asked, whatever this one has.
+    void want(const NameSet& names, bool everywhere = false);  // check.py:4383
+    // Lower what the body of a generic function written here names, before an instance of it is lowered,
+    // with whatever body is being lowered here set aside.
+    void wanted_by_an_instance(const NameSet& names);  // check.py:_wanted_by_an_instance
     // The module a path names, or nothing: `m`, or `m.inner` where `m` hands on a module it imported under
     // that name.
     LoadedModule* module_at(const ast::Expr* expr);  // check.py:4429

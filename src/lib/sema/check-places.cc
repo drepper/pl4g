@@ -3170,6 +3170,17 @@ namespace pl4g::sema {
   }
 
 
+  void Checker::ask_for_the_arms(Generic* written, std::span<const ast::IfArm* const> arms)
+  {
+    NameSet names;
+    for (auto arm : arms)
+      if (written->asked_arms.insert(arm->body).second)
+        mentioned_but_the_arms(arm->body, names);
+    if (! names.empty() && written->asks != nullptr)
+      written->asks->wanted_by_an_instance(names);
+  }
+
+
   ir::Value* Checker::lower_scoped(ir::Builder& builder, const ast::Scoped* expr, const ir::Type* wanted)
   {
     push_scope();
@@ -3192,6 +3203,8 @@ namespace pl4g::sema {
       auto arms = chosen_arms(stmt);
       if (! arms)
         return undef_error(module);
+      if (asking != nullptr)
+        ask_for_the_arms(asking, *arms);
       if (arms->empty())
         // Every arm the compiler settled was false and there was no `else`.
         return produces ? undef_error(module) : undef_of(module, ir::void_type());

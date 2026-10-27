@@ -240,6 +240,10 @@ namespace pl4g::sema {
       NameSet wanted;
       mentioned(std::span<const ast::SourceUnit* const>(units), wanted);
       ask_the_modules(wanted);
+      for (auto one : generics_here)
+        // Every name a body here writes has just been asked for, a generic's
+        // arms with the rest: an instance has nothing to ask.
+        one->asks = nullptr;
       for (auto entry : callees_first(collected))
         lower_function(entry);
       for (auto one : std::vector(generics_here))
@@ -283,7 +287,7 @@ namespace pl4g::sema {
   }
 
 
-  void Checker::want(const NameSet& given)
+  void Checker::want(const NameSet& given, bool everywhere)
   {
     NameSet names = given;
     std::vector<Collected*> chosen;
@@ -309,7 +313,11 @@ namespace pl4g::sema {
         if (names.contains(one->node->name) || ! is_identifier(one->node->name)) {
           std::erase(waiting_generics, one);
           generics.push_back(one);
-          mentioned(one->node, names);
+          // The signature is read at every call, and the body only where an
+          // instance is made: what the body names is asked for then.
+          mentioned_but_the_body(one->node, names);
+          one->body_names.emplace();
+          mentioned_but_the_arms(one->node->body, *one->body_names);
           if (one->written_params)
             for (auto param : *one->written_params)
               mentioned(param, names);
@@ -324,7 +332,7 @@ namespace pl4g::sema {
         named.push_back(name);
     for (const auto& name : named)
       image_now(name);
-    if (chosen.empty() && generics.empty() && initialized.empty()) {
+    if (chosen.empty() && generics.empty() && initialized.empty() && ! everywhere) {
       for (const auto& name : exported_imports) {
         auto held = top->get(name);
         if (held == nullptr)
@@ -340,6 +348,16 @@ namespace pl4g::sema {
     for (auto one : generics)
       check_generic(one);
     lower_initializers(initialized);
+  }
+
+
+  void Checker::wanted_by_an_instance(const NameSet& names)
+  {
+    // An instance is made where a call is lowered, which may be a body of this
+    // very file's, half done.
+    body_set_aside([&] { want(names, true); }, true);
+    if (owned_settled)
+      owned_settled();
   }
 
 
@@ -1158,6 +1176,7 @@ namespace pl4g::sema {
         if (auto value = one.get<ir::Value>())
           loaded->owned.push_back(value);
     };
+    inner->owned_settled = settle_owned;
     loaded->want = [inner, settle_owned](const NameSet& names) {
       inner->want(names);
       settle_owned();

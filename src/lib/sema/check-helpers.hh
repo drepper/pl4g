@@ -176,6 +176,13 @@ namespace pl4g::sema {
   // these.
   void mentioned(const ast::Node* node, NameSet& into);
   void mentioned(std::span<const ast::SourceUnit* const> units, NameSet& into);  // check.py:1471
+  // What `mentioned` finds in `node`, its body apart: the parameters, what it answers, its clauses --
+  // what a call reads, wherever an instance is made.
+  void mentioned_but_the_body(const ast::FuncDef* node, NameSet& into);  // check.py:_mentioned_but_the_body
+  // What `mentioned` finds below `node`, but for the bodies of the arms of a `comptime if`: what every
+  // instance of a generic body lowers.  An arm is lowered by the instances whose types take it, and asks
+  // for its own names there.
+  void mentioned_but_the_arms(const ast::Node* node, NameSet& into);  // check.py:_mentioned_but_the_arms
   // The names called anywhere below `node`.
   std::vector<std::string> called_in(const ast::Node* node);  // check.py:1496
   // Every name read below `node`.

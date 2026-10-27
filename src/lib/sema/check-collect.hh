@@ -25,6 +25,10 @@
     Generator* generator_function(const ast::FuncDef* node, std::string_view path, const ir::FuncAttrs& func_attrs, const Dict<std::string, const ir::Type*>& bound);  // check.py:6830
     // Lower a body in the middle of another, with that one set aside.
     void lower_set_aside(Collected* entry);  // check.py:6893
+    // Set aside what the checker keeps of the body it is lowering, run `then`, and put it back; `fresh`
+    // where what `then` lowers is no part of that body, so that nothing of its types, requirements or
+    // walk reaches it.
+    void body_set_aside(std::function_ref<void()> then, bool fresh = false);  // check.py:_body_set_aside
     // The generator `template` comes to for these types, compiled once per set of them as a generic
     // function's instances are.
     Generator* generator_instance(Generator* template_, const Dict<std::string, const ir::Type*>& bound, Span span);  // check.py:6914
