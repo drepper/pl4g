@@ -954,3 +954,11 @@ Found writing `std.time` in the language (2026-10-23):
     to hold one" in `target/globals.emit_globals`, a shared object having no record the entry point lays out, and `std.fs`'s
     directory holding an address of it.  Every module `std` hands on can be imported by its own name meanwhile, which is how
     `std-time-in-a-shared-object` does it.  Check the C++ compiler, which should agree.
+
+[ ] a generic of a module whose body calls another generic with its types written down, outside `comptime` (`helper(5u8)` in
+    `fn outer(v: T') → u8`), makes that instance while the outer generic is checked where it is written; the check throws away
+    everything it made, the instance with it, and a program using both `outer` and `helper` stops with 8501 "returning a value of
+    type '<error>'".  Found on 2026-10-27 making a generic's body be asked for by its instances (99bca39), which makes it no
+    worse.  Reproducer: a module `m.pl4g` with `helper(v: T') → u8` (an arm `comptime if ⎕typeof(⌜v⌝) = ⌜u8⌝` calling a function
+    of the module) and `outer(v: T') → u8: helper(5u8)`, and a program calling `m.outer(true) + m.helper(3u8)`.  An instance made
+    during that check should be kept, or made again when an instance of the outer generic is.
