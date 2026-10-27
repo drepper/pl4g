@@ -27665,6 +27665,15 @@ class Checker:
             return UndefConst(ERROR)
         if dropping:
             if found.unit.is_none:
+                if any(found is one for one in self._bound.values()):
+                    # A type parameter's: whether it carries a unit is what the
+                    # call said, and a generic body taking off whatever there
+                    # is cannot know.  A unit says nothing about the bits, so
+                    # the instances it comes to do the same thing either way.
+                    if not self._accepts(expected, found):
+                        self._report_mismatch(expr.span, found, expected)
+                        return UndefConst(ERROR)
+                    return given
                 self._diags.emit(D.LANG_UNIT_DROP_HAS_NONE, expr.span)
                 return UndefConst(ERROR)
             return self._as_united(builder, given, found.bare, expected, expr.span)

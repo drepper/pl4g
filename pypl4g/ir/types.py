@@ -164,8 +164,13 @@ class Unit:
                                 for one in _each(below))))
 
     def mangled(self) -> str:
-        """The unit as one word, for a symbol name."""
-        return "".join((n, str(e)) for n, e in self.powers)
+        """The unit as one word, for a symbol name: as it is written, and the
+        scale after it where that is not one, since two units with the same
+        base units and different scales are two units."""
+        if self.scale == 1:
+            return self.render()
+        return "".join((self.render(), "\N{MULTIPLICATION SIGN}",
+                        str(self.scale.numerator), "/", str(self.scale.denominator)))
 
     def times(self, other: Unit) -> Unit:
         """The unit of a product: the exponents added, the scales multiplied."""
@@ -265,10 +270,14 @@ class IntType(Type):
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name.
 
-        The unit is left out: it says nothing about what the bits are, and a
-        unit that changed a symbol name would be a unit that changed the code.
+        The unit is in it, written after the mark as it is in a type but with
+        no space: it says nothing about the bits, but a generic function is
+        one function per set of types and may ask what its types are, so
+        `f(u64 \N{CURRENCY SIGN}size)` and `f(u64)` are two functions and need two symbols.
         """
-        return "".join(("i" if self.signed else "u", str(self.bits)))
+        made = "".join(("i" if self.signed else "u", str(self.bits)))
+        return made if self.unit.is_none else \
+            "".join((made, "\N{CURRENCY SIGN}", self.unit.mangled()))
 
     @property
     def bare(self) -> IntType:
@@ -340,8 +349,10 @@ class FloatType(Type):
             "".join((made, " \N{CURRENCY SIGN}", self.unit.render()))
 
     def mangled(self) -> str:
-        """The normalized name of this type, with the unit left out."""
-        return "".join(("f", str(self.bits)))
+        """The normalized name of this type, with the unit as `IntType` has it."""
+        made = "".join(("f", str(self.bits)))
+        return made if self.unit.is_none else \
+            "".join((made, "\N{CURRENCY SIGN}", self.unit.mangled()))
 
     @property
     def bare(self) -> FloatType:

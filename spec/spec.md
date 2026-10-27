@@ -438,7 +438,13 @@ std.text(1234u32)                ※ "1234"
 
 `⍕` is APL's own glyph for this -- monadic format -- and the two are one body under two names: the operator for writing, and the
 name for a program that delegates to it.  **What comes out reads back as what went in.**  The raised minus is the one a negative
-literal is written with, and a record is written in the notation a program writes one in.
+literal is written with, and a record is written in the notation a program writes one in.  A number with a unit is the number
+alone, a literal carrying none.  **An `f64` is the shortest text that reads back as the same number** -- `std.string`'s
+Schubfach -- with a point or an exponent always, laid out as Python's `repr` lays it out: `⍕2.5f64` is `2.5`, `⍕100f64` is
+`100.0`, `⍕1e16f64` is `1e+16`, `⍕⁻0.1f64` is `⁻0.1`.  Compare **Python**'s `repr`, whose digits and layout these are with the
+sign raised; **JavaScript**'s `Number.prototype.toString`, the same digits without the point on a whole number, which would read
+back as an integer here; **C**'s `%g`, six digits unless told; **Go**'s `strconv.FormatFloat(x, 'g', -1, 64)` and **Rust**'s
+`{}`, both shortest.
 
 **It is one definition and not one per type.**  The language has no overloading, so a glyph has one meaning per number of operands
 and a generic body with `comptime if` says a different thing for each type inside that one meaning.  **Nothing in the number arm
@@ -3122,7 +3128,10 @@ let far: u32 ¤mph = ⎕unit(⎕drop(v), ⌜mph⌝)
 
 That is the point rather than the price: the step that would otherwise have been silent is the step that is said out loud.
 `⎕drop` of something with no unit is refused (4543) and `⎕unit` on something that has one is refused (4544), so neither can be
-written where it does nothing or where it hides a crossing.  The unit is written between the lifting marks (4546) because a unit
+written where it does nothing or where it hides a crossing.  **Except `⎕drop` in a generic body, of a value whose type is the one
+a type parameter stands for**: whether that carries a unit is what the call said, so `⎕drop(v)` takes off whatever there is, none
+included, and one definition serves a number with a unit and one without -- which is how `std.text` writes both.  A unit says
+nothing about the bits, so the instances do the same thing; a value of a type no parameter stands for is held to the rule.  The unit is written between the lifting marks (4546) because a unit
 is not a value -- there is nothing at all for one to be while the program runs.
 
 Compare: **F#**, whose units of measure are this feature and the one full implementation in a mainstream language -- `[<Measure>]`
@@ -9008,7 +9017,9 @@ whose substitution failure is the thing not inherited; **Go**, which checks the 
 sets; **Zig** and **D**, which check per instantiation, compile-time code being their whole mechanism -- the one corner kept here.
 
 **One function is made per set of types**, not one per call: a second call saying what an earlier one said gets that same
-function.  The two are told apart by their symbols on their own, a symbol being the signature written out.  Which sets of types a
+function.  The two are told apart by their symbols on their own, a symbol being the signature written out -- **a unit
+included**: `u64 ¤size` and `u64` are two types, and a body may ask which it was given, so `f(u64¤size)` and `f(u64)` are two
+functions.  Which sets of types a
 generic function was compiled for is written to the report log (`instantiate`), since the program said nothing about them.
 
 **A generic function may call itself with the types it was given**, and two may call each other: what the call names is the

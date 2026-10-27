@@ -2,6 +2,7 @@
 // the compiler's own functions comes to.
 //
 // A port of pypl4g/sema/check.py, lines 23413 to 26512, method for method.
+#include <algorithm>
 #include <cmath>
 #include <format>
 #include <limits>
@@ -2220,6 +2221,17 @@ namespace pl4g::sema {
     auto unit = integer != nullptr ? integer->unit : floating->unit;
     if (dropping) {
       if (unit->is_none()) [[unlikely]] {
+        // A type parameter's: whether it carries a unit is what the call said,
+        // and a generic body taking off whatever there is cannot know.  A unit
+        // says nothing about the bits, so the instances it comes to do the same
+        // thing either way.
+        if (std::ranges::any_of(bound, [found](const auto& one) { return one.second == found; })) {
+          if (! accepts(expected, found)) [[unlikely]] {
+            report_mismatch(expr->span, found, expected);
+            return error_value(module);
+          }
+          return given;
+        }
         diags.emit(D::LANG_UNIT_DROP_HAS_NONE, expr->span);
         return error_value(module);
       }

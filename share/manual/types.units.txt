@@ -31,7 +31,9 @@ for the file or inside a body for that body:
 The last form lets a value of the first unit stand where the second is wanted,
 and only that way round.  **Crossing is written**: `⎕drop(x)` takes a unit off
 (4543 where there is none) and `⎕unit(x, ⌜U⌝)` puts one on (4544 where there
-is one).
+is one).  In a generic body, `⎕drop` of a value of a type parameter's type takes
+off whatever unit the call gave it, none included.  `⍕` writes the number
+alone.
 
 Program:
 

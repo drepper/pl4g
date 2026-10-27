@@ -38,6 +38,19 @@ namespace pl4g::ir {
       return *the;
     }
 
+    // A 128-bit number in decimal, which std::to_string does not write.
+    std::string decimal128(__int128 n)
+    {
+      bool negative = n < 0;
+      unsigned __int128 rest = negative ? -static_cast<unsigned __int128>(n) : static_cast<unsigned __int128>(n);
+      std::string out;
+      do {
+        out.insert(out.begin(), char('0' + int(rest % 10)));
+        rest /= 10;
+      } while (rest != 0);
+      return negative ? "-" + out : out;
+    }
+
     __int128 gcd128(__int128 a, __int128 b)
     {
       if (a < 0)
@@ -209,10 +222,11 @@ namespace pl4g::ir {
 
   std::string Unit::mangled() const
   {
-    std::string out;
-    for (const auto& [n, e] : powers)
-      out += n + std::to_string(e);
-    return out;
+    // As it is written, and the scale after it where that is not one: two
+    // units with the same base units and different scales are two units.
+    if (scale == Rational{})
+      return render();
+    return render() + "\N{MULTIPLICATION SIGN}" + decimal128(scale.num) + "/" + decimal128(scale.den);
   }
 
 
@@ -249,7 +263,13 @@ namespace pl4g::ir {
     return unit->is_none() ? made : made + " \N{CURRENCY SIGN}" + unit->render();
   }
 
-  std::string IntType::mangled() const { return (is_signed ? "i" : "u") + std::to_string(bits); }
+  // The unit is in it: a generic function is one function per set of types
+  // and may ask what its types are, so `f(u64 ¤size)` and `f(u64)` are two.
+  std::string IntType::mangled() const
+  {
+    std::string made = (is_signed ? "i" : "u") + std::to_string(bits);
+    return unit->is_none() ? made : made + "\N{CURRENCY SIGN}" + unit->mangled();
+  }
 
   const IntType* IntType::bare() const { return int_type(bits, is_signed); }
 
@@ -260,7 +280,11 @@ namespace pl4g::ir {
     return unit->is_none() ? made : made + " \N{CURRENCY SIGN}" + unit->render();
   }
 
-  std::string FloatType::mangled() const { return "f" + std::to_string(bits); }
+  std::string FloatType::mangled() const
+  {
+    std::string made = "f" + std::to_string(bits);
+    return unit->is_none() ? made : made + "\N{CURRENCY SIGN}" + unit->mangled();
+  }
 
   const FloatType* FloatType::bare() const { return float_type(bits); }
 

@@ -1,0 +1,51 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⍕` is one definition for every type, and that includes a number with a unit
+※ and an `f64`.  A number with a unit is the number alone, which is what a
+※ program writes where one is wanted -- `⍕#s` is a count.  An `f64` is the
+※ shortest text that reads back as the same number, with a point or an
+※ exponent always, as Python's `repr` writes it, so that it reads back as a
+※ floating-point number and not a whole one; a negative one has the raised
+※ minus a whole number has.  Both used to fail inside `std.text`.
+
+let std := ⎕import("std")
+
+unit ¤meter → ¤idx
+
+@[opaque]
+fn far() → f64 ¤meter:
+    1.5
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let s: u8⟦⟧ = ⎕bytes("abc")
+    if ⍕#s ≠ "3":
+        return 1u6
+    if std.text(#s, .base ← 2u8) ≠ "11":
+        return 2u6
+    let back: i8 ¤meter = ⁻3
+    if ⍕back ≠ "⁻3":
+        return 3u6
+    if ⍕far() ≠ "1.5":
+        return 4u6
+    if ⍕2.5f64 ≠ "2.5":
+        return 5u6
+    if ⍕⁻0.1f64 ≠ "⁻0.1":
+        return 6u6
+    if ⍕100f64 ≠ "100.0":
+        return 7u6
+    if ⍕1e16f64 ≠ "1e+16":
+        return 8u6
+    if ⍕0.00001f64 ≠ "1e-05":
+        return 9u6
+    if ⍕0f64 ≠ "0.0":
+        return 10u6
+    ※ The seventeen digits a number needs where sixteen would read back as
+    ※ another, and no more.
+    if ⍕(0.1f64 + 0.2f64) ≠ "0.30000000000000004":
+        return 11u6
+    ※ In a record, as anywhere else.
+    let p: std.string.Parsed(f64) = std.string.Parsed(.value ← 0.5f64, .end ← 3)
+    if ⍕p ≠ "Parsed(f64)(.value ← 0.5, .end ← 3)":
+        return 12u6
+    0u6

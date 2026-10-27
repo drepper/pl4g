@@ -476,10 +476,12 @@ fn Io.println(to: &mut io.Writer, what: u8⟦⟧) → u64 ¤size ? i32:
 ※※ and a dictionary as each is written down -- `[1, 2]`, `⸨1, 2⸩`, `⸨a: 1⸩` --
 ※※ in the order they are walked; and a sum as it is made, the one part it holds
 ※※ named, `Shape(.line ← 7)`, and `Shape(.empty ← true)` for a part that
-※※ carries nothing.  Text inside something else is not quoted.  A
-※※ floating-point number, a tuple, an enumeration's value and a number with a
-※※ unit are not written yet: `std.string.format_f64` writes a floating-point
-※※ number, and `⎕drop` takes a unit off.
+※※ carries nothing.  Text inside something else is not quoted.  A number with a
+※※ unit is the number alone, as a literal is written where one is wanted.  An
+※※ `f64` is the shortest text that reads back as the same number, with a point
+※※ or an exponent always -- `2.5`, `100.0`, `1e+16`, `⁻1e-05` -- as Python's
+※※ `repr` writes it, the sign being the raised minus.  An `f32`, a tuple and an
+※※ enumeration's value are not written yet.
 ※※
 ※※ A program that wants other text for a type of its own writes `⍕` for its
 ※※ own file, which wins over this module's, and hands every other type back to
@@ -507,6 +509,19 @@ fn text(v: T', a: &mut arena, base: u8 ← 10u8, upper: bool ← false) → str 
         if v: "true" else: "false"
     comptime elif ⎕typeof(⌜v⌝) = ⌜char⌝:
         ⎕str(v, a)
+    comptime elif ⎕kindof(⌜T'⌝) = "float":
+        ※ The shortest digits that read back as the same number, `std.string`'s
+        ※ Schubfach, laid out as Python's `repr` lays them out: a point or an
+        ※ exponent always, so that what reads back is a floating-point number
+        ※ and not a whole one.  The sign is the raised minus, as for a whole
+        ※ number, and the unit is taken off where there is one: a literal
+        ※ carries none.  Written here and not in a function of its own, which
+        ※ every program would check and lower whether it wrote a number or not.
+        let n: string.Numeral = string.numeral_f64(⎕drop(v), string.Form.python)
+        let below: bool = n.text⟦n.from⟧ = 45u8
+        let from: u64 ¤idx = if below: n.from + 1 else: n.from
+        let out: str = ⎕text(n.text⟦from…n.to⟧) in a ?? ""
+        if below: "⁻" ⧺ out in a else: out
     comptime elif ⎕isrecord(⌜T'⌝):
         ※ The notation the language itself uses for a record, which is also what
         ※ reads back as the same value.
@@ -534,14 +549,28 @@ fn text(v: T', a: &mut arena, base: u8 ← 10u8, upper: bool ← false) → str 
                 out ← ⎕typename(⌜T'⌝) ⧺ "(." ⧺ p⟦0⟧ ⧺ " ← " ⧺ said ⧺ ")" in a
         out
     else:
-        ※ A number, one place at a time and least significant first, so nothing
-        ※ has to know how many places there are.
+        ※ A whole number, its unit taken off where it has one, as for a
+        ※ floating-point number above.
+        whole_text(⎕drop(v), a, base, upper)
+
+※※ The text of a whole number with no unit, in *base*.
+※※
+※※ \param v the number
+※※ \param a the arena the text is made in
+※※ \param base how many digits a place has
+※※ \param upper whether the digits past nine are capitals
+※※ \return the digits, the raised minus in front of a negative number
+fn whole_text(v: T', a: &mut arena, base: u8, upper: bool) → str in a, ⎕static:
+    comptime if ⎕kindof(⌜T'⌝) = "integer":
+        ※ One place at a time and least significant first, so nothing has to
+        ※ know how many places there are.
         ※
-        ※ Nothing here names a width: the type it is compiled for settles what the
-        ※ arithmetic is, so this one body is every integer type the language has.
-        ※ And nothing is ever negated -- the remainder of a negative number is
-        ※ negative and its digit is what that is away from nought, which is the one
-        ※ way to write the smallest value a type has, there being no positive of it.
+        ※ Nothing here names a width: the type it is compiled for settles what
+        ※ the arithmetic is, so this one body is every integer type the language
+        ※ has.  And nothing is ever negated -- the remainder of a negative number
+        ※ is negative and its digit is what that is away from nought, which is
+        ※ the one way to write the smallest value a type has, there being no
+        ※ positive of it.
         let zero: T' = ⎕narrow(0u8, ⌜T'⌝) ?? v
         let radix: T' = ⎕narrow(base, ⌜T'⌝) ?? v
         let below: bool = v < zero
@@ -559,9 +588,14 @@ fn text(v: T', a: &mut arena, base: u8 ← 10u8, upper: bool ← false) → str 
             rest ← rest ÷ radix ?? zero
             if rest = zero:
                 break §places
-        ※ The raised minus the language writes a negative literal with, so that what
-        ※ comes out reads back as what went in.
+        ※ The raised minus the language writes a negative literal with, so that
+        ※ what comes out reads back as what went in.
         if below: "⁻" ⧺ out in a else: out
+    else:
+        ※ Never reached: `text` hands over nothing but a whole number.  The arm
+        ※ is what keeps the body above from being checked where it is written,
+        ※ for a type nothing is known of.
+        ""
 
 ※※ The text of a list: its elements', between brackets and apart by commas, as a
 ※※ list is written down.

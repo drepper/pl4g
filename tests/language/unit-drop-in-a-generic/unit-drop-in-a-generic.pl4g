@@ -1,0 +1,33 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ In a generic body, `⎕drop` of a value whose type is the one a type parameter
+※ stands for takes off whatever unit that type carries -- none included, which
+※ is the value as it is.  Whether there is one is what the call said, and the
+※ body cannot know; refusing it there (4543) would leave a generic function no
+※ way to write a number with a unit and one without in one definition.  A unit
+※ says nothing about the bits, so the two instances do the same thing.
+
+let std := ⎕import("std")
+
+unit ¤meter → ¤idx
+
+※ In an arm asking what kind `T'` is, as anything done to a value of a type
+※ parameter without a requirement saying so is: the arm is checked for the
+※ types a call gives it, and not where it is written.
+fn doubled(v: T') → u64:
+    comptime if ⎕kindof(⌜T'⌝) = "integer":
+        ⎕widen(⎕drop(v), ⌜u64⌝) × 2u64
+    else:
+        0u64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let far: u32 ¤meter = 21
+    if doubled(far) ≠ 42u64:
+        return 1u6
+    if doubled(5u32) ≠ 10u64:
+        return 2u6
+    let s: u8⟦⟧ = ⎕bytes("abc")
+    if doubled(#s) ≠ 6u64:
+        return 3u6
+    0u6
