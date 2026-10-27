@@ -1832,6 +1832,43 @@ of its own that this language does not have; **Rust**'s `u64::widening_mul` and 
 way round, low half first; **Go**'s `bits.Mul64`, which answers `(hi, lo)` as this does; **Zig**'s `std.math.mulWide`, which
 answers a `u128`; **Java**'s `Math.multiplyHigh`, the upper half alone.
 
+#### The carry-less product
+
+**`⎕clmul(a, b)` is the product of two 64-bit words with no carries in it**, answered as `⎕wide_mul` answers: the upper half and
+the lower half, in that order, as a tuple of two `u64`.
+
+```
+let high, low := ⎕clmul(0b1011u64, 0b1011u64)              ※ 0 and 0b1000101: (x³ + x + 1)² is x⁶ + x² + 1
+let inside := ⎕clmul(quotes, 0xFFFFFFFFFFFFFFFFu64)⟦1⟧   ※ each bit the exclusive or of those at and below it
+```
+
+Each bit of the answer is the exclusive or of the products of the bits whose places add up to its own, which is the product of two
+polynomials whose coefficients are bits.  That is the arithmetic a cyclic redundancy check divides in and GHASH multiplies in, and
+by a word of all ones it is the **prefix exclusive or** -- the lower half's bit *k* is the exclusive or of the bits at and below
+*k* -- which is how a parser finds every byte inside a string sixty-four at a time.
+
+**Both operands are `u64`** (4020, and 4206 where they differ).  A carry-less product is of words of bits, not of numbers: a sign
+means nothing to it, so an `i64` is refused rather than read as one, and a narrower word is a wider one with zeroes above it,
+which a program says by widening it.  It is never a fault, and what it answers counts nothing.  Two words written down are
+multiplied while compiling.
+
+**It is one instruction where the program was built for one, and ordinary multiplications elsewhere.**  x86-64 has `pclmulqdq`,
+which is in none of the levels the architecture's table lists and in every processor of the third: this compiler's `v3` asks the
+processor for it at the entry point beside the rest, which refuses no processor the level describes, and `v3` and `v4` use it.
+RISC-V has `clmul` and `clmulh` in Zbc and again in Zbkc, which the application profiles do not require, so a program built for
+either has them.  AArch64's `pmull` is in the cryptographic extension, which nothing yet tells this compiler a program may use.
+Where there is no instruction the product is sixteen ordinary multiplications of every fourth bit of each half-word, three times
+over -- no carry reaching a bit that is read -- with no branch, so it takes the same time whatever the factors are, which is what
+the arithmetic of a cipher asks; and a factor of all ones written down is the prefix exclusive or's ladder of shifts.  The answers
+are the same everywhere.
+
+Compare: **C** and **C++** have it only as the instructions themselves -- `_mm_clmulepi64_si128` on x86-64, `vmull_p64` on Arm,
+`__builtin_riscv_clmul` and `clmulh` on RISC-V -- each behind its own header and its own target flag, and a program that wants
+all three writes all three and a fallback; **Rust**'s `core::arch` is the same intrinsics under `unsafe` and
+`#[target_feature]`; **Zig** has no such builtin and **Go** no such function, `crypto/aes` and `hash/crc32` carrying their own
+assembly instead.  **simdjson**'s `prefix_xor` is `clmul(x, ~0)` on the machines that have it and the ladder on the ones that do
+not, which is what this compiles to.
+
 #### Saturating arithmetic
 
 Three operators compute a sum, a difference and a product that **answer with the nearest value the type can hold** rather than
@@ -4700,6 +4737,28 @@ What followed the element moves down into its place and the list is one shorter.
 **What follows the `†` is where the list is** (4701) and not a list that was worked out: a list is where its elements are and
 how many there are, so one element fewer is different words, and they have to go back where the list was.  The place has to allow
 it, so the name needs `mut` (4004).
+
+**`†l⟦i…j⟧` takes a run out**, the elements from `i` up to and not including `j`, and what followed them moves down: the list is
+`j - i` shorter.  **`†l⟦n…#l⟧` cuts it short** to `n` elements, and nothing moves.
+
+```
+let l: mut [u8] = [1u8, 2u8, 3u8, 4u8, 5u8]
+†l⟦1…3⟧                              ※ [1, 4, 5]
+†l⟦1…#l⟧                             ※ [1], the room for five kept
+```
+
+**The ends are checked as a slice's are**: the end against how many there are, which it may equal, and the start against the end
+-- a run reaching past the end, or ending before it begins, stops the program, as an index past the end does.  **It has no step**
+(4022): every other element would leave the rest in pieces, each moved by a different distance, which is a filter and not a run.
+**The room is kept**, so the list grows into it again without asking for more, and what was taken out is not given back -- as the
+element `†l⟦i⟧` takes is not: another name for the list may hold it.  **It answers nothing, so it is a statement** (4021): the run
+is not kept anywhere an answer could be made of, and a list of it would be room made for something a program cutting a list short
+almost never reads.  A program that wants the elements reads them first, `l⟦i…j⟧`, and copies what it keeps.
+
+Compare: **Rust**'s `Vec::truncate`, which keeps the room as this does, and `drain(i..j)`, which answers an iterator over what it
+takes; **Python**'s `del l[i:j]`, a statement that answers nothing, which this is; **C++**'s `erase(first, last)`, which answers
+an iterator to what followed; **Go**'s `l = l[:n]`, which keeps the room and the elements past it, and `slices.Delete`; **Zig**'s
+`shrinkRetainingCapacity` and `replaceRange` with nothing put in.
 
 **A list is a value**, and **another name holding that list keeps what it had** whatever is done in place to the first -- an element
 taken out, one written, more joined on.  So a list read out of a place into another -- bound to a name, assigned, put in a field

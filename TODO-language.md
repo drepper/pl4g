@@ -1383,9 +1383,13 @@ Runtime
       handed in instead;
     - a list of the heap's is never given back, so everything a program makes over and over must be made in an arena;
     - `&l⟦i⟧` of a list's element is refused, and a list cannot be cut short in place;
+      the second done (2026-10-27): `†l⟦i…j⟧` takes a run out and `†l⟦n…#l⟧` cuts a list short, a statement keeping the room
+      (`tests/language/list-take-run`);
     - a view assigned to an array in a loop, `block ← view`, is refused as writing through a reference (4479);
     - a self-call in tail position with an arena parameter ran out of stack -- nothing makes it a jump;
     - there is no carry-less multiplication (`pclmulqdq`, `pmull`, `clmul`), which simdjson's prefix exclusive or is one of.
+      Done (2026-10-27): `⎕clmul(a, b)`, `pclmulqdq` at x86-64-v3 and up and `clmul`/`clmulh` with Zbc or Zbkc, and the
+      module's first stage uses it (`tests/language/carryless-multiply`, `tests/compiler/test_clmul.py`).
 
 Found writing the manual (2026-10-22); the manual says what the compiler does today and is silent on these:
 
@@ -1419,3 +1423,6 @@ Found writing the manual (2026-10-22); the manual says what the compiler does to
     `@[cdecl]` function there (a fallback a slot holds until something better is found) wants the image to hold the address of
     code -- a relocation of a function's address in the data on the three back ends, `dropunreached` keeping a function a kept
     variable's initializer names, and the interpreter handing out a closure for it.  9902 until then.
+[ ] AArch64 has no level a program can be built for, so `⎕clmul` never uses `pmull`/`pmull2` there (FEAT_PMULL, the
+    cryptographic extension, which no version of the architecture requires): it multiplies without them.  A level or a feature
+    for it wants the option, a check of `HWCAP_PMULL` at the entry point as x86-64's `CPUID` check, and the C++ port.

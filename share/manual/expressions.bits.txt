@@ -28,11 +28,13 @@ over the set bits goes: take it, then clear it with `m & (m - 1)`.
 
 **`⎕wide_mul(a, b)`** multiplies two `u64` or two `i64` (4243) and answers
 `〈upper, lower〉`, the lower half always a `u64`: `let high, low :=
-⎕wide_mul(x, y)`.  It never fails.  **`⎕clmul(a, b)`** is the product
-without carries -- of polynomials over bits, a CRC's and GHASH's -- of two
-`u64` (4020), answered the same way; `⎕clmul(x, ~0u64)`'s lower half is the
-prefix exclusive or of `x`.  One instruction at x86-64-v3 and with RISC-V's
-Zbc or Zbkc, ordinary multiplications elsewhere.
+⎕wide_mul(x, y)`.  It never fails.
+
+**`⎕clmul(a, b)`** is the product without carries -- of polynomials over
+bits, a CRC's and GHASH's -- of two `u64` (4020), answered the same way.  By
+a factor of all ones written down its lower half is the prefix exclusive or
+of the other.  One instruction at x86-64-v3 and with RISC-V's Zbc or Zbkc,
+ordinary multiplications elsewhere.
 
 **`⎕mask(b)`** makes the bits of a number out of an array of truth values
 ([[types.arrays.masks]]).

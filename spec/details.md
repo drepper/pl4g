@@ -3212,6 +3212,28 @@ operands': the verifier asks for two 64-bit operands of one type and an answer o
 lowers it to `Assembler.wide_product`, which saturating and trapping multiplication already used, into two registers that are the
 tuple's two members as any value of several parts is held -- the upper one first.
 
+`⎕clmul` is `clmul`, the same shape -- two 64-bit operands, the tuple of two halves -- with both operands `u64` and both halves
+`u64`, which the verifier asks of it beside what it asks of `wide.mul`.  The checker folds two numbers written down with
+`ir.inst.carryless_product` (C++: `ir::carryless_product` in `ir.hh`), which both interpreters answer with as well, so the three
+agree by being one function.  Each back end hands it to `target/carryless.py` (`target/carryless.cc`), written once as the
+counting of bits is, which asks the assembler `multiplies_carryless`:
+
+- **Where it does**, `Assembler.carryless_product`: x86-64's `select_carryless_product` moves both factors into vector registers
+  (`movq`), multiplies them with `pclmulqdq …, 0`, and moves the halves back -- the lower with `movq`, the upper with `pshufd …,
+  0xEE` and `movq`; RISC-V's is `clmulh` and then `clmul`, the order `select_wide_product` has.  x86-64 says it does at `v3` and
+  `v4` (`levels.CARRYLESS`), and the third level's `CPUID` check asks for leaf 1's `ECX` bit 1 beside what the architecture's table
+  lists, so a program of those levels has said at its entry point that the instruction is there.  RISC-V says it does where the
+  ISA has `zbc` or `zbkc`.  AArch64 never says it does.
+- **Where it does not and a factor is a number written down with every bit set** -- an `MCImm` reaching the back end, which a
+  name for one does not -- the ladder: the other factor shifted left by 1, 2, 4, …, 32 and exclusive-ored into itself is the lower
+  half, and the same shifted right, shifted right once more, the upper.  Twenty-six instructions.
+- **Otherwise**, Karatsuba over the 32-bit halves (`_karatsuba`), each of the three products of two half-words made of sixteen
+  ordinary multiplications (`_product`): both factors masked into four pieces of every fourth bit (`0x1111…` shifted by 0 to 3),
+  the products of piece `i` of one and piece `(k - i) mod 4` of the other exclusive-ored together for each `k`, and each of the four
+  masked back to its own bits and ored into the answer.  No place gathers more than eight products of bits from two 32-bit pieces,
+  so a carry reaches at most three places up and lands where the mask clears.  Forty-eight multiplications and about a hundred
+  more instructions, no branch and no memory.  The registers are every one a fresh virtual one, which the allocator packs.
+
 
 A function written where a value is wanted
 ------------------------------------------
@@ -4629,6 +4651,19 @@ is; what these take is the compiler's own pointer and never the program's.
 front -- which is safe for the overlap, the bytes moving *down* -- and one for
 every list of every element type, since what it is told is how long an element
 is.  The count is the caller's to write, the caller being what holds the list.
+
+**A run taken out** is `__pl4g_list_erase_run(at, stride, count, first, end)`
+beside it, the same loop moving `(count - end) × stride` bytes down by
+`(end - first) × stride`: a list cut short at its end moves nothing and the loop
+runs no turn.  `_lower_take_run` (C++: `lower_take_run`) is what `_lower_stmt`
+sends an `ast.TakeAt` whose index is an `ast.Range` to, from the one place a
+statement's expression is lowered as a statement; anywhere else
+`_lower_take_at` refuses it (4021) before looking at the list.  The start is
+`_index_into`, an index; the end is read as `_run_along` reads a slice's, a count
+of anything; and the checks are a slice's two, `end ≤ count` and then
+`first ≤ end`, with their own words.  The room is kept -- the third word is
+written back as it was -- and what was taken out is not given back, as
+`†l⟦i⟧`'s element is not.
 
 **A cursor in a condition** is asked whether the walk is over, which
 `_asked` turns into `index ≥ count` wherever a condition is lowered.  That

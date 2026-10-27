@@ -12165,6 +12165,80 @@ first read, checked on every read); **Go**'s package variables, initialized in d
 refused -- the order chosen here; **Zig**'s `comptime`, with nothing to run at start; **Odin**'s `@(init)` procedures; **C**, with
 a section attribute, a constructor and an `mprotect`, nothing checking the rest.
 
+## 2026-10-27T10:00+01:00 — language and compiler
+
+### `⎕clmul(a, b)` and `†l⟦i…j⟧`: two things the `json` module wrote around
+
+Two items of the `json` module's list in the to-do file, "there is no carry-less multiplication" and "a list cannot be cut short
+in place".  For each the user was offered the options and chose the recommended one.
+
+**`⎕clmul(a, b) → 〈u64, u64〉`**: the product of two `u64` with no carries, answered as the upper half and the lower half -- the
+shape and the naming of `⎕wide_mul`, which is the same question of two words taking two.  It is the IR's `clmul`, a binary
+instruction answering a tuple as `wide.mul` does, followed all the way through: the checker, folding two numbers written down,
+both interpreters, the three back ends and the C++ port.  The uses it is for are a cyclic redundancy check, GHASH, and simdjson's
+prefix exclusive or, the lower half of `clmul(x, ~0)`; the `json` module's first stage now uses it there.
+
+**`†l⟦i…j⟧`** takes the run of elements from `i` up to and not including `j` out of a list, what follows moving down;
+`†l⟦n…#l⟧` cuts the list short to `n`.  The user's option said "it answers nothing, or the view of what was taken is not kept":
+it answers nothing.  The room is kept, as `Vec::truncate` keeps it.
+
+What the decision left open, and how it was settled:
+
+- **Which operands `⎕clmul` takes: `u64` only** (4020).  A carry-less product is of words of bits; a sign means nothing to it,
+  so an `i64` is refused rather than read as bits, and a narrower word is a wider one with zeroes above it, which a program says
+  by widening it -- `⎕wide_mul` refuses the narrower ones for the same reason.  64 bits is the one width all three instructions
+  have.  The two operands are of one type (4206), and a unit is allowed as anywhere and counts nothing in the answer.
+- **When x86-64 has `pclmulqdq`: at `v3` and `v4`, asked of the processor.**  The architecture's table puts the instruction in no
+  level, and every processor of the third level has it -- Intel's from Westmere, two generations before the first with AVX2,
+  AMD's from Bulldozer -- while one of the second does not: Nehalem, the processor `v2` describes.  So this compiler's `v3` asks
+  `CPUID` for leaf 1's `ECX` bit 1 beside the rest of its check, which refuses no processor the level describes and changes one
+  immediate of the check every `v3` and `v4` program makes; `v1` and `v2` multiply without it.  A flag of its own (`--mclevel=v2+pclmul`
+  or the like) was the other way, and is a second spelling of levels for one instruction; GCC's `-march=haswell` and every newer
+  `-march` enable `-mpclmul` for the same reason.  The instruction used is the legacy-encoded `pclmulqdq` with the halves moved
+  in and out by `movq` and `pshufd`, which is how the rest of this back end's scalar SSE is written.
+- **When RISC-V has `clmul` and `clmulh`: with Zbc or Zbkc** in the ISA string.  The application profile the compiler builds for
+  by default requires neither, so `rva23` multiplies without them, and `rv64gc_zbc` or `rv64gc_zbkc` gets them.
+- **AArch64 never assumes `pmull`.**  It is FEAT_PMULL, in the cryptographic extension, which no version of the architecture
+  requires and some processors lack (the Raspberry Pi 4's Cortex-A72); this compiler has no level for AArch64 to say a program may
+  use it, and adding one -- the option, the entry point's check of `HWCAP`, the C++ port -- is a change of its own.  The to-do
+  list has it.
+- **Without the instruction: ordinary multiplications, no loop.**  Karatsuba over the two 32-bit halves, each product of two
+  half-words sixteen multiplications of every fourth bit with the carries landing in the places between, which a mask clears --
+  BearSSL's method.  About a hundred and fifty instructions and no branch, against a loop of sixty-four turns three times as long
+  whose time would depend on the factors, which is what the arithmetic of a cipher must not do; and against a table of sixteen
+  multiples of a factor, which needs memory and reads it at addresses that depend on the factors, the same fault by another way.
+- **A factor of all ones written down is the ladder**, six shifts and exclusive ors for each half, on a machine without the
+  instruction: that is the prefix exclusive or, the one use whose speed decides whether the `json` module may use `⎕clmul` at
+  all.  Only a number written down -- a name for one is a load the back end cannot see through, and nothing folds `~0u64` yet --
+  so the module writes `0xFFFFFFFFFFFFFFFFu64`.
+- **Whether the `json` module uses it** was to be decided by measuring at the default level: on x86-64-v4 the prefix exclusive or
+  alone, in a dependent chain of two hundred million, is 0.31 s with `pclmulqdq` against 0.51 s with the ladder; decoding a
+  document forty times, 2.03 s against 2.03 s (best of seven, the stage being a small part of decoding), and the `json` language
+  tests the same within the noise.  Not slower, so it does.  At `v2`, on AArch64 and at `rva23` the module gets the ladder it had,
+  with the upper half computed beside it and not read -- thirteen instructions more, nothing at the machine level removing them.
+- **`†l⟦i…j⟧` is a statement only** (4021).  Answering a list of what was taken would need room made somewhere -- the arena in
+  force, or the list's own -- and given back by somebody, for an answer a program cutting a list short almost never reads; a view
+  of it would be a view of elements that have moved.  Written where a value is wanted -- bound to a name, an operand, a function's
+  answer -- it is refused before the list is looked at.  The other two answers `†` gives are values because what they answer is
+  one element or a cursor, which cost nothing to answer.
+- **No step** (4022): `†l⟦0…n…2⟧` would leave the rest in pieces moved by different distances, which is a filter.
+- **The ends are a slice's**: the start an index (so `¤idx`, as `†l⟦i⟧`'s is), the end a count of anything, which `#l` is; `end ≤
+  count` and then `start ≤ end` checked, stopping with the status an index out of range stops with, in words of their own ("a run
+  reaching past the end of its list", "a run that ends before it begins").
+- **What is taken out is not given back**, as the element `†l⟦i⟧` takes is not: another name for the list may hold what an
+  element points to.  A list of strings cut short keeps its strings' room until the arena goes, as the one `†l⟦i⟧` takes from does.
+- **One generated function, `__pl4g_list_erase_run`**, beside `__pl4g_list_erase` and the same byte-at-a-time loop, rather than
+  `__pl4g_list_erase` given a fifth argument: every program that takes one element out would otherwise change, and a run at the end
+  -- cutting short -- moves nothing either way.
+
+Compare, for the product: **C** and **C++**, `_mm_clmulepi64_si128` (`<wmmintrin.h>`, `-mpclmul`), `vmull_p64` (`<arm_neon.h>`,
+`+crypto`), `__builtin_riscv_clmul` and `__builtin_riscv_clmulh` (`zbc`), each an intrinsic of one architecture behind a flag;
+**Rust**'s `core::arch::x86_64::_mm_clmulepi64_si128` and `core::arch::aarch64::vmull_p64`, the same under `unsafe` and
+`#[target_feature]`; **Zig**, nothing built in (`std.crypto` carries its own); **Go**, nothing in the language or `math/bits`, the
+standard library's GHASH and CRC in assembly per architecture.  For the run: **Rust**'s `Vec::truncate` and `drain(i..j)`;
+**Python**'s `del l[i:j]`; **C++**'s `erase(first, last)`; **Go**'s `l = l[:n]` and `slices.Delete`; **Zig**'s
+`shrinkRetainingCapacity` and `replaceRange`.
+
 Open questions
 --------------
 
