@@ -2253,6 +2253,99 @@ def _is_temporary(written: ast.Expr) -> bool:
                                     ast.If, ast.Match, ast.Scoped, ast.Named))
 
 
+#: What the flag beside a variable whose room is given back is called: a name no
+#: program can write, the mark being no character a name may hold.
+_ROOM_SUFFIX: Final[str] = "#room"
+
+#: The operators whose answer is a truth value about their operands and holds
+#: nothing of them.
+_ROOM_ASKS: Final = frozenset({
+    ast.BinaryOp.EQUAL, ast.BinaryOp.NOT_EQUAL, ast.BinaryOp.LESS,
+    ast.BinaryOp.GREATER, ast.BinaryOp.LESS_EQUAL, ast.BinaryOp.GREATER_EQUAL,
+    ast.BinaryOp.ALIKE, ast.BinaryOp.UNALIKE, ast.BinaryOp.BELOW_OR_ALIKE,
+    ast.BinaryOp.ABOVE_OR_ALIKE, ast.BinaryOp.BELOW_NOT_ALIKE,
+    ast.BinaryOp.ABOVE_NOT_ALIKE})
+
+
+def _room_elements(held: Type | None) -> Type | None:
+    """What a list or an array of *held* holds, or nothing for anything else."""
+    if isinstance(held, (ListType, ArrayType)):
+        return held.element
+    return None
+
+
+def _room_member(held: Type | None, name: str) -> Type | None:
+    """The type of the field *name* of a record of *held*, or nothing."""
+    if isinstance(held, ProductType):
+        for one, part in held.fields:
+            if one == name:
+                return part
+    return None
+
+
+def _rooted_at(expr: ast.Expr, name: str) -> bool:
+    """Whether *expr* is the name *name* or a field or an element of it."""
+    while isinstance(expr, (ast.Member, ast.Element)):
+        expr = expr.base
+    return isinstance(expr, ast.NameRef) and expr.name == name
+
+
+def _keeps_a_loan(ty: Type, answered: bool, seen: frozenset[int] = frozenset()
+                  ) -> bool:
+    """Whether a value of *ty* may hold something of what a call was handed, as it
+    is: a table or a set, whose keys and values go in as they are; a view; a
+    lambda; a walk or a cursor; and -- answered, *answered* says -- a reference.
+
+    A reference handed in is a place the callee may write, and what it writes
+    there is copied as what is written into a place from outside the call is, so
+    a parameter's reference keeps a loan only where what it names can."""
+    if id(ty) in seen:
+        return False
+    deeper = seen | {id(ty)}
+    match ty:
+        case PtrType():
+            return answered or _keeps_a_loan(ty.pointee, answered, deeper)
+        case SetType() | DictType() | CursorType() | IterType() | RunningType() \
+                | OpaqueType() | CoroutineFrame():
+            return True
+        case FuncType():
+            return not ty.system
+        case ArrayType():
+            return not ty.fixed or _keeps_a_loan(ty.element, answered, deeper)
+        case ListType():
+            return _keeps_a_loan(ty.element, answered, deeper)
+        case TupleType():
+            return any(_keeps_a_loan(one, answered, deeper) for one in ty.members)
+        case ResultType():
+            return _keeps_a_loan(ty.ok, answered, deeper) or (
+                ty.err is not None and _keeps_a_loan(ty.err, answered, deeper))
+        case ProductType():
+            return any(_keeps_a_loan(one, answered, deeper) for _, one in ty.fields)
+        case SumType():
+            return any(_keeps_a_loan(one, answered, deeper)
+                       for _, one in ty.variants)
+    return False
+
+
+def _bare_text(ty: Type | None) -> bool:
+    """Whether a value of *ty* is or holds text or a view other than inside a
+    list -- what goes into a table as it is, where a list is copied in."""
+    match ty:
+        case None | StrType():
+            return True
+        case ArrayType():
+            return not ty.fixed or _bare_text(ty.element)
+        case TupleType():
+            return any(_bare_text(one) for one in ty.members)
+        case ResultType():
+            return _bare_text(ty.ok) or (ty.err is not None and _bare_text(ty.err))
+        case ProductType():
+            return any(_bare_text(one) for _, one in ty.fields)
+        case SumType():
+            return any(_bare_text(one) for _, one in ty.variants)
+    return False
+
+
 #: Where `→ T in ⎕heap` puts the heap among the places an answer may be made in,
 #: which are otherwise parameters.
 HEAP_AT: Final[int] = -1
@@ -3994,6 +4087,34 @@ class _Deferred:
     depth: int
     #: The block it runs at the end of.
     block: Span = INVALID_SPAN
+    #: Where it is no statement at all but the room of a variable given back
+    #: (`_Room`), which the compiler puts off and nothing in the program wrote.
+    room: "_Room | None" = None
+
+
+@dataclass(slots=True)
+class _Room:
+    """A variable of the body's own whose room is its own, given back where its
+    scope ends -- unless it has handed the room on by then.
+
+    Whether it still holds the room is a value along each way through the body,
+    the truth value `owns` stands for: a local the compiler made beside the
+    variable, which every `if`, `match` and loop carries as it carries the
+    variable itself, so that a list answered down one arm and kept down the other
+    is given back down the second alone.  It is a constant almost everywhere, and
+    then what is given back is known while compiling and nothing is asked.
+    """
+
+    local: _Local
+    owns: _Local
+    #: The statements of its scope that may hand the room on, by identity, and for
+    #: each the names of the variable in it that do -- every one with the nodes
+    #: from it up to the statement, which is where a copy noted for one of them is
+    #: looked for.  A name handed to a parameter the callee takes as its own is
+    #: there too, marked: the call says whether it moved.
+    hands: dict[int, list[tuple[tuple[tuple[ast.Node, Type | None], ...], bool]]]
+    #: What `owned.give_back` is told of the allocator.
+    known: str | None = None
 
 
 #: What a value made in `⎕heap` is made in.  Not the identity of any name: `⎕heap`
@@ -4583,6 +4704,17 @@ class Checker:
         #: last.  One list per block and not per scope, a block being what `defer`
         #: is about.
         self._deferred: list[list[_Deferred]] = []
+        #: The variables in scope whose room is given back where the scope ends,
+        #: by the identity of the variable, and the flags beside them -- the
+        #: compiler's own locals, which nothing reports as unread.
+        self._rooms: dict[int, _Room] = {}
+        self._room_flags: set[int] = set()
+        #: The statements of the block being lowered and how far along it the
+        #: statement being lowered is, which is the scope a definition there has.
+        self._rest_of_block: tuple[Sequence[ast.Stmt], int] | None = None
+        #: A body and the parameters it takes as its own, whose room is given back
+        #: where that body ends: its block is where the give-back is put off.
+        self._rooms_pending: tuple[ast.Block, list[_Local]] | None = None
         #: Which deferred statements have been lowered with their diagnostics
         #: told.  One is lowered at every way out of its block, and a mistake in it
         #: is one mistake however many ways out there are.
@@ -7056,6 +7188,7 @@ class Checker:
                                 if one[3] < depth]
         self._unit_scopes.pop()
         for local in self._scopes.pop().values():
+            self._rooms.pop(id(local), None)
             self._report_unused(local)
             self._report_needless_mut(local)
             self._settle_local(local)
@@ -7068,7 +7201,7 @@ class Checker:
         definition -- covers a diagnostic only discovered later.
         """
         if local.read or local.is_parameter or local.value.ty is ERROR \
-                or local.name == WILDCARD_NAME:
+                or local.name == WILDCARD_NAME or id(local) in self._room_flags:
             # `_` is what an arm writes where it binds nothing -- `Pair(u8)(_)`,
             # whose parentheses would otherwise be read as the binding -- and
             # nothing is there to read.
@@ -7731,13 +7864,14 @@ class Checker:
         "_thin_to", "_answer_arms", "_yield_answer", "_hands_out",
         "_hands_out_local", "_receiving", "_unscanned", "_borrows", "_places",
         "_iterator_loans", "_pick_in", "_pick_walked", "_demanding",
-        "_writing_in", "_block_spans", "_filling")
+        "_writing_in", "_block_spans", "_filling", "_rooms")
 
     def _lower_set_aside(self, entry: _Collected) -> None:
         """Lower a body in the middle of another, with that one set aside."""
         saved = {name: getattr(self, name) for name in self._BODY_STATE}
         self._scopes, self._addressed = [], set()
         self._deferred, self._emptied = [], []
+        self._rooms = {}
         self._block_spans = []
         self._carried, self._loops, self._outside = set(), [], []
         self._borrows, self._places, self._iterator_loans = [], {}, []
@@ -8324,7 +8458,8 @@ class Checker:
         self._made_from[id(expr)] = (expr, self._last_made_in)
         # An answer whose allocator the callee fixed is in it, never text in the
         # image: where that is the heap, it is fresh, and what holds it owns it.
-        if (func.answer_from is not None or func.made_in == (HEAP_AT,)) \
+        if ((func.answer_from is not None and func.answer_from[0] == "heap")
+                or func.made_in == (HEAP_AT,)) \
                 and self._last_made_in == {_HEAP}:
             self._fresh_heap.add(id(expr))
         self._callee_of[id(expr)] = func
@@ -10595,6 +10730,14 @@ class Checker:
                 if local is None:
                     if node.name == HEAP_NAME:
                         into.add(_HEAP)
+                        return
+                    held = self._top.get(node.name)
+                    if isinstance(held, GlobalVar) and (held.mutable or held.relro) \
+                            and owned.points(held.value_type):
+                        # A variable at the top level written while running holds
+                        # what the heap made for it, and goes on holding it: what is
+                        # read out of it is the heap's and nobody's alone.
+                        into.add(_HEAP)
                     return
                 if self._is_arena(local):
                     into.add(id(local))
@@ -11238,7 +11381,8 @@ class Checker:
             if not made:
                 self._answer_kinds.append("static")
                 return value
-            if _IMAGE in made and made - {_IMAGE} <= allowed:
+            if _IMAGE in made and made - {_IMAGE} <= allowed \
+                    and not (_HEAP in made and self._shared_heap(written)):
                 self._answer_kinds.append("maybe")
                 return value
         if not allowed and func.made_in == (HANDS_AT,):
@@ -11524,6 +11668,13 @@ class Checker:
         told about once: it is lowered at every way out, and a mistake in it is
         still one mistake.
         """
+        if entry.room is not None:
+            # What the compiler put off for itself: the room of a variable given
+            # back, which is nothing the program wrote and nothing to report on.
+            self._give_back_room(builder, entry.room,
+                                 self._room_now(builder, entry.room, entry.node.span),
+                                 entry.node.span)
+            return
         told = id(entry.node) in self._defer_told
         self._defer_told.add(id(entry.node))
         kept = (self._scopes, self._unit_scopes, self._diags, self._in_deferred,
@@ -11553,7 +11704,7 @@ class Checker:
         here, where nothing will run it.
         """
         pending = [entry for entry in self._deferred[frame]
-                   if id(entry.node) not in self._defer_told]
+                   if id(entry.node) not in self._defer_told and entry.room is None]
         if not pending:
             return
         nowhere = func.add_block("deferred.unreached")
@@ -11850,6 +12001,7 @@ class Checker:
             assert isinstance(last, ast.ExprStmt)
             body = replace(body, stmts=(*body.stmts[:-1], ast.ReturnStmt(
                 span=last.span, value=last.value, explicit=False)))
+        self._rooms_pending = (body, self._owned_params(node, func))
         self._lower_block(builder, body, func, as_result=generating is None)
         # Before the scope goes: a parameter a reference was taken of lives in
         # the frame, and the name is what still knows where.
@@ -11910,8 +12062,18 @@ class Checker:
         wanted of, in which case its last statement has to have one.
         """
         self._deferred.append([])
+        pending, self._rooms_pending = self._rooms_pending, None
+        if pending is not None:
+            if pending[0] is block:
+                # The parameters a body takes as its own give their room back
+                # where it ends, on every way out of it.
+                for local in pending[1]:
+                    self._room_kept_by(local, True, block.stmts)
+            else:
+                self._rooms_pending = pending
         outer_live = self._current_live
         outer_reach, outer_stmt = self._current_reach, self._current_stmt
+        outer_rest = self._rest_of_block
         # To the end of its last statement: a block's own span runs on to the
         # next statement.
         self._block_spans.append(Span(block.span.start,
@@ -11935,6 +12097,7 @@ class Checker:
                     self._current_live = live
                     self._current_reach = self._live_reach.get(id(stmt))
                 self._current_stmt = stmt
+                self._rest_of_block = (block.stmts, index + 1)
                 if is_last and produces:
                     answer = self._lower_yielding(builder, stmt, func, wanted)
                 else:
@@ -11970,6 +12133,7 @@ class Checker:
             self._block_spans.pop()
             self._current_live = outer_live
             self._current_reach, self._current_stmt = outer_reach, outer_stmt
+            self._rest_of_block = outer_rest
             self._last_emptied = self._emptied.pop()
 
     def _lower_yielding(self, builder: IRBuilder, stmt: ast.Stmt, func: Function,
@@ -11988,6 +12152,8 @@ class Checker:
         # hands the answering down to that one's arms.
         answering, self._yield_answer = self._yield_answer, None
         outer_arms = self._answer_arms
+        flags = self._room_flags_now()
+        self._let_go(stmt)
         if answering is not None and isinstance(stmt, ast.ExprStmt) \
                 and isinstance(stmt.value, (ast.If, ast.Match)):
             self._answer_arms = answering
@@ -12013,6 +12179,7 @@ class Checker:
                     self._diags.emit(D.LANG_MATCH_ARM_HAS_NO_VALUE, stmt.span)
                     return None
         finally:
+            self._room_flags_back(builder, flags)
             self._answer_arms = outer_arms
             self._end_expecting(expectation)
             if self._settle_expecting(expectation, pairs):
@@ -12031,8 +12198,10 @@ class Checker:
             self._bind_attributes(stmt.attrs, AttrTarget.STATEMENT))
         expectation = self._begin_expecting(pairs)
         carried = False
+        flags = self._room_flags_now()
         try:
             self._lower_stmt(builder, stmt, func, is_last)
+            self._room_flags_back(builder, flags)
             if isinstance(stmt, ast.VarDef) and expectation is not None:
                 local = self._find_local(stmt.name)
                 if local is not None:
@@ -12047,6 +12216,10 @@ class Checker:
     def _lower_stmt(self, builder: IRBuilder, stmt: ast.Stmt, func: Function,
                     is_last: bool) -> None:
         """Lower one statement."""
+        if self._rooms and not isinstance(stmt, (ast.VarDef, ast.AssignStmt,
+                                                 ast.EntryAssign, ast.ElementAssign,
+                                                 ast.MemberAssign)):
+            self._let_go(stmt)
         match stmt:
             case ast.MemberAssign():
                 self._stored_into[id(stmt.value)] = "a field"
@@ -12066,15 +12239,23 @@ class Checker:
                     self._diags.emit(D.LANG_FUNCDEF_RETURN_REDUNDANT, stmt.span)
                 self._lower_return(builder, stmt, func)
             case ast.VarDef() if stmt.made_in is not None:
+                self._let_go(stmt)
                 self._lower_receiving(builder, stmt)
                 self._report_inferred(((stmt.name, stmt.name_span), *stmt.more),
                                       stmt.type)
             case ast.VarDef():
                 owns = self._copied_where_shared(stmt.value, stmt.mutable)
+                self._let_go(stmt)
                 self._lower_local(builder, stmt)
                 self._owning_room(stmt.name, owns and not stmt.more)
                 self._variable_slot(stmt)
                 self._made_in(stmt.name, stmt.value, stmt.span)
+                local = self._find_local(stmt.name)
+                if local is not None and not stmt.more \
+                        and self._rest_of_block is not None:
+                    within, at = self._rest_of_block
+                    self._room_kept_by(local, self._owns_what_it_is_given(
+                        stmt.value, owns), within[at:], stmt.value)
                 self._report_inferred(((stmt.name, stmt.name_span), *stmt.more),
                                       stmt.type)
             case ast.AssignStmt():
@@ -12083,8 +12264,14 @@ class Checker:
                 wants_value = is_last and func.ty.ret is not VOID
                 owns = not stmt.more \
                     and self._copied_where_shared(stmt.value, True)
+                self._let_go(stmt)
                 result = self._lower_assignment(builder, stmt, wants_value)
                 self._owning_room(stmt.name, owns)
+                if not stmt.more:
+                    # What it holds now is its own to give back -- unless it is
+                    # what the function answers, which is the caller's.
+                    self._room_given(stmt.name, not wants_value and
+                                     self._owns_what_it_is_given(stmt.value, owns))
                 if not stmt.more:
                     self._made_in(stmt.name, stmt.value, stmt.span,
                                   assigning=True)
@@ -12100,6 +12287,7 @@ class Checker:
                     self._returning(builder, result, stmt.span)
             case ast.EntryAssign():
                 self._copied_where_shared(stmt.value, True)
+                self._let_go(stmt)
                 self._lower_entry_assign(builder, stmt)
                 self._made_in_part(stmt.base, stmt.value, stmt.span)
             case ast.UnitDef():
@@ -12109,15 +12297,18 @@ class Checker:
                 self._define_unit(stmt)
             case ast.ElementAssign() | ast.MemberAssign() \
                     if _marked(stmt.base) is not None:
+                self._let_go(stmt)
                 self._assign_each(builder, stmt, func)
             case ast.ElementAssign():
                 self._copied_where_shared(stmt.value, True)
+                self._let_go(stmt)
                 self._lower_element_assign(builder, stmt)
                 self._made_in_part(stmt.base, stmt.value, stmt.span, element=True)
             case ast.JoinAssign():
                 self._lower_join_assign(builder, stmt)
             case ast.MemberAssign():
                 self._copied_where_shared(stmt.value, True)
+                self._let_go(stmt)
                 self._lower_member_assign(builder, stmt)
                 self._made_in_part(stmt.base, stmt.value, stmt.span)
             case ast.Yield():
@@ -13992,7 +14183,8 @@ class Checker:
                     func.name if func is not None else "", span) else None
             made = self._arenas_in(written)
             stays = sorted(one for one in made if one not in (_HEAP, _IMAGE))
-            if not stays:
+            if not stays and not (_HEAP in made and self._shared_heap(written)
+                                  and owned.can_own(ty)):
                 return value
             if not owned.can_own(ty):
                 self._diags.emit(D.LANG_WRITTEN_BEYOND_THE_CALL, span,
@@ -14026,6 +14218,21 @@ class Checker:
                 return None
         named.arenas = named.arenas | made
         return value
+
+    def _shared_heap(self, written: ast.Expr) -> bool:
+        """Whether *written*, something of the heap's, may be held by something
+        else as well: anything but a temporary, or a variable whose room is its
+        own and that is done with -- which hands that room over.  What goes into
+        a place from outside the call goes to whoever holds that place, who may
+        give it back; so what someone else holds too is copied first."""
+        if _is_temporary(written):
+            return False
+        if isinstance(written, ast.NameRef):
+            local = self._find_local(written.name)
+            if local is not None and id(local) in self._rooms \
+                    and not self._used_after(local):
+                return False
+        return True
 
     def _long_enough_for(self, where: Value, value: Value,
                          stmt: ast.MemberAssign) -> bool:
@@ -14625,8 +14832,9 @@ class Checker:
                  self._out_of_arena, self._out_of_arenas, self._made_from,
                  self._answer_kinds, self._thin_to, self._answer_arms,
                  self._yield_answer, self._hands_out, self._hands_out_local,
-                 self._receiving, self._unscanned, self._filling)
+                 self._receiving, self._unscanned, self._filling, self._rooms)
         self._scopes, self._addressed = [], set()
+        self._rooms = {}
         self._answer_arms = self._yield_answer = None
         self._hands_out = self._hands_out_local = self._receiving = None
         # What was worked out about where an expression was made belongs to the
@@ -14678,6 +14886,7 @@ class Checker:
                                    len(self._scopes))
             self._params_made_in(node, func)
             self._lower_conditions(inner, node, func, while_running=True)
+            self._rooms_pending = (node.body, self._owned_params(node, func))
             self._lower_block(inner, node.body, func)
             if not inner.is_terminated:
                 self._all_closed(self._scopes, node.span)
@@ -14701,7 +14910,7 @@ class Checker:
              self._out_of_arena, self._out_of_arenas, self._made_from,
              self._answer_kinds, self._thin_to, self._answer_arms,
              self._yield_answer, self._hands_out, self._hands_out_local,
-             self._receiving, self._unscanned, self._filling) = outer
+             self._receiving, self._unscanned, self._filling, self._rooms) = outer
             self._demanding, self._at_entry = outer_demanding, outer_entry
             self._marking = outer_marking
             self._unsettled_tables = outer_unsettled
@@ -15851,8 +16060,10 @@ class Checker:
                  self._emptied, self._out_of_arena, self._out_of_arenas,
                  self._answer_made_in, self._made_from, self._answer_kinds,
                  self._thin_to, self._answer_arms, self._yield_answer,
-                 self._hands_out, self._hands_out_local, self._receiving)
+                 self._hands_out, self._hands_out_local, self._receiving,
+                 self._rooms)
         self._deferred, self._emptied, self._made_from = [], [], {}
+        self._rooms = {}
         self._answer_kinds, self._thin_to = [], None
         self._answer_arms = self._yield_answer = None
         self._hands_out = self._hands_out_local = self._receiving = None
@@ -15971,7 +16182,8 @@ class Checker:
              self._emptied, self._out_of_arena, self._out_of_arenas,
              self._answer_made_in, self._made_from, self._answer_kinds,
              self._thin_to, self._answer_arms, self._yield_answer,
-             self._hands_out, self._hands_out_local, self._receiving) = outer
+             self._hands_out, self._hands_out_local, self._receiving,
+             self._rooms) = outer
             self._borrows = outer_borrows
             observed, self._observing = self._observing, outer_observing
             self._unsettled_tables = outer_unsettled
@@ -17946,6 +18158,497 @@ class Checker:
             return True
         return False
 
+    # -- room given back where its scope ends ---------------------------------
+
+    def _room_kept_by(self, local: _Local, mine: bool, stmts: Sequence[ast.Stmt],
+                      given: ast.Expr | None = None) -> _Room | None:
+        """Give *local*, just bound, its room back where its scope ends, where
+        *mine* says the room is its own -- made where it was bound, copied for it,
+        or handed over to it -- and the room may be the heap's.
+
+        *stmts* are the statements of its scope after it, which say where it may
+        hand the room on (`_room_hands`); what they cannot follow -- a lambda that
+        brings it in, a macro -- leaves it with nothing given back, which is what
+        every variable had before.  The give-back is put off like a `defer`
+        written right after the definition.
+
+        Text the heap made for certain -- *given*, what it was bound to, being
+        a join or what a function answering in the heap answers -- and given
+        nothing else is given back to the heap straight away; anything else asks
+        the value, which may be text in the image.
+        """
+        func = self._demanding[1]
+        if func is None or self._generating is not None \
+                or self._abstract is not None or not self._deferred \
+                or self._in_deferred is not None:
+            return None
+        # A variable given something else later may hold room of its own then,
+        # whatever it starts with: `let t: mut str = ""` and `t ← t ⧺ s`.
+        later = local.mutable and any(
+            isinstance(one, ast.AssignStmt)
+            and local.name in (one.name, *(n for n, _ in one.more))
+            and not self._pool_made(one.value)
+            for one in _below(tuple(stmts)))
+        if not mine and not later:
+            return None
+        if local.handed_out or local.closer or local.iterable is not None \
+                or local.is_parameter and not local.named_parameter:
+            return None
+        ty = self._held_by(local)
+        # A view, a table, a lambda held anywhere in it is room somebody else's,
+        # or nothing this gives back: such a value is left as it was.
+        if ty is ERROR or isinstance(ty, ArrayType) or not owned.points(ty) \
+                or not owned.can_own(ty) or _keeps_a_loan(ty, False) \
+                or _HEAP not in local.arenas \
+                and not local.named_parameter and not (later and not local.arenas):
+            # Made in an arena, or in the image: nothing to give back one at a
+            # time.  A parameter the body takes as its own was handed what the
+            # caller had, and what it was made in is asked of it.
+            return None
+        hands = self._room_hands(local.name, ty, stmts)
+        if hands is None:
+            return None
+        flag = _Local(name="".join((local.name, _ROOM_SUFFIX)),
+                      value=self._module.bool_const(BOOL, mine), span=local.span,
+                      read=True, depth=local.depth)
+        for scope in reversed(self._scopes):
+            if scope.get(local.name) is local:
+                scope[flag.name] = flag
+                break
+        else:
+            return None
+        self._room_flags.add(id(flag))
+        known: str | None = None
+        if isinstance(ty, ListType) and not owned.points(ty.element):
+            # A list's room is given back by the size its header says, asked of
+            # the allocator the list carries: right for the heap, nothing for a
+            # pool or the image, so it is never wrong to say so.
+            known = "heap"
+        elif isinstance(ty, StrType) and given is not None \
+                and self._freshly_heap(given) and not later:
+            known = "heap"
+        room = _Room(local=local, owns=flag, hands=hands, known=known)
+        self._rooms[id(local)] = room
+        self._deferred[-1].append(_Deferred(
+            node=ast.Defer(span=local.span, stmt=ast.EmptyStmt(span=local.span)),
+            depth=len(self._scopes), block=self._block_spans[-1]
+            if self._block_spans else INVALID_SPAN, room=room))
+        return room
+
+    def _owned_params(self, node: ast.FuncDef, func: Function) -> list[_Local]:
+        """The parameters *node*'s body holds room of its own in: those it takes
+        as its own, which its caller copied or handed over, and the `mut` ones it
+        changes in place, which it copied on the way in."""
+        found: list[_Local] = []
+        if node.body is None:
+            return found
+        for at, param in enumerate(node.params):
+            local = self._find_local(param.name)
+            if local is None or not local.named_parameter:
+                continue
+            if at in func.takes_owned or (
+                    param.mutable and _holds_a_list(self._held_by(local))
+                    and _changed_in_place(param.name, node.body)):
+                found.append(local)
+        return found
+
+    def _room_hands(self, name: str, ty: Type, stmts: Sequence[ast.Stmt]
+                    ) -> dict[int, list[tuple[tuple[tuple[ast.Node, Type | None],
+                                                     ...], bool]]] | None:
+        """Where in *stmts* the variable *name*, holding *ty*, may hand its room
+        on: every statement naming it in a way that may keep what it holds, with
+        the nodes from each such name up to the statement -- or nothing, where a
+        lambda or a macro names it and no statement can be said to.
+
+        A name is read without handing anything on where what is read holds no
+        room (`#l`, `l⟦i⟧` of numbers, a comparison), where it is the place a
+        statement changes in place (`l ⧺← x`, `l⟦i⟧ ← v`, `†l⟦i⟧`), where it is
+        copied (a join, `⧺←`'s right side, `⎕text`), where a reference is taken
+        that cannot outlive it, where a walk reads it, and where it is handed to a
+        function that cannot keep it (`_room_argument`).  Anything else may keep
+        it -- bound, assigned, answered, put in a record, a list, a table, a
+        lambda -- and is listed.  By name, as `_addressed_in` is: a name a block
+        inside binds again is the other variable, and what it does costs this
+        one at most its give-back.
+        """
+        hands: dict[int, list[tuple[tuple[tuple[ast.Node, Type | None], ...],
+                                    bool]]] = {}
+        parents: dict[int, ast.Node] = {}
+        found: list[tuple[ast.NameRef, ast.Stmt]] = []
+        stack: list[tuple[ast.Node, ast.Stmt | None]] = [
+            (one, None) for one in reversed(stmts)]
+        while stack:
+            node, stmt = stack.pop()
+            if isinstance(node, ast.Stmt):
+                stmt = node
+            match node:
+                case ast.Lambda() | ast.Invoke() | ast.Quote() | ast.Hole():
+                    if any(isinstance(one, (ast.NameRef, ast.Capture))
+                           and one.name == name for one in _below(node)):
+                        return None
+                    continue
+                case ast.NameRef() if node.name == name and stmt is not None:
+                    found.append((node, stmt))
+                case ast.MemberAssign() if _rooted_at(node.base, name) \
+                        and not _is_temporary(node.value):
+                    # Something that is not room of its own put in a field: the
+                    # record would give it back as if it were.
+                    hands.setdefault(id(node), []).append((((node.value, None),),
+                                                           False))
+            for field_name in _children(node):
+                held = getattr(node, field_name)
+                for child in (held if isinstance(held, (tuple, list)) else (held,)):
+                    if isinstance(child, ast.Node):
+                        parents[id(child)] = node
+                        stack.append((child, stmt))
+                    elif isinstance(child, tuple):
+                        for each in child:
+                            if isinstance(each, ast.Node):
+                                parents[id(each)] = node
+                                stack.append((each, stmt))
+        for ref, stmt in found:
+            path: dict[int, Type | None] = {}
+            use = self._room_use(ref, ty, parents, path)
+            if use == "kept":
+                continue
+            chain: list[tuple[ast.Node, Type | None]] = []
+            one: ast.Node | None = ref
+            while one is not None and one is not stmt:
+                chain.append((one, path.get(id(one))))
+                one = parents.get(id(one))
+            hands.setdefault(id(stmt), []).append((tuple(chain), use == "moved"))
+        return hands
+
+    def _room_use(self, ref: ast.NameRef, ty: Type,
+                  parents: Mapping[int, ast.Node],
+                  path: dict[int, Type | None]) -> str:
+        """What the statement around *ref* does with the room of what it names:
+        ``"kept"`` where nothing it does can keep it, ``"moved"`` where it is an
+        argument for a parameter the callee takes as its own -- the call decides
+        -- and ``"handed"`` where it may keep it.  *path* is given the type of
+        what each node on the way up reads, where that is known."""
+        node: ast.Node = ref
+        held: Type | None = ty
+        while True:
+            path[id(node)] = held
+            if held is not None and not _points_somewhere(held):
+                return "kept"
+            parent = parents.get(id(node))
+            match parent:
+                case ast.Element() if parent.base is node:
+                    held = self._room_element(held, parent)
+                case ast.Element():
+                    return "kept"
+                case ast.Member() if parent.base is node:
+                    held = _room_member(held, parent.name)
+                case ast.Unary() if parent.op in (ast.UnaryOp.MAX, ast.UnaryOp.MIN):
+                    held = _room_elements(held)
+                case ast.Unary():
+                    return "kept"
+                case ast.Binary() if parent.op in _ROOM_ASKS:
+                    return "kept"
+                case ast.Binary() if parent.op is ast.BinaryOp.CONCAT:
+                    inner = _room_elements(held)
+                    return "kept" if isinstance(held, StrType) or (
+                        inner is not None and not _points_somewhere(inner)) \
+                        else "handed"
+                case ast.JoinAssign():
+                    # The place joined onto, or what is copied onto it.
+                    return "kept"
+                case ast.ListLit() | ast.ArrayLit():
+                    # An element of a list written out and joined onto a list
+                    # that is not a pool's is copied in deep, there being a name
+                    # among them; a pool's takes it as it is.
+                    grand = parents.get(id(parent))
+                    if isinstance(grand, ast.JoinAssign) and grand.value is parent \
+                            and self._pool_joined_onto(grand.target) is None:
+                        return "kept"
+                    return "handed"
+                case ast.ElementAssign() | ast.MemberAssign() | ast.EntryAssign() \
+                        if parent.base is node:
+                    return "kept"
+                case ast.TakeAt() | ast.Take() | ast.Index() if parent.base is node:
+                    return "kept"
+                case ast.Index():
+                    return "kept"
+                case ast.AddressOf() if not parent.mutable:
+                    return "kept"
+                case ast.AddressOf():
+                    # Somewhere else may write the place: only a call that is
+                    # held to copying what it writes there.
+                    grand = parents.get(id(parent))
+                    named = None
+                    if isinstance(grand, ast.Named):
+                        named, parent, grand = grand.name, grand, parents.get(id(grand))
+                    if not isinstance(grand, ast.Call) \
+                            or self._room_argument(grand, parent, named, held) != "kept":
+                        return "handed"
+                    return "kept"
+                case ast.ForEach() if parent.iterable is node:
+                    return self._room_walked(parent, held)
+                case ast.Named() if parent.value is node:
+                    grand = parents.get(id(parent))
+                    if not isinstance(grand, ast.Call) \
+                            or self._makes_a_record(grand.callee):
+                        return "handed"
+                    found = self._room_argument(grand, parent, parent.name, held)
+                    if isinstance(found, str):
+                        return found
+                    held, node = found, grand
+                    continue
+                case ast.Call() if node is not parent.callee:
+                    if self._makes_a_record(parent.callee):
+                        return "handed"
+                    found = self._room_argument(parent, node, None, held)
+                    if isinstance(found, str):
+                        return found
+                    held = found
+                case _:
+                    return "handed"
+            node = parent
+
+    def _room_element(self, held: Type | None, expr: ast.Element) -> Type | None:
+        """What `x⟦…⟧` reads out of a value of *held*: an element, or for a range
+        a view of the elements."""
+        inner = _room_elements(held)
+        if inner is None:
+            return None
+        if any(isinstance(one, ast.Range) for one in expr.indices):
+            return self._module.types.array_type(inner, (None,))
+        if isinstance(held, ArrayType) and len(expr.indices) != held.rank:
+            return None
+        return inner
+
+    def _room_walked(self, loop: ast.ForEach, held: Type | None) -> str:
+        """Whether a `foreach` walking a value of *held* keeps any of its room: not
+        where the elements hold none, nor where nothing the loop does with its
+        name keeps that."""
+        inner = CHAR if isinstance(held, StrType) else _room_elements(held)
+        if inner is None:
+            return "handed"
+        if not _points_somewhere(inner):
+            return "kept"
+        if loop.more:
+            return "handed"
+        kept = self._room_hands(loop.name, inner, loop.body.stmts)
+        return "kept" if kept is not None and not kept else "handed"
+
+    def _room_argument(self, call: ast.Call, given: ast.Node, name: str | None,
+                       held: Type | None) -> str | Type | None:
+        """What a call does with the room of an argument holding *held*: a
+        verdict as `_room_use` gives one, or -- for `⎕bytes`, `⎕one_run` and
+        `⎕drop`, which answer what they are given seen another way -- the type
+        the answer is, whose own use says.
+
+        A function of the program cannot keep what it is handed where nothing it
+        answers or is handed can hold a loan (`_keeps_a_loan`): what it answers
+        or writes anywhere else is copied, by the rules every body follows.  One
+        that may change the program's own variables may still put text or a view
+        as it is into a table at the top level, so that is asked of it too.
+        """
+        callee = call.callee
+        if isinstance(callee, ast.NameRef) and callee.name.startswith(BUILTIN_GLYPH):
+            if self._find_local(callee.name) is not None:
+                return "handed"
+            if callee.name in (TEXT_NAME, ITER_NAME, RESERVE_NAME):
+                return "kept"
+            if callee.name in (BYTES_NAME, ONE_RUN_NAME):
+                return self._module.types.array_type(U8, (None,)) \
+                    if isinstance(held, StrType) else held
+            if callee.name == DROP_NAME:
+                return held
+            return "handed"
+        func = self._room_callee(callee)
+        if func is None or func.cconv != DEFAULT_CCONV:
+            return "handed"
+        if name is not None:
+            if name not in func.param_names:
+                return "handed"
+            at = func.param_names.index(name)
+        else:
+            if given not in call.args:
+                return "handed"
+            at = call.args.index(given)
+        if at >= len(func.ty.params):
+            return "handed"
+        if at in func.takes_owned:
+            return "moved"
+        if _keeps_a_loan(func.ty.ret, True) \
+                or any(_keeps_a_loan(one, False) for one in func.ty.params):
+            return "handed"
+        if func.attrs.impure and _bare_text(held):
+            return "handed"
+        return "kept"
+
+    def _room_callee(self, callee: ast.Expr) -> Function | None:
+        """The function a call names, asked quietly: nothing for anything else."""
+        match callee:
+            case ast.NameRef():
+                if self._find_local(callee.name) is not None:
+                    return None
+                found = self._top.get(callee.name)
+                return found if isinstance(found, Function) else None
+            case ast.Member():
+                inside = self._member_named(callee)
+                if isinstance(inside, Function):
+                    return inside
+                held = self._module_at(callee.base)
+                found = held.exports.get(callee.name) if held is not None else None
+                return found if isinstance(found, Function) else None
+        return None
+
+    def _let_go(self, stmt: ast.Stmt) -> None:
+        """Say of every variable *stmt* may hand its room on from that it does,
+        unless what it names there is copied: from here on, along this way, it
+        does not give that room back."""
+        if not self._rooms:
+            return
+        for room in list(self._rooms.values()):
+            found = room.hands.get(id(stmt))
+            if found is not None and any(
+                    not moved and not any(self._copied_whole(node, held)
+                                          for node, held in chain)
+                    for chain, moved in found):
+                self._room_handed_on(room)
+
+    def _copied_whole(self, node: ast.Node, held: Type | None) -> bool:
+        """Whether *node*, of *held* where that is known, is copied where it is
+        lowered, everything in it that points anywhere: noted to be, and holding
+        a list, which is what `_copy_of` copies -- text and all -- and the only
+        thing it does."""
+        if id(node) not in self._copying:
+            return False
+        if held is None and isinstance(node, ast.Expr):
+            held = self._said_to_be(node)
+        return held is not None and _holds_a_list(held) and owned.can_own(held)
+
+    def _room_flags_now(self) -> list[tuple[_Local, Value]]:
+        """What every room's flag says before a statement is lowered."""
+        return [(room.owns, room.owns.value) for room in self._rooms.values()]
+
+    def _room_flags_back(self, builder: IRBuilder,
+                         flags: list[tuple[_Local, Value]]) -> None:
+        """Put the flags back as they were where the statement left the block:
+        what it handed on it handed on along a way nothing follows, and an arm
+        whose last statement that is changed nothing the arms join with."""
+        if builder.is_terminated:
+            for flag, value in flags:
+                flag.value = value
+
+    def _room_handed_on(self, room: _Room) -> None:
+        """*room*'s variable no longer holds room of its own, along this way."""
+        room.owns.value = self._module.bool_const(BOOL, False)
+
+    def _room_named(self, name: str) -> _Room | None:
+        """The room of the variable *name* stands for, where it has one."""
+        local = self._find_local(name)
+        return self._rooms.get(id(local)) if local is not None else None
+
+    def _room_now(self, builder: IRBuilder, room: _Room, span: Span) -> Value:
+        """What *room*'s variable holds here."""
+        local = room.local
+        ty = self._held_by(local)
+        if not local.placed:
+            return local.value
+        if _held_in_memory(ty):
+            return builder.cast(CastKind.BITCAST, local.value, ty, span)
+        if isinstance(ty, ProductType):
+            return self._record_from(builder, local.value, ty, span)
+        return builder.load(local.value, span)
+
+    def _give_back_room(self, builder: IRBuilder, room: _Room, value: Value,
+                        span: Span) -> None:
+        """Give back *value*, what *room*'s variable holds or held, where the room
+        is still its own: straight away where that is known, and asked where it
+        is not -- where one way through handed it on and another did not."""
+        owns = room.owns.value
+        if isinstance(owns, BoolConst) and not owns.value:
+            return
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return
+        if isinstance(owns, BoolConst):
+            owned.give_back(builder, value, ty, room.known)
+            return
+        give = builder.new_block("give_back")
+        kept = builder.new_block("given_back")
+        builder.condbr(owns, give, kept, true_args=(builder.memory(),),
+                       false_args=(builder.memory(),), span=span)
+        builder.position_at(give)
+        builder.set_memory(give.add_param(MEM, "mem"))
+        owned.give_back(builder, value, ty, room.known)
+        builder.br(kept, (builder.memory(),), span)
+        builder.position_at(kept)
+        builder.set_memory(kept.add_param(MEM, "mem"))
+
+    def _room_replaced(self, builder: IRBuilder, local: _Local, span: Span) -> None:
+        """Give back what *local* holds, just before it is given something else,
+        where that is room of its own; what it is given is said of it after."""
+        room = self._rooms.get(id(local))
+        if room is None:
+            return
+        self._give_back_room(builder, room, self._room_now(builder, room, span), span)
+        self._room_handed_on(room)
+
+    def _room_given(self, name: str, owns: bool) -> None:
+        """Say of the variable *name*, just given a value, whether that value's
+        room is its own to give back."""
+        room = self._room_named(name)
+        if room is not None:
+            room.owns.value = self._module.bool_const(BOOL, owns)
+
+    def _owns_what_it_is_given(self, written: ast.Expr, owns: bool) -> bool:
+        """Whether a variable given *written* holds room of its own: what
+        `_copied_where_shared` answered for one holding a list, and for text and
+        what holds text alone, whether it was made where it is given."""
+        if self._pool_made(written):
+            return False
+        ty = self._said_to_be(written)
+        if ty is not None and _holds_a_list(ty):
+            return owns
+        return self._text_made_here(written)
+
+    def _text_made_here(self, written: ast.Expr) -> bool:
+        """Whether *written* is room made where it is written, as
+        `_room_made_here` takes it, or text the language's own functions make --
+        `⎕text`, `⎕str` -- or what is left of either after `??`, the other side
+        being made there too or being text in the image."""
+        while isinstance(written, ast.Allocated):
+            written = written.value
+        match written:
+            case ast.Call(callee=ast.NameRef(name=name)) \
+                    if name in (TEXT_NAME, STR_OF_NAME) \
+                    and self._find_local(name) is None:
+                return True
+            case ast.Binary() if written.op is ast.BinaryOp.OR_ELSE:
+                return self._text_made_here(written.left) and (
+                    isinstance(written.right, ast.StringLit)
+                    or self._text_made_here(written.right))
+        return self._room_made_here(written)
+
+    def _pool_made(self, written: ast.Expr) -> bool:
+        """Whether *written* is made in a pool and nowhere else -- which gives
+        nothing back one object at a time, so that there is nothing to give back
+        of it."""
+        made = self._arenas_in(written)
+        return bool(made) and all(one in self._arena_by_id for one in made)
+
+    def _rooms_in(self, body: ast.Block, alternative: ast.Block | None,
+                  found: dict[int, _Local]) -> None:
+        """Add to *found* the flags of the rooms a loop over *body* may change:
+        where the variable is changed itself, or where a statement in the loop
+        may hand its room on."""
+        if not self._rooms:
+            return
+        inside = {id(one) for one in _below(body)}
+        if alternative is not None:
+            inside |= {id(one) for one in _below(alternative)}
+        for room in self._rooms.values():
+            if room.owns.placed:
+                continue
+            if id(room.local) in found or any(one in inside for one in room.hands):
+                found.setdefault(id(room.owns), room.owns)
+
     def _owning_room(self, name: str, owns: bool) -> None:
         """Say of the local *name*, just given a value, whether its room is its
         own."""
@@ -18005,6 +18708,11 @@ class Checker:
                 continue
             one = written.get(at)
             if one is not None and self._movable(one, builder.function):
+                if isinstance(one, ast.NameRef):
+                    # Handed over: the room is the callee's to give back now.
+                    room = self._room_named(one.name)
+                    if room is not None:
+                        self._room_handed_on(room)
                 self._module.reports.record(
                     ReportKind.COPY_INTO_ALLOCATOR, func.name,
                     "".join(("'", _written_as(one), "' is handed to '", func.name,
@@ -18233,7 +18941,14 @@ class Checker:
         made = self._room_made(builder, place, ty, joined, span)
         _, new, count, _, into = made
         source = more
-        if owned.points(ty.element):
+        # A list made here of nothing but what the heap made here, joined onto a
+        # list of the heap's: its elements are nobody else's, and they move.
+        moved = owned.points(ty.element) and self._made_of_its_own(written) \
+            and self._arenas_in(written) == {_HEAP} \
+            and isinstance(stmt.target, ast.NameRef) \
+            and {one for one in self._arenas_in(stmt.target)
+                 if not _is_container_key(one)} == {_HEAP}
+        if owned.points(ty.element) and not moved:
             # Into the list's own allocator, which is known only while running.
             source = builder.call(owned.own_function(self._module, ty), (into, more),
                                   ty, span)
@@ -18245,14 +18960,33 @@ class Checker:
                                         builder.extract(source, 0, parts_of(ty)[0],
                                                         span), bytes_, span),
                            builder.binary(BinOp.WRAP_MUL, joined, size, span))
-        if owned.points(ty.element):
-            # Its elements are the list's now, and the run they were in is spare.
+        if owned.points(ty.element) and not moved:
+            # Its elements are the list's now, and the run they were in is spare --
+            # and so is the run of a temporary they were copied out of, whose
+            # elements are somebody else's.
             owned.give_back_storage(builder, source, ty, None)
+            if _is_temporary(written):
+                owned.give_back_storage(builder, more, ty, None)
         elif _is_temporary(written):
             owned.give_back_storage(
                 builder, more, ty, "heap" if self._freshly_heap(written) else None)
         self._room_kept(builder, place, ty, made,
                         builder.binary(BinOp.WRAP_ADD, count, joined, span), span)
+
+    def _made_of_its_own(self, written: ast.Expr) -> bool:
+        """Whether *written* is a list made where it is written whose elements are
+        nobody else's: what a function of the program answers, or a list written
+        out of nothing but such -- calls, joins, lists written out -- and not of a
+        name, a field, an element, or text in the image."""
+        while isinstance(written, ast.Allocated):
+            written = written.value
+        match written:
+            case ast.ListLit() | ast.ArrayLit():
+                return all(_is_temporary(one) for one in written.elements)
+            case ast.Call():
+                return self._room_made_here(written) \
+                    and not self._makes_a_record(written.callee)
+        return False
 
     def _pool_joined_onto(self, target: ast.Expr) -> tuple[int, _Local] | None:
         """The arena a list joined onto keeps its elements in, and the name it is,
@@ -22465,6 +23199,7 @@ class Checker:
             # where it is read and carried nowhere.
             if local is not None and not local.placed:
                 found.setdefault(id(local), local)
+        self._rooms_in(body, alternative, found)
         return list(found.values())
 
     # -- match -----------------------------------------------------------------
@@ -23272,6 +24007,9 @@ class Checker:
                                           node.span):
                 return None
             self._kept_by_a_name(local.held, local.span)
+            # What it held goes, where it was its own, once what replaces it has
+            # been worked out -- which may have read it.
+            self._room_replaced(builder, local, node.span)
             if isinstance(local.held, ProductType):
                 self._record_into(builder, local.value, value, local.held,
                                   node.span)
@@ -23306,6 +24044,7 @@ class Checker:
                 # the other arms and on what follows them, so a straight-line
                 # answer would be a guess.
                 self._report_unused(local)
+            self._room_replaced(builder, local, node.span)
             local.value = value
             local.value_span = node.span
             local.read = wants_value
@@ -23431,6 +24170,9 @@ class Checker:
                 return
             if self._lent_out(node.name, node.span, True):
                 return
+            # Taken out of a tuple, the part is nobody's alone that anything
+            # here knows of: what was held goes, and what comes is not given back.
+            self._room_replaced(builder, local, node.span)
             if isinstance(local.held, ProductType):
                 self._record_into(builder, local.value, value, local.held,
                                   node.span)
@@ -23448,6 +24190,7 @@ class Checker:
                 return
             if id(local) not in self._carried:
                 self._report_unused(local)
+            self._room_replaced(builder, local, node.span)
             local.value = value
             local.value_span = node.span
             local.read = False
@@ -25336,6 +26079,14 @@ class Checker:
         if not self._accepts(expected, STR):
             self._report_mismatch(expr.span, STR, expected)
             return UndefConst(ERROR)
+        for side, value in ((expr.left, left), (expr.right, right)):
+            if _is_temporary(side) and self._text_made_here(side) \
+                    and not self._pool_made(side):
+                # A join of three is a join of two joined again: what the inner
+                # one made is read once, here, and nobody else names it.  Text
+                # that may be the image's -- `⎕text(b) ?? ""` -- is asked.
+                owned.give_back(builder, value, STR,
+                                "heap" if self._freshly_heap(side) else None)
         return found
 
     def _joined_type(self, expr: ast.Binary, left: Value,

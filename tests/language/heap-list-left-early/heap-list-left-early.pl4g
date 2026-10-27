@@ -1,0 +1,126 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **Every way out of a scope gives back what it owns**: off its end, a `return`, a `break`, a
+※ `continue`, a `?` -- the way an arena is given back, and by the same path, as if `defer` had
+※ been written right after the definition.  A variable given another list gives back the one it
+※ held, once what replaces it has been worked out; a list of lists gives back every list it
+※ holds and then its own room; a `mut` parameter the body changes in place is a copy of the
+※ body's own, given back where the body ends; text joined in a loop gives back the text it
+※ replaces; and a record gives back what each of its fields owns.
+※
+※ Each function below makes eight kilobytes or more and is called a hundred thousand times or
+※ more, which is more than a program run by the tests may have, so each of them runs to the
+※ end only because nothing of what it made stays.
+※
+※ Compare: **Rust**, which drops at every way out of a scope and drops the old value of an
+※ assignment; **C++**, the destructors of a scope's objects, run by `return`, `break` and
+※ `continue` as by its end; **Zig**, whose `defer` and `errdefer` are written by hand for this.
+
+let std := ⎕import("std")
+
+type Box = items : [u64] ; n : u64
+
+※ Eight kilobytes of room, one word of it used.
+@[opaque]
+fn big() → [u64]:
+    let l: mut [u64] = []
+    ⎕reserve(l, 1000)
+    l ⧺← ⟦1u64⟧
+    l
+
+@[opaque]
+fn early(k: u64) → u64:
+    let l: [u64] = big()
+    if k ≠ 7u64:
+        return 1u64
+    ⎕drop(#l)
+
+@[opaque]
+fn skipped(n: u64) → u64:
+    let total: mut u64 = 0u64
+    foreach §turns k: u64 = 0u64…n:
+        let l: [u64] = big()
+        if k ≠ 7u64:
+            continue §turns
+        total ← total + ⎕drop(#l)
+    total
+
+@[opaque]
+fn broken() → u64:
+    let total: mut u64 = 0u64
+    foreach §turns k: u64 = 0u64…10u64:
+        let l: [u64] = big()
+        if k = 0u64:
+            break §turns
+        total ← total + ⎕drop(#l)
+    total
+
+@[opaque]
+fn refused(n: u64) → u64 ? u8:
+    if n = 0u64:
+        ⊥ 1u8
+    else:
+        n
+
+@[opaque]
+fn tried(n: u64) → u64 ? u8:
+    let l: [u64] = big()
+    let x: u64 = refused(n)?
+    x + ⎕drop(#l)
+
+@[opaque]
+fn reassigned(n: u64) → u64:
+    let l: mut [u64] = []
+    foreach _: u64 = 0u64…n:
+        l ← big()
+    ⎕drop(#l)
+
+@[opaque]
+fn nested() → u64:
+    let ll: mut [[u64]] = []
+    foreach _: u64 = 0u64…4u64:
+        ll ⧺← [big()]
+    ⎕drop(#ll)
+
+@[opaque]
+fn changed(v: mut [u64]) → u64:
+    v ⧺← ⟦1u64⟧
+    ⎕drop(#v)
+
+@[opaque]
+fn joined(bytes: [u8]) → u64:
+    let t: mut str = ""
+    foreach _: u64 = 0u64…2u64:
+        t ← t ⧺ (⎕text(bytes) ?? "")
+    ⎕drop(#t)
+
+@[opaque]
+fn boxed() → u64:
+    let b: Box = Box(.items ← big(), .n ← 3u64)
+    b.n + ⎕drop(#b.items)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let total: mut u64 = 0u64
+    foreach k: u64 = 0u64…100000u64:
+        total ← total + early(k) + broken() + (tried(0u64) ?? 1u64) + boxed()
+    if total ≠ 600000u64:
+        return 1u6
+    if skipped(100000u64) ≠ 1u64 ∨ reassigned(100000u64) ≠ 1u64:
+        return 2u6
+    foreach _: u64 = 0u64…50000u64:
+        total ← total + nested()
+    if total ≠ 800000u64:
+        return 3u6
+    let base: mut [u64] = []
+    ⎕reserve(base, 1000)
+    foreach _: u64 = 0u64…100000u64:
+        total ← total + changed(base)
+    if total ≠ 900000u64 ∨ #base ≠ 0:
+        return 4u6
+    let bytes: mut [u8] = []
+    foreach _: u64 = 0u64…3000u64:
+        bytes ⧺← ⟦97u8⟧
+    foreach _: u64 = 0u64…50000u64:
+        total ← total + joined(bytes)
+    if total = 300900000u64: 0u6 else: 5u6

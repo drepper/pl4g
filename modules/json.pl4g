@@ -25,8 +25,8 @@
 ※ list and string of the document is made there, so a value goes into the list
 ※ holding it as it is, and the whole document is given back at once when the
 ※ arena is -- what simdjson's and yyjson's documents do with a pool of their own.
-※ What is written is made in an arena too, the heap keeping what it is given
-※ for as long as the program runs.
+※ What is written is made in an arena too, the caller's to give back when it
+※ likes.
 
 unit ¤size → ¤idx
 
@@ -713,16 +713,15 @@ fn stop_at(input: u8⟦⟧, from: u64 ¤idx, quote: u8) → u64 ¤idx:
 ※ The rest of a string with an escape in it: `begin` is its first byte and
 ※ `from` the first backslash.  What it stands for is gathered in a list -- the
 ※ runs between escapes in one move each -- and made text once it is all there.
-※ The list is the arena's, as the text is: one of the heap's would be the
-※ program's for as long as it runs, and the bytes it holds are no more than the
-※ string's.
+※ The list is the heap's and given back on the way out, so that the arena holds
+※ the text and not the bytes it was made from as well.
 fn escaped(input: u8⟦⟧, begin: u64 ¤idx, from: u64 ¤idx, a: &mut arena,
            allow: Extensions) → str ? Fault in a:
     let n: u64 ¤idx = #input
     let quote: u8 = input⟦begin - 1⟧
     let raw: bool = allows(allow, Extensions.control_characters)
     let more: bool = allows(allow, Extensions.escapes)
-    let out: mut [u8] = [] in a
+    let out: mut [u8] = []
     out ⧺← input⟦begin…from⟧
     let at: mut u64 ¤idx = from
     while §runs true:
@@ -741,7 +740,7 @@ fn escaped(input: u8⟦⟧, begin: u64 ¤idx, from: u64 ¤idx, a: &mut arena,
                 at ← at + 2
             elif e = 117u8:
                 let code: Code = unicode_escape(input, at, allow)?
-                out ← code_point(code.point, out, a)
+                out ← code_point(code.point, out)
                 at ← code.end
             elif more:
                 let skip: u64 ¤idx = json5_escape(input, at)
@@ -752,7 +751,7 @@ fn escaped(input: u8⟦⟧, begin: u64 ¤idx, from: u64 ¤idx, a: &mut arena,
                 elif e = 120u8:
                     let high: u8 = string.digit_value(input⟦at + 2⟧) ?? 0u8
                     let low: u8 = string.digit_value(input⟦at + 3⟧) ?? 0u8
-                    out ← code_point(⎕widen(high × 16u8 + low, ⌜u32⌝), out, a)
+                    out ← code_point(⎕widen(high × 16u8 + low, ⌜u32⌝), out)
                 elif ¬line_end(input, at + 1):
                     ※ any other character stands for itself, all its bytes; a line's
                     ※ end after a backslash stands for nothing
@@ -774,7 +773,7 @@ fn escaped(input: u8⟦⟧, begin: u64 ¤idx, from: u64 ¤idx, a: &mut arena,
             ⊥ Fault(.problem ← Problem.not_utf8, .at ← ill_formed(input, begin, at))
 
 ※ A code point written onto `into` as UTF-8, one byte to four.
-fn code_point(n: u32, into: mut [u8] in a, a: &mut arena) → [u8] in a:
+fn code_point(n: u32, into: mut [u8]) → [u8]:
     if n < 0x80u32:
         into ⧺← ⟦low_byte(n)⟧
     elif n < 0x800u32:

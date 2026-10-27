@@ -1,0 +1,55 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A list of the heap's whose room is its own is given back where its scope ends.**  `l` below
+※ is made in `⎕heap`, grown where it is and read, and nothing takes its room anywhere else: so
+※ where the body ends the room goes back to the heap, by the size its header says, as if
+※ `defer` had been written right after the definition.  A million calls of `once` make a million
+※ lists of a hundred and twenty-eight words, two gigabytes in all, which is four times what a
+※ program run by the tests may have -- so this runs at all only because each list is given back.
+※
+※ The same holds where the room is the size of a class (`reserved`, eight kilobytes a turn, in
+※ the slabs) and where it is mapped on its own (`mapped`, eight hundred kilobytes a turn): each
+※ would pass the limit three times over if anything stayed.
+※
+※ Compare: **Rust**, whose `Vec` is dropped at the end of its scope; **C++**, whose
+※ `std::vector` is destroyed there; **Swift**, whose array is released when the last reference
+※ goes; **Go**, where the collector finds it some time later; **Zig** and **Odin**, where
+※ `defer list.deinit()` is written by hand and forgetting it is a leak.
+
+let std := ⎕import("std")
+
+@[opaque]
+fn once(n: u64) → u64:
+    let l: mut [u64] = [] in ⎕heap
+    foreach i: u64 = 0u64…n:
+        l ⧺← ⟦i⟧
+    ⎕drop(#l)
+
+@[opaque]
+fn reserved(n: u64 ¤idx) → u64:
+    let l: mut [u64] = []
+    ⎕reserve(l, n)
+    l ⧺← ⟦⎕drop(n)⟧
+    ⎕drop(#l)
+
+@[opaque]
+fn mapped(n: u64 ¤idx) → u64:
+    let l: mut [u64] = []
+    ⎕reserve(l, n)
+    l ⧺← ⟦⎕drop(n), ⎕drop(n)⟧
+    ⎕drop(#l)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let total: mut u64 = 0u64
+    foreach _: u64 = 0u64…1000000u64:
+        total ← total + once(128u64)
+    if total ≠ 128000000u64:
+        return 1u6
+    foreach _: u64 = 0u64…200000u64:
+        total ← total + reserved(1000)
+    if total ≠ 128200000u64:
+        return 2u6
+    foreach _: u64 = 0u64…2000u64:
+        total ← total + mapped(100000)
+    if total = 128204000u64: 0u6 else: 3u6
