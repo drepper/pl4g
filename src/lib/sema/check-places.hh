@@ -187,6 +187,68 @@
     bool copied_where_shared(const ast::Expr* written, bool changes);  // check.py:16524
     // Say of the local `name`, just given a value, whether its room is its own.
     void owning_room(std::string_view name, bool owns);
+    // Give `local`, just bound, its room back where its scope ends, where `mine` says the room is its own
+    // and the room may be the heap's; `stmts` are the statements of its scope after it.
+    OwnedRoom* room_kept_by(Local* local, bool mine, std::span<const ast::Stmt* const> stmts,
+                            const ast::Expr* given = nullptr);  // check.py:18163
+    // The parameters `node`'s body holds room of its own in: those it takes as its own, and the `mut`
+    // ones it changes in place.
+    std::vector<Local*> owned_params(const ast::FuncDef* node, ir::Function* func);  // check.py:18238
+    // Where in `stmts` the variable `name`, holding `ty`, may hand its room on, or nothing where a lambda
+    // or a macro names it.
+    std::optional<RoomHands> room_hands(std::string_view name, const ir::Type* ty,
+                                        std::span<const ast::Stmt* const> stmts);  // check.py:18255
+    // What the statement around `ref` does with the room of what it names: "kept", "moved" or "handed";
+    // `path` is given the type of what each node on the way up reads, where that is known.
+    std::string room_use(const ast::NameRef* ref, const ir::Type* ty,
+                         const std::unordered_map<std::int64_t, const ast::Node*>& parents,
+                         std::unordered_map<std::int64_t, const ir::Type*>& path);  // check.py:18322
+    // What `x⟦…⟧` reads out of a value of `held`: an element, or for a range a view of the elements.
+    const ir::Type* room_element(const ir::Type* held, const ast::Element* expr);  // check.py:18410
+    // Whether a `foreach` walking a value of `held` keeps any of its room.
+    std::string room_walked(const ast::ForEach* loop, const ir::Type* held);  // check.py:18422
+    // What a call does with the room of an argument holding `held`: a verdict, or for what answers what
+    // it is given seen another way, the type the answer is.
+    std::variant<std::string, const ir::Type*> room_argument(const ast::Call* call, const ast::Node* given,
+                                                             std::optional<std::string_view> name,
+                                                             const ir::Type* held);  // check.py:18436
+    // The function a call names, asked quietly: nothing for anything else.
+    ir::Function* room_callee(const ast::Expr* callee);  // check.py:18483
+    // Say of every variable `stmt` may hand its room on from that it does, unless what it names there is
+    // copied.
+    void let_go(const ast::Stmt* stmt);  // check.py:18500
+    // Whether `node`, of `held` where that is known, is copied whole where it is lowered.
+    bool copied_whole(const ast::Node* node, const ir::Type* held);  // check.py:18514
+    // What every room's flag says before a statement is lowered.
+    std::vector<std::pair<Local*, ir::Value*>> room_flags_now();  // check.py:18525
+    // Put the flags back as they were where the statement left the block.
+    void room_flags_back(ir::Builder& builder, const std::vector<std::pair<Local*, ir::Value*>>& flags);  // check.py:18529
+    // `room`'s variable no longer holds room of its own, along this way.
+    void room_handed_on(OwnedRoom* room);  // check.py:18538
+    // The room of the variable `name` stands for, where it has one.
+    OwnedRoom* room_named(std::string_view name);  // check.py:18542
+    // What `room`'s variable holds here.
+    ir::Value* room_now(ir::Builder& builder, OwnedRoom* room, Span span);  // check.py:18547
+    // Give back `value` where the room is still its own: straight away where that is known, and asked
+    // where it is not.
+    void give_back_room(ir::Builder& builder, OwnedRoom* room, ir::Value* value, Span span);  // check.py:18559
+    // Give back what `local` holds, just before it is given something else, where that is room of its own.
+    void room_replaced(ir::Builder& builder, Local* local, Span span);  // check.py:18584
+    // Say of the variable `name`, just given a value, whether that value's room is its own to give back.
+    void room_given(std::string_view name, bool owns);  // check.py:18593
+    // Whether a variable given `written` holds room of its own.
+    bool owns_what_it_is_given(const ast::Expr* written, bool owns);  // check.py:18600
+    // Whether `written` is room made where it is written, or text the language's own functions make, or
+    // what is left of either after `??`.
+    bool text_made_here(const ast::Expr* written);  // check.py:18611
+    // Whether `written` is made in a pool and nowhere else.
+    bool pool_made(const ast::Expr* written);  // check.py:18629
+    // Add to `found` the flags of the rooms a loop over `body` may change.
+    void rooms_in(const ast::Block* body, const ast::Block* alternative, Dict<std::int64_t, Local*>& found);  // check.py:18636
+    // Whether `written`, something of the heap's, may be held by something else as well.
+    bool shared_heap(const ast::Expr* written);  // check.py:14222
+    // Whether `written` is a list made where it is written whose elements are nobody else's.
+    bool made_of_its_own(const ast::Expr* written);  // check.py:19120
     // Whether `written` is a list made where it is written, in room nothing
     // else holds, or something made only of such lists.
     bool room_made_here(const ast::Expr* written);

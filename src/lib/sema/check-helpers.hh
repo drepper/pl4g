@@ -237,6 +237,25 @@ namespace pl4g::sema {
   bool is_owning(const ir::Type* ty);  // check.py:1977
   // Whether what an expression comes to is something nothing else names.
   bool is_temporary(const ast::Expr* written);  // check.py:1982
+  // What the flag beside a variable whose room is given back is called: a name
+  // no program can write.
+  inline constexpr std::string_view room_suffix = "#room";  // check.py:2258
+  // Whether `op`'s answer is a truth value about its operands and holds nothing
+  // of them (`_ROOM_ASKS`).
+  bool room_asks(ast::BinaryOp op);  // check.py:2262
+  // What a list or an array of `held` holds, or nothing for anything else.
+  const ir::Type* room_elements(const ir::Type* held);  // check.py:2271
+  // The type of the field `name` of a record of `held`, or nothing.
+  const ir::Type* room_member(const ir::Type* held, std::string_view name);  // check.py:2278
+  // Whether `expr` is the name `name` or a field or an element of it.
+  bool rooted_at(const ast::Expr* expr, std::string_view name);  // check.py:2287
+  // Whether a value of `ty` may hold something of what a call was handed, as it
+  // is: a table or a set, a view, a lambda, a walk or a cursor, and -- answered,
+  // `answered` says -- a reference.
+  bool keeps_a_loan(const ir::Type* ty, bool answered, const KeySet& seen = {});  // check.py:2294
+  // Whether a value of `ty` is or holds text or a view other than inside a list
+  // -- what goes into a table as it is.
+  bool bare_text(const ir::Type* ty);  // check.py:2330
   // The arena of the body's own a definition hands out with its answer.
   std::optional<std::string> hands_out_of(const ast::Node* node);  // check.py:2010
   // Whether an answer of `ty` can travel without its allocator.

@@ -892,7 +892,7 @@ namespace pl4g::sema {
       for (auto one : made)
         if (one != heap_key && one != image_key)
           stays.push_back(one);
-      if (stays.empty())
+      if (stays.empty() && ! (made.contains(heap_key) && shared_heap(written) && owned::can_own(ty)))
         return value;
       if (! owned::can_own(ty)) {
         NameSet named;
@@ -1599,8 +1599,10 @@ namespace pl4g::sema {
     auto outer_hands_out_local = hands_out_local;
     auto outer_receiving = std::move(receiving);
     auto outer_unscanned = unscanned;
+    auto outer_rooms = std::move(rooms);
     scopes.clear();
     addressed.clear();
+    rooms.clear();
     answer_arms = yield_answer = nullptr;
     hands_out.reset();
     hands_out_local = nullptr;
@@ -1666,6 +1668,7 @@ namespace pl4g::sema {
       hands_out_local = outer_hands_out_local;
       receiving = std::move(outer_receiving);
       unscanned = outer_unscanned;
+      rooms = std::move(outer_rooms);
       demanding = outer_demanding;
       at_entry = std::move(outer_entry);
       marking = outer_marking;
@@ -1700,6 +1703,7 @@ namespace pl4g::sema {
                               static_cast<std::int64_t>(scopes.size()) };
     params_made_in(node, func);
     lower_conditions(inner, node, func, true);
+    rooms_pending = std::pair(node->body, owned_params(node, func));
     lower_block(inner, node->body, func);
     if (! inner.is_terminated())
       all_closed(scopes, node->span);
@@ -2853,8 +2857,10 @@ namespace pl4g::sema {
     auto outer_hands_out = std::move(hands_out);
     auto outer_hands_out_local = hands_out_local;
     auto outer_receiving = std::move(receiving);
+    auto outer_rooms = std::move(rooms);
     deferred.clear();
     emptied.clear();
+    rooms.clear();
     made_from.clear();
     answer_kinds.clear();
     thin_to.reset();
@@ -2910,6 +2916,7 @@ namespace pl4g::sema {
         outside = std::move(outer_outside);
         deferred = std::move(outer_deferred);
         emptied = std::move(outer_emptied);
+        rooms = std::move(outer_rooms);
         out_of_arena = outer_out_of_arena;
         out_of_arenas = std::move(outer_out_of_arenas);
         answer_made_in = std::move(outer_answer_made_in);

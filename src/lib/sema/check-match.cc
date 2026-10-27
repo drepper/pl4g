@@ -916,6 +916,9 @@ namespace pl4g::sema {
       if (reaches_a_place(local->held) && outlives_it(value, local->depth, node->name, node->span))
         return nullptr;
       kept_by_a_name(local->held, local->span);
+      // What it held goes, where it was its own, once what replaces it has
+      // been worked out -- which may have read it.
+      room_replaced(builder, local, node->span);
       if (auto record = ir::as<ir::ProductType>(local->held))
         record_into(builder, local->value, value, record, node->span);
       else
@@ -943,6 +946,7 @@ namespace pl4g::sema {
       if (! carried.contains(id_of(local)))
         // Inside an arm of a `match` the question cannot be answered here.
         report_unused(local);
+      room_replaced(builder, local, node->span);
       local->value = value;
       local->value_span = node->span;
       local->read = wants_value;
@@ -1051,6 +1055,9 @@ namespace pl4g::sema {
       }
       if (lent_out(node->name, node->span, true))
         return;
+      // Taken out of a tuple, the part is nobody's alone that anything here
+      // knows of: what was held goes, and what comes is not given back.
+      room_replaced(builder, local, node->span);
       if (auto record = ir::as<ir::ProductType>(local->held))
         record_into(builder, local->value, value, record, node->span);
       else
@@ -1068,6 +1075,7 @@ namespace pl4g::sema {
       }
       if (! carried.contains(id_of(local)))
         report_unused(local);
+      room_replaced(builder, local, node->span);
       local->value = value;
       local->value_span = node->span;
       local->read = false;

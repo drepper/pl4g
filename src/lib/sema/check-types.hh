@@ -347,10 +347,40 @@ namespace pl4g::sema {
   };
 
   // A statement put off until its block is left, and where it was written.
+  struct OwnedRoom;
+
   struct Deferred {
     const ast::Defer* node = nullptr;
     std::int64_t depth = 0;
     Span block;
+    // Where it is no statement at all but the room of a variable given back,
+    // which the compiler puts off and nothing in the program wrote.
+    OwnedRoom* room = nullptr;
+  };
+
+  // One name of a room's variable on the way up to the statement it is in: the
+  // node, and the type of what it reads where that is known.
+  using RoomStep = std::pair<const ast::Node*, const ir::Type*>;
+  // Where in a scope a variable may hand its room on: by the statement's
+  // identity, each name of it there with its steps up, and whether it is handed
+  // to a parameter the callee takes as its own.
+  using RoomHands = Dict<std::int64_t, std::vector<std::pair<std::vector<RoomStep>, bool>>>;
+
+  // A variable of the body's own whose room is its own, given back where its
+  // scope ends -- unless it has handed the room on by then (`_Room`).  Whether
+  // it still holds the room is the truth value `owns` stands for: a local the
+  // compiler made beside the variable, which every `if`, `match` and loop
+  // carries as it carries the variable itself.
+  struct OwnedRoom {
+    Local* local = nullptr;
+    Local* owns = nullptr;
+    // The statements of its scope that may hand the room on, by identity, and
+    // for each the names of the variable in it that do, with the nodes from
+    // each up to the statement; marked where it is handed to a parameter the
+    // callee takes as its own, the call deciding.
+    RoomHands hands;
+    // What `owned::give_back` is told of the allocator.
+    std::optional<std::string> known;
   };
 
   // One name's state at one point of a body: the arenas it was made in, and

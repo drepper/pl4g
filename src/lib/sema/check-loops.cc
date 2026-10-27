@@ -2959,6 +2959,7 @@ namespace pl4g::sema {
       if (local != nullptr && ! local->placed)
         found.setdefault(id_of(local), local);
     }
+    rooms_in(body, alternative, found);
     std::vector<Local*> locals;
     for (const auto& [_, local] : found)
       locals.push_back(local);

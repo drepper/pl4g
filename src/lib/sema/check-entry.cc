@@ -2685,6 +2685,7 @@ namespace pl4g::sema {
     auto leaving = std::move(scopes.back());
     scopes.pop_back();
     for (const auto& [name, local] : leaving) {
+      rooms.erase(id_of(local));
       report_unused(local);
       report_needless_mut(local);
       settle_local(local);
@@ -2695,7 +2696,7 @@ namespace pl4g::sema {
   void Checker::report_unused(Local* local)
   {
     if (local->read || local->is_parameter || local->value->ty == ir::error_type()
-        || local->name == names::wildcard_name)
+        || local->name == names::wildcard_name || room_flags.contains(id_of(local)))
       // `_` is what an arm writes where it binds nothing, and nothing is there
       // to read.
       return;

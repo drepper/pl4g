@@ -457,6 +457,17 @@ namespace pl4g::sema {
     // last.  One list per block and not per scope, a block being what `defer`
     // is about.
     std::vector<std::vector<Deferred*>> deferred;  // check.py:4088
+    // The variables in scope whose room is given back where the scope ends, by
+    // the identity of the variable, and the flags beside them -- the compiler's
+    // own locals, which nothing reports as unread.
+    Dict<std::int64_t, OwnedRoom*> rooms;  // check.py:4707
+    KeySet room_flags;  // check.py:4708
+    // The statements of the block being lowered and how far along it the
+    // statement being lowered is, which is the scope a definition there has.
+    std::optional<std::pair<std::span<const ast::Stmt* const>, std::size_t>> rest_of_block;  // check.py:4711
+    // A body and the parameters it takes as its own, whose room is given back
+    // where that body ends.
+    std::optional<std::pair<const ast::Block*, std::vector<Local*>>> rooms_pending;  // check.py:4714
     // Which deferred statements have been lowered with their diagnostics
     // told.  One is lowered at every way out of its block, and a mistake in it
     // is one mistake however many ways out there are.
