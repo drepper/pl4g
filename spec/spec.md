@@ -375,7 +375,7 @@ no way to hand a `Reader` to `write` and no way to write to a number a program m
 `init.io`, which is what the startup function may take -- **the record itself and not a reference to it**:
 
 ```
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     ⎕drop(std.println⌜&mut init.io.output, "x = {}", x⌝ ?? 0)
     ⎕drop(std.println⌜&mut init.io.error, "went wrong"⌝ ?? 0)
@@ -3338,7 +3338,7 @@ are as they were.
 ```
 type Io = mut input : Reader ; mut output : Writer ; mut error : Writer
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     ⎕drop(std.println⌜&mut init.io.output, "hello"⌝ ?? 0)     ※ init is not mut; output is
     …
@@ -8730,7 +8730,7 @@ that checks the program, and run by the compiler that compiles it.
 ```
 let std := ⎕import("std")
 
-@[startup, impure]
+@[startup]
 fn main(init: std.Init) → u6:
     ※ the devices the process inherited, as descriptors and not as numbers
     ⎕drop(std.write_sync(&mut init.io.output, ⎕bytes("hello\n")) ?? 0)

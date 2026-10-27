@@ -1389,11 +1389,16 @@ Runtime
 
 Found writing the manual (2026-10-22); the manual says what the compiler does today and is silent on these:
 
-[ ] spec examples write `@[startup, impure]` on a startup function that only prints (spec.md around lines 378, 3268, 6424,
+[x] spec examples write `@[startup, impure]` on a startup function that only prints (spec.md around lines 378, 3268, 6424,
     8468), which 4933 now refuses.  Correct the examples.
+    Done (2026-10-27): the three that only print through the devices `init` hands over (spec.md 378, 3341, 8733) say
+    `@[startup]`, and compile so.  The one around 6497, which runs tasks, keeps `@[impure]`: `std.spawn` and `std.run` are
+    `@[impure]`, and without it `main` is refused (4480).  That example has faults of its own, in the entry below: `say` opens
+    and writes files without a device (4538 three times), and the second `std.spawn` line is refused with 4212.
 [?] the purity of tasks and files.  spec.md around 7260 says running tasks and opening files "need nothing said", but
     `std.spawn` and `std.run` are `@[impure]` and opening through `std.fs.cwd()` asks for `@[io]` (tests `tasks-interleave`,
-    `directory-opened`).
+    `directory-opened`).  The example of tasks itself (spec.md around 6480-6500) does not compile today: `say` is refused
+    4538 for `std.fs.open`, `std.write` and `Writer.close`, and the second `std.spawn(…)` line 4212.
     Question: which is meant -- the spec's rule, or what std and the checker ask today?
 [?] no way from `f32` to `f64`.  spec.md around 1462 says a floating-point number "becomes the other format by widening", but
     `⎕widen` refuses floats (4590) and nothing else converts.
