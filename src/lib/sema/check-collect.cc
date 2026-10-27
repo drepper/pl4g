@@ -1341,6 +1341,10 @@ namespace pl4g::sema {
       check_test_signature(func, node);
       module.tests.push_back(func);
       break;
+    case ir::SpecialKind::initializer:
+      // What a `constinit` variable's value is worked out by: made by the
+      // checker, and never a kind a program writes on a function.
+      break;
     }
   }
 
