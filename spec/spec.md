@@ -2248,9 +2248,10 @@ Compare **Rust**'s `Result<&[u8], E>`, **Zig**'s `E![]const u8`, **Swift**'s `[U
 same way; C and Go answer two values instead.
 
 **What the error carries is named as a type is anywhere else**, through the modules it is reached by: `u64 ? std.string.ParseError`
-is a number of the language's own or another module's reason for there being none.  **A name alone after the mark is looked up
-where the answer's is** -- `std.string.Parsed(f64) ? ParseError` is `std.string`'s, as is everything about that answer -- except
-a type of the language's, which no module defines; a path says which module itself.  Compare **Rust**'s `Result<u64,
+is a number of the language's own or another module's reason for there being none.  **A name alone after the mark is a type of
+the language's or of the file it is written in, and failing both is looked up where the answer's is** -- a module answering
+`std.string.Parsed(Value) ? Error` carries its own `Error`, and `std.string.Parsed(f64) ? ParseError` written where there is no
+`ParseError` carries `std.string`'s, as is everything about that answer; a path says which module itself.  Compare **Rust**'s `Result<u64,
 std::num::ParseIntError>`, **Zig**'s `std.fmt.ParseIntError!u64`, **Haskell**'s `Either Text.Read.Error Word64`, all paths as
 any type is.
 
@@ -3034,7 +3035,8 @@ whatever file names it.
 type parameters is written with its own before that -- `Maybe(u8)(inner)` -- and one with neither binding nor anything after it
 would read its single type as a binding, so it takes `(_)` -- which binds nothing, and nothing is said of it not being read.
 **A result of one is written with its types before the mark**, `Read(f64) ? Why`, and they are the answer's: the error is a
-name of its own, a type of the answer's module or one the language has, which takes none.
+name of its own -- one the language has, one of the file it is written in, or else one of the answer's module -- which takes
+none.
 
 Compare Haskell's `data Pair a = Pair a a`, Rust's `struct Pair<T>` with `where` bounds, C++ class templates with `requires`
 clauses, Go's `type Pair[T any] struct`, and Zig, where a function returning a type is how a type takes parameters.  The

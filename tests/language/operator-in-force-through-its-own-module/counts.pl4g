@@ -1,0 +1,12 @@
+※ pl4g-test: module
+※※ A count, written by an operator of its own with `std`'s `⍕`.
+
+let std := ⎕import("std")
+
+@[export]
+type Count = n : u64
+
+※※ The text of a count, by the `⍕` this file imported.
+@[export]
+fn `⍎`(c: Count) → str:
+    ⍕c.n

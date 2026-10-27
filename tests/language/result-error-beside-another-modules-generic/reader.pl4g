@@ -1,0 +1,18 @@
+※ pl4g-test: module
+※※ A reader whose answer is another module's generic and whose error is its own.
+
+let std := ⎕import("std")
+
+@[export]
+type Value = n : u64
+
+@[export]
+enum Error : u8:
+    empty ;
+    unreadable
+
+@[export]
+fn parse(b: u8⟦⟧) → std.string.Parsed(Value) ? Error:
+    if #b = 0:
+        return ⊥ Error.empty
+    std.string.Parsed(.value ← Value(.n ← 1u64), .end ← 1)

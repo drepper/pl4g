@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ An operator a module exports is in force where that module is imported, and
+※ through no other: `counts` imports `std` and so has `std`'s `⍕` in force, but
+※ it is not `counts`'s to export, and this file importing both is not told that
+※ `⍕` is exported twice.  What `counts` defines itself, `⍎` of a count, is
+※ its own and is in force here.
+
+let std := ⎕import("std")
+let counts := ⎕import("counts")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let c: counts.Count = counts.Count(.n ← 5u64)
+    if ⍕c.n ≠ "5":
+        return 1u6
+    if ⍎c ≠ "5":
+        return 2u6
+    0u6

@@ -5693,10 +5693,13 @@ class Checker:
             loaded.bundles = dict(inner._bundles)
             # Only the exported ones, unlike the bundles above: a bundle has a
             # name and so can be told "it is not yours to apply", and an operator
-            # has none to be told anything about.
+            # has none to be told anything about.  And only the file's own: one
+            # it imported is exported by the module it came from, and a file
+            # importing both would otherwise be told the one definition was two.
             loaded.operators = {key: what
                                 for key, what in inner._operators.items()
-                                if _is_exported(what)}
+                                if _is_exported(what)
+                                and key not in inner._operators_from}
             # A name inside a type is reached through the type, so only the
             # exported ones: one not exported is not a name this file can write
             # at all, the type being somebody else's.
@@ -6954,7 +6957,14 @@ class Checker:
     def _enum_value_of(self, expr: ast.Member) -> EnumConst | None:
         """The value of an enumeration a `TYPE.NAME` names, outside a body."""
         base = expr.base
-        held = self._top.get(base.name) if isinstance(base, ast.NameRef) else None
+        held: object | None = None
+        if isinstance(base, ast.NameRef):
+            held = self._top.get(base.name)
+        elif isinstance(base, ast.Member):
+            # `m.TYPE.NAME`, an enumeration another module exports: the value
+            # is as known while compiling as one of this file's.
+            through = self._module_at(base.base)
+            held = through.exports.get(base.name) if through is not None else None
         if not isinstance(held, _NamedType):
             self._diags.emit(
                 D.IMPL_UNIMPLEMENTED_FEATURE, expr.span,
@@ -9649,18 +9659,21 @@ class Checker:
             return self._module.types.result_type(found)
         # What the error carries is a type like any other, named the way the
         # answer is: the same lookup, and the same report where the name is not
-        # one.  A name alone is reached through the answer's module, except a
-        # type the language has, which no module defines: `std.fs.Pending ?
-        # i32` carries an `i32`.  A name written through a module is that
-        # module's, whatever the answer's is: `u64 ? std.string.ParseError`.
-        # The answer's type arguments are the answer's: `Parsed(f64) ? Fault`
-        # carries a `Fault`, which takes none.
+        # one.  A name alone is a type the language has, or one of the file it
+        # is written in, as a name alone is anywhere else; failing both, it is
+        # reached through the answer's module: `std.fs.Pending ? i32` carries
+        # an `i32`, `std.string.Parsed(Value) ? Error` the file's own `Error`,
+        # and `std.string.Parsed(f64) ? ParseError` the module's.  A name
+        # written through a module is that module's, whatever the answer's is:
+        # `u64 ? std.string.ParseError`.  The answer's type arguments are the
+        # answer's: `Parsed(f64) ? Fault` carries a `Fault`, which takes none.
         through, _, name = ref.error.rpartition(".")
+        own = name in BUILTIN_TYPES or isinstance(self._top.get(name), _NamedType)
         carried = self._resolve_type(
             replace(ref, name=name, result=False, error=None, unit=None,
                     args=(),
                     module=(through if through
-                            else None if name in BUILTIN_TYPES else ref.module)))
+                            else None if own else ref.module)))
         if carried is ERROR:
             return ERROR
         if carried is VOID:
@@ -9826,7 +9839,10 @@ class Checker:
                              wanted="two or more" if paired
                              else "one operand or two")
             return
-        self._operators[(node.name, len(node.params))] = what
+        key = (node.name, len(node.params))
+        self._operators[key] = what
+        # The file's own now, whatever an import put in force before it.
+        self._operators_from.pop(key, None)
 
     def _paired(self, builder: IRBuilder, base: ast.Expr, pair: str,
                 inside: Sequence[ast.Expr], span: Span,

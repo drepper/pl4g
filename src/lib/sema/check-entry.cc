@@ -1172,10 +1172,12 @@ namespace pl4g::sema {
     for (const auto& [name, bundle] : *inner->bundles)
       loaded->bundles[name] = bundle;
     // Only the exported operators and members: neither has a name an
-    // importing file could be told it may not use.
+    // importing file could be told it may not use.  And only the file's own
+    // operators: one it imported is exported by the module it came from, and a
+    // file importing both would otherwise be told the one definition was two.
     loaded->operators.clear();
     for (const auto& [key, what] : inner->operators)
-      if (is_exported(what))
+      if (is_exported(what) && ! inner->operators_from.contains(key))
         loaded->operators[key] = what;
     loaded->members.clear();
     for (const auto& [key, what] : inner->members)
@@ -2247,8 +2249,15 @@ namespace pl4g::sema {
 
   bool Checker::names_an_enum(const ast::Member* expr)
   {
-    auto ref = ast::as<ast::NameRef>(expr->base);
-    auto held = ref != nullptr ? top->get(std::string(ref->name)) : nullptr;
+    const Held* held = nullptr;
+    if (auto ref = ast::as<ast::NameRef>(expr->base); ref != nullptr)
+      held = top->get(std::string(ref->name));
+    else if (auto path = ast::as<ast::Member>(expr->base); path != nullptr) {
+      // `m.TYPE.NAME`, an enumeration another module exports: the value is as
+      // known while compiling as one of this file's.
+      LoadedModule* through = module_at(path->base);
+      held = through != nullptr ? through->exports.get(std::string(path->name)) : nullptr;
+    }
     auto named = held != nullptr ? held->get<NamedType>() : nullptr;
     return named != nullptr && ir::is<ir::EnumType>(resolved(named));
   }
@@ -2573,8 +2582,15 @@ namespace pl4g::sema {
 
   const ir::EnumConst* Checker::enum_value_of(const ast::Member* expr)
   {
-    auto ref = ast::as<ast::NameRef>(expr->base);
-    auto held = ref != nullptr ? top->get(std::string(ref->name)) : nullptr;
+    const Held* held = nullptr;
+    if (auto ref = ast::as<ast::NameRef>(expr->base); ref != nullptr)
+      held = top->get(std::string(ref->name));
+    else if (auto path = ast::as<ast::Member>(expr->base); path != nullptr) {
+      // `m.TYPE.NAME`, an enumeration another module exports: the value is as
+      // known while compiling as one of this file's.
+      LoadedModule* through = module_at(path->base);
+      held = through != nullptr ? through->exports.get(std::string(path->name)) : nullptr;
+    }
     auto named = held != nullptr ? held->get<NamedType>() : nullptr;
     if (named == nullptr) {
       diags.emit(D::IMPL_UNIMPLEMENTED_FEATURE, expr->span,
