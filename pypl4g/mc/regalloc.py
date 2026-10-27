@@ -858,6 +858,11 @@ class LinearScan:
         ranges = {found.reg.ident: found for found in assignment.ranges
                   if isinstance(found.reg, VirtReg)}
         split: dict[int, tuple[VirtReg, frozenset[int]]] = {}
+        # What put a value in the frame across its calls in an earlier round and
+        # is to go now: taken out once this round's splits are in, which find the
+        # calls by where they stood when the ranges were worked out -- with that
+        # code still there.
+        gone: set[int] = set()
         for victim in victims:
             if not victim.spillable:
                 raise RegisterPressureError(function.name, len(victims),
@@ -871,9 +876,7 @@ class LinearScan:
                 # there across the calls goes, every read and write of it
                 # reaching the frame now.
                 slots[victim.ident] = kept
-                gone = assignment.split_code.pop(victim.ident, set())
-                for block in function.blocks:
-                    block.insts = [one for one in block.insts if id(one) not in gone]
+                gone |= assignment.split_code.pop(victim.ident, set())
                 continue
             across = self._calls_across(ranges.get(victim.ident))
             if across and 2 * sum(runs for _, runs in across) \
@@ -885,6 +888,9 @@ class LinearScan:
             slots[victim.ident] = function.frame.allocate(victim.bits // 8)
         if split:
             self._split_at_calls(function, split, assignment)
+        if gone:
+            for block in function.blocks:
+                block.insts = [one for one in block.insts if id(one) not in gone]
         assignment.spilled.update(slots)
         wanted = {v.ident: v for v in victims if v.ident in slots}
         if not wanted:

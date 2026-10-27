@@ -699,6 +699,11 @@ namespace pl4g::mc {
       if (found.reg.is_virtual())
         ranges[found.reg.virt()->ident] = &found;
     OrderedMap<int, std::pair<const VirtReg*, std::set<std::int64_t>>> split;
+    // What put a value in the frame across its calls in an earlier round and is
+    // to go now: taken out once this round's splits are in, which find the calls
+    // by where they stood when the ranges were worked out -- with that code still
+    // there.
+    std::set<const MCInst*> gone;
     for (auto victim : victims) {
       if (! victim->spillable) [[unlikely]]
         throw RegisterPressureError(function.name, std::int64_t(victims.size()),
@@ -710,13 +715,10 @@ namespace pl4g::mc {
         // everywhere, then, in the slot it has, and what put it there across
         // the calls goes.
         slots[victim->ident] = *kept;
-        std::set<const MCInst*> gone;
         if (auto it = assignment.split_code.find(victim->ident); it != assignment.split_code.end()) {
-          gone = std::move(it->second);
+          gone.merge(it->second);
           assignment.split_code.erase(it);
         }
-        for (auto& block : function.blocks)
-          std::erase_if(block->insts, [&](const InstRef& one) { return gone.contains(one.get()); });
         continue;
       }
       auto it = ranges.find(victim->ident);
@@ -738,6 +740,9 @@ namespace pl4g::mc {
     }
     if (! split.empty())
       split_at_calls(function, split, assignment);
+    if (! gone.empty())
+      for (auto& block : function.blocks)
+        std::erase_if(block->insts, [&](const InstRef& one) { return gone.contains(one.get()); });
     for (const auto& [ident, slot] : slots)
       assignment.spilled[ident] = slot;
     OrderedMap<int, const VirtReg*> wanted;
