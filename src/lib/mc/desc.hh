@@ -38,15 +38,15 @@ namespace pl4g::mc {
   struct OperandSpec {
     OperandKind kinds{};
     const RegClass* rclass = nullptr;
-    std::optional<int> bits;
+    std::optional<int> bits{};
     // A slot that is always one particular register.
     const PhysReg* fixed = nullptr;
     // The width of the place, where a slot takes a register or a place in
     // memory and the two are named at different widths.
-    std::optional<int> mem_bits;
+    std::optional<int> mem_bits{};
     // The largest and the smallest value an immediate slot accepts.
-    std::optional<__int128> imm_max;
-    std::optional<__int128> imm_min;
+    std::optional<__int128> imm_max{};
+    std::optional<__int128> imm_min{};
 
     // Whether `operand` may be used in this slot.
     bool matches(const MCOperand& operand) const noexcept;
