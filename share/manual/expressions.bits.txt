@@ -7,6 +7,7 @@ Part of [[expressions]].
     a ↺ n   a ↻ n                  rotate left and right
     ⎕ones(a)  ⎕lead(a)  ⎕trail(a)  bits set, zeroes above, zeroes below
     ⎕wide_mul(a, b)                the whole 128-bit product of two 64-bit numbers
+    ⎕clmul(a, b)                   the same without carries, of two u64
 
 **The bitwise operators take whole numbers** -- and the values of a flag
 enumeration ([[types.enums]]) -- with both sides of one type: `1u8 & 2u16` is
@@ -27,7 +28,11 @@ over the set bits goes: take it, then clear it with `m & (m - 1)`.
 
 **`⎕wide_mul(a, b)`** multiplies two `u64` or two `i64` (4243) and answers
 `〈upper, lower〉`, the lower half always a `u64`: `let high, low :=
-⎕wide_mul(x, y)`.  It never fails.
+⎕wide_mul(x, y)`.  It never fails.  **`⎕clmul(a, b)`** is the product
+without carries -- of polynomials over bits, a CRC's and GHASH's -- of two
+`u64` (4020), answered the same way; `⎕clmul(x, ~0u64)`'s lower half is the
+prefix exclusive or of `x`.  One instruction at x86-64-v3 and with RISC-V's
+Zbc or Zbkc, ordinary multiplications elsewhere.
 
 **`⎕mask(b)`** makes the bits of a number out of an array of truth values
 ([[types.arrays.masks]]).
@@ -48,9 +53,10 @@ Program:
     fn main(init: std.Init) → u6:
         let m: u16 = 0b1010_0000_0110u16
         let high, low := ⎕wide_mul(1u64 « 63u64, 4u64)
-        _ ← std.println⌜&mut init.io.output, "{} {} {} {} {}", places(m), ⎕ones(m), 13u8 ↻ 1u8, high, low⌝
+        let square := ⎕clmul(0b1011u64, 0b1011u64)⟦1⟧
+        _ ← std.println⌜&mut init.io.output, "{} {} {} {} {} {}", places(m), ⎕ones(m), 13u8 ↻ 1u8, high, low, square⌝
         0u6
 
 Output:
 
-    [1, 2, 9, 11] 4 134 2 0
+    [1, 2, 9, 11] 4 134 2 0 69

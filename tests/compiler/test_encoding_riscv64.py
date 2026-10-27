@@ -38,10 +38,11 @@ ASSEMBLER = "/usr/bin/riscv64-linux-gnu-as"
 #: extension, single and double precision floating point, the vector
 #: extension, the rounding instructions of Zfa and the bit counts of Zbb --
 #: which is what the application profile this compiler builds for by default
-#: has, and what the rows below need to assemble.  The compressed encoding is
+#: has -- and the carry-less products of Zbc, which a program built for it
+#: has: what the rows below need to assemble.  The compressed encoding is
 #: deliberately not included: nothing emits it, and the header flag that would
 #: announce it stays clear.
-MARCH = "rv64imfdv_zfa_zbb"
+MARCH = "rv64imfdv_zfa_zbb_zbc"
 
 
 def assemble(mnemonic: str, *operands: object) -> bytes:
@@ -99,6 +100,8 @@ SAMPLES = [
     ("clz a0, a1", "clz", MCReg(reg("a0")), MCReg(reg("a1"))),
     ("ctz a0, a1", "ctz", MCReg(reg("a0")), MCReg(reg("a1"))),
     ("cpop a0, a1", "cpop", MCReg(reg("a0")), MCReg(reg("a1"))),
+    ("clmul a0, a1, a2", "clmul", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
+    ("clmulh t3, s1, a7", "clmulh", MCReg(reg("t3")), MCReg(reg("s1")), MCReg(reg("a7"))),
     ("div a0, a1, a2", "div", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
     ("divu a0, a1, a2", "divu", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
     ("rem a0, a1, a2", "rem", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),

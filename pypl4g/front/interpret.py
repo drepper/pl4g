@@ -40,7 +40,8 @@ from ..ir.inst import (AddressInst, AssertInst, BinaryInst, BinOp, BrInst,
                        ExtractInst, FailedInst, FieldInst, FrameInst, Instruction,
                        LoadInst, MemStartInst, RetInst, StoreInst, SumGetInst,
                        SumMakeInst, SumTagInst, SwitchInst, TupleInst,
-                       UnaryInst, UnOp, UnreachableInst, WrapInst)
+                       UnaryInst, UnOp, UnreachableInst, WrapInst,
+                       carryless_product)
 from ..ir.layout import (DataLayout, align_of, member_offsets_of, offsets_of,
                          size_of, tag_offset_of)
 from ..ir.types import (BOOL, BoolType, CharType, EnumType, FloatType, IntType,
@@ -332,6 +333,11 @@ class Machine:
             assert isinstance(upper, IntType)
             return (_in_range((whole >> 64) & ((1 << 64) - 1), upper),
                     whole & ((1 << 64) - 1))
+        if inst.op is BinOp.CLMUL:
+            # The same two halves of a product with no carries in it, both of
+            # them unsigned.
+            whole = carryless_product(left, right)
+            return ((whole >> 64) & ((1 << 64) - 1), whole & ((1 << 64) - 1))
         if ty is BOOL:
             found = _ARITHMETIC.get(inst.op)
             if found is None:

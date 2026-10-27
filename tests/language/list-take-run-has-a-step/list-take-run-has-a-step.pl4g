@@ -1,0 +1,16 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4022 LANG_TAKE_RUN_HAS_A_STEP
+
+※ What `†l⟦i…j⟧` takes out is one piece, and what followed it moves down by the
+※ length of the piece.  Every other element of a run would leave the rest in
+※ pieces, each moved by a different distance -- which is a filter over the list
+※ and not a run taken out of it, so a step is refused here though a slice may
+※ have one.
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: mut [u8] = [1u8, 2u8, 3u8, 4u8]
+    †l⟦0…4…2⟧
+    0u6

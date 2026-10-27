@@ -402,6 +402,19 @@ class InstructionSelector(Protocol):
         """
         ...
 
+    def select_carryless_product(self, low: Reg, high: Reg, left: MCOperand,
+                                 right: MCOperand,
+                                 span: Span) -> Sequence[MCInst]:
+        """Instructions computing both halves of the product of *left* and
+        *right* without carries, the low one into *low* and the upper one into
+        *high*.
+
+        Asked only of a selector that says `multiplies_carryless`: where there
+        is no instruction the product is a sequence of ordinary ones, which is
+        written once for every target (`target.carryless`).
+        """
+        ...
+
     def link_slot_size(self) -> int:
         """How much room a function that calls has to set aside for its own
         return address, which is none where a call has already put it somewhere
@@ -1159,6 +1172,19 @@ class Assembler:
         """And whether it has one that counts the zeroes below the lowest set
         bit, nought included."""
         return bool(getattr(self._selector, "counts_trailing", False))
+
+    @property
+    def multiplies_carryless(self) -> bool:
+        """Whether the target has the product of two words without carries as
+        an instruction, which on two of the three is a question of what the
+        program was built for."""
+        return bool(getattr(self._selector, "multiplies_carryless", False))
+
+    def carryless_product(self, low: Reg, high: Reg, left: MCOperand,
+                          right: MCOperand, span: Span = INVALID_SPAN) -> None:
+        """Multiply *left* by *right* without carries into *high*:*low*."""
+        self._emit(self._selector.select_carryless_product(low, high, left,
+                                                           right, span))
 
     @property
     def converts_unsigned(self) -> bool:

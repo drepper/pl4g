@@ -1,0 +1,23 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4021 LANG_TAKE_RUN_NOT_A_VALUE
+※ pl4g-test: expect-diag 4021 LANG_TAKE_RUN_NOT_A_VALUE
+※ pl4g-test: expect-diag 4021 LANG_TAKE_RUN_NOT_A_VALUE
+
+※ `†l⟦i⟧` answers the element it took out; `†l⟦i…j⟧` answers nothing.  The run
+※ is not kept anywhere an answer could be made of, and a list of it would be
+※ room made for something a program cutting a list short almost never reads --
+※ so it is a statement and only a statement.  Bound to a name, an operand of an
+※ operator, a function's answer: each is a value wanted of it.  A program that
+※ wants the elements reads them first, `l⟦i…j⟧`, and copies what it keeps.
+
+let std := ⎕import("std")
+
+fn cut(l: mut [u8]) → [u8]:
+    †l⟦0…1⟧
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: mut [u8] = [1u8, 2u8, 3u8]
+    let gone := †l⟦0…1⟧
+    let n: u64 = #(†l⟦0…1⟧)
+    0u6

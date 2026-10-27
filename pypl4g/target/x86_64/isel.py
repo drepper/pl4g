@@ -40,6 +40,7 @@ from ...ir.types import (ResultType, leaves_of, VecType, made_of_parts,
 from ..callconv import (OnStack, TooManyArguments, argument_places, calls_placed,
                         destroyed_by, result_places, stack_bytes)
 from ..bitcount import COUNTING, lower_count
+from ..carryless import CARRYLESS, lower_carryless
 from ..saturate import (DIVISION, EXTREMA, NAMES, SATURATING, TRAPPING,
                         Unsupported,
                         SHIFTS, WRAPPING, lower_division_result,
@@ -183,7 +184,8 @@ class X86Selector(InstructionSelector):
 
     def __init__(self, table: InstrTable | None = None,
                  rounds: bool = True, counts_ones: bool = False,
-                 counts_leading: bool = False) -> None:
+                 counts_leading: bool = False,
+                 multiplies_carryless: bool = False) -> None:
         self.table = table if table is not None else InstrTable(X86_INSTRS)
         #: Whether the level this is generating for has the rounding
         #: instruction.  It is SSE4.1, which the second level promises and the
@@ -196,6 +198,9 @@ class X86Selector(InstructionSelector):
         #: without one gets the sequence that stands in for it.
         self.counts_ones = counts_ones
         self.counts_leading = counts_leading
+        #: And whether it has the product without carries, which this compiler
+        #: has the third level ask the processor for.
+        self.multiplies_carryless = multiplies_carryless
 
     def _inst(self, mnemonic: str, operands: Sequence[MCOperand], span: Span) -> MCInst:
         """Select the shortest encoding of *mnemonic* for *operands*."""
@@ -1221,6 +1226,40 @@ class X86Selector(InstructionSelector):
         held.extend(self.select_move(low, MCReg(accumulator), span))
         return tuple(held)
 
+    def select_carryless_product(self, low: Reg, high: Reg, left: MCOperand,
+                                 right: MCOperand,
+                                 span: Span) -> Sequence[MCInst]:
+        """Both halves of the product of *left* and *right* without carries.
+
+        `pclmulqdq` multiplies one quadword of each of two vector registers, so
+        the factors are moved over and the product moved back a half at a time:
+        the lower half is where `movq` reads, and the upper one is brought down
+        to it first.  Five instructions and the one multiplication among them.
+        """
+        held: list[MCInst] = []
+        factors: list[VirtReg] = []
+        for factor in (left, right):
+            word, before = self._in_register(factor, 64, span)
+            held.extend(before)
+            into = REGISTERS.new_virtual(VEC, _FLOAT_REGISTER_BITS)
+            held.append(self._inst("movq", (MCReg(into, bits=128), word), span))
+            factors.append(into)
+        product, other = factors
+        held.append(self._inst("pclmulqdq", (MCReg(product, bits=128),
+                                             MCReg(other, bits=128),
+                                             MCImm(0, 8, signed=False)), span))
+        held.append(self._inst("movq", (MCReg(low, bits=64),
+                                        MCReg(product, bits=128)), span))
+        # The upper quadword copied into both halves, so that the move that
+        # reads the lower one reads it.
+        upper = REGISTERS.new_virtual(VEC, _FLOAT_REGISTER_BITS)
+        held.append(self._inst("pshufd", (MCReg(upper, bits=128),
+                                          MCReg(product, bits=128),
+                                          MCImm(0xEE, 8, signed=False)), span))
+        held.append(self._inst("movq", (MCReg(high, bits=64),
+                                        MCReg(upper, bits=128)), span))
+        return tuple(held)
+
     def _in_register(self, operand: MCOperand, bits: int,
                      span: Span) -> tuple[MCReg, Sequence[MCInst]]:
         """*operand* as a register of *bits*, with whatever puts it in one."""
@@ -1920,6 +1959,17 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                         asm.loadreg(result, MCReg(_value_of(value, held, span)),
                                     inst.span)
                     asm.ret(inst.span, (result,))
+                case BinaryInst() if inst.op is CARRYLESS:
+                    # The same two halves of a product with no carries in it,
+                    # with the instruction where the program was built for one.
+                    high = registers.new_virtual(GPR, 64)
+                    low = registers.new_virtual(GPR, 64)
+                    held[id(inst)] = high
+                    extra[id(inst)] = [low]
+                    lower_carryless(asm, low, high,
+                                    operands.value(inst.operands[0], inst.span),
+                                    operands.value(inst.operands[1], inst.span),
+                                    operands, inst.span)
                 case BinaryInst() if inst.op is BinOp.WIDE_MUL:
                     # Both halves at once, the upper one first as the tuple
                     # has them: one instruction answers both here.

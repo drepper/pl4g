@@ -1,0 +1,69 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `†l⟦i…j⟧` takes the elements from `i` up to and not including `j` out of a
+※ list, and what followed them moves down into their place: the list is `j - i`
+※ shorter.  `†l⟦n…#l⟧` cuts it short to `n` elements, and nothing moves.  It is
+※ a statement and answers nothing.  The room the list had is kept, so joining
+※ onto it again asks for none -- and another name holding the list keeps what
+※ it had, as with every change made in place.
+
+let std := ⎕import("std")
+
+※ Whether `l` holds exactly what `want` does, in order.
+fn same(l: u16⟦⟧, want: u16⟦⟧) → bool:
+    if #l ≠ #want:
+        return false
+    let n: u64 ¤idx = ⎕unit(⎕drop(#l), ⌜idx⌝)
+    let at: mut u64 ¤idx = 0
+    while at < n:
+        if l⟦at⟧ ≠ want⟦at⟧:
+            return false
+        at ← at + 1
+    true
+
+※ A number the compiler cannot see, so that the ends are worked out while running.
+@[opaque]
+fn given(n: u64 ¤idx) → u64 ¤idx:
+    n
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: mut [u16] = []
+    foreach i := 0u16…10u16:
+        l ⧺← [i]
+    let kept: [u16] = l
+    ※ a run out of the middle, what follows moving down
+    †l⟦2…5⟧
+    if ¬same(l, ⟦0u16, 1u16, 5u16, 6u16, 7u16, 8u16, 9u16⟧):
+        return 1u6
+    ※ cut short, with ends nobody wrote down
+    †l⟦given(4)…#l⟧
+    if ¬same(l, ⟦0u16, 1u16, 5u16, 6u16⟧):
+        return 2u6
+    ※ an empty run, at the start and at the end, changes nothing
+    let end: u64 ¤idx = ⎕unit(⎕drop(#l), ⌜idx⌝)
+    †l⟦0…0⟧
+    †l⟦end…#l⟧
+    if ¬same(l, ⟦0u16, 1u16, 5u16, 6u16⟧):
+        return 3u6
+    ※ the front, and then everything
+    †l⟦0…given(1)⟧
+    if ¬same(l, ⟦1u16, 5u16, 6u16⟧):
+        return 4u6
+    ※ the list joined onto again after being cut short has what was joined
+    l ⧺← [7u16, 8u16]
+    if ¬same(l, ⟦1u16, 5u16, 6u16, 7u16, 8u16⟧):
+        return 5u6
+    †l⟦0…#l⟧
+    if #l ≠ 0:
+        return 6u6
+    ※ and the other name for it kept what it had
+    if #kept ≠ 10 ∨ kept⟦3⟧ ≠ 3u16:
+        return 7u6
+    ※ a list of text, cut short: what is left is what it was
+    let words: mut [str] = []
+    words ⧺← ["one", "two", "three", "four"]
+    †words⟦1…3⟧
+    if #words ≠ 2 ∨ words⟦0⟧ ≠ "one" ∨ words⟦1⟧ ≠ "four":
+        return 8u6
+    0u6

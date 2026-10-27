@@ -1,0 +1,17 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=82 diag=none
+
+※ A run whose end is before its start is no run, and taking it out stops the
+※ program as a slice whose end is before its start does: there is no number
+※ of elements it could take out.
+
+let std := ⎕import("std")
+
+@[opaque]
+fn given(n: u64 ¤idx) → u64 ¤idx:
+    n
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: mut [u8] = [1u8, 2u8, 3u8]
+    †l⟦given(2)…1⟧
+    0u6

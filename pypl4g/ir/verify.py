@@ -279,12 +279,14 @@ class Verifier:
                     self._fail(where, "".join((
                         "the address of a ", inst.operands[0].ty.render(),
                         " read as ", inst.ty.render())))
-            case BinaryInst() if inst.op is BinOp.WIDE_MUL:
+            case BinaryInst() if inst.op in (BinOp.WIDE_MUL, BinOp.CLMUL):
                 # Two 64-bit numbers of one type, and the two halves of their
                 # product: the upper one of the operands' type and the lower
-                # one unsigned, the bits below the top half having no sign.
+                # one unsigned, the bits below the top half having no sign.  A
+                # carry-less product is of words of bits, which have none.
                 ty = inst.operands[0].ty
                 if not (isinstance(ty, IntType) and ty.bits == 64) \
+                        or (inst.op is BinOp.CLMUL and ty.signed) \
                         or without_units(ty) != without_units(inst.operands[1].ty):
                     self._fail(where, "".join((
                         "'", inst.opcode, "' of ", ty.render(), " and ",

@@ -272,9 +272,10 @@ type Carry = escaped : u64 ; inside : u64 ; scalar : u64 ; starts : u64
 ※ run is odd -- which subtraction does for every run at once, the odd places
 ※ brought in first and taken out after (simdjson's `json_escape_scanner`).
 ※ **In a string**: a quote not escaped flips it, which is a prefix exclusive or
-※ of the quotes -- `x ^= x « 1`, `« 2`, and so on to `« 32`, the ladder a
-※ carry-less multiplication by all ones would be on a machine that has one --
-※ continued from the block before.  **Begins something**: a structural
+※ of the quotes -- the lower half of their carry-less product with all ones,
+※ one instruction where the machine has it and the ladder `x ^= x « 1`, `« 2`,
+※ and so on to `« 32` where it has not (simdjson's `prefix_xor`) -- continued
+※ from the block before.  **Begins something**: a structural
 ※ character, or a byte that is neither white space nor structural after one
 ※ that is either -- a quote counted as the end of a run, so that what follows
 ※ the end of a string begins again -- and not inside a string, the quote that
@@ -294,14 +295,7 @@ fn block_starts(block: u8⟦64⟧, before: Carry) → Carry:
         escaped ← codes ^ (backslash | before.escaped)
         carried ← (codes & backslash) » 63u64
     let real: u64 = quote & ~escaped
-    let flipped: mut u64 = real
-    flipped ← flipped ^ (flipped « 1u64)
-    flipped ← flipped ^ (flipped « 2u64)
-    flipped ← flipped ^ (flipped « 4u64)
-    flipped ← flipped ^ (flipped « 8u64)
-    flipped ← flipped ^ (flipped « 16u64)
-    flipped ← flipped ^ (flipped « 32u64)
-    let in_string: u64 = flipped ^ before.inside
+    let in_string: u64 = ⎕clmul(real, 0xFFFFFFFFFFFFFFFFu64)⟦1⟧ ^ before.inside
     let scalar: u64 = ~(operator | space)
     let plain: u64 = scalar & ~real
     let follows: u64 = (plain « 1u64) | before.scalar

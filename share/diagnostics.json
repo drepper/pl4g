@@ -2108,6 +2108,60 @@
       "option": "unread-variable"
     },
     {
+      "number": 4020,
+      "name": "LANG_CLMUL_NOT_A_WORD",
+      "severity": "error",
+      "message": "'⎕clmul' multiplies two 'u64' without carries, and '{found}' is not one",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what it was given"
+        }
+      ],
+      "cause": "A carry-less product is a product of two polynomials whose coefficients are bits, so what it is given are words of bits and not numbers: a sign means nothing to it, and a narrower word is a wider one with zeroes above it, which a program says by widening it first.  So it takes two `u64` -- the one width every machine that has the instruction has it at -- and answers the 128 bits of the product as two of them.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / The carry-less product",
+        "requirement": "`⎕clmul` takes two `u64`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4021,
+      "name": "LANG_TAKE_RUN_NOT_A_VALUE",
+      "severity": "error",
+      "message": "taking a run of elements out of a list answers nothing, so it is written as a statement of its own",
+      "args": [],
+      "cause": "`†l⟦i⟧` answers the element it took out, which is a value the list held.  A run taken out would be a list of them, and the room for one would have to be made somewhere and given back by somebody -- for an answer that a program cutting a list short almost never wants.  So `†l⟦i…j⟧` takes the run out and answers nothing, and is written where nothing is wanted of it.  A program that wants the elements as well reads them first, `l⟦i…j⟧`, and copies what it keeps.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Lists",
+        "requirement": "`†l⟦i…j⟧` is a statement."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4022,
+      "name": "LANG_TAKE_RUN_HAS_A_STEP",
+      "severity": "error",
+      "message": "a run taken out of a list is one piece, and has no step",
+      "args": [],
+      "cause": "What is taken out is the elements from one place up to another, and what followed moves down into the room they leave.  Every other one of them would leave the rest in pieces, each moved by a different distance, which is a filter over the list rather than a run taken out of it -- and is written as one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Lists",
+        "requirement": "The run `†l⟦i…j⟧` takes out has two ends and no step."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4100,
       "name": "LANG_IMPORT_NOT_FOUND",
       "severity": "error",

@@ -1,0 +1,17 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=82 diag=none
+
+※ A run taken out of a list reaching past its end stops the program, as a slice
+※ reaching past the end does and an index past the end does: what was asked
+※ for is not there.  The end may be the length itself and no more.
+
+let std := ⎕import("std")
+
+@[opaque]
+fn given(n: u64) → u64:
+    n
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: mut [u8] = [1u8, 2u8, 3u8]
+    †l⟦1…given(4u64)⟧
+    0u6

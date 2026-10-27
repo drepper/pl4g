@@ -39,6 +39,7 @@ from ...ir.types import (ResultType, leaves_of, VecType, made_of_parts,
 from ..callconv import (OnStack, TooManyArguments, argument_places, calls_placed,
                         destroyed_by, result_places, stack_bytes)
 from ..bitcount import COUNTING, lower_count
+from ..carryless import CARRYLESS, lower_carryless
 from ..saturate import (DIVISION, EXTREMA, NAMES, SATURATING, TRAPPING,
                         Unsupported,
                         SHIFTS, WRAPPING, lower_division_result,
@@ -1999,6 +2000,17 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                         asm.loadreg(result, MCReg(_value_of(value, held, span)),
                                     inst.span)
                     asm.ret(inst.span, (result,))
+                case BinaryInst() if inst.op is CARRYLESS:
+                    # The same two halves of a product with no carries in it,
+                    # with the instruction where the program was built for one.
+                    high = registers.new_virtual(GPR, 64)
+                    low = registers.new_virtual(GPR, 64)
+                    held[id(inst)] = high
+                    extra[id(inst)] = [low]
+                    lower_carryless(asm, low, high,
+                                    operands.value(inst.operands[0], inst.span),
+                                    operands.value(inst.operands[1], inst.span),
+                                    operands, inst.span)
                 case BinaryInst() if inst.op is BinOp.WIDE_MUL:
                     # Both halves, the upper one first as the tuple has them.
                     high = registers.new_virtual(GPR, 64)

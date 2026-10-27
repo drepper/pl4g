@@ -859,6 +859,17 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, imm_op=2, imm_bits=8, est_size=5,
                 roles=(OperandRole.DEF, OperandRole.USE, OperandRole.USE)),
+    # The product of two quadwords without carries, all 128 bits of it, in the
+    # register the first factor was in.  The immediate says which half of each
+    # register is a factor -- bit 0 the first's, bit 4 the second's -- and nought
+    # is the two lower ones, which is where a word moved in from an ordinary
+    # register is.  It is not in any of the architecture's levels; this compiler
+    # has the third ask for it (see `levels`).
+    # pclmulqdq xmm, xmm/m128, imm8     66 0F 3A 44 /r ib
+    X86InstDesc("pclmulqdq", (_x(), _xm(128), _imm(8)), opcode=0x44,
+                map=OpMap.M0F3A, mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, imm_op=2, imm_bits=8, est_size=6,
+                roles=(OperandRole.DEF_USE, OperandRole.USE, OperandRole.USE)),
     # -- the same, thirty-two bytes at a time -----------------------------------
     # These are AVX2, which the architecture's third level includes.  They are
     # the same operations over twice as many lanes, with two differences that

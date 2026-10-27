@@ -39,7 +39,8 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            ARRAY_OPEN_GLYPH, ARRAY_CLOSE_GLYPH,
                            SET_OPEN_GLYPH, SET_CLOSE_GLYPH,
                            DROP_NAME, LEAD_NAME, MASK_NAME, NARROW_NAME, ONES_NAME,
-                           TRAIL_NAME, WIDE_MUL_NAME, FLOAT_NAME, TRUNC_NAME,
+                           TRAIL_NAME, WIDE_MUL_NAME, CLMUL_NAME, FLOAT_NAME,
+                           TRUNC_NAME,
                            BITS_NAME, FROM_BITS_NAME,
                            UNIT_NAME,
                           ENUMERATE_NAME, TYPEOF_NAME,
@@ -56,7 +57,8 @@ from ..ir.layout import (DataLayout, member_offsets_of, offsets_of,
 from ..ir.inst import (AddressInst, BinaryInst, BinOp, CallInst, CastInst,
                        CastKind, CmpPred,
                        ExtractInst, FrameInst, Instruction, LoadInst, MemStartInst, RetInst,
-                       Ordering, StoreInst, Terminator, TupleInst, UnOp)
+                       Ordering, StoreInst, Terminator, TupleInst, UnOp,
+                       carryless_product)
 from ..target.registry import architecture_of, conventions_of
 from ..target.syscalls import KNOWN as SYSCALL_NAMES, number_of
 from ..runtime import names as runtime_names
@@ -12170,6 +12172,11 @@ class Checker:
                     # body.  It is the one expression that is worth writing for
                     # what it does rather than for what it comes to.
                     self._lower_match(builder, stmt.value, func, None, False)
+                elif isinstance(stmt.value, ast.TakeAt) \
+                        and isinstance(stmt.value.index, ast.Range):
+                    # A run taken out of a list answers nothing, which is why
+                    # it is written here and nowhere a value is wanted.
+                    self._lower_take_run(builder, stmt.value)
                 else:
                     self._check_value_is_used(stmt.value)
                     self._lower_expr(builder, stmt.value, None)
@@ -17818,6 +17825,11 @@ class Checker:
         past the end of an array does -- one rule for indexing, whatever is
         indexed.
         """
+        if isinstance(expr.index, ast.Range):
+            # A run taken out answers nothing, and here something is wanted of
+            # it: an operand, a value bound to a name, an answer (4021).
+            self._diags.emit(D.LANG_TAKE_RUN_NOT_A_VALUE, expr.span)
+            return UndefConst(ERROR)
         found = self._list_place(builder, expr.base, expr.base.span)
         if found is None:
             return UndefConst(ERROR)
@@ -17838,6 +17850,72 @@ class Checker:
         gone = self._element_of(builder, elements, ty, at, expr.span)
         self._erased(builder, place, ty, elements, count, at, expr.span)
         return gone
+
+    def _lower_take_run(self, builder: IRBuilder, expr: ast.TakeAt) -> None:
+        """Lower `†l⟦i…j⟧`, which takes the elements from *i* up to and not
+        including *j* out and answers nothing.
+
+        What follows the run moves down into its place, and the list is that
+        many shorter: `†l⟦n…#l⟧` cuts it short to *n*, moving nothing.  The two
+        ends are checked as a slice's are -- the end against how many there are
+        and the start against the end -- and stop the program where they are
+        out of range, as an index does.  The room is kept, as `Vec::truncate`
+        keeps it, so the list grows into it again without asking for more; and
+        what is taken out is not given back, as the element `†l⟦i⟧` takes is
+        not -- another name for the list may hold it.
+
+        It is a statement, and only a statement (4021): the run is not kept
+        anywhere for an answer to be made of, and a list of it would be room
+        made for something a program cutting a list short almost never reads.
+        """
+        written = expr.index
+        assert isinstance(written, ast.Range)
+        found = self._list_place(builder, expr.base, expr.base.span)
+        if found is None:
+            return
+        place, ty = found
+        if written.step is not None:
+            # A run is one piece; every other element is a filter (4022).
+            self._diags.emit(D.LANG_TAKE_RUN_HAS_A_STEP, written.step.span)
+            return
+        first = self._index_into(builder, written.start, expr.span)
+        if first is None:
+            return
+        # The end may be the length itself, one past the last element, and is
+        # read as a slice's end is: as the count it is, of whatever it counts.
+        last = self._on_its_own(builder, written.stop)
+        reaching = self._value_type_of(last)
+        if reaching is ERROR:
+            return
+        if not isinstance(reaching, IntType):
+            self._diags.emit(D.LANG_ARRAY_INDEX_NOT_A_NUMBER, written.stop.span,
+                             found=reaching.written())
+            return
+        end = self._as_count(builder, last, reaching, expr.span)
+        if not self._made_here(place):
+            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
+        self._made_writable(builder, place, ty, expr.span, expr.base)
+        elements, count, held = self._list_at(builder, place, ty, expr.span)
+        builder.check(builder.compare(CmpPred.ULE, end, count, expr.span),
+                      "a run reaching past the end of its list",
+                      statuses.OUT_OF_RANGE, expr.span)
+        builder.check(builder.compare(CmpPred.ULE, first, end, expr.span),
+                      "a run that ends before it begins",
+                      statuses.OUT_OF_RANGE, expr.span)
+        builder.call(lists.erase_run_function(self._module),
+                     (builder.cast(CastKind.BITCAST, elements,
+                                   self._module.types.ptr_type(U8, mutable=True),
+                                   expr.span),
+                      builder.int_const(U64, stride_of(ty.element, _LAYOUT)),
+                      count, first, end),
+                     VOID, expr.span)
+        builder.store(place, builder.make_tuple(
+            (elements, builder.binary(
+                BinOp.WRAP_SUB, count,
+                builder.binary(BinOp.WRAP_SUB, end, first, expr.span),
+                expr.span),
+             builder.extract(held, 2, parts_of(ty)[2], expr.span)),
+            ty, expr.span), expr.span)
 
     def _room_made(self, builder: IRBuilder, place: Value, ty: ListType,
                    more: Value, span: Span) -> tuple[Value, Value, Value, Value, Value]:
@@ -26824,6 +26902,72 @@ class Checker:
                 answer, expr.span)
         return builder.binary(BinOp.WIDE_MUL, left, right, expr.span, answer)
 
+    def _lower_clmul(self, builder: IRBuilder, expr: ast.Call,
+                     expected: Type | None) -> Value:
+        """Lower `⎕clmul(A, B)`: the product of two 64-bit words with no
+        carries, as a tuple of its upper half and its lower half.
+
+        **It is a product of polynomials whose coefficients are bits**, which
+        is what a cyclic redundancy check divides by and what GHASH multiplies
+        in: each bit of the answer is the exclusive or of the products of the
+        bits whose places add up to its own, and nothing carries from one
+        place to the next.  Answered as `⎕wide_mul` answers -- two `u64`, the
+        upper one first -- because it is the same shape of question, the
+        product of two words taking two words.
+
+        **Both operands are `u64`** and nothing else (4020).  A word of bits
+        has no sign, so an `i64` is refused rather than read as one; a
+        narrower word is a wider one with zeroes above it, which a program
+        says by widening it, and its product then has zeroes in the upper half.
+
+        **One instruction where the machine has it** -- `pclmulqdq` at x86-64's
+        third level, `clmul` and `clmulh` with RISC-V's Zbc or Zbkc -- and a
+        sequence of ordinary multiplications where it has not, which the back
+        end writes.  Two words written down are multiplied here, as
+        `⎕wide_mul`'s are.
+        """
+        if len(expr.args) != 2:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=CLMUL_NAME, expected=2,
+                             found=len(expr.args))
+            return UndefConst(ERROR)
+        # The two are operands of one multiplication, so they take their type
+        # from each other as an operator's do, and a mismatch between them is
+        # reported as one between an operator's.
+        context = self._hint_of(expr.args[0]) or self._hint_of(expr.args[1])
+        outer, self._operand_of = self._operand_of, CLMUL_NAME
+        try:
+            left = self._lower_expr(builder, expr.args[0], context)
+            found = self._value_type_of(left)
+            if found is ERROR:
+                return UndefConst(ERROR)
+            if not isinstance(found, IntType) or found.bits != 64 \
+                    or found.signed:
+                self._diags.emit(D.LANG_CLMUL_NOT_A_WORD, expr.args[0].span,
+                                 found=found.written())
+                return UndefConst(ERROR)
+            told = self._diags.error_count
+            right = self._lower_expr(builder, expr.args[1], found)
+            other = self._value_type_of(right)
+            if other is not found and other is not ERROR \
+                    and self._diags.error_count == told:
+                self._report_mismatch(expr.args[1].span, other, found)
+        finally:
+            self._operand_of = outer
+        if other is not found:
+            return UndefConst(ERROR)
+        answer = self._module.types.tuple_type((U64, U64))
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        if isinstance(left, IntConst) and isinstance(right, IntConst):
+            whole = carryless_product(left.value, right.value)
+            return builder.make_tuple(
+                (builder.int_const(U64, whole >> 64),
+                 builder.int_const(U64, whole & ((1 << 64) - 1))),
+                answer, expr.span)
+        return builder.binary(BinOp.CLMUL, left, right, expr.span, answer)
+
     def _numeric_target(self, written: ast.Expr, name: str) -> Type | None:
         """The type the last argument of one of the crossings between whole and
         floating-point numbers lifts, or a report that it lifts none."""
@@ -27115,6 +27259,8 @@ class Checker:
                 return self._lower_mask(builder, expr, expected)
             if given == WIDE_MUL_NAME:
                 return self._lower_wide_mul(builder, expr, expected)
+            if given == CLMUL_NAME:
+                return self._lower_clmul(builder, expr, expected)
             if given == FLOAT_NAME:
                 return self._lower_to_float(builder, expr, expected)
             if given == TRUNC_NAME:

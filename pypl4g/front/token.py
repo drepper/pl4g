@@ -380,6 +380,11 @@ TRAIL_NAME: Final[str] = "".join((BUILTIN_GLYPH, "trail"))
 #: half.  What every machine has an instruction for and no type of the language
 #: is wide enough to hold, which is why it answers two of them.
 WIDE_MUL_NAME: Final[str] = "".join((BUILTIN_GLYPH, "wide_mul"))
+#: And the product of two 64-bit numbers without the carries, which is the
+#: product of two polynomials over the field of two elements -- a checksum's
+#: and a cipher's arithmetic, and a prefix exclusive or when one of them is all
+#: ones.  Answered the way the other is, the upper half first.
+CLMUL_NAME: Final[str] = "".join((BUILTIN_GLYPH, "clmul"))
 
 #: The crossings between whole numbers and floating-point ones.  A whole number
 #: becomes the floating-point number nearest it, which cannot fail; a

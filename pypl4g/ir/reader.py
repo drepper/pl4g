@@ -329,12 +329,13 @@ class _FunctionReader:
             # the width the answer is: the checker widened them before this.
             given = [self._value(one, ty, number) for one in parts]
             return block.append(SyscallInst(given[0], given[1:], ty))
-        if head == BinOp.WIDE_MUL.value and isinstance(ty, TupleType):
+        if head in (BinOp.WIDE_MUL.value, BinOp.CLMUL.value) \
+                and isinstance(ty, TupleType):
             # The operands are of the type of the upper half, the answer
             # being the two halves of what they come to.
             factor = ty.members[0]
             return block.append(BinaryInst(
-                BinOp.WIDE_MUL, self._value(parts[0], factor, number),
+                BinOp(head), self._value(parts[0], factor, number),
                 self._value(parts[1], factor, number), ty=ty))
         if head in _BINOPS:
             lhs = self._value(parts[0], ty, number)

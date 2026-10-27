@@ -1,0 +1,103 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕clmul(A, B)` is the product of two 64-bit words with no carries in it --
+※ the product of two polynomials whose coefficients are bits, which is what a
+※ cyclic redundancy check and GHASH compute with -- and it takes 128 bits, so it
+※ is answered as `⎕wide_mul` answers: the upper half and the lower half, in
+※ that order, as a tuple of two `u64`.
+※
+※ What the machine does for it depends on what the program was built for: one
+※ instruction where there is one, and ordinary multiplications arranged so that
+※ no carry reaches a bit that is read where there is not.  Either way the answer
+※ is the one the schoolbook method gives, a bit at a time, which is what this
+※ checks it against over a few thousand pairs nobody wrote down.  A factor of
+※ all ones written down is the prefix exclusive or of the other -- each bit of
+※ the lower half the exclusive or of the bits at and below its place -- which is
+※ what finding the bytes inside a string asks; and two numbers written down are
+※ multiplied while compiling.
+
+let std := ⎕import("std")
+
+※ The product the slow way: the first factor shifted to the place of every bit
+※ the second has set, the copies combined without carries.
+fn slowly(a: u64, b: u64) → 〈u64, u64〉:
+    let high: mut u64 = 0u64
+    let low: mut u64 = 0u64
+    let at: mut u64 = 0u64
+    while at < 64u64:
+        if (b » at) & 1u64 = 1u64:
+            low ← low ^ (a « at)
+            if at > 0u64:
+                high ← high ^ (a » (64u64 - at))
+        at ← at + 1u64
+    〈high, low〉
+
+※ And every bit at and below each place of `x`, and above it: a factor of all
+※ ones, the slow way.
+fn prefix(x: u64) → 〈u64, u64〉:
+    slowly(x, 18446744073709551615u64)
+
+※ The next number of a sequence nobody wrote down (xorshift64).
+fn next(x: u64) → u64:
+    let a: u64 = x ^ (x « 13u64)
+    let b: u64 = a ^ (a » 7u64)
+    b ^ (b « 17u64)
+
+※ `y` as it comes, made sparse, or made narrow.
+fn shaped(y: u64, how: u64) → u64:
+    if how = 0u64:
+        y
+    elif how = 1u64:
+        y & (y » 32u64)
+    else:
+        y » 40u64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let x: mut u64 = given(88172645463325252u64)
+    let y: mut u64 = given(2463534242u64)
+    let turn: mut u64 = 0u64
+    while turn < 3000u64:
+        x ← next(x)
+        y ← next(y)
+        ※ as they come, and with one of them made sparse or narrow, which is
+        ※ where a sequence of ordinary multiplications would carry first
+        let b: u64 = shaped(y, turn & 3u64)
+        let high, low := ⎕clmul(x, b)
+        let want := slowly(x, b)
+        if high ≠ want⟦0⟧ ∨ low ≠ want⟦1⟧:
+            return 1u6
+        ※ either way round, it being a product
+        let other, under := ⎕clmul(b, x)
+        if other ≠ high ∨ under ≠ low:
+            return 2u6
+        ※ a factor of all ones, written down
+        let up, down := ⎕clmul(x, 18446744073709551615u64)
+        let ones := prefix(x)
+        if up ≠ ones⟦0⟧ ∨ down ≠ ones⟦1⟧:
+            return 3u6
+        turn ← turn + 1u64
+    ※ the ends: nought, one, and every bit
+    let none, nothing := ⎕clmul(given(0u64), given(18446744073709551615u64))
+    let same, itself := ⎕clmul(given(1u64), given(12345678901234567890u64))
+    let full, most := ⎕clmul(given(18446744073709551615u64),
+                             given(18446744073709551615u64))
+    if none ≠ 0u64 ∨ nothing ≠ 0u64:
+        4u6
+    elif same ≠ 0u64 ∨ itself ≠ 12345678901234567890u64:
+        5u6
+    elif full ≠ 6148914691236517205u64 ∨ most ≠ 6148914691236517205u64:
+        6u6
+    elif ⎕clmul(3u64, 3u64)⟦1⟧ ≠ 5u64:
+        ※ written down, and multiplied while compiling: 11 times 11 is 101
+        7u6
+    elif ⎕clmul(9223372036854775808u64, 9223372036854775808u64)⟦0⟧ ≠ 4611686018427387904u64:
+        ※ the top bit times itself is the 126th
+        8u6
+    else:
+        0u6
+
+※ A value the compiler cannot see, so that the products are the machine's.
+@[opaque]
+fn given(n: u64) → u64:
+    n

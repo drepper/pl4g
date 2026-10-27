@@ -36,6 +36,7 @@ Numbers:
     ⎕lead(n)            how many zeroes above the highest set bit
     ⎕trail(n)           how many zeroes below the lowest
     ⎕wide_mul(a, b)     the 128-bit product of two 64-bit numbers, 〈upper, lower〉
+    ⎕clmul(a, b)        the same without carries, of two u64
     ⎕mask(b)            truth values as the bits of a number             [[types.arrays.masks]]
 
 Characters and text:

@@ -87,6 +87,29 @@ class BinOp(Enum):
     #: instruction, so it is one operation and not a sequence a pass would have
     #: to recognise.
     WIDE_MUL = "wide.mul"
+    #: And the product of two 64-bit words with no carries in it -- each bit of
+    #: the answer the exclusive or of the products of bits whose places add up
+    #: to its own -- answered the same way, the upper half first.  Unsigned
+    #: always, a word of bits having no sign.  One instruction where the machine
+    #: has it, and a sequence the back end writes where it has not: a pass that
+    #: looked for the sequence would be looking for something no program writes.
+    CLMUL = "clmul"
+
+
+def carryless_product(left: int, right: int) -> int:
+    """What `clmul` answers for two words written down, as one 128-bit number.
+
+    The schoolbook product with exclusive or where the sum would be: *left*
+    shifted to the place of every bit *right* has set, and the copies combined
+    without carries.  It is what the checker folds two numbers written down to
+    and what the interpreters answer, so the three agree by being one function.
+    """
+    whole = 0
+    while right:
+        lowest = right & -right
+        whole ^= left * lowest
+        right ^= lowest
+    return whole
 
 
 class UnOp(Enum):

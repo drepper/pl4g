@@ -1,0 +1,27 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4020 LANG_CLMUL_NOT_A_WORD
+※ pl4g-test: expect-diag 4020 LANG_CLMUL_NOT_A_WORD
+※ pl4g-test: expect-diag 4020 LANG_CLMUL_NOT_A_WORD
+※ pl4g-test: expect-diag 4206 LANG_TYPE_OPERAND_MISMATCH
+
+※ `⎕clmul` multiplies words of bits, and a word of bits is a `u64`.  A narrower
+※ one is a wider one with zeroes above it, which the program says by widening
+※ it; a signed one has a sign, which a product of polynomials has no use for;
+※ and a floating-point number is not bits at all.  The two are of one type, as
+※ the operands of every arithmetic operator are.
+
+let std := ⎕import("std")
+
+let a: u32 = 7u32
+let s: i64 = 3i64
+let x: f64 = 2.5f64
+let w: u64 = 3u64
+let t: u64 ¤idx = 3
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let h, l := ⎕clmul(a, a)
+    let p, q := ⎕clmul(s, s)
+    let m, n := ⎕clmul(x, x)
+    let u, v := ⎕clmul(w, t)
+    0u6

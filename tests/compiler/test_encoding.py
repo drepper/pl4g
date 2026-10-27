@@ -155,6 +155,13 @@ SAMPLES = [
     ("punpcklqdq xmm0,xmm0", "punpcklqdq", MCReg(reg("xmm0")), MCReg(reg("xmm0"))),
     ("pshufd xmm0,xmm1,0x0", "pshufd", MCReg(reg("xmm0")), MCReg(reg("xmm1")),
      MCImm(0, 8, False)),
+    # The disassembler names the four halves the immediate can pick.
+    ("pclmullqlqdq xmm0,xmm1", "pclmulqdq", MCReg(reg("xmm0")),
+     MCReg(reg("xmm1")), MCImm(0, 8, False)),
+    ("pclmullqlqdq xmm9,xmm12", "pclmulqdq", MCReg(reg("xmm9")),
+     MCReg(reg("xmm12")), MCImm(0, 8, False)),
+    ("pclmulhqhqdq xmm2,xmm3", "pclmulqdq", MCReg(reg("xmm2")),
+     MCReg(reg("xmm3")), MCImm(0x11, 8, False)),
     ("vmovdqu ymm0,ymm1", "movdqu", MCReg(reg("ymm0")), MCReg(reg("ymm1"))),
     ("vmovdqu ymm0,YMMWORD PTR [rbx]", "movdqu", MCReg(reg("ymm0")),
      MCMem(base=reg("rbx"), size_bits=256)),

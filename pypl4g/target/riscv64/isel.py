@@ -42,6 +42,7 @@ from ...ir.types import (ResultType, leaves_of, made_of_parts, parts_of, held_in
 from ..callconv import (OnStack, TooManyArguments, argument_places, calls_placed,
                         destroyed_by, result_places, stack_bytes)
 from ..bitcount import COUNTING, lower_count
+from ..carryless import CARRYLESS, lower_carryless
 from ..saturate import (DIVISION, EXTREMA, NAMES, SATURATING, TRAPPING,
                         Unsupported,
                         SHIFTS, WRAPPING, lower_division_result,
@@ -843,6 +844,32 @@ class RVSelector(InstructionSelector):
     def counts_trailing(self) -> bool:
         """And again."""
         return self.isa.has("zbb")
+
+    @property
+    def multiplies_carryless(self) -> bool:
+        """Whether the product without carries is two instructions, which it is
+        where the program is built for Zbc or for the half of it the
+        cryptographic extensions have, Zbkc -- neither of which the application
+        profiles require."""
+        return self.isa.has("zbc") or self.isa.has("zbkc")
+
+    def select_carryless_product(self, low: Reg, high: Reg, left: MCOperand,
+                                 right: MCOperand,
+                                 span: Span) -> Sequence[MCInst]:
+        """Both halves of the product of *left* and *right* without carries.
+
+        Two instructions, the upper half first, as `select_wide_product` has
+        them and for the same reason: the lower half may be asked for in a
+        register one of the factors is in.
+        """
+        held: list[MCInst] = []
+        first, before = self._as_register(left, span)
+        held.extend(before)
+        second, before = self._as_register(right, span)
+        held.extend(before)
+        held.append(self._inst("clmulh", (MCReg(high), first, second), span))
+        held.append(self._inst("clmul", (MCReg(low), first, second), span))
+        return tuple(held)
 
     def select_count_ones(self, dst: Reg, src: MCOperand,
                           span: Span) -> Sequence[MCInst]:
@@ -1872,6 +1899,17 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                         asm.loadreg(result, MCReg(_value_of(value, held, span)),
                                     inst.span)
                     asm.ret(inst.span, (result,))
+                case BinaryInst() if inst.op is CARRYLESS:
+                    # The same two halves of a product with no carries in it,
+                    # with the instruction where the program was built for one.
+                    high = registers.new_virtual(GPR, 64)
+                    low = registers.new_virtual(GPR, 64)
+                    held[id(inst)] = high
+                    extra[id(inst)] = [low]
+                    lower_carryless(asm, low, high,
+                                    operands.value(inst.operands[0], inst.span),
+                                    operands.value(inst.operands[1], inst.span),
+                                    operands, inst.span)
                 case BinaryInst() if inst.op is BinOp.WIDE_MUL:
                     # Both halves, the upper one first as the tuple has them.
                     high = registers.new_virtual(GPR, 64)

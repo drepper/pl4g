@@ -70,6 +70,14 @@ _ADDED: Final[dict[str, tuple[Requirement, ...]]] = {
         # FMA, MOVBE, OSXSAVE, AVX, F16C
         Requirement(1, 0, "ecx", _bits(12, 22, 27, 28, 29),
                     ("FMA", "MOVBE", "OSXSAVE", "AVX", "F16C")),
+        # PCLMULQDQ, which the architecture's table leaves out of every level
+        # and every processor with AVX2 has: Intel's from Westmere, two
+        # generations before the first of them, and AMD's from Bulldozer.  So
+        # asking for it here refuses no processor the level describes, and lets
+        # a carry-less product be the one instruction it is.  The one level a
+        # processor without it has is the second -- Nehalem's -- which is why
+        # it is asked here and not there.
+        Requirement(1, 0, "ecx", _bits(1), ("PCLMULQDQ",)),
         # BMI1, AVX2, BMI2
         Requirement(7, 0, "ebx", _bits(3, 5, 8), ("BMI1", "AVX2", "BMI2")),
         # LZCNT, which the architecture counts under ABM
@@ -133,6 +141,12 @@ NAMES: Final[tuple[str, ...]] = ("v1", "v2", "v3", "v4")
 #: built for one of these has already said at its own entry point that the
 #: processor has it.  The wider registers again that `v4` adds are not used yet.
 WIDE: Final[frozenset[str]] = frozenset(("v3", "v4"))
+
+#: The levels that have the product without carries.  The architecture's
+#: table puts it in none of them, and this compiler's third level asks the
+#: processor for it beside what the table lists (above), so a program built for
+#: one of these has said at its own entry point that it is there.
+CARRYLESS: Final[frozenset[str]] = frozenset(("v3", "v4"))
 
 #: What a program is built for unless it says otherwise.  The newest, because a
 #: program that will not run says so the moment it is started, while one built

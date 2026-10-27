@@ -275,6 +275,16 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     RVInstDesc("cpop", (_r(), _r()), template=0x60201013,
                fields=(_reg(0, _RD), _reg(1, _RS1)),
                est_size=INSTRUCTION_SIZE),
+    # clmul and clmulh rd, rs1, rs2: the lower and the upper half of the
+    # product without carries, as `mul` and `mulhu` are of the one with them.
+    # Zbc's and Zbkc's, which no application profile requires; a program built
+    # without either multiplies the ordinary way, around the carries.
+    RVInstDesc("clmul", (_r(), _r(), _r()), template=0x0A001033,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("clmulh", (_r(), _r(), _r()), template=0x0A003033,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
     # mulhu rd, rs1, rs2
     RVInstDesc("mulhu", (_r(), _r(), _r()), template=0x02003033,
                fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),

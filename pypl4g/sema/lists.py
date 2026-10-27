@@ -130,6 +130,71 @@ def erase_function(module: Module) -> Function:
     return func
 
 
+#: And the one that takes a run of them out.
+ERASE_RUN_SYMBOL: Final[str] = "__pl4g_list_erase_run"
+
+
+def erase_run_function(module: Module) -> Function:
+    """``__pl4g_list_erase_run(at, stride, count, first, end)``: the elements
+    from *first* up to and not including *end* out.
+
+    The same as taking one out, the run being *end* less *first* elements long
+    rather than one: what follows it moves down by that many, from the front,
+    and how many there are is the caller's to write.  Where the run reaches the
+    end of the list -- a list cut short -- nothing follows it, and nothing moves.
+
+    Nothing is checked here either: the two ends were, where the program says
+    so, before this is called.
+    """
+    bytes_ = module.types.ptr_type(U8, mutable=True)
+    func, fresh = tables.generated(module, ERASE_RUN_SYMBOL,
+                                   (bytes_, U64, U64, U64, U64), VOID)
+    if not fresh:
+        return func
+    entry = func.add_block()
+    walk = func.add_block("walk")
+    move = func.add_block("move")
+    done = func.add_block("done")
+    builder = IRBuilder(module, func)
+
+    builder.position_at(entry)
+    at = entry.add_param(bytes_, "at")
+    stride = entry.add_param(U64, "stride")
+    count = entry.add_param(U64, "count")
+    first = entry.add_param(U64, "first")
+    end = entry.add_param(U64, "end")
+    # Where the bytes that move go, how far they move, and how many of them
+    # there are: every element after the run.
+    start = builder.binary(BinOp.WRAP_MUL, first, stride)
+    gap = builder.binary(BinOp.WRAP_MUL,
+                         builder.binary(BinOp.WRAP_SUB, end, first), stride)
+    moving = builder.binary(BinOp.WRAP_MUL,
+                            builder.binary(BinOp.WRAP_SUB, count, end), stride)
+    builder.br(walk, (builder.int_const(U64, 0), builder.memory()))
+
+    builder.position_at(walk)
+    step = walk.add_param(U64, "step")
+    token = walk.add_param(MEM, "mem")
+    builder.set_memory(token)
+    builder.condbr(builder.compare(CmpPred.ULT, step, moving), move, done)
+
+    # One byte down by the run's length, from the front, so that each is read
+    # before anything writes over it.
+    builder.position_at(move)
+    where = builder.binary(BinOp.WRAP_ADD, start, step)
+    builder.store(builder.binary(BinOp.ADD, at, where),
+                  builder.load(builder.binary(
+                      BinOp.ADD, at, builder.binary(BinOp.WRAP_ADD, where, gap))))
+    builder.br(walk, (builder.binary(BinOp.WRAP_ADD, step,
+                                     builder.int_const(U64, 1)),
+                      builder.memory()))
+
+    builder.position_at(done)
+    builder.set_memory(token)
+    builder.ret()
+    return func
+
+
 def _bytes(module: Module) -> PtrType:
     return module.types.ptr_type(U8, mutable=True)
 
