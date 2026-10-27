@@ -1374,18 +1374,30 @@ Runtime
 
 
 [ ] what the `json` module ran into and wrote around (2026-10-22), each still so:
-    - a result whose answer is a generic of another module, `string.Parsed(Value) ? Error`, looks the error type up in the answer's
-      module and not where it is written;
-    - a default argument naming an enumeration value of an imported module is an internal error (9902);
-    - `⍕` of a number with a unit, and of an `f64`, fails inside `std.text`;
-    - `l ⧺← (if c: ⟦a⟧ else: ⟦b⟧)` is an internal error, and an `if` expression of views a type error;
-    - a result cannot be copied, so a local list cannot be answered in `[u8] ? E` (4624) -- the encoder answers `[u8]?` of a list
-      handed in instead;
-    - a list of the heap's is never given back, so everything a program makes over and over must be made in an arena;
-    - `&l⟦i⟧` of a list's element is refused, and a list cannot be cut short in place;
-    - a view assigned to an array in a loop, `block ← view`, is refused as writing through a reference (4479);
-    - a self-call in tail position with an arena parameter ran out of stack -- nothing makes it a jump;
-    - there is no carry-less multiplication (`pclmulqdq`, `pmull`, `clmul`), which simdjson's prefix exclusive or is one of.
+    - [x] a result whose answer is a generic of another module, `string.Parsed(Value) ? Error`, looks the error type up in the
+      answer's module and not where it is written.  Done 2026-10-27: a name alone is the file's own first
+      (`result-error-beside-another-modules-generic`); and a module importing `std` no longer exports `std`'s `⍕` as its own
+      (4924, `operator-in-force-through-its-own-module`);
+    - [x] a default argument naming an enumeration value of an imported module is an internal error (9902).  Done 2026-10-27
+      (`default-argument-imported-enumeration`);
+    - [x] `⍕` of a number with a unit, and of an `f64`, fails inside `std.text`.  Done 2026-10-27: `⎕drop` of a type parameter's
+      value takes off whatever unit there is, the unit is in the symbol so that instances apart by a unit are two functions, and
+      an `f64` is Schubfach's digits in Python's layout (`std-text-unit-and-f64`, `unit-drop-in-a-generic`,
+      `generic-instances-apart-by-unit`);
+    - [x] `l ⧺← (if c: ⟦a⟧ else: ⟦b⟧)` is an internal error, and an `if` expression of views a type error.  Done 2026-10-27
+      (`join-onto-a-list-an-if-of-arrays`, `if-of-views-of-arrays`);
+    - [x] a result cannot be copied, so a local list cannot be answered in `[u8] ? E` (4624) -- the encoder answers `[u8]?` of a
+      list handed in instead.  Found done for `[u8] ? E in pool`; done 2026-10-27 for the heap, the answer of a result kept as it
+      would be on its own (`result-of-a-local-list-in-an-arena`);
+    - [ ] a list of the heap's is never given back, so everything a program makes over and over must be made in an arena;
+    - [ ] `&l⟦i⟧` of a list's element is refused, and a list cannot be cut short in place.  The first half done 2026-10-27: the
+      reference lends the whole list, and one that writes makes the list's room its own first
+      (`reference-to-an-element-of-a-list`, `reference-to-an-element-of-a-list-held`);
+    - [x] a view assigned to an array in a loop, `block ← view`, is refused as writing through a reference (4479).  Done
+      2026-10-27: a name of an array is not carried by the loop (`array-assigned-in-a-loop`);
+    - [x] a self-call in tail position with an arena parameter ran out of stack -- nothing makes it a jump.  Found done
+      (`tail-call-with-an-arena`);
+    - [ ] there is no carry-less multiplication (`pclmulqdq`, `pmull`, `clmul`), which simdjson's prefix exclusive or is one of.
 
 Found writing the manual (2026-10-22); the manual says what the compiler does today and is silent on these:
 

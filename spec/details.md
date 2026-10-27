@@ -6312,6 +6312,63 @@ the tip of `json` and now: macro-comptime-fn 30.1 ms and 12.9 (macro expansion 2
 `python -m pytest tests`, every core: 120 s, now 81.
 
 
+What the `json` module ran into
+-------------------------------
+
+**The error after the mark.**  `_resolve_type` resolves the name after `?` with the answer's module only where the name is no
+type of the language's and `self._top` holds no `_NamedType` of it; the C++ port asks `top` the same in `resolve_type`.  The text
+of the reference is unchanged, so nothing else about a result type moves.
+
+**An operator a module imported is not exported.**  `_operators_from` says which module each operator in force came from, and a
+definition of the file's own takes its glyph out of it (`_operators_from.pop`), so `LoadedModule.operators` is what `_operators`
+holds less what `_operators_from` still names.  The one place a glyph is in force through two routes now is a file importing two
+modules that define it, which is what 4924 was for.
+
+**An imported enumeration's value as a default.**  `_enum_value_of` reads `m.TYPE` out of the module's exports where the base of
+`TYPE.NAME` is a path, as `_type_exported` does for a record.
+
+**`⎕drop` of a type parameter's value** is the value where its type carries no unit: the operand's type is compared by identity
+with the values of `self._bound`, which while an instance is lowered are the types the call settled.  No cast is made, so the
+instance for `u64` is what it was.  `std.text` hands a number to `whole_text` and an `f64` to `std.string.numeral_f64` through
+`⎕drop`, so the arm reading digits is compiled for the bare type whatever the call's was.  `whole_text`'s body is inside a
+`comptime if ⎕kindof(⌜T'⌝) = "integer"` because a generic body is checked where it is written (`_check_generic`) and `⎕narrow`
+of an opaque type is refused there; a `comptime` arm is checked only for the types a call gives it.  The `f64` arm is written in
+`text` itself rather than in a function of its own: a function of a module that is not generic is checked and lowered with the
+module, and one calling `numeral_f64` would have lowered Schubfach into every program importing `std`.
+
+**The unit is in the symbol.**  `IntType.mangled` and `FloatType.mangled` write the unit after `¤` with no space, and
+`Unit.mangled` is the unit as it is written with the scale after `×` where it is not one.  What changed with it is every key made
+of `mangled()`: the module's key for a generic instance (`_make_instance`), the generated helpers named after a type
+(`__pl4g_own.list<…>`, `__pl4g_one_run.…`), and the symbols.  Before, `text(u64 ¤size)` and `text(u64)` were registered under
+one key, the second replacing the first in `module.functions` while the calls lowered against the first went on naming it --
+a function no pass ran over, which the back end then met.
+
+**An `if` or a `match` of arrays.**  `_spread` lowers an `if` or a `match` with the view it is wanted as, so `_run_arms` hands
+each arm `_lower_into` that view and every arm becomes one (`_as_a_view`) before the join; before, the `if` was lowered with
+nothing expected and took its first arm's array type.  `_may_be_an_array` answers yes for an `if` with an `else` or a `match` all
+of whose arms end in an array -- one written out, or what `_may_be_an_array` says of it -- found by `_arm_ends`, which reaches
+into an arm that ends in another `if` or `match`; `_lower_join_assign` then lowers it with `_lower_into` the view of the list's
+elements and joins the view on.  And `_lower_array` refuses an array written out where a list is wanted (4203), which had been
+handed on with the array's type to a join typed as the list.
+
+**A list's element referred to.**  `_lower_address` asks `_place_written(…, writing)`, which `_place_of_an_element` takes for a
+list: a reference that writes is `_list_element_written`'s place -- the list's own room made first by `_made_writable`, the index
+checked -- and one that reads is the read-only place `of_a_list` already gave a record's field.  `_borrowed_name` makes an element
+of a list the whole list, and `_list_place` does not count the borrow of the reference being taken, which `_lower_address` lent
+before the place was worked out (`_taking_a_reference`).  `_addressed_here` gives storage to the root of a path through an
+element a reference is taken of, as it does for one written; an array is given none, a reference never naming a place that
+holds one.
+
+**An array name in a loop.**  `_loop_locals` leaves out a name holding an array unless it is assigned together with another name
+(`_assigned_apart_in`), `_array_assigned` copying into the elements and leaving the name as it was.  Carried, the name reached the
+body as a block parameter, which `_made_here` cannot see through until the loop is complete.
+
+**A result answered.**  `_answered` takes a type to answer as, and where what is answered is a `wrap` of a successful answer it
+answers the answer as `ty.ok` and wraps what that comes to; the `wrap` it was handed is left for the passes to remove.  So a list
+answered in `[u8] ? E` is handed over, or copied into the heap, as it would be in `[u8]`, where `owned.can_own` of the result had
+refused it.
+
+
 The manual
 ----------
 
