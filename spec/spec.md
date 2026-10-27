@@ -1332,9 +1332,9 @@ parameter, it is what `s: T in a` says: what is handed over is kept in what `a` 
 and nowhere but a signature does the name mean anything.  `→ fn(u8) → u8 in a` would not say it: `in` after the answer's type
 says where the *answer* is made, and that answer is the lambda's own.
 
-**An environment is never given back.**  What a lambda kept in `⎕heap` stays there, as a string a name held does; one kept in an
-arena goes with the arena.  The third word says which allocator it is, so that giving it back can come later without changing what
-a lambda is.
+**An environment is never given back.**  What a lambda kept in `⎕heap` stays there, and so does what it brought in: a variable a
+lambda brings in gives none of its room back where its scope ends (Lists); one kept in an arena goes with the arena.  The third word
+says which allocator it is, so that giving it back can come later without changing what a lambda is.
 
 **A variable at the top level may not hold a lambda** (4550).  Its value is in the image, and the image does not yet hold an address
 of code -- nor, for that matter, a string (9902).  A value of the system's convention is not a lambda and may be held there, starting
@@ -4751,6 +4751,51 @@ Compare: **Swift**'s arrays, values copied when written behind a reference count
 where it cannot see that nothing will write; **Mojo**, which transfers a value at its last use, as the hand-over does; **Rust**,
 where `let m = l` moves the vector and a copy is `l.clone()`; **Go**, whose slices share their room, the behaviour this avoids.
 
+**A list of the heap's whose room is its own is given back where its scope ends**, by `⎕heap`'s sized free: the room is the heap's,
+the size is what the list's header says, and nobody else holds it.  Its own is what the hand-over above calls its own -- room made
+where the name is bound (a list written out, a join, what a function of the program answers), a copy made for it, or room handed
+over to it by a name done with -- and a parameter the body takes as its own, which its caller copied or handed over.  It is given
+back on every way out of the scope -- off its end, a `return`, a `break`, a `continue`, a `?` -- as an arena is (below): as if
+`defer` stood right after the definition, after whatever the block put off later and after what the block comes to is worked out.
+**Unless the room was handed on first**: answered, bound or assigned to another name, put in a field, an element or an entry of a
+table, handed to a parameter the callee takes as its own, kept by a lambda that brought it in -- room somebody else holds now,
+which the giver leaves to them.  Along a way out that handed it on nothing is given back, and along one that did not, it is.
+
+```
+fn early(stop: bool) → [u8]:
+    let l: mut [u8] = [1u8, 2u8]
+    if stop:
+        return l                      ※ handed out: the caller's to give back
+    let m: mut [u8] = [3u8]
+    m                                 ※ handed out, and l given back on the way
+```
+
+**What it does with the name decides it, and what may keep anything is taken to.**  A name read for what it holds and nothing more
+keeps the room: its length, an element of what points nowhere, a comparison, a join or `⧺←` that copies it, a walk whose turns keep
+nothing, a reference -- which cannot outlive it -- and a call of a function of the program that cannot keep what it is handed,
+nothing it answers or is handed being able to hold a loan of it: a view, a table, whose keys and values go in as they are, a
+lambda, a walk.  Anything else may have handed the room on, and from there on, along that way, the name does not give it back --
+a list nothing gives back, which is what every list was before.  Where a statement copies what it reads -- a name given to a place
+that may change it -- nothing was handed on.  Where one way through a branch handed the room on and another did not, the end of the
+scope asks which way was taken; almost everywhere it is one way, and nothing is asked.
+
+**A name given another list gives back the one it held**, once what replaces it has been worked out -- which may have read it --
+so a list made afresh each turn of a loop is given back each turn.  **A list of lists gives back every list it holds**, and then its
+own room, as a container replacing an element does; a record or a tuple holding lists gives back each of them, and **text** made in
+the heap -- a join, `⎕text`, `⎕str`, what a function answers -- is given back the same way, where it was a name's own: a join gives
+back the text it joined out of where nothing else names it.  Tables and sets are not yet held to any of this, nor what a lambda
+brought in, which is never given back, nor a list a generator's body holds, which lives in the walk's frame.
+
+**What is handed to the kernel is the program's to keep**: `std.write` of a view of a list or of text starts a request the kernel
+reads after the call has returned, as the room an arena gives back may already be gone when it does.  A program that writes
+what it then gives back waits for the request first (`std.flush`), as one writing out of an arena already did.
+
+Compare: **Rust**, whose `Vec` is dropped at the end of its scope unless it was moved out, a move on one way of a branch leaving
+a drop flag that the end of the scope reads -- the rule this is; **C++**, whose `std::vector` is destroyed there, a moved-from one
+destroying nothing; **Swift**'s ARC, which releases an array when the last reference goes, counting at run time what this follows
+while compiling; **Go**, where the collector finds it some time later; **Zig** and **Odin**, whose allocators are explicit and
+whose `defer list.deinit()` is written by hand -- forgetting it is a leak, writing it twice a double free.
+
 **An index past the end stops the program** (as an array's does), which is a comparison at run time: a list's length is not in its
 type, so there is nothing for the compiler to refuse.
 
@@ -4816,7 +4861,8 @@ and it is in the runtime: sizes are rounded to a *class* -- sixteen bytes apart 
 each class keeps what was given back to it, and anything larger is mapped on its own.  **Giving back takes the size**, which the
 compiler always knows, so no object carries a header saying it -- C23's `free_sized`, C++'s sized `delete` and Rust's `dealloc`
 are the same interface.  Where the compiler knows an allocation is `⎕heap`'s it calls the heap straight away; elsewhere one
-compare picks the kind.
+compare picks the kind.  **What gives back is what holds**: a container replacing an element, a list growing out of its room, and a
+variable whose room is its own where its scope ends (Lists, above) -- nothing a program writes, as nothing writes `⎕empty`.
 
 **`EXPR in NAME` says which arena an expression takes its room from**, and the whole of one is given back when the block it was
 defined in is left:
@@ -4836,8 +4882,9 @@ nowhere to come from (4568).
 
 **Taking room from an arena is not an effect**, from `⎕heap` or from any other.  What is made is new: nothing that was there
 before the call can reach it, so nothing anybody else holds changes, and a pure function may allocate wherever it likes -- named
-with `in`, or not named and so from `⎕heap`.  What `⎕heap` holds lasts as long as the program, so a function may answer it; that is
-how a function hands a caller text when the caller gave it no arena.  Filling what was just made -- the entries of a collection,
+with `in`, or not named and so from `⎕heap`.  What `⎕heap` holds lasts until whatever holds it gives it back, so a function may
+answer it -- the answer is its caller's then, to keep or to give back; that is how a function hands a caller text when the caller
+gave it no arena.  Filling what was just made -- the entries of a collection,
 the elements of a list -- writes only that new room.
 
 **An arena is given back as a whole, and when the block it was defined in is left** -- off its end, by a `return`, a `break`, a
@@ -4902,7 +4949,8 @@ whole was made in grows, and is never replaced.  Reading a part of a dead name i
 out of a value, what a `foreach` takes out of what it walks, and what a tuple is taken apart into, were made where the whole was.
 
 **Only what made an arena gives it back.**  One handed over by reference is its maker's, who may be holding things made in it;
-`⎕heap` and an arena at the top level last as long as the program, and anything anywhere may be holding things made in those.
+`⎕heap` and an arena at the top level last as long as the program, and anything anywhere may be holding things made in those --
+what the heap gives back of them is what its holder gives back, one object at a time.
 Without this none of the above would hold: a function giving back an arena it was handed would kill names in its caller that the
 caller cannot see die.  Since nothing but the end of the block that made an arena gives it back, nothing has to be checked for it.
 
@@ -4930,7 +4978,8 @@ allocator, and lasts as long as the call.
 **An answer is kept in the allocator the signature names**: `→ T in a`, or `⎕heap`.  One made anywhere else is copied there before
 the function leaves -- before what it put off runs, so an arena given back on the way out has been copied out of first.  That is
 how a value made in a scope's own arena reaches past the scope.  Text in the image goes as it is; a value of the heap's is the
-caller's alone, so only a temporary of the heap's is answered as it is, and a name holding one is copied.  **What cannot be copied
+caller's alone, so only a temporary of the heap's is answered as it is, and a name holding one is copied -- a variable at the top
+level the program writes, whose room is the heap's and stays the variable's, among them.  **What cannot be copied
 is refused** (4624): a result, and anything holding a value marked `@[unique]`, which is what `@[unique]` is for.  A record or a
 tuple holding text is copied part by part.
 
@@ -4950,11 +4999,12 @@ allocator the compiler can name again: `⎕heap`, none, or what a parameter is g
 known only at run time, carry it.  Every such decision is in the report log: `lean-value` where a value stays two words,
 `fat-value` where it carries its allocator and why, `answer-thin` for an answer that travels without it.
 
-**What is written into a place from outside the call lasts as long as the caller can read it.**  A field of a record a
-reference parameter names, or an element of an array the caller handed over, is the caller's, and read after the call has ended --
-so what goes there is held to what an answer is: one made in `⎕heap` or in the image goes in as it is, and one made anywhere else
-is copied into `⎕heap` on the way in.  What cannot be copied is refused (4633), and so is a lambda reaching anything that does not
-last (4632).
+**What is written into a place from outside the call lasts as long as the caller can read it.**  A field of a record a reference
+parameter names, or an element of an array the caller handed over, is the caller's, and read after the call has ended -- so what
+goes there is held to what an answer is: text in the image goes in as it is, and so does what the heap made where nothing else
+holds it -- a temporary, or the room of a variable that is done with, which hands it over -- and anything else is copied into
+`⎕heap` on the way in, the caller giving back what it holds.  What cannot be copied is refused (4633), and so is a lambda reaching
+anything that does not last (4632).
 
 A value made in a local arena reaches past the scope either as a copy, as above, or with the arena itself (below).
 

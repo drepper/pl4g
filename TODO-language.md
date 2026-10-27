@@ -1381,7 +1381,10 @@ Runtime
     - `l ⧺← (if c: ⟦a⟧ else: ⟦b⟧)` is an internal error, and an `if` expression of views a type error;
     - a result cannot be copied, so a local list cannot be answered in `[u8] ? E` (4624) -- the encoder answers `[u8]?` of a list
       handed in instead;
-    - a list of the heap's is never given back, so everything a program makes over and over must be made in an arena;
+    - [x] a list of the heap's is never given back, so everything a program makes over and over must be made in an arena;
+      done on 2026-10-27: a list, text or record of them whose room is a variable's own is given back where its scope ends (the
+      decisions entry of that day); `escaped` gathers its bytes in the heap's, and the document and what is written stay in the
+      caller's arena, which is what simdjson's documents are;
     - `&l⟦i⟧` of a list's element is refused, and a list cannot be cut short in place;
     - a view assigned to an array in a loop, `block ← view`, is refused as writing through a reference (4479);
     - a self-call in tail position with an arena parameter ran out of stack -- nothing makes it a jump;

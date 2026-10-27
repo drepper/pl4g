@@ -1842,10 +1842,12 @@ and read back just after, and is in an ordinary register -- one a call destroys 
 question the depth of the loops cannot answer, a block behind a test in a loop being as deep as the test, so it is asked of
 `block_frequencies` (`mc/loops.py`): ten turns of every loop as before, and either way of every branch alike, the ways that stay in
 a loop sharing a turn and a way out of one taken once whichever turn takes it -- the uniform guess LLVM's block frequencies begin
-with where there is no profile.  The guess decides that and nothing else: which value is given up is still the price above.  A
-value split so and still in the way in the next round goes to the frame everywhere, in the slot it has, what put it there across
-the calls taken out again; a call that destroys nothing -- the one to the fault path, which does not come back -- is no reason to
-move anything.
+with where there is no profile.  The guess decides that and nothing else: which value is given up is still the price above.  A value
+split so and still in the way in the next round goes to the frame everywhere, in the slot it has, what put it there across the
+calls taken out again -- once the round's own splits are in, which find their calls by the positions the ranges were worked out
+with, the old split code among them; taken out first, it moved every position after it, and a store and a load landed around a move
+of what a loop carries, the load undoing the move; a call that destroys nothing -- the one to the fault path, which does not come
+back -- is no reason to move anything.
 
 **A value moved to or from another is given the other's register**, where that is free at every point the value is live, after the
 hint and before the order.  The moves the builder writes are mostly between values whose lives touch end to end: a block's
@@ -4579,6 +4581,64 @@ offsets put them: x86-64 and AArch64 read a misaligned word as one instruction a
 does not, so lining them up first is a cost for the uncommon machine.  It is impure, a call that writes memory being one nothing may
 remove.  The older byte loops (`copy_bytes`, in a string's join and a list's) are left as they were, since changing them changes
 the code of every program that joins anything.
+
+Room given back where its scope ends
+------------------------------------
+
+**A variable whose room is its own is a `_Room`**: the `_Local`, a flag beside it, where each statement of its scope may hand the
+room on, and what `owned.give_back` is told of the allocator.  `_room_kept_by` makes one where `_lower_stmt` has bound a `VarDef` --
+with `_owns_what_it_is_given` of the value, which is `_copied_where_shared`'s answer for what holds a list and `_text_made_here`
+for text (room made here, `⎕text`, `⎕str`, and what is left of those after `??`) -- and `_lower_block` makes one for each parameter
+`_owned_params` names (taken as the body's own, or a `mut` one changed in place, which `_own_when_changed` copied), handed over
+through `_rooms_pending` so that the give-back lands in the body's own frame.  None is made in a generator's body, in a body checked
+in the abstract, for a value whose type holds a loan (`_keeps_a_loan`: a view, a table, a lambda, a walk), for what only a pool or
+the image made (`_HEAP` not among the name's arenas, nor a `mut` variable given something else later that is not a pool's), or
+where `_room_hands` finds a lambda or a macro naming the variable.
+
+**The flag is a `_Local` of the compiler's own**, named `NAME#room`, put in the variable's scope with `read` set and listed in
+`_room_flags` so that nothing reports it unread.  It holds a truth value -- `bool_const(True)` where the room is the variable's --
+and being a local, `_run_arms` merges it where the arms join as it merges any name an arm changed, and `_loop_locals` carries it
+round a loop where `_rooms_in` finds the loop changing the variable or holding a statement that may hand the room on.  Where a
+statement leaves the block -- a `return`, a `break` -- the flags are put back as they were (`_room_flags_back`), so an arm that
+hands the room on and leaves changes nothing the arms join with.
+
+**`_room_hands` reads the rest of the scope once**, when the variable is bound: every `NameRef` of it, with the parents of every
+node, and for each `_room_use` -- the climb from the name through what reads a part of it (an element, a field, a slice, `⎕bytes`,
+`⎕drop`, `⌈`), each with the type it reads, to what takes it.  `"kept"` is what keeps nothing (a length, a comparison, a join of
+what points nowhere, `⧺←` either side, the place a statement changes, a reference that may only read, a key looked up, a walk whose
+loop name is kept by nothing -- `_room_walked`, the same reading of the loop's body); `"moved"` is an argument for a parameter the
+callee takes as its own (`_owned_arguments` clears the flag where it hands the name over); `"handed"` is anything else.
+`_room_argument` asks a call: `⎕text`, `⎕iter` and `⎕reserve` keep, `⎕bytes`, `⎕one_run` and `⎕drop` read on, a function of the
+program (`_room_callee`, asked quietly) keeps where neither its answer nor any parameter can hold a loan and -- where it may change
+the program's own variables -- the argument holds no text or view outside a list (`_bare_text`), and anything else hands it on.  A
+`MemberAssign` of a field of the variable with something that is not a temporary is listed too: a record given someone else's room
+would give it back.  What is listed for a statement is the chain of nodes from the name up to the statement.
+
+**`_let_go` runs where each statement starts** -- in `_lower_stmt` after `_copied_where_shared` has noted what it copies, and in
+`_lower_yielding` -- and clears the flag of a room the statement is listed for, unless a node of every chain is noted in `_copying`
+and holds a list (`_copied_whole`: `_copy_of` copies only what holds one, so a view or a record of text noted there is handed on
+as it is).  Clearing at the start is early on purpose: a way out inside the statement then gives back nothing, which is a list
+nobody gives back, never one given back twice.
+
+**The give-back is a `_Deferred` with `room` set**, put in the frame of the block the variable was bound in.  `_lower_deferred`
+lowers it as `_give_back_room` of what the variable holds there (`_room_now`: the value, or what its place holds): nothing for a
+flag that is a constant false, `owned.give_back` for a constant true, and otherwise a `condbr` on the flag to `give_back`, which
+gives it back, and `given_back`.  `_unrun_deferred` leaves these out: nothing to check in what the program did not write.  An
+assignment to the variable gives back what it held before it is given the new value (`_room_replaced`, in `_lower_assignment` and
+`_store_into`), and `_lower_stmt` then sets the flag to `_owns_what_it_is_given` of the new value -- false where the assignment is
+what the function answers.
+
+**`known` is `"heap"` for a list whose elements point nowhere** -- `_dispose` asks the list's own allocator word, so a pool's or
+the image's is given nothing -- and for text bound to what `_freshly_heap` says the heap made and never assigned, which calls
+`pl4g_heap_free` straight away; anything else is `__pl4g_disown.T`, which asks the value.
+
+**What the change found sharing the heap's.**  `_collect_arenas` gives a variable at the top level that is `mut` or `constinit` the
+key `_HEAP`, so `_answered` copies it rather than answering it as text in the image.  `_into_a_place` copies into `⎕heap` what is
+written into a place from outside the call where `_shared_heap` says something else may hold it -- anything but a temporary or a
+room's variable done with -- and `_answered`'s "maybe" answer of `→ T in ⎕heap, ⎕static` does the same.  `_fresh_heap` takes a
+call as fresh only where the callee's `answer_from` is the heap, not the image.  `_joined_text` gives back a side that is a
+temporary of text made here.  `_lower_join_assign` moves the elements of a list written out of nothing but temporaries
+(`_made_of_its_own`) onto a list of the heap's, giving back only the run, where it copied them and kept the temporary.
 
 Text from bytes
 ---------------
