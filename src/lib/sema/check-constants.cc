@@ -3331,7 +3331,10 @@ namespace pl4g::sema {
         std::vector<std::optional<std::int64_t>> at;
         for (auto one : element->indices)
           at.push_back(index_known(one));
-        if (std::ranges::any_of(at, [](const auto& one) { return ! one; }))
+        // An element of a list is the whole list: what moves its room moves
+        // every element, so no two of them are places apart.
+        if (ir::is<ir::ListType>(said_to_be(element->base))
+            || std::ranges::any_of(at, [](const auto& one) { return ! one; }))
           // The whole array, whichever element: what was below it is part of
           // that.
           fields.clear();
@@ -3417,7 +3420,7 @@ namespace pl4g::sema {
     std::optional<PlaceTaken> found;
     {
       Finally put_back([&] { taking_a_reference = outer; });
-      found = place_written(builder, expr->operand);
+      found = place_written(builder, expr->operand, writes);
     }
     if (! found)
       return error_value(module);
@@ -3444,7 +3447,7 @@ namespace pl4g::sema {
     if (auto name = ast::as<ast::NameRef>(expr))
       return place_of_a_name(builder, name);
     if (auto element = ast::as<ast::Element>(expr))
-      return place_of_an_element(builder, element);
+      return place_of_an_element(builder, element, false, writing);
     if (auto member = ast::as<ast::Member>(expr))
       return place_of_a_field(builder, member, writing);
     if (auto deref = ast::as<ast::Deref>(expr)) {

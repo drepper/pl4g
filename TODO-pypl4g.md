@@ -940,6 +940,8 @@ Found writing the manual (2026-10-22), in both compilers unless said otherwise:
     the fallback is `v`).
 [ ] `std.text` does not compile for a number with a unit (so `⍕#s` fails), nor for a tuple, and does not write `f64` or the
     values of an enumeration; the spec says one definition serves every type.
+    Partly done 2026-10-27: a number with a unit and an `f64` (`std-text-unit-and-f64`); a tuple, an `f32` and an enumeration's
+    value are left.
 [ ] `ps¨.age ← older(ages)` -- an array value written through `¨` without a mark -- reports "returning 'u8⟦3⟧' from a function
     declared to return 'u8'" (4202), which says nothing of what is wrong.
 [ ] spec/details.md says a failing test exits with 66 and that a run stops at the first test that fails; the spec and the test

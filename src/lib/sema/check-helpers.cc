@@ -485,11 +485,19 @@ namespace pl4g::sema {
     return found;
   }
 
-  void collect_assigned(const ast::Block* block, std::vector<std::string>& into)
+  std::vector<std::string> assigned_apart_in(const ast::Block* block)
+  {
+    std::vector<std::string> found;
+    collect_assigned(block, found, true);
+    return found;
+  }
+
+  void collect_assigned(const ast::Block* block, std::vector<std::string>& into, bool only_apart)
   {
     for (auto stmt : block->stmts()) {
       if (auto assign = ast::as<ast::AssignStmt>(stmt)) {
-        into.emplace_back(assign->name);
+        if (! only_apart || ! assign->more.empty())
+          into.emplace_back(assign->name);
         for (const auto& one : assign->more)
           into.emplace_back(one.name);
         continue;
@@ -498,19 +506,19 @@ namespace pl4g::sema {
       if (expr == nullptr)
         continue;
       if (auto looped = ast::as<ast::While>(expr->value)) {
-        collect_assigned(looped->body, into);
+        collect_assigned(looped->body, into, only_apart);
         if (looped->alternative != nullptr)
-          collect_assigned(looped->alternative, into);
+          collect_assigned(looped->alternative, into, only_apart);
       } else if (auto each = ast::as<ast::ForEach>(expr->value)) {
-        collect_assigned(each->body, into);
+        collect_assigned(each->body, into, only_apart);
         if (each->alternative != nullptr)
-          collect_assigned(each->alternative, into);
+          collect_assigned(each->alternative, into, only_apart);
       } else if (auto asked = ast::as<ast::If>(expr->value)) {
         for (auto arm : asked->arms)
-          collect_assigned(arm->body, into);
+          collect_assigned(arm->body, into, only_apart);
       } else if (auto matched = ast::as<ast::Match>(expr->value)) {
         for (auto arm : matched->arms)
-          collect_assigned(arm->body, into);
+          collect_assigned(arm->body, into, only_apart);
       }
     }
   }
@@ -568,6 +576,9 @@ namespace pl4g::sema {
       changed = taken->base;
     else if (auto joined = ast::as<ast::JoinAssign>(node))
       changed = joined->target;
+    else if (auto taken = ast::as<ast::AddressOf>(node))
+      // And a reference taken of an element of one, which may write it.
+      changed = taken->operand;
     else if (auto call = ast::as<ast::Call>(node)) {
       auto callee = callee_name(call);
       if (callee != nullptr && (callee->name == names::reserve_name || callee->name == names::iter_name)

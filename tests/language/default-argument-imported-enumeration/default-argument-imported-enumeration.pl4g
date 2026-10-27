@@ -1,0 +1,30 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A default argument may be a value of an enumeration another module exports,
+※ `std.string.Allow.json`, as it may be one of this file's: the value is known
+※ while compiling either way.  The path through the module used to be taken
+※ for a top-level variable whose value is not a literal (9902).
+
+let std := ⎕import("std")
+
+enum Mode : u8:
+    quiet ;
+    loud
+
+fn read(b: u8⟦⟧, allow: std.string.Allow ← std.string.Allow.json, mode: Mode ← Mode.loud) → u64:
+    if mode ≠ Mode.loud:
+        return 7u64
+    (std.string.parse_int(b, ⌜u64⌝, 10u8, allow) ?? std.string.Parsed(.value ← 0u64, .end ← 0)).value
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if read(⎕bytes("42")) ≠ 42u64:
+        return 1u6
+    ※ JSON's rule refuses a `+` in front, which `Allow.plus` allows.
+    if read(⎕bytes("+5")) ≠ 0u64:
+        return 2u6
+    if read(⎕bytes("+5"), std.string.Allow.plus) ≠ 5u64:
+        return 3u6
+    if read(⎕bytes("1"), .mode ← Mode.quiet) ≠ 7u64:
+        return 4u6
+    0u6

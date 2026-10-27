@@ -12238,6 +12238,98 @@ Compare, for the product: **C** and **C++**, `_mm_clmulepi64_si128` (`<wmmintrin
 standard library's GHASH and CRC in assembly per architecture.  For the run: **Rust**'s `Vec::truncate` and `drain(i..j)`;
 **Python**'s `del l[i:j]`; **C++**'s `erase(first, last)`; **Go**'s `l = l[:n]` and `slices.Delete`; **Zig**'s
 `shrinkRetainingCapacity` and `replaceRange`.
+## 2026-10-27T18:00+01:00 — what the `json` module ran into
+
+The user said: "fix "what the json module ran into and wrote around (2026-10-22" in TODO-language".  The entry listed ten
+things; six were compiler bugs, one was found fixed already and one fixed for an arena and not for the heap, and three -- heap
+lists never given back, a list cut short in place, carry-less multiplication -- are design questions left with the user.  Fixing
+the bugs settled questions the specification did not; each is below with what was chosen and why.
+
+### The error after the mark is looked up where it is written first
+
+**A name alone after the mark of a result is a type of the language's or of the file it is written in, and failing both one of
+the answer's module.**  A module answering `std.string.Parsed(Value) ? Error` with an `Error` of its own was refused (4104): the
+rule of 2026-10-22 looked a name alone up only through the answer's module, which has no `Error`.  The file's own comes first
+because that is what a name alone means everywhere else, and because the other order leaves the file's own type no way to be
+named at all -- there is no path to a file's own module -- where this order leaves the module's reachable by a path,
+`std.string.ParseError`.  The fallback keeps what was written before meaning what it meant: `std.string.Parsed(f64) ?
+ParseError` in a file with no `ParseError` is `std.string`'s.
+- Compare **Rust**, **Zig** and **Haskell**, where a name alone is only ever the scope's; the fallback is this language's, kept
+  for the programs written against it.
+
+### An operator a module imports is not one it exports
+
+**A module's exported operators are the ones it defines.**  An imported operator was kept among the importer's own and handed on
+as exported, so a file importing `std` and any module that imports `std` was told `⍕` was exported by both (4924).  Re-exporting
+one is not something any module asked for, and a module importing `std` to write its own code is not offering `std`'s glyphs.
+- Compare **Haskell**, whose instances travel with every import transitively -- the behaviour this was by accident, without
+  Haskell's rule that one instance is one instance however it arrives; **Rust**, whose trait implementations are in force where
+  the trait and the type are, re-exported by nobody.
+
+### `⎕drop` in a generic body takes off whatever unit there is
+
+**`⎕drop(v)` of a value whose type is the one a type parameter stands for is the value as it is where that type carries no
+unit.**  `⍕` of a number with a unit failed inside `std.text`: the number arm turns the value into digits through `⎕narrow`, which
+keeps the unit, and `⎕drop` was refused where there is none (4543), so one generic body could not write both.  Three ways were
+weighed:
+- a reflection, `⎕hasunit(⌜T⌝)`, to ask in a `comptime if` -- a builtin, a diagnostic, and instances of one function differing by
+  more than the bits;
+- `⎕drop` allowed on any number -- which loses 4543, the point of which is that a crossing nobody needed is a mistake;
+- **`⎕drop` allowed on a type parameter's value**, chosen: whether there is a unit is what the call said, so the body cannot be
+  written knowing, and the rule against a pointless `⎕drop` keeps its force everywhere the type is written down.  A value of a
+  concrete type in the same body is held to it (`unit-drop-in-a-generic-has-none`).  The check is of the value's type against
+  the types the parameters are bound to, so a concrete value of the same type as a parameter's slips through; telling the two
+  apart would need the type the definition wrote, which is gone by the time the instance is checked.
+- Compare **F#**, whose unit-generic functions take `float<'u>` and strip it with `float x`; **C++**'s `std::chrono`, whose
+  `count()` is the drop and whose templates are written over the representation.
+
+### The unit is in the symbol
+
+**`u64 ¤size` and `u64` are two types, so a generic function compiled for each is two functions with two symbols.**  The symbol
+left the unit out, on the argument that a unit never changes the code -- but a generic body asks what its types are (`⎕typeof(⌜v⌝)
+= ⌜u64⌝`), so it does, and the two instances shared one symbol: one was dropped from the module while calls still reached it,
+which ran the wrong body or stopped the back end on a function no pass had seen.  `mangled()` of a number with a unit now writes
+it after the mark with no space, and the scale after a `×` where it is not one: `f(u64¤size)`, `f(f64¤meter÷second)`.  Symbols of
+functions taking no number with a unit are what they were.
+- Compare **C++**, whose mangled names carry every template argument, `std::chrono::duration<long, std::milli>` included;
+  **Rust**, likewise, units being types there.
+
+### `⍕` of an `f64` is Python's `repr` with the sign raised
+
+**The shortest text that reads back as the same number, with a point or an exponent always**: `2.5`, `100.0`, `1e+16`, `1e-05`,
+`⁻0.1`.  The digits are `std.string.numeral_f64`'s Schubfach; the layout is `Form.python`'s, because a whole number written as
+`100` would read back as an integer here, which is what `Form.javascript` writes; the sign is the raised minus, as a whole number's
+is.  An `f32` is not written yet: it has no shortest digits of its own in `std.string`, and widening gives an `f64`'s.
+
+### A reference into a list lends the whole list
+
+**`&l⟦i⟧` and `&mut l⟦i⟧` are references to an element of a list, and lend the list for as long as the reference is kept,
+whichever element.**  The specification named a name, a variable and an element of an array as the places `&` is written before;
+a list's element was refused (4449).  Two things had to be settled.
+- **What may not happen while it is out**: anything that may move the list's room -- a join, a take, a new value, `⎕reserve`.
+  Rather than a rule of its own, the reference is a borrow of the list, the one a view of the list already is (`as_a_view`): with
+  a `&` out the list is not changed in place, with a `&mut` out it is neither read nor changed except through the reference
+  (4566).  Every element is the whole list -- `l⟦0⟧` and `l⟦1⟧` are not two places apart as they are in an array -- because what
+  moves one moves all.  Compare **Rust**, whose `&mut v[0]` borrows the vector whole, which is this; **C++**, where
+  `int& r = v[0]` dangles after a `push_back` that reallocates, with nothing said; **Go**, where `&s[0]` keeps the old array
+  alive and goes on writing it after an `append` moved the slice.
+- **What a reference that writes writes**: the list's own room.  A list may share its room with another name until it is
+  written, and a list in the image is read-only, so `&mut l⟦i⟧` makes the list in its place ready as `l⟦i⟧ ← v` does, before the
+  address is taken; a `&` reads the room as it is.  The list's place has to allow writing (4537, as for an array).
+
+### The rest
+
+**An `if` or a `match` of arrays joined onto a list is joined on as the view its arms meet as**, and one where a view is wanted
+lowers each arm into the view, so arms of different lengths meet: the arms of `l ⧺← (if c: ⟦1u8⟧ else: ⟦2u8⟧)` were lowered into
+the list's type, which an array written out is not, and the back end was handed an array where a list was promised (8501).
+**An array written out where a list is wanted is refused** (4203), in an arm as anywhere: it had been handed on with the array's
+type, which is what reached the back end.  `l ⧺← ⟦a, b⟧` stays the one place it is the list of its elements, as the specification
+has it.
+**A default argument may name an imported module's enumeration value** (9902 before).  **A name of an array assigned in a loop
+is not carried by the loop**: `a ← v` copies into the elements and `a` goes on naming them, and carried it reached the body as a
+parameter of the loop nobody could tell was the frame, so a pure function writing its own array was told it wrote memory it did
+not make (4479).  **A local list is answered in a result in the heap**, `→ [u8] ? E`: the answer of a result made here is kept as
+it would be on its own, and the result made of that -- a result cannot be copied, and its answer can (4624 before).
 
 Open questions
 --------------

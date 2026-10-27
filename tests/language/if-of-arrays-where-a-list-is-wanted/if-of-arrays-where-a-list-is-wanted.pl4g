@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4203
+
+※ A list is not an array, so an array written out where a list is wanted is a
+※ value of the wrong type -- in an arm of an `if` as anywhere else.  It used to
+※ be handed on unchecked, as an array where a list was promised, and the back
+※ end stopped on it (8501).  `l ⧺← ⟦a, b⟧` is the one place an array written
+※ out is the list of its elements, and an `if` of arrays joined onto a list is
+※ joined on as the view its arms meet as (`join-onto-a-list-an-if-of-arrays`).
+
+let std := ⎕import("std")
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let c: bool = #init.args > 0
+    let l: [u8] = if c: ⟦1u8⟧ else: ⟦2u8, 3u8⟧
+    if #l = 1: 0u6 else: 1u6

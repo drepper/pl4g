@@ -21,6 +21,37 @@ namespace pl4g::sema {
 
   namespace {
 
+    // The expression each arm of an `if` with an `else`, or of a `match`, ends
+    // in, an arm ending in another of either reaching into that one's; nothing
+    // where *expr* is neither, or where an arm ends in no expression.
+    std::optional<std::vector<const ast::Expr*>> arm_ends(const ast::Expr* expr)
+    {
+      std::vector<const ast::Block*> bodies;
+      if (auto chosen = ast::as<ast::If>(expr); chosen != nullptr) {
+        if (chosen->arms.empty() || chosen->arms.back()->condition != nullptr)
+          return std::nullopt;
+        for (auto arm : chosen->arms)
+          bodies.push_back(arm->body);
+      } else if (auto matched = ast::as<ast::Match>(expr); matched != nullptr) {
+        for (auto arm : matched->arms)
+          bodies.push_back(arm->body);
+      } else
+        return std::nullopt;
+      std::vector<const ast::Expr*> ends;
+      for (auto body : bodies) {
+        auto stmts = body->stmts();
+        auto last = stmts.empty() ? nullptr : ast::as<ast::ExprStmt>(stmts.back());
+        if (last == nullptr)
+          return std::nullopt;
+        if (auto deeper = arm_ends(last->value); deeper.has_value())
+          ends.insert(ends.end(), deeper->begin(), deeper->end());
+        else
+          ends.push_back(last->value);
+      }
+      return ends;
+    }
+
+
     // The names the language gives the compiler's own (front/token.py).
     constexpr std::string_view heap_name = "\N{APL FUNCTIONAL SYMBOL QUAD}heap";
     constexpr std::string_view is_record_name = "\N{APL FUNCTIONAL SYMBOL QUAD}isrecord";
@@ -756,8 +787,24 @@ namespace pl4g::sema {
 
 
   std::optional<Checker::PlaceTaken> Checker::place_of_an_element(ir::Builder& builder, const ast::Element* expr,
-                                                                  bool of_a_list)
+                                                                  bool of_a_list, bool writing)
   {
+    if (! of_a_list && ir::is<ir::ListType>(said_to_be(expr->base)) && expr->indices.size() == 1
+        && ! ast::is<ast::Range>(expr->indices[0])) {
+      // A reference to an element of a list.  One that writes has the list in
+      // its place given room of its own first, as `l⟦i⟧ ← v` has, so that what
+      // it writes is this list's alone; one that reads, or one the list may not
+      // be written for, is where the element is now.  The list is lent for as
+      // long as the reference is kept (`borrowed_name`), which is what keeps
+      // the room from moving under it.
+      if (writing && may_write(expr->base)) {
+        auto written = list_element_written(builder, expr);
+        if (! written)
+          return std::nullopt;
+        return PlaceTaken{ std::get<0>(*written), std::get<1>(*written), true, "an element", false };
+      }
+      return place_of_an_element(builder, expr, true);
+    }
     ir::Value* base = lower_expr(builder, expr->base, nullptr);
     const ir::Type* ty = value_type_of(base);
     if (ty == ir::error_type())
@@ -1346,9 +1393,10 @@ namespace pl4g::sema {
     // A view of its elements may be out, which changing it in place could
     // leave pointing at room given back: the list is lent for as long as one
     // is kept (`as_a_view`).
+    // Not the reference being taken of an element of it, which lent it just now.
     if (auto borrowed = borrowed_name(expr)) {
       const auto& [name, path] = *borrowed;
-      if (lent_out(name, span, true, path)) [[unlikely]]
+      if (name != taking_a_reference && lent_out(name, span, true, path)) [[unlikely]]
         return std::nullopt;
     }
     return std::tuple{ builder.cast(ir::CastKind::bitcast, address, ir::ptr_type(list, true), span), list };
@@ -1770,8 +1818,11 @@ namespace pl4g::sema {
     Span span = stmt->span;
     if (may_be_an_array(written)) {
       // An array of the list's elements, of one dimension: one growth to fit,
-      // and the elements copied in as `joined_on` copies.
-      ir::Value* given = lower_expr(builder, written, nullptr);
+      // and the elements copied in as `joined_on` copies.  An `if` or a `match`
+      // of arrays is lowered as the view its arms meet as.
+      ir::Value* given = ast::is<ast::If>(written) || ast::is<ast::Match>(written)
+                           ? lower_into(builder, written, ir::array_type(ty->element, { std::nullopt }), written->span)
+                           : lower_expr(builder, written, nullptr);
       const ir::Type* held = value_type_of(given);
       if (held == ir::error_type())
         return;
@@ -1873,6 +1924,13 @@ namespace pl4g::sema {
   {
     if (ir::is<ir::ArrayType>(said_to_be(written)))
       return true;
+    // An `if` or a `match` every arm of which ends in an array, one written out
+    // among them: what it comes to is an array, and not the list a list's arms
+    // would be lowered into.
+    if (auto ends = arm_ends(written); ends.has_value())
+      return std::ranges::all_of(*ends, [this](const ast::Expr* one) {
+        return ast::is<ast::ArrayLit>(one) || may_be_an_array(one);
+      });
     if (auto element = ast::as<ast::Element>(written))
       return std::ranges::any_of(element->indices, [](const ast::Expr* one) { return ast::is<ast::Range>(one); });
     if (auto call = ast::as<ast::Call>(written))

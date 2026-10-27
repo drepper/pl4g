@@ -3,9 +3,10 @@
 ※ What the error of a result carries is a type, and is written as a type is
 ※ anywhere else: a name of this file, one of the language's, or a name reached
 ※ through a module -- `u64 ? std.string.ParseError`, an answer of the language's
-※ own carrying another module's error.  A name alone after the mark is looked
-※ up where the answer's is, so `std.string.Parsed(f64) ? ParseError` is
-※ `std.string`'s as it always was; a path says which module itself.
+※ own carrying another module's error.  A name alone after the mark that this
+※ file does not define is looked up where the answer's is, so
+※ `std.string.Parsed(f64) ? ParseError` is `std.string`'s as it always was; a
+※ path says which module itself.
 ※
 ※ The same after the brackets of an array and of a list, whose answer has no
 ※ module to look a name up through at all.

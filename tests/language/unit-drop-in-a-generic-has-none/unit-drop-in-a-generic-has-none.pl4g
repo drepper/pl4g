@@ -1,0 +1,21 @@
+※ pl4g-test: compile=error diag=4543
+
+※ A generic body may take off a unit a type parameter's type may or may not
+※ carry, and nothing else: `n` here is a `u32` whatever `doubled` is compiled
+※ for, so `⎕drop(n)` does nothing in every instance and is refused as it is
+※ outside a generic function.
+
+let std := ⎕import("std")
+
+fn doubled(v: T') → u64:
+    comptime if ⎕kindof(⌜T'⌝) = "integer":
+        let n: u32 = 5u32
+        ⎕widen(⎕drop(n), ⌜u64⌝) + ⎕widen(⎕drop(v), ⌜u64⌝)
+    else:
+        0u64
+
+@[startup]
+fn main(init: std.Init) → u6:
+    if doubled(3u8) ≠ 8u64:
+        return 1u6
+    0u6

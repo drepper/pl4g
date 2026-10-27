@@ -438,7 +438,13 @@ std.text(1234u32)                ※ "1234"
 
 `⍕` is APL's own glyph for this -- monadic format -- and the two are one body under two names: the operator for writing, and the
 name for a program that delegates to it.  **What comes out reads back as what went in.**  The raised minus is the one a negative
-literal is written with, and a record is written in the notation a program writes one in.
+literal is written with, and a record is written in the notation a program writes one in.  A number with a unit is the number
+alone, a literal carrying none.  **An `f64` is the shortest text that reads back as the same number** -- `std.string`'s
+Schubfach -- with a point or an exponent always, laid out as Python's `repr` lays it out: `⍕2.5f64` is `2.5`, `⍕100f64` is
+`100.0`, `⍕1e16f64` is `1e+16`, `⍕⁻0.1f64` is `⁻0.1`.  Compare **Python**'s `repr`, whose digits and layout these are with the
+sign raised; **JavaScript**'s `Number.prototype.toString`, the same digits without the point on a whole number, which would read
+back as an integer here; **C**'s `%g`, six digits unless told; **Go**'s `strconv.FormatFloat(x, 'g', -1, 64)` and **Rust**'s
+`{}`, both shortest.
 
 **It is one definition and not one per type.**  The language has no overloading, so a glyph has one meaning per number of operands
 and a generic body with `comptime if` says a different thing for each type inside that one meaning.  **Nothing in the number arm
@@ -2285,9 +2291,10 @@ Compare **Rust**'s `Result<&[u8], E>`, **Zig**'s `E![]const u8`, **Swift**'s `[U
 same way; C and Go answer two values instead.
 
 **What the error carries is named as a type is anywhere else**, through the modules it is reached by: `u64 ? std.string.ParseError`
-is a number of the language's own or another module's reason for there being none.  **A name alone after the mark is looked up
-where the answer's is** -- `std.string.Parsed(f64) ? ParseError` is `std.string`'s, as is everything about that answer -- except
-a type of the language's, which no module defines; a path says which module itself.  Compare **Rust**'s `Result<u64,
+is a number of the language's own or another module's reason for there being none.  **A name alone after the mark is a type of
+the language's or of the file it is written in, and failing both is looked up where the answer's is** -- a module answering
+`std.string.Parsed(Value) ? Error` carries its own `Error`, and `std.string.Parsed(f64) ? ParseError` written where there is no
+`ParseError` carries `std.string`'s, as is everything about that answer; a path says which module itself.  Compare **Rust**'s `Result<u64,
 std::num::ParseIntError>`, **Zig**'s `std.fmt.ParseIntError!u64`, **Haskell**'s `Either Text.Read.Error Word64`, all paths as
 any type is.
 
@@ -3071,7 +3078,8 @@ whatever file names it.
 type parameters is written with its own before that -- `Maybe(u8)(inner)` -- and one with neither binding nor anything after it
 would read its single type as a binding, so it takes `(_)` -- which binds nothing, and nothing is said of it not being read.
 **A result of one is written with its types before the mark**, `Read(f64) ? Why`, and they are the answer's: the error is a
-name of its own, a type of the answer's module or one the language has, which takes none.
+name of its own -- one the language has, one of the file it is written in, or else one of the answer's module -- which takes
+none.
 
 Compare Haskell's `data Pair a = Pair a a`, Rust's `struct Pair<T>` with `where` bounds, C++ class templates with `requires`
 clauses, Go's `type Pair[T any] struct`, and Zig, where a function returning a type is how a type takes parameters.  The
@@ -3157,7 +3165,10 @@ let far: u32 ¤mph = ⎕unit(⎕drop(v), ⌜mph⌝)
 
 That is the point rather than the price: the step that would otherwise have been silent is the step that is said out loud.
 `⎕drop` of something with no unit is refused (4543) and `⎕unit` on something that has one is refused (4544), so neither can be
-written where it does nothing or where it hides a crossing.  The unit is written between the lifting marks (4546) because a unit
+written where it does nothing or where it hides a crossing.  **Except `⎕drop` in a generic body, of a value whose type is the one
+a type parameter stands for**: whether that carries a unit is what the call said, so `⎕drop(v)` takes off whatever there is, none
+included, and one definition serves a number with a unit and one without -- which is how `std.text` writes both.  A unit says
+nothing about the bits, so the instances do the same thing; a value of a type no parameter stands for is held to the rule.  The unit is written between the lifting marks (4546) because a unit
 is not a value -- there is nothing at all for one to be while the program runs.
 
 Compare: **F#**, whose units of measure are this feature and the one full implementation in a mainstream language -- `[<Measure>]`
@@ -3196,9 +3207,9 @@ moving ← &mut m               ※ binds the name to another place
 `mut` before the type says the name may move; `mut` inside the reference says the place may be written.  A `&T` refuses the first
 line (4535) and a name without `mut` refuses the second.
 
-**`&` is written before a place** (4533): a name, a variable at the top level, an element of an array.  A value the program worked
-out is in no particular place -- it may be in a register and it may be nowhere at all -- so there is nothing for a reference to
-name.  A reference that allows writing further needs a place the program could have written where it stands (4537), since it is a
+**`&` is written before a place** (4533): a name, a variable at the top level, an element of an array or of a list.  A value the
+program worked out is in no particular place -- it may be in a register and it may be nowhere at all -- so there is nothing for a
+reference to name.  A reference that allows writing further needs a place the program could have written where it stands (4537), since it is a
 way to write it.
 
 **Whether it may be written is part of the type, so the context says it.**  `&x` where a `&mut T` is wanted is a reference that
@@ -4671,6 +4682,14 @@ left is a place (3027), a list's (4929) -- an array's length is in its type, and
 length is not in its type -- and written as an array's are.  A list in the image is read-only, so the first change made to one
 where it stands copies it out, into the arena in force; what is in the image is as it was.
 
+**`&l⟦i⟧` and `&mut l⟦i⟧` refer to an element where it is**, and lend the list -- the whole list, whichever element -- for as long
+as the reference is kept, as a view of it does: joining onto it, taking one out or giving it a new value may move every element
+into new room and give the old room back, so none of them is allowed while the reference is out, and while a `&mut` is out the
+list is not read by name either (4566).  A reference that writes has the list in its place given room of its own first, as
+`l⟦i⟧ ← v` has -- a list in the image copied out, one another name shares copied -- and the place has to allow writing (4537).
+Compare **Rust**, whose `&mut v[i]` borrows the whole vector; **C++**, whose `int& r = v[i]` dangles after a `push_back` that
+reallocates, with nothing said; **Go**, whose `&s[i]` goes on naming the old array after an `append` moved the slice.
+
 **A part of an element is written where the element is**: `l⟦i⟧.name ← v` writes one field of a list of records, and the rest
 of the element is not read or written.  It is held to what writing the element whole is held to -- the list in a place that may be
 changed, the index checked, a list in the image copied out first -- and what points somewhere, text or a list, is copied into the
@@ -4704,7 +4723,9 @@ the list itself copies it out first where it has to -- a view is handed where th
 copy out before a write through it.  An element is written through the list, `l⟦i⟧ ← v`.
 
 **What is joined onto a list may be an array of its elements**, of one dimension -- a view, a slice, an array whose type says its
-shape -- and so may either side of a `⧺` whose other side is a list, which makes a new list of the two in the arena in force.
+shape, an `if` or a `match` every arm of which is one of those or an array written out, joined on as the view its arms meet as --
+and so may either side of a `⧺` whose other side is a list, which makes a new list of the two in the arena in force.  Anywhere
+else an array written out is not a list (4203).
 
 ```
 l ⧺← row                              ※ row: u16⟦⟧, its elements copied in
@@ -4797,7 +4818,8 @@ nobody else's, and the call ending leaves the caller the only one holding it.  S
 answered, is answered without a copy.  The variable has to be bound once and given only lists made where it is given them -- a list
 written out, a join, what a function of the program answers -- and be reached no other way and named by nothing put off with
 `defer`, which runs after the answer is worked out.  Anything else is copied as before: a variable given another name's list may
-share that name's room.  Compare **C++**'s implicit move of a returned local, **Rust**'s move of a returned `Vec`.
+share that name's room.  **The same holds of a list answered in a result**, `→ [u8] ? E`: the answer is kept where the signature
+says as it would be answered alone, and the result made of it.  Compare **C++**'s implicit move of a returned local, **Rust**'s move of a returned `Vec`.
 
 ```
 let l: mut [u8] = [1u8, 2u8, 3u8]
@@ -5469,7 +5491,9 @@ arms.
 **`if` is an expression, and a statement where nothing wants its value**, exactly as `match` is.  Where a value is wanted of it,
 every arm produces one and they are all of one type, and **there has to be an `else`** (4428) -- an `if` without one has a way
 through that runs no arm, and that way would owe a value it has nowhere to get.  An arm ending in `return` owes none, leaving the
-function rather than reaching the place the arms join.
+function rather than reaching the place the arms join.  **Each arm is lowered into what is wanted**, so where that is a view the
+arms may be arrays of different lengths, views and slices, each the view it stands for: `let v: u8⟦⟧ = if c: ⟦1u8⟧ else: ⟦2u8,
+3u8⟧`.
 
 ```
 let first: u8 = if a < b:
@@ -9065,7 +9089,9 @@ whose substitution failure is the thing not inherited; **Go**, which checks the 
 sets; **Zig** and **D**, which check per instantiation, compile-time code being their whole mechanism -- the one corner kept here.
 
 **One function is made per set of types**, not one per call: a second call saying what an earlier one said gets that same
-function.  The two are told apart by their symbols on their own, a symbol being the signature written out.  Which sets of types a
+function.  The two are told apart by their symbols on their own, a symbol being the signature written out -- **a unit
+included**: `u64 ¤size` and `u64` are two types, and a body may ask which it was given, so `f(u64¤size)` and `f(u64)` are two
+functions.  Which sets of types a
 generic function was compiled for is written to the report log (`instantiate`), since the program said nothing about them.
 
 **A generic function may call itself with the types it was given**, and two may call each other: what the call names is the

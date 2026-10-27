@@ -2951,13 +2951,22 @@ namespace pl4g::sema {
     if (alternative != nullptr)
       for (auto& name : assigned_in(alternative))
         names.push_back(std::move(name));
+    auto apart = assigned_apart_in(body);
+    if (alternative != nullptr)
+      for (auto& name : assigned_apart_in(alternative))
+        apart.push_back(std::move(name));
     for (const auto& name : names) {
       auto local = find_local(name);
       // A name with storage of its own stands for the same place at every
       // turn: what a turn changes is what is in the place, which is read where
-      // it is read and carried nowhere.
-      if (local != nullptr && ! local->placed)
-        found.setdefault(id_of(local), local);
+      // it is read and carried nowhere.  So does a name of an array: `a ← v`
+      // copies into the elements `a` names, and `a` goes on naming them --
+      // except where it is assigned together with another name, which binds it.
+      if (local == nullptr || local->placed)
+        continue;
+      if (ir::is<ir::ArrayType>(held_by(local)) && std::ranges::find(apart, name) == apart.end())
+        continue;
+      found.setdefault(id_of(local), local);
     }
     std::vector<Local*> locals;
     for (const auto& [_, local] : found)

@@ -1,0 +1,50 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `&l⟦i⟧` and `&mut l⟦i⟧` are references to an element of a list, as they are
+※ to an element of an array.  One that writes has the list given room of its
+※ own first, as `l⟦i⟧ ← v` has -- a list in the image is copied out, and so a
+※ list another name shares is never written through it -- and the index is
+※ checked against how many there are.  The list is lent for as long as the
+※ reference is kept, the whole list whichever element: joining onto it or
+※ taking one out could move every element, so neither may happen while it is
+※ out (`reference-to-an-element-of-a-list-held`).
+
+let std := ⎕import("std")
+
+type Point = x : u8 ; y : u8
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let l: mut [u8] = [1u8, 2u8] in ⎕heap
+    let r: &mut u8 = &mut l⟦0⟧
+    r⌖ ← 5u8
+    if l⟦0⟧ ≠ 5u8:
+        return 1u6
+    let q := &mut l⟦1⟧
+    q⌖ ← q⌖ + 1u8
+    if l⟦1⟧ ≠ 3u8:
+        return 2u6
+    let s: &u8 = &l⟦1⟧
+    if s⌖ ≠ 3u8:
+        return 3u6
+    ※ A list in the image is copied out before it is written through one.
+    let fixed: mut [u8] = [7u8, 8u8]
+    let kept: [u8] = fixed
+    let f: &mut u8 = &mut fixed⟦0⟧
+    f⌖ ← 8u8
+    if fixed⟦0⟧ ≠ 8u8 ∨ kept⟦0⟧ ≠ 7u8:
+        return 4u6
+    ※ A field of an element, through a reference to the whole element or to
+    ※ the field.
+    let ps: mut [Point] = [Point(.x ← 1u8, .y ← 2u8)] in ⎕heap
+    let p: &mut Point = &mut ps⟦0⟧
+    p⌖.y ← 9u8
+    let x: &mut u8 = &mut ps⟦0⟧.x
+    x⌖ ← 2u8
+    if ps⟦0⟧.x ≠ 2u8 ∨ ps⟦0⟧.y ≠ 9u8:
+        return 5u6
+    ※ Once the reference is no longer used, the list may grow again.
+    l ⧺← [4u8]
+    if #l ≠ 3:
+        return 6u6
+    0u6

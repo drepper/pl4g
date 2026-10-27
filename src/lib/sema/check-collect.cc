@@ -2441,8 +2441,9 @@ namespace pl4g::sema {
     if (! ref->error)
       return ir::result_type(found);
     // What the error carries is a type like any other, named the way the
-    // answer is: a name alone through the answer's module, except a type the
-    // language has, and a name written through a module through that one.
+    // answer is: a name alone is a type the language has or one of this file,
+    // as a name alone is anywhere else, and failing both is reached through the
+    // answer's module; a name written through a module is that module's.
     auto other = syntax.copy(*ref);
     auto dot = ref->error->rfind('.');
     other->name = dot == std::string_view::npos ? *ref->error : ref->error->substr(dot + 1);
@@ -2455,6 +2456,8 @@ namespace pl4g::sema {
     if (dot != std::string_view::npos)
       other->module = ref->error->substr(0, dot);
     else if (ir::builtin_type(*ref->error) != nullptr)
+      other->module.reset();
+    else if (const Held* own = top->get(std::string(*ref->error)); own != nullptr && own->get<NamedType>() != nullptr)
       other->module.reset();
     const ir::Type* carried_ = resolve_type(other);
     if (carried_ == ir::error_type())
@@ -2610,7 +2613,10 @@ namespace pl4g::sema {
                    { "wanted", paired_ ? "two or more" : "one operand or two" } });
       return;
     }
-    operators[{ std::string(node->name), std::int64_t(node->params.size()) }] = what;
+    std::pair key { std::string(node->name), std::int64_t(node->params.size()) };
+    operators[key] = what;
+    // The file's own now, whatever an import put in force before it.
+    operators_from.erase(key);
   }
 
 

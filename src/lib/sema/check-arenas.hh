@@ -70,7 +70,8 @@
     // Kill every name read out of a container that may have replaced elements.
     void elements_replaced(const KeySet& keys, std::string_view name, Span span);  // check.py:10090
     // What a function answers, kept in the allocator its signature names.
-    ir::Value* answered(ir::Builder& builder, const ast::Expr* written, ir::Value* value, ir::Function* func, Span span);  // check.py:10107
+    ir::Value* answered(ir::Builder& builder, const ast::Expr* written, ir::Value* value, ir::Function* func, Span span,
+                        const ir::Type* as = nullptr);  // check.py:10107
     // Check that a lambda leaving the call reaches nothing that stays (4632).
     bool lambda_may_leave(const ast::Expr* written, const KeySet& lasting, std::string_view name, Span span);  // check.py:10222
     // What a report calls something a value reaches, by its key.

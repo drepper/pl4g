@@ -1,0 +1,35 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A generic function is one function per set of types, and `u64 ¤size` and
+※ `u64` are two types: `which` asks what it was given and answers differently
+※ for each.  The two instances used to share a symbol, the unit being left out
+※ of it, so one of them was lost and both calls reached the other -- or the
+※ compiler stopped on the one it had dropped.  The unit is in the symbol now.
+
+let std := ⎕import("std")
+
+unit ¤meter → ¤idx
+
+fn which(v: T') → u8:
+    comptime if ⎕typeof(⌜v⌝) = ⌜u64⌝:
+        1u8
+    comptime elif ⎕typeof(⌜v⌝) = ⌜u64 ¤size⌝:
+        2u8
+    else:
+        3u8
+
+@[startup]
+fn main(init: std.Init) → u6:
+    let s: u8⟦⟧ = ⎕bytes("abc")
+    let far: u64 ¤meter = 4
+    if which(#s) ≠ 2u8:
+        return 1u6
+    if which(3u64) ≠ 1u8:
+        return 2u6
+    if which(far) ≠ 3u8:
+        return 3u6
+    ※ The same through `⍕`, whose instances for a number with a unit and one
+    ※ without are apart in the same way.
+    if ⍕#s ≠ "3" ∨ ⍕far ≠ "4" ∨ ⍕3u64 ≠ "3":
+        return 4u6
+    0u6

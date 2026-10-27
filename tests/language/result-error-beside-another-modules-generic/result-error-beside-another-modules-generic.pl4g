@@ -1,0 +1,34 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A name alone after the mark of a result is a name of the file it is written
+※ in, as a name alone is anywhere else, before it is one of the answer's
+※ module: `reader` answers `std.string.Parsed(Value) ? Error`, and `Error` is
+※ its own.  The name used to be looked up only where `Parsed` was defined, and
+※ `std.string` has no `Error`.  `std.string.Parsed(u64) ? ParseError` still
+※ finds `std.string`'s, this file defining none.
+
+let std := ⎕import("std")
+let reader := ⎕import("reader")
+
+@[opaque]
+fn digits(text: u8⟦⟧) → std.string.Parsed(u64) ? ParseError:
+    std.string.parse_int(text, ⌜u64⌝)
+
+@[startup]
+fn main(init: std.Init) → u6:
+    match reader.parse(⎕bytes("x")):
+        std.string.Parsed(reader.Value)(p):
+            if p.value.n ≠ 1u64:
+                return 1u6
+        ⊥(_):
+            return 2u6
+    match reader.parse(⎕bytes("")):
+        std.string.Parsed(reader.Value)(_):
+            return 3u6
+        ⊥(e):
+            if e ≠ reader.Error.empty:
+                return 4u6
+    let seven: std.string.Parsed(u64) = digits(⎕bytes("7")) ?? std.string.Parsed(.value ← 0u64, .end ← 0)
+    if seven.value ≠ 7u64:
+        return 5u6
+    0u6
