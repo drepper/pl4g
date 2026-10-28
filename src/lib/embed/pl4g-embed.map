@@ -1,4 +1,4 @@
-/* What libpl4g-embed.so offers: four functions with C's linkage, and nothing
+/* What libpl4g-embed.so offers: five functions with C's linkage, and nothing
    else -- not the grammar's entry point, nor the instantiations of the
    standard library's templates, which are visible by their own say-so.  */
 {
@@ -7,6 +7,7 @@
     pl4g_embed_state_free;
     pl4g_embed_define;
     pl4g_embed_run_source;
+    pl4g_embed_stop;
   local:
     *;
 };

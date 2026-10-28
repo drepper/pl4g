@@ -8,12 +8,15 @@
 // hands the answers back through a third, which only stores them.  It is
 // started with three words, as a compiled program is with the words it was
 // named with, and prints each through a fourth function defined here, which
-// writes it with std::println and keeps it.  Once the program has run, main
-// checks what was stored against what it works out itself, and exits with 0
-// where everything agrees and with a number saying what did not.  It does so
-// with two interpreters alive at the same time.
+// writes it with std::println and keeps it.  Before that it asks a fifth for
+// its heading, which answers text -- a pointer and a length, the bytes kept
+// here -- prints it on its own output and hands it back through the fourth.
+// Once the program has run, main checks what was stored against what it works
+// out itself, and exits with 0 where everything agrees and with a number
+// saying what did not.  It does so with two interpreters alive at the same
+// time.
 //
-// The four functions are found by the interpreter with
+// The five functions are found by the interpreter with
 // dlsym(RTLD_DEFAULT, ...), so they have C's linkage and this program is
 // linked with -rdynamic: what it defines is then in its dynamic symbol table,
 // where dlsym looks.
@@ -24,7 +27,9 @@
 #include <cstdint>
 #include <exception>
 #include <numeric>
+#include <format>
 #include <print>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -55,10 +60,14 @@ namespace {
   const std::vector<std::string> words{ "alpha", "beta", "gamma" };
   std::vector<std::string> printed;
 
-  // The program, in PL4G.  It declares the three functions below as defined
-  // by its host, reads every reading, and delivers how many there were, their
-  // sum, the smallest and the largest, and the sum of their squares.  Then
-  // it prints the words it was started with, its own name left out.
+  // The heading the program asks for, kept here: the program copies it.
+  std::string heading;
+
+  // The program, in PL4G.  It declares the five functions below as defined
+  // by its host, prints the heading the host answers and hands it back, reads
+  // every reading, and delivers how many there were, their sum, the smallest
+  // and the largest, and the sum of their squares.  Then it prints the words
+  // it was started with, its own name left out.
   constexpr std::string_view program =
     "@[host(\"example_count\")]\n"
     "fn count() \N{RIGHTWARDS ARROW} i64\n"
@@ -72,10 +81,18 @@ namespace {
     "@[host(\"example_print\")]\n"
     "fn print(text: str)\n"
     "\n"
+    "@[host(\"example_heading\")]\n"
+    "fn heading() \N{RIGHTWARDS ARROW} str\n"
+    "\n"
     "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
     "\n"
     "@[startup, impure]\n"
     "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+    "    let title: str = heading()\n"
+    "    if title = \"\":\n"
+    "        return 3u6\n"
+    "    _ \N{LEFTWARDS ARROW} std.println\N{TOP LEFT CORNER}&mut init.io.output, \"{}\", title\N{TOP RIGHT CORNER}\n"
+    "    print(title)\n"
     "    let n: i64 = count()\n"
     "    let sum: mut i64 = 0i64\n"
     "    let squares: mut i64 = 0i64\n"
@@ -124,8 +141,12 @@ namespace {
                  wanted.smallest, wanted.largest, wanted.squares);
       return 6;
     }
-    if (printed != words) [[unlikely]] {
-      std::print(stderr, "printed {} words where {} were handed over\n", printed.size(), words.size());
+    if (printed.empty() || printed.front() != heading) [[unlikely]] {
+      std::print(stderr, "the heading came back as {:?}\n", printed.empty() ? std::string() : printed.front());
+      return 8;
+    }
+    if (! std::ranges::equal(printed | std::views::drop(1), words)) [[unlikely]] {
+      std::print(stderr, "printed {} words where {} were handed over\n", printed.size() - 1, words.size());
       return 7;
     }
     std::print("delivered: {} readings, sum {}, smallest {}, largest {}, sum of squares {}\n", result.count,
@@ -165,6 +186,22 @@ extern "C" void example_print(const char* text)
 {
   std::println("{}", text);
   printed.emplace_back(text);
+}
+
+
+// What a host function answering `str` answers: the bytes and how many.
+struct Text {
+  const char* text;
+  std::uint64_t length;
+};
+
+
+// The heading the program prints, made here and kept until the next call:
+// the program has copied it into its own heap before the call returns to it.
+extern "C" Text example_heading()
+{
+  heading = std::format("{} readings, summed", readings.size());
+  return { heading.data(), heading.size() };
 }
 
 

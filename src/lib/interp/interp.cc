@@ -47,6 +47,10 @@ namespace pl4g::interp {
       constexpr int tests_failed = 88;
     } // namespace status
 
+    // The flag of a run nobody stops, so that asking it needs no test of
+    // whether there is one.
+    constinit const std::atomic<bool> never_stopped{ false };
+
     // How the program ended, unwound to the top of the run.
     struct Exit {
       int status;
@@ -171,6 +175,9 @@ namespace pl4g::interp {
     // A branch: where to, and which cells go to which parameter.
     struct Jump {
       std::uint32_t block = 0;
+      // Whether it goes to a block at or before the one it leaves, which
+      // every loop has one of: where the host's stop is asked.
+      bool backward = false;
       std::vector<std::pair<In, std::uint32_t>> moves;
       std::uint32_t moved = 0;
     };
@@ -203,6 +210,10 @@ namespace pl4g::interp {
       // A call's callee, or a native one.
       const Function* callee = nullptr;
       Native native = nullptr;
+      // Whether a call goes to a function at or before its caller in the
+      // module, or through a value: every cycle of calls has one of these,
+      // as every loop has a jump back, and here the host's stop is asked.
+      bool backward = false;
       std::vector<Jump> jumps;
       std::vector<Cell> cases;
       // What a fault here says.
@@ -468,10 +479,24 @@ namespace pl4g::interp {
         return in.at >= 0 ? cells.data() + a.base + std::size_t(in.at) : a.code->constants.data() + ~in.at;
       }
 
+      // End the run as the host has asked, from another thread: out of the
+      // way of the loop that asks, which is one relaxed load and a branch not
+      // taken -- nothing is ordered by it, a stop seen a turn later costing
+      // nothing.
+      [[noreturn, gnu::cold, gnu::noinline]] void stopped()
+      {
+        fault("pl4g: the host stopped the program\n", target::statuses::STOPPED_BY_HOST);
+      }
+
       const Module& module;
+      // The host's flag, or one nobody sets.
+      const std::atomic<bool>* stopping;
       DataLayout layout;
       std::unordered_map<const Function*, std::unique_ptr<Code>> codes;
       std::unordered_set<const Function*> known;
+      // Where each function stands in the module, which says which calls go
+      // back.
+      std::unordered_map<const Function*, std::size_t> order;
       std::unordered_map<const Value*, std::byte*> places;
       // Room for the image's objects, each aligned as its type wants.
       struct Freed {
@@ -555,13 +580,19 @@ namespace pl4g::interp {
     }
 
 
-    Machine::Machine(const Module& module, const Options& options) : options(options), module(module)
+    Machine::Machine(const Module& module, const Options& options)
+      : options(options), module(module), stopping(options.stop != nullptr ? options.stop : &never_stopped)
     {
       layout.frames = &module.frame_sizes;
-      for (const auto& [_, f] : module.functions)
+      // Any order will do for which calls go back, so long as it is one.
+      for (const auto& [_, f] : module.functions) {
         known.insert(f.get());
-      for (const auto& f : module.unlisted)
+        order.emplace(f.get(), order.size());
+      }
+      for (const auto& f : module.unlisted) {
         known.insert(f.get());
+        order.emplace(f.get(), order.size());
+      }
       // The record the startup function is handed, where it takes one.
       if (module.startup != nullptr && ! module.startup->fty->params.empty())
         if (auto ptr = as<PtrType>(module.startup->fty->params[0]))
@@ -876,6 +907,7 @@ namespace pl4g::interp {
           for (const auto& target : inst->targets) {
             Jump jump;
             jump.block = numbers.at(target.block);
+            jump.backward = jump.block <= b;
             for (std::size_t i = 0; i < target.args.size(); ++i) {
               auto from = operand(code, target.args[i], cells);
               jump.moves.emplace_back(from, cells[target.block->params[i].get()]);
@@ -987,6 +1019,8 @@ namespace pl4g::interp {
             break;
           case InstKind::CallInst:
             op.callee = inst->callee;
+            op.backward = inst->callee == nullptr || ! order.contains(inst->callee)
+                          || order.at(inst->callee) <= order.at(&func);
             break;
           case InstKind::AssertInst:
             op.message = describe(inst->what, func, inst->span);
@@ -1347,6 +1381,8 @@ namespace pl4g::interp {
 
     void Machine::execute(std::size_t depth)
     {
+      // Where the host's stop is, read once: the loop asks what it holds.
+      const std::atomic<bool>& asked = *stopping;
       while (activations.size() > depth) {
         Activation& a = activations.back();
         const Op& op = a.code->blocks[a.block][a.at++];
@@ -1528,8 +1564,14 @@ namespace pl4g::interp {
                                             args.size(), callee->name, code.arguments));
           // What the call takes of the stack, which is what running out of it
           // is measured in.
+          // The host's stop is asked with it at a call that goes back, which
+          // a recursion with no loop in it makes over and over: a program
+          // whose every call went forward would make finitely many.
           std::size_t cost = code.frame_bytes + 32 + 4 * std::size_t(code.cells);
-          if (stack_used + cost > stack_size || frame_top + code.frame_bytes + 16 > stack_size) [[unlikely]] {
+          if (stack_used + cost > stack_size || frame_top + code.frame_bytes + 16 > stack_size
+              || (op.backward && asked.load(std::memory_order_relaxed))) [[unlikely]] {
+            if (asked.load(std::memory_order_relaxed))
+              stopped();
             write_all(options.devices.error, "pl4g: the stack ran out\n");
             throw Exit{ status::stack_overflow };
           }
@@ -1602,6 +1644,8 @@ namespace pl4g::interp {
           }
           a.block = jump->block;
           a.at = 0;
+          if (jump->backward && asked.load(std::memory_order_relaxed)) [[unlikely]]
+            stopped();
           break;
         }
         case InstKind::UnreachableInst:
@@ -1692,7 +1736,13 @@ namespace pl4g::interp {
           throw InternalError(std::format("libffi cannot describe a call of '{}'", callee->name));
         host.prepared = true;
       }
-      return crossed_call(host, host.address, given);
+      Cell answer = crossed_call(host, host.address, given);
+      // A program stopped while the host's function ran -- which nothing
+      // interrupts -- ends as it returns, the first moment it is the
+      // program's again.
+      if (stopping->load(std::memory_order_relaxed)) [[unlikely]]
+        stopped();
+      return answer;
     }
 
 

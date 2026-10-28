@@ -1,7 +1,7 @@
 // PL4G's interpreter, for a C++ program that loads it as a shared object.
 //
 // The C++ face of embed/pl4g-embed.h: one object is one interpreter.  Making
-// it loads libpl4g-embed.so, finds the four functions the library offers and
+// it loads libpl4g-embed.so, finds the five functions the library offers and
 // makes a state of the interpreter; destroying it gives the state back and
 // lets the library go.  Several may exist at once, each with a state of its
 // own, the library being loaded once however many hold it.
@@ -14,7 +14,11 @@
 //
 // The functions the PL4G program calls with @[host("SYMBOL")] are found with
 // dlsym(RTLD_DEFAULT, SYMBOL), so the program loading this has to be linked
-// with -rdynamic for its own to be found.
+// with -rdynamic for its own to be found.  What crosses is what C has, as
+// embed/pl4g-embed.h says: a `str` goes to the host as a nul-terminated copy,
+// and one a host function answers comes back as
+// `struct { const char* text; uint64_t length; }`, whose bytes the host keeps
+// and the program copies.
 #pragma once
 
 #include <dlfcn.h>
@@ -71,6 +75,7 @@ namespace pl4g::embed {
       state_free = found<::pl4g_embed_state_free_t>("pl4g_embed_state_free");
       run_source = found<::pl4g_embed_run_source_t>("pl4g_embed_run_source");
       define_one = found<::pl4g_embed_define_t>("pl4g_embed_define");
+      stop_one = found<::pl4g_embed_stop_t>("pl4g_embed_stop");
       state = state_new();
       if (state == nullptr) [[unlikely]] {
         ::dlclose(handle);
@@ -86,7 +91,8 @@ namespace pl4g::embed {
     LoadedInterpreter(LoadedInterpreter&& other) noexcept
       PL4G_POST(! other.valid())
       : handle(std::exchange(other.handle, nullptr)), state_new(other.state_new), state_free(other.state_free),
-        run_source(other.run_source), define_one(other.define_one), state(std::exchange(other.state, nullptr))
+        run_source(other.run_source), define_one(other.define_one), stop_one(other.stop_one),
+        state(std::exchange(other.state, nullptr))
     {
     }
 
@@ -100,6 +106,7 @@ namespace pl4g::embed {
         state_free = other.state_free;
         run_source = other.run_source;
         define_one = other.define_one;
+        stop_one = other.stop_one;
         state = std::exchange(other.state, nullptr);
       }
       return *this;
@@ -150,6 +157,18 @@ namespace pl4g::embed {
       return run_source(state, text.data(), text.size(), name.c_str(), words.data(), words.size());
     }
 
+    // Stop the program `run` is running on another thread: it ends at its
+    // next jump back or call, or as the host function it is in returns, and
+    // that `run` answers 93.  Callable from any thread; one made while
+    // nothing runs does nothing, every run starting with none asked for.
+    // One moved from has nothing to stop.
+    void stop() noexcept
+    {
+      if (state == nullptr) [[unlikely]]
+        return;
+      stop_one(state);
+    }
+
   private:
     // The function the library offers as `symbol`.  Throws where it offers
     // none, having let the library go.
@@ -183,6 +202,7 @@ namespace pl4g::embed {
     ::pl4g_embed_state_free_t state_free = nullptr;
     ::pl4g_embed_run_source_t run_source = nullptr;
     ::pl4g_embed_define_t define_one = nullptr;
+    ::pl4g_embed_stop_t stop_one = nullptr;
     ::pl4g_embed_state* state = nullptr;
   };
 

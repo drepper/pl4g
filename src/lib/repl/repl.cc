@@ -34,6 +34,7 @@ namespace pl4g::repl {
     options.devices = settings.devices;
     options.sources = &sources;
     options.defined = &settings.defined;
+    options.stop = settings.stop;
     auto outcome = interp::run(*module, options);
     return { outcome.status, outcome.signal };
   }

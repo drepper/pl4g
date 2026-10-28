@@ -30,6 +30,9 @@ namespace pl4g::repl {
     std::vector<std::pair<std::filesystem::path, std::string>> held;
     // Functions the host hands over by name, asked before `dlsym` is.
     interp::HostFunctions defined;
+    // What the host sets to stop the run, from another thread; nothing where
+    // nobody does.
+    const std::atomic<bool>* stop = nullptr;
     // What the program is started with, beside its own name.
     std::vector<std::string> args;
     std::vector<std::string> environment;

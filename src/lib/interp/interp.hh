@@ -12,6 +12,7 @@
 // descriptors the program's devices start on are the caller's to choose.
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -65,6 +66,13 @@ namespace pl4g::interp {
     // it does not export, or put something of its own where an exported
     // symbol is.  Nothing where it hands over nothing.
     const HostFunctions* defined = nullptr;
+    // Set, from any thread, where the host wants the program stopped.  It is
+    // read at every jump back to a block at or before the one jumped from --
+    // so in every turn of every loop -- at every call back to a function at
+    // or before the caller, or through a value -- so in every turn of every
+    // recursion -- and when a host function returns; a run it ends answers
+    // `STOPPED_BY_HOST`.  Nothing where nobody stops the program.
+    const std::atomic<bool>* stop = nullptr;
   };
 
   // How a run ended: the status it exited with, or the signal it would have

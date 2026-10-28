@@ -13,11 +13,13 @@
 //
 // Exits with 0 where everything went as it should, saying what did not on
 // standard error otherwise.
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <print>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <string_view>
 #include <vector>
@@ -241,6 +243,60 @@ extern "C" {
       seen.failed.push_back(which);
   }
 
+  // What a host function declared to answer `str` answers: the bytes, which
+  // the host keeps, and how many there are.
+  struct Text {
+    const char* text;
+    std::uint64_t length;
+  };
+
+  Text embed_greeting()
+  {
+    return { "hello, world", 12 };
+  }
+
+  // A nul inside, and a character of three bytes after it.
+  Text embed_with_nul()
+  {
+    return { "a\0b\xe2\x82\xac", 6 };
+  }
+
+  Text embed_empty()
+  {
+    return { "", 0 };
+  }
+
+  // No text at all, the length beside it not looked at.
+  Text embed_nothing()
+  {
+    return { nullptr, 7 };
+  }
+
+  // `s` and an exclamation mark, out of a buffer kept until the next call:
+  // the program has copied the bytes by then.
+  Text embed_echo(const char* s)
+  {
+    static std::string kept;
+    kept = s;
+    kept += '!';
+    return { kept.data(), kept.size() };
+  }
+
+  // `n` bytes of one buffer the host keeps, copied and given back each time.
+  Text embed_big(std::uint64_t n)
+  {
+    static std::string kept;
+    if (kept.size() < n)
+      kept.assign(n, 'x');
+    return { kept.data(), n };
+  }
+
+  // A nul written the long way, which is no UTF-8.
+  Text embed_overlong()
+  {
+    return { "a\xc0\x80", 3 };
+  }
+
 } // extern "C"
 
 
@@ -438,6 +494,103 @@ namespace {
 
   double factor = 3.0;
 
+  // Text answered by the host: copied out of what it keeps, a nul among the
+  // bytes, nothing at all the empty string -- and a thousand copies made and
+  // given back.
+  constexpr const char* texts = "@[host(\"embed_greeting\")]\nfn greeting() \N{RIGHTWARDS ARROW} str\n"
+    "@[host(\"embed_with_nul\")]\nfn with_nul() \N{RIGHTWARDS ARROW} str\n"
+    "@[host(\"embed_empty\")]\nfn empty() \N{RIGHTWARDS ARROW} str\n"
+    "@[host(\"embed_nothing\")]\nfn nothing() \N{RIGHTWARDS ARROW} str\n"
+    "@[host(\"embed_echo\")]\nfn echo(s: str) \N{RIGHTWARDS ARROW} str\n"
+    "@[host(\"embed_big\")]\nfn big(n: u64) \N{RIGHTWARDS ARROW} str\n"
+    "@[host(\"embed_verdict\")]\nfn verdict(which: u32, ok: bool)\n"
+    "\n"
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
+    "\n"
+    "@[opaque, impure]\n"
+    "fn bytes_of_big(n: u64) \N{RIGHTWARDS ARROW} u64:\n"
+    "    let made: str = big(n)\n"
+    "    \N{APL FUNCTIONAL SYMBOL QUAD}drop(#\N{APL FUNCTIONAL SYMBOL QUAD}bytes(made))\n"
+    "\n"
+    "@[startup, impure]\n"
+    "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+    "    verdict(1u32, greeting() = \"hello, world\")\n"
+    "    let odd: str = with_nul()\n"
+    "    verdict(2u32, odd = \"a\\u0000b\N{EURO SIGN}\" \N{LOGICAL AND}"
+    " \N{APL FUNCTIONAL SYMBOL QUAD}drop(#\N{APL FUNCTIONAL SYMBOL QUAD}bytes(odd)) = 6u64)\n"
+    "    verdict(3u32, empty() = \"\" \N{LOGICAL AND} nothing() = \"\")\n"
+    "    verdict(4u32, echo(\"again\") = \"again!\")\n"
+    "    let total: mut u64 = 0u64\n"
+    "    foreach _: u64 = 0u64\N{HORIZONTAL ELLIPSIS}1000u64:\n"
+    "        total \N{LEFTWARDS ARROW} total + bytes_of_big(4096u64)\n"
+    "    verdict(5u32, total = 4096000u64)\n"
+    "    0u6\n";
+
+  // Text that is not UTF-8, which stops the program before anything reads it.
+  constexpr const char* not_text = "@[host(\"embed_overlong\")]\nfn overlong() \N{RIGHTWARDS ARROW} str\n"
+    "@[host(\"embed_verdict\")]\nfn verdict(which: u32, ok: bool)\n"
+    "\n"
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
+    "\n"
+    "@[startup, impure]\n"
+    "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+    "    let got: str = overlong()\n"
+    "    verdict(1u32, false)\n"
+    "    if got = \"\": 1u6 else: 2u6\n";
+
+  // A program that would run for as long as there are numbers: a loop and
+  // nothing else, which only a stop from outside ends.
+  constexpr const char* forever = "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
+    "\n"
+    "@[opaque]\n"
+    "fn last() \N{RIGHTWARDS ARROW} u64:\n"
+    "    18446744073709551615u64\n"
+    "\n"
+    "@[startup]\n"
+    "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+    "    let limit: u64 = last()\n"
+    "    let n: mut u64 = 0u64\n"
+    "    while n < limit:\n"
+    "        n \N{LEFTWARDS ARROW} n + 1u64\n"
+    "    if n = 0u64: 1u6 else: 2u6\n";
+
+  // One that runs for longer than anyone waits with no loop at all: a
+  // recursion, which only its calls give a stop the chance to end.
+  constexpr const char* recursing = "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
+    "\n"
+    "fn fib(n: u64) \N{RIGHTWARDS ARROW} u64:\n"
+    "    if n < 2u64: n else: fib(n - 1u64) + fib(n - 2u64)\n"
+    "\n"
+    "@[startup]\n"
+    "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+    "    if fib(90u64) = 0u64: 1u6 else: 2u6\n";
+
+  // A program stopped while the host function it called is still running,
+  // which ends it as that function returns and before the next call.
+  constexpr const char* stopped_inside = "@[host(\"embed_wait\")]\nfn wait() \N{RIGHTWARDS ARROW} i64\n"
+    "@[host(\"embed_verdict\")]\nfn verdict(which: u32, ok: bool)\n"
+    "\n"
+    "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
+    "\n"
+    "@[startup, impure]\n"
+    "fn main(init: std.Init) \N{RIGHTWARDS ARROW} u6:\n"
+    "    let got: i64 = wait()\n"
+    "    verdict(1u32, false)\n"
+    "    if got = 1i64: 1u6 else: 2u6\n";
+
+  // Whether `waiting` returned, which a stop made while it ran waits for.
+  bool waited = false;
+
+  // Have another thread stop the interpreter `context` is, and return only
+  // once it has, a while after.
+  std::int64_t waiting(void* context)
+  {
+    std::thread([context] { static_cast<pl4g::embed::Interpreter*>(context)->stop(); }).join();
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    waited = true;
+    return 1;
+  }
+
   // A program that does not compile.
   constexpr const char* broken = "let std := \N{APL FUNCTIONAL SYMBOL QUAD}import(\"std\")\n"
     "\n"
@@ -549,6 +702,80 @@ int main()
     expect(handed_verdicts == std::vector<std::pair<std::uint32_t, bool>>{ { 1, true }, { 2, true } },
            std::format("what was handed over saw {} verdicts", handed_verdicts.size()));
     expect(seen.verdicts.empty(), "the exported verdict was called where one was handed over");
+  }
+
+  {
+    seen.verdicts.clear();
+    seen.failed.clear();
+    pl4g::embed::Interpreter interpreter;
+    auto ended = interpreter.run_source(texts, "embedded-texts.pl4g");
+    expect(ended.status == 0 && ended.signal == 0,
+           std::format("the program of texts ended with status {}, signal {}", ended.status, ended.signal));
+    expect(seen.verdicts.size() == 5, std::format("{} verdicts of 5 on texts", seen.verdicts.size()));
+    for (auto which : seen.failed)
+      expect(false, std::format("comparison {} of texts failed in the program", which));
+  }
+
+  {
+    seen.verdicts.clear();
+    auto [ended, said] = caught(not_text, "embedded-not-text.pl4g");
+    expect(ended.status == 94 && ended.signal == 0,
+           std::format("text that is not UTF-8 ended with status {}, signal {}", ended.status, ended.signal));
+    expect(seen.verdicts.empty(), "text that is not UTF-8 was read");
+    expect(said.contains("text the host answered that is not UTF-8"),
+           std::format("text that is not UTF-8 said {:?}", said));
+  }
+
+  // A run stopped from another thread ends with its status, and the program
+  // embedding it goes on; the stop is that run's, and the next is not
+  // stopped by it.
+  {
+    int fd = ::memfd_create("embed-host", 0);
+    pl4g::embed::Interpreter interpreter;
+    interpreter.devices(0, 1, fd).colour(pl4g::embed::Colour::never);
+    auto began = std::chrono::steady_clock::now();
+    std::jthread stopper([&interpreter] {
+      std::this_thread::sleep_for(std::chrono::milliseconds(200));
+      interpreter.stop();
+    });
+    auto ended = interpreter.run_source(forever, "embedded-forever.pl4g");
+    auto took = std::chrono::steady_clock::now() - began;
+    stopper.join();
+    auto said = written(fd);
+    ::close(fd);
+    expect(ended.status == 93 && ended.signal == 0,
+           std::format("a program stopped ended with status {}, signal {}", ended.status, ended.signal));
+    expect(said == "pl4g: the host stopped the program\n", std::format("a program stopped said {:?}", said));
+    expect(took < std::chrono::seconds(60), "a program stopped took a minute to end");
+
+    // A recursion, stopped at a call, by the same interpreter: the stop
+    // before was that run's.
+    std::jthread again([&interpreter] {
+      std::this_thread::sleep_for(std::chrono::milliseconds(200));
+      interpreter.stop();
+    });
+    ended = interpreter.run_source(recursing, "embedded-recursing.pl4g");
+    again.join();
+    expect(ended.status == 93, std::format("a recursion stopped ended with status {}", ended.status));
+
+    // Asked for while nothing runs, which is for no run.
+    interpreter.stop();
+    seen.verdicts.clear();
+    ended = interpreter.run_source(missing, "embedded-after-a-stop.pl4g");
+    expect(ended.status == 92 && seen.verdicts.size() == 1,
+           std::format("a run after a stop ended with status {} and {} verdicts", ended.status, seen.verdicts.size()));
+  }
+
+  {
+    seen.verdicts.clear();
+    int fd = ::memfd_create("embed-host", 0);
+    pl4g::embed::Interpreter interpreter;
+    interpreter.define("embed_wait", waiting, &interpreter).devices(0, 1, fd);
+    auto ended = interpreter.run_source(stopped_inside, "embedded-stopped-inside.pl4g");
+    ::close(fd);
+    expect(ended.status == 93, std::format("a program stopped in a host call ended with status {}", ended.status));
+    expect(waited, "a host call was interrupted by a stop");
+    expect(seen.verdicts.empty(), "a program stopped in a host call went on after it");
   }
 
   {

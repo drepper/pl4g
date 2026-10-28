@@ -49,6 +49,14 @@ extern "C" [[gnu::visibility("default")]] int pl4g_embed_define(pl4g_embed_state
 }
 
 
+extern "C" [[gnu::visibility("default")]] void pl4g_embed_stop(pl4g_embed_state* state)
+{
+  if (state == nullptr) [[unlikely]]
+    return;
+  state->interpreter.stop();
+}
+
+
 extern "C" [[gnu::visibility("default")]] int pl4g_embed_run_source(pl4g_embed_state* state, const char* text,
                                                                    std::size_t length, const char* name,
                                                                    const char* const* args, std::size_t count)

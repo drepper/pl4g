@@ -14,6 +14,20 @@
 // are in the dynamic symbol table -- `-rdynamic`, or CMake's ENABLE_EXPORTS --
 // and a function it offers has to be `extern "C"`.  One that is not found
 // stops the program with status 92, saying which.
+//
+// What crosses is what C has: integers, floating-point numbers, truth values,
+// characters (as `uint32_t`), references (as the address of what they name),
+// records marked `@[abi]` by reference and answered by value as C answers the
+// `struct`, and text.  A `str` is handed over as a nul-terminated copy, made
+// for the call and given back after it.  A host function answering `str`
+// answers `struct { const char* text; uint64_t length; }`: the host keeps the
+// bytes, which are copied into the program's heap before the call returns to
+// it, a nul among them being a character like any other and a null `text`
+// the empty string.  Bytes that are not UTF-8 stop the program (94).
+//
+// A run can be stopped from another thread with `stop`: the program ends at
+// its next jump back or call, or when the host function it is in returns, and
+// the run answers status 93, as any other stop ends it.
 #pragma once
 
 #include <cstdint>
@@ -114,6 +128,14 @@ namespace pl4g::embed {
     // for `run_file`.
     Ended run_source(std::string_view text, std::filesystem::path name = "embedded.pl4g",
                      std::optional<std::span<const std::string>> args = std::nullopt);
+
+    // Stop the program running in this interpreter, from any thread: it
+    // ends at its next jump back to where it was, its next call, or as the
+    // host function it is in returns -- a host call in progress is not
+    // interrupted -- and `run_file` or `run_source` answers status 93, as a
+    // stop ends a run.  A stop is for the run in progress: one made while
+    // nothing runs does nothing, each run starting with none asked for.
+    void stop() noexcept;
 
   private:
     struct State;

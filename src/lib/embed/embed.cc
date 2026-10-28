@@ -6,6 +6,7 @@
 // a program's text handed over in memory.
 #include "embed/embed.hh"
 
+#include <atomic>
 #include <utility>
 
 #include "repl/repl.hh"
@@ -20,6 +21,9 @@ namespace pl4g::embed {
     // every table -- for the runs of this interpreter and no other's, and
     // what it took from the system, which is given back with it.
     ::pl4g_runtime_state runtime{};
+    // Whether the run in progress is to stop, set by `stop` from any thread
+    // and read by the interpreter where a program can be stopped.
+    std::atomic<bool> stopping = false;
 
     ~State() { ::pl4g_runtime_release(&runtime); }
   };
@@ -42,6 +46,14 @@ namespace pl4g::embed {
     private:
       ::pl4g_runtime_state* before = nullptr;
     };
+
+    // Have a run of `settings` stopped by `stopping`, cleared first: a stop
+    // asked for before the run began is for no run.
+    void stopped_by(repl::Settings& settings, std::atomic<bool>& stopping)
+    {
+      stopping.store(false, std::memory_order_relaxed);
+      settings.stop = &stopping;
+    }
 
   } // anonymous namespace
 
@@ -113,6 +125,12 @@ namespace pl4g::embed {
   }
 
 
+  void Interpreter::stop() noexcept
+  {
+    state->stopping.store(true, std::memory_order_relaxed);
+  }
+
+
   Ended Interpreter::run_file(const std::filesystem::path& path, std::optional<std::span<const std::string>> args)
   {
     // A copy, so that what one run names is not left for the next.
@@ -120,6 +138,7 @@ namespace pl4g::embed {
     settings.compile.inputs = { path };
     if (args)
       settings.args.assign(args->begin(), args->end());
+    stopped_by(settings, state->stopping);
     Selected selected(state->runtime);
     auto ended = repl::run_file(settings);
     return { ended.status, ended.signal };
@@ -134,6 +153,7 @@ namespace pl4g::embed {
     if (args)
       settings.args.assign(args->begin(), args->end());
     settings.held.emplace_back(std::move(name), std::string(text));
+    stopped_by(settings, state->stopping);
     Selected selected(state->runtime);
     auto ended = repl::run_file(settings);
     return { ended.status, ended.signal };
