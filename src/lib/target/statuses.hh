@@ -44,5 +44,9 @@ namespace pl4g::target::statuses {
   inline constexpr int ZERO_STEP = FIRST + 12;
   // A function the host defines whose symbol the host does not.
   inline constexpr int HOST_SYMBOL_MISSING = FIRST + 13;
+  // The host asked the interpreter to stop the program, from another thread.
+  inline constexpr int STOPPED_BY_HOST = FIRST + 14;
+  // A function the host defines answered text that is not well-formed UTF-8.
+  inline constexpr int HOST_TEXT_NOT_UTF8 = FIRST + 15;
 
 } // namespace pl4g::target::statuses

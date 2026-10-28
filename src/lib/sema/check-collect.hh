@@ -44,6 +44,8 @@
     // Make a function the host defines that takes text into two: a body copying each `str` into C's text,
     // and the declaration of the host's own taking addresses.
     void hand_over_text(ir::Function* func);  // check.py:7031
+    // The `str` a host's `{text, length}` stands for, asked whether it is UTF-8 and copied into the heap.
+    ir::Value* text_from_host(ir::Builder& builder, ir::Value* answer, Span span);  // check.py:_text_from_host
     // Report a record laid out for something else crossing a call whole.
     void not_by_value(const ir::Type* ty, Span where);  // check.py:6971
     // What each parameter of `node` is given where a call gives it nothing.

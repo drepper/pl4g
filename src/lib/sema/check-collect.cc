@@ -633,13 +633,21 @@ namespace pl4g::sema {
                    { { "type", ty->written() }, { "param", node->params[at]->name }, { "name", node->name } });
     }
     // A record laid out for C comes back as C answers one, which is the
-    // system's convention and so the host's.
+    // system's convention and so the host's.  So does text, as a record of
+    // two words the crossing copies out of (`hand_over_text`).
     auto record = ir::as<ir::ProductType>(ret);
+    bool text = ir::as<ir::StrType>(ret) != nullptr;
     if (ret != ir::error_type() && ret != ir::void_type() && ir::as<ir::IntType>(ret) == nullptr
         && ir::as<ir::FloatType>(ret) == nullptr && ir::as<ir::BoolType>(ret) == nullptr
-        && ir::as<ir::CharType>(ret) == nullptr && (record == nullptr || ! record->abi))
+        && ir::as<ir::CharType>(ret) == nullptr && ! text && (record == nullptr || ! record->abi))
       diags.emit(D::LANG_HOST_RESULT_TYPE, node->ret_type != nullptr ? node->ret_type->span : node->name_span,
                  { { "name", node->name }, { "type", ret->written() } });
+    // The copy is made where every `str` nobody names is made, in the heap;
+    // an arena or the image named for it is somewhere it is not.
+    if (text)
+      for (const auto& [name, span] : node->made_in)
+        if (name != heap_name)
+          diags.emit(D::LANG_HOST_TEXT_MADE_ELSEWHERE, span, { { "name", node->name }, { "place", name } });
   }
 
 
@@ -655,9 +663,10 @@ namespace pl4g::sema {
 
   void Checker::hand_over_text(ir::Function* func)
   {
-    if (! func->attrs.host || std::ranges::none_of(func->fty->params, [](const ir::Type* ty) {
-          return ir::as<ir::StrType>(ty) != nullptr;
-        }))
+    bool answers_text = ir::as<ir::StrType>(func->fty->ret) != nullptr;
+    if (! func->attrs.host || (! answers_text && std::ranges::none_of(func->fty->params, [](const ir::Type* ty) {
+                                 return ir::as<ir::StrType>(ty) != nullptr;
+                               })))
       return;
     // C has no `str`: what it calls text is the address of bytes ending in a
     // nul.  So the function the program calls is made a function of its own,
@@ -670,7 +679,9 @@ namespace pl4g::sema {
     std::vector<const ir::Type*> handed;
     for (auto ty : func->fty->params)
       handed.push_back(ir::as<ir::StrType>(ty) != nullptr ? bytes : ty);
-    auto made = std::make_unique<ir::Function>(func->name + ".host", ir::func_type(handed, func->fty->ret));
+    auto made = std::make_unique<ir::Function>(
+      func->name + ".host",
+      ir::func_type(handed, answers_text ? strings::host_text_type(module) : func->fty->ret));
     made->attrs = func->attrs;
     made->linkage = ir::Linkage::internal;
     made->cconv = func->cconv;
@@ -701,10 +712,38 @@ namespace pl4g::sema {
       copies.emplace_back(copy, builder.binary(ir::BinOp::wrap_add, length, builder.int_const(ir::u64(), 1)));
       given.push_back(copy);
     }
-    auto answer = builder.call(crossing, given, func->fty->ret, func->span);
+    auto answer = builder.call(crossing, given, crossing->fty->ret, func->span);
     for (auto [copy, size] : copies)
       builder.call(tables::heap_free_function(module), std::vector<ir::Value*>{ copy, size }, ir::void_type());
+    if (answers_text) {
+      answer = text_from_host(builder, answer, func->span);
+      // Made in the heap on every way out, which callers compiled after this
+      // can rely on: what holds the answer owns it and gives it back.
+      func->answer_from = std::pair(std::string("heap"), -1);
+    }
     builder.ret(func->fty->ret == ir::void_type() ? nullptr : answer);
+  }
+
+
+  ir::Value* Checker::text_from_host(ir::Builder& builder, ir::Value* answer, Span span)
+  {
+    // The host keeps its bytes: they are read here, while the call is still
+    // the host's, and copied into room of the program's own.  A null text is
+    // the empty string, whatever the length says.  They are asked whether they
+    // are UTF-8, as `⎕text` asks, and stop the program where they are not.
+    auto bytes = strings::bytes_type(module);
+    auto text = builder.extract(answer, 0, bytes, span);
+    auto given = builder.extract(answer, 1, ir::u64(), span);
+    auto zero = builder.int_const(ir::u64(), 0);
+    auto none = builder.compare(ir::CmpPred::eq, builder.cast(ir::CastKind::bitcast, text, ir::u64(), span), zero, span);
+    auto length = builder.select(none, zero, given, span);
+    auto upto = builder.call(strings::valid_function(module), std::vector<ir::Value*>{ text, length }, ir::u64(), span);
+    builder.check(builder.compare(ir::CmpPred::eq, upto, length, span), "text the host answered that is not UTF-8",
+                  target::statuses::HOST_TEXT_NOT_UTF8, span);
+    auto heap = builder.address(tables::heap_global(module), span);
+    auto room = tables::allocate(builder, heap, length);
+    strings::moved(builder, room, text, length, span);
+    return builder.make_tuple(std::vector<ir::Value*>{ room, length, heap }, ir::str_type(), span);
   }
 
 

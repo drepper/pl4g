@@ -282,6 +282,22 @@ namespace pl4g::sema::strings {
   }
 
 
+  const ir::ProductType* host_text_type(ir::Module& module)
+  {
+    // The length beside the bytes and not a nul after them, so that text
+    // holding a nul crosses whole.  One record for every module, as the
+    // arena's is: the types outlive the modules here.
+    static const ir::ProductType* the = [&module] {
+      auto made = ir::new_product();
+      made->fields = { { "text", bytes_type(module) }, { "length", ir::u64() } };
+      made->name = std::string(host_text_name);
+      made->abi = true;
+      return made;
+    }();
+    return the;
+  }
+
+
   const ir::Type* taken_type(ir::Module&)
   {
     return ir::tuple_type({ ir::char_type(), ir::u64() });

@@ -26,6 +26,13 @@ namespace pl4g::sema::strings {
 
   // What the bytes of a string are reached by.
   const ir::PtrType* bytes_type(ir::Module& module);
+  // What the record a host answers text with is called in the textual form.
+  inline constexpr std::string_view host_text_name = "host_text";
+  // What a host function answering text answers, as C sees it:
+  // `struct { const char* text; uint64_t length; }`, laid out as C lays it
+  // out, two words every one of the three systems answers in two registers.
+  // The one record of that name, filled in on first ask.
+  const ir::ProductType* host_text_type(ir::Module& module);
   // What taking one character answers with: the character and where the next
   // one begins.
   const ir::Type* taken_type(ir::Module& module);
