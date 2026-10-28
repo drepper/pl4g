@@ -27,6 +27,8 @@ The runtime's numbers:
     90   a post-condition did not hold: the callee's fault
     91   a range whose step was worked out as nought
     92   a function the host defines, and the host has no such symbol
+    93   the host stopped the run, from another thread (the interpreter)
+    94   a function the host defines answered text that is not UTF-8
 
 **86** is reported from a stack of its own, there being no room left on the
 program's; **87** happens before the program has run at all, the startup

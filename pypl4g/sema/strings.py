@@ -36,7 +36,8 @@ from ..ir.builder import IRBuilder
 from ..ir.function import FuncAttrs, Function, Linkage
 from ..ir.inst import BinOp, CastKind, CmpPred
 from ..ir.module import Module
-from ..ir.types import ARENA, CHAR, I64, MEM, VOID, PtrType, Type, U8, U32, U64
+from ..ir.types import (ARENA, CHAR, I64, MEM, VOID, ProductType, PtrType, Type,
+                        U8, U32, U64)
 from ..ir.value import Value
 from ..source.location import INVALID_SPAN, Span
 
@@ -86,6 +87,30 @@ def _generated(module: Module, name: str, params: tuple[Type, ...],
 def bytes_type(module: Module) -> PtrType:
     """What the bytes of a string are reached by."""
     return module.types.ptr_type(U8, mutable=True)
+
+
+#: What the record a host answers text with is called in the textual form.  It
+#: is a name a program can write, which the textual form needs, and no program's
+#: record of that name is this one: a record is the object it is.
+HOST_TEXT_NAME: Final[str] = "host_text"
+
+
+def host_text_type(module: Module) -> ProductType:
+    """What a host function answering text answers, as C sees it.
+
+    ``struct { const char* text; uint64_t length; }``, laid out as C lays it
+    out: two words, which every one of the three systems answers in two
+    registers.  The length beside the bytes and not a nul after them, so that
+    text holding a nul crosses whole.  One record per module, made on first ask
+    and kept with the module's types under its name -- a shell filled in, as a
+    record a program defines is.
+    """
+    found = module.types.named_record(HOST_TEXT_NAME)
+    if not found.fields:
+        object.__setattr__(found, "fields",
+                           (("text", bytes_type(module)), ("length", U64)))
+        object.__setattr__(found, "abi", True)
+    return found
 
 
 def taken_type(module: Module) -> Type:

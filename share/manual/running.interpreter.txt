@@ -26,7 +26,7 @@ its type.  The session's own commands begin with `@`:
 
 **A program the interpreter runs has a host** -- the program the interpreter
 is in -- so it may declare functions the host defines, `@[host("SYMBOL")]`,
-found with `dlsym` the first time they are called ([[running.foreign]]); an
+found with `dlsym` the first time they are called ([[running.host]]); an
 executable cannot (5300).
 
 **The interpreter can be embedded.**  A C++ program links with the library
@@ -47,6 +47,12 @@ and `dlsym` after, for which the host exports with `-rdynamic`.  So a host can
 hand over what it does not export, or its own function where the system has
 one of that name.  A function handed over with a context, a `void*` that is
 null unless given, takes it first and the declaration's arguments after.  `src/examples/embed/` has a program for each way.
+
+**A run can be stopped from another thread**: `stop()` of either C++ class,
+`pl4g_embed_stop(state)` in C.  The program ends at its next jump back or
+call, or as the host function it is in returns -- a host call is not
+interrupted -- and the run answers 93.  A stop is for the run in progress:
+one made while nothing runs does nothing.
 
 **This manual is a library too**: `libpl4g-manual.so`, whose
 `pl4g::manual::lookup(name)` answers a node's text (`src/manual/manual.hh`),

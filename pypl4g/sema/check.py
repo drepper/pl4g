@@ -8138,13 +8138,21 @@ class Checker:
                 self._diags.emit(D.LANG_HOST_PARAMETER_TYPE, param.type.span,
                                  type=ty.written(), param=param.name, name=node.name)
         # A record laid out for C comes back as C answers one, which is the
-        # system's convention and so the host's.
+        # system's convention and so the host's.  So does text, as a record of
+        # two words the crossing copies out of (`_hand_over_text`).
         if ret is not ERROR and ret is not VOID \
-                and not isinstance(ret, (IntType, FloatType, BoolType, CharType)) \
+                and not isinstance(ret, (IntType, FloatType, BoolType, CharType,
+                                         StrType)) \
                 and not (isinstance(ret, ProductType) and ret.abi):
             self._diags.emit(D.LANG_HOST_RESULT_TYPE,
                              node.ret_type.span if node.ret_type is not None
                              else node.name_span, name=node.name, type=ret.written())
+        # The copy is made where every `str` nobody names is made, in the
+        # heap; an arena or the image named for it is somewhere it is not.
+        for name, span in node.made_in if isinstance(ret, StrType) else ():
+            if name != HEAP_NAME:
+                self._diags.emit(D.LANG_HOST_TEXT_MADE_ELSEWHERE, span,
+                                 name=node.name, place=name)
 
     def _check_offered(self, node: ast.FuncDef, attrs: FuncAttrs,
                        linkage: Linkage) -> None:
@@ -8170,15 +8178,18 @@ class Checker:
         every way the program is run: the interpreter's host call and the
         compiled stub see only what C sees.
         """
-        if func.attrs.host is None \
-                or not any(isinstance(ty, StrType) for ty in func.ty.params):
+        answers_text = isinstance(func.ty.ret, StrType)
+        if func.attrs.host is None or not answers_text \
+                and not any(isinstance(ty, StrType) for ty in func.ty.params):
             return
         bytes_ = strings.bytes_type(self._module)
         crossing = self._module.add_function(Function(
             "".join((func.name, ".host")),
             self._module.types.func_type(
                 tuple(bytes_ if isinstance(ty, StrType) else ty
-                      for ty in func.ty.params), func.ty.ret),
+                      for ty in func.ty.params),
+                strings.host_text_type(self._module) if answers_text
+                else func.ty.ret),
             func.attrs, linkage=Linkage.INTERNAL, cconv=func.cconv, span=func.span,
             name_span=func.name_span, source_path=func.source_path,
             module=func.module, param_names=func.param_names))
@@ -8201,10 +8212,51 @@ class Checker:
             copies.append((copy, builder.binary(BinOp.WRAP_ADD, length,
                                                 builder.int_const(U64, 1))))
             given.append(copy)
-        answer = builder.call(crossing, given, func.ty.ret, func.span)
+        answer = builder.call(crossing, given, crossing.ty.ret, func.span)
         for copy, size in copies:
             builder.call(tables.heap_free_function(self._module), (copy, size), VOID)
+        if answers_text:
+            answer = self._text_from_host(builder, answer, func.span)
+            # Made in the heap on every way out, which callers compiled after
+            # this can rely on: what holds the answer owns it and gives it back.
+            func.answer_from = ("heap", -1)
         builder.ret(None if func.ty.ret is VOID else answer)
+
+    def _text_from_host(self, builder: IRBuilder, answer: Value,
+                        span: Span) -> Value:
+        """The `str` a host's ``{text, length}`` stands for, made in the heap.
+
+        **The host keeps its bytes**: they are read here, while the call is
+        still the host's, and copied into room of the program's own, so that the
+        string owns its bytes as every other does and nothing on the host's
+        side is the program's to give back.  A null *text* is the empty string,
+        whatever the length says -- C's way of saying "nothing" being a null.
+
+        **They are asked whether they are UTF-8**, as `⎕text` asks: that every
+        `str` is well-formed is an invariant, and this is text coming in from
+        bytes nothing here wrote.  Where they are not, the program is stopped
+        (`HOST_TEXT_NOT_UTF8`), the declaration answering a string and not a
+        result.  A nul among them is a character like any other.
+        """
+        module = self._module
+        bytes_ = strings.bytes_type(module)
+        text = builder.extract(answer, 0, bytes_, span)
+        given = builder.extract(answer, 1, U64, span)
+        zero = builder.int_const(U64, 0)
+        length = builder.select(
+            builder.compare(CmpPred.EQ,
+                            builder.cast(CastKind.BITCAST, text, U64, span),
+                            zero, span),
+            zero, given, span)
+        upto = builder.call(strings.valid_function(module), (text, length),
+                            U64, span)
+        builder.check(builder.compare(CmpPred.EQ, upto, length, span),
+                      "text the host answered that is not UTF-8",
+                      statuses.HOST_TEXT_NOT_UTF8, span)
+        heap = builder.address(tables.heap_global(module), span)
+        room = tables.allocate(builder, heap, length)
+        strings.moved(builder, room, text, length, span)
+        return builder.make_tuple((room, length, heap), STR, span)
 
     def _not_by_value(self, ty: Type, where: Span) -> None:
         """Report a record laid out for something else handed to a call whole.

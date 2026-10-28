@@ -1,0 +1,17 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=94 host=host.c
+※ pl4g-test: args -shared
+
+※ **Text a host answers is asked whether it is UTF-8**, as `⎕text` asks the
+※ bytes it is handed: every `str` is well formed, and this is text coming in
+※ from bytes nothing in the program wrote.  The declaration answers a string
+※ and not a result, so bytes that are not one stop the program, with a status
+※ of their own (94), before anything reads them.  `host.c` answers `61 C0 80`,
+※ a nul written the long way after an `a`.
+
+@[host("overlong")]
+fn overlong() → str
+
+@[visible, cdecl, impure]
+fn run() → i32:
+    let got: str = overlong()
+    if got = "": 1i32 else: 2i32

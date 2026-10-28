@@ -1,0 +1,18 @@
+※ pl4g-test: compile=error diag=4030
+※ pl4g-test: args -shared
+※ pl4g-test: expect-diag 4030 LANG_HOST_TEXT_MADE_ELSEWHERE
+
+※ The text a host answers is copied, before the call returns, into room of
+※ the program's own, and that room is the heap's: the host is handed no arena
+※ to copy into, and the image is nowhere to copy anything to.  So `in ⎕heap`
+※ may be said of it, which is what saying nothing says, and nothing else.
+
+@[host("in_an_arena")]
+fn in_an_arena(pool: &mut arena) → str in pool
+
+@[host("in_the_image")]
+fn in_the_image() → str in ⎕static
+
+@[visible, cdecl, impure]
+fn run() → i64:
+    0i64

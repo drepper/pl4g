@@ -12412,6 +12412,78 @@ vector as well, where it does nothing; **Swift**'s ARC, which counts while runni
 array back when the count reaches nought; **Go**'s collector, which finds it some time later and costs a collector; **Zig** and
 **Odin**, whose explicit allocators make `defer list.deinit(allocator)` the program's to write, and forgetting it a leak.
 
+## 2026-10-28T12:00+01:00 — language, compiler and the embedded interpreter
+
+### A host function answering `str`, and stopping a run from another thread
+
+procctl embeds the interpreter (`libpl4g-embed.a`) and offers the programs its agents write every tool it has, each an in-process
+call taking the arguments as a JSON object's text and answering JSON text.  The natural binding is `@[host("tool")] fn tool(name:
+str, arguments: str) → str`, which 5302 refused: text went to the host, as a nul-terminated copy, and nothing brought any back.
+And a program that never ends could not be stopped: the thread running it cannot be cancelled.  Asked, **the user chose the
+recommended option every time**:
+
+- **The C shape is `struct { const char* text; uint64_t length; }`, answered by value** -- two words, in two registers on all
+  three ABIs (`rax`:`rdx`, `x0`:`x1`, `a0`:`a1`), as any two-word C `struct` is.  Nul bytes inside are allowed.  Not a `const
+  char*` measured with `strlen`, which would have been simpler for a host and lost every text holding a nul.
+- **The host keeps the bytes.**  The crossing copies `length` bytes into the program's `⎕heap` before the call returns to the
+  program, so the program's `str` owns them as any other -- and is given back by the rules of 2026-10-27, counting as room of its
+  own -- while the host's buffer is only read during the call.  Nothing on the host's side is freed by PL4G.  Not the other way, a
+  `free` named with `define` and called after the copy: that makes the host's allocator the program's business.
+- **A null `text` answers the empty `str`**, the length then ignored -- rather than a fault, a null being what C says nothing with.
+- **Both ways of running a program agree**: the interpreter, through libffi with a `struct` of two members as the answer type, and
+  a compiled shared object, through the stub that finds the host's function; an executable still refuses `@[host]` (5300).
+- **Text inside a record or a result a host answers is out of scope**, and stays refused (5302).
+- **`Interpreter::stop()`**, callable from any thread while a run is on another, with `pl4g_embed_stop(state)` in the C entry and
+  `LoadedInterpreter::stop()`: a flag, an atomic, which the running program asks cheaply at the back edges of loops and at calls;
+  the run then ends as a stop ends it, unwinding, and answers `Ended` with a status reserved for it.  A host call in progress is
+  not interrupted; the stop takes effect when it returns.  **A stop made while nothing runs does nothing, and is forgotten**: a
+  run starts with the flag clear.  Destructors and `defer` on the way out: what a stop does today, which is none.
+
+Settled in the work, and why:
+
+- **The bytes are checked as `⎕text` checks them, and bytes that are not UTF-8 stop the program, with a status of their own
+  (94).**  Every `str` is well-formed UTF-8, and the specification says that is an invariant and not a hope: text from bytes is
+  checked where it comes in, which this is.  The declaration answers a `str`, not a result, so there is no way to answer the
+  failure but to stop; a host that cannot promise UTF-8 can answer bytes and leave `⎕text` to the program.  Trusting the host
+  instead would have made every walk over such a string a decoder of unchecked input -- the one cost the invariant exists to save.
+  The check is the eight-bytes-at-a-time one and costs little against the copy beside it.  A status of its own because "a host
+  answered something that is not text" is a different thing to do something about from every other stop.
+- **The stop's status is 93, "stopped by the host"**, the next of the reserved range after 92.  A host giving runs a time limit
+  reads it to know that the limit is what ended one.
+- **Where the copy goes: the heap, and only the heap (4030).**  `→ str in ⎕heap` says what saying nothing says; `→ str in pool`
+  or `in ⎕static` is refused rather than honoured.  The host is handed no arena to copy into -- the copy is the compiler's, made
+  after the host has answered -- and an arena parameter of a host function would be an address C sees and nothing more, so "in
+  pool" would mean the compiler copying out of the host into an arena the host was handed but did not use.  Honouring it is
+  possible and nobody asked for it; refusing it now leaves it possible later without changing a program that compiles.
+- **The function is marked as answering the heap's on every way out**, as `_settle_answer` marks a body that shows it, so that
+  its answer is fresh from the heap at every call: the name holding it gives it back where its scope ends, and `thinanswers` lets
+  it travel without its allocator.  The language test `host-answers-text` asks a megabyte a thousand times, which runs out of
+  memory under the tests' limit unless each copy is given back.
+- **Where the stop is asked**: at every jump to a block at or before the one jumped from, which every cycle in the control flow
+  has one of, marked on the jump when the interpreter compiles the function, so that a loop asks once per turn and straight-line
+  code never; at every call that goes back -- to a function at or before the caller in the module, or through a value -- which
+  every cycle of calls has one of by the same argument, and which catches a recursion with no loop in it; and as a host function
+  returns.  Not at every call: asking there cost the runs-agree programs 3.6 % of their cycles, and asking at the calls that go
+  back, in the condition of the stack's check that is there already, 1.7 % in all (a tight loop 0.1 %; details.md has the
+  numbers).  One relaxed load and a branch.  No ordering is needed: a stop seen a turn later costs nothing, and the flag guards
+  no data.
+- **The message is `pl4g: the host stopped the program`**, on the error device, as every stop says what it was.
+- **The flag is cleared as the run begins, before it compiles**, so a stop made while the program is still being compiled stops it
+  as soon as it runs -- that run is in progress -- while one made between runs is forgotten.
+- **No stop is offered in pypl4g**, which has no embedding interface; the status is in both tables, numbers being settled in one
+  place.
+
+Compare, for the text: **Rust**'s FFI, which answers a `#[repr(C)]` `(ptr, len)` pair the Rust side turns into a `String` with
+`from_utf8` -- a copy and this check, written by hand; **Go**'s cgo `C.GoStringN(p, n)`, a copy of `n` bytes into a Go string and no
+check; **JNI**'s `NewStringUTF`, a copy of nul-terminated modified UTF-8 into a string the collector owns; **Lua**'s
+`lua_pushlstring(L, s, len)`, a copy of `len` bytes, nuls and all, the C side keeping its buffer -- the closest of them; **Python**'s
+`PyUnicode_FromStringAndSize(s, n)`, a copy decoded as UTF-8 that fails on bytes that are not.  All of them copy: two sides with two
+allocators leave nothing else.  For the stop: **Lua**'s `lua_sethook` with a count hook, which a host uses to end a script that
+runs too long, asked every so many instructions; **Python**'s `PyErr_SetInterrupt` and `Py_AddPendingCall`, a flag the eval loop
+asks between bytecodes, which raises in the running code and is equally unable to interrupt a C call; **V8**'s
+`TerminateExecution`, callable from any thread, checked at loop back edges and function entries -- which this is; **JavaScriptCore**'s
+watchdog and **Wasmtime**'s epoch interruption, a counter asked at loop headers and function entries, the same places.
+
 Open questions
 --------------
 

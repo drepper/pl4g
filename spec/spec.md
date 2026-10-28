@@ -6887,14 +6887,55 @@ executable has none**, so a host function in one is refused (5300): the image a 
 handed over as the address of the place it names -- or a `str`; a record marked `@[abi]` crosses by reference only (4596), and
 anything else is refused (5301).  **A `str` is handed over as a C string**: a copy of its bytes followed by a nul, made in the
 heap for the call and given back after it -- what C means by text, which a `str` is not, holding its length beside its bytes and
-no nul.  The answer is nothing, a number, or an `@[abi]` record answered as C answers the `struct` (5302): the interpreter has
-libffi call it with the record's members as the `struct`'s, and a shared object calls it as any function of the system's
-convention.  Like an external function, a host function is impure by being one, since nothing here can see what it does.
+no nul.  The answer is nothing, a number, an `@[abi]` record answered as C answers the `struct`, or a `str` (5302): the
+interpreter has libffi call it with the record's members as the `struct`'s, and a shared object calls it as any function of the
+system's convention.  Like an external function, a host function is impure by being one, since nothing here can see what it does.
 
 Compare: **LuaJIT**'s `ffi.cdef`, which declares C functions and finds them with `dlsym` when first called, and **Python**'s
 ctypes, whose `c_char_p` makes the same nul-terminated copy of a string; **Julia**'s `@ccall`, looked up the first time it runs;
 **C**, **Zig** and **Rust**, whose `extern` declarations are this one with a linker resolving them before the program starts
 rather than the program resolving them as it goes.
+
+**A host function may answer a `str`**, and on the C side it answers the bytes and how many there are:
+
+```
+@[host("tool")]
+fn tool(name: str, arguments: str) → str           ※ struct { const char* text; uint64_t length; } tool(const char*, const char*)
+```
+
+**The shape is a record of two words, answered by value**, which every one of the three systems answers in two registers --
+`rax` and `rdx`, `x0` and `x1`, `a0` and `a1` -- as it answers any C `struct` of two words.  The length is beside the bytes and
+not a nul after them, so text holding a nul crosses whole, and the host need not have counted what it already knew.  **A null
+`text` is the empty string**, whatever the length says: C's way of saying "nothing" is a null, and a host with nothing to say should
+not have to make an empty string to say it.
+
+**The host keeps the bytes.**  Before the call returns to the program, the bytes are copied into the program's heap, so that the
+`str` owns them as every other string does -- given back where the name holding it is done with it, as text of the heap's is
+([lists](#lists)) -- and the host's buffer is only read during the call; nothing of the host's is freed by the program.  That is
+the direction in which neither side has to know the other's allocator: the host may answer a literal, a buffer it keeps until
+its next call, or memory it frees when the run ends, and the program's heap is the program's.  Saying `→ str in ⎕heap` says what
+saying nothing says; anything else after `in` is refused (4030), there being no arena the host could be handed to copy into and
+the image being nowhere to copy anything to.
+
+**The bytes are asked whether they are UTF-8**, as `⎕text` asks the bytes it is handed, with the same check: every `str` is well
+formed, and this is text coming in from bytes nothing in the program wrote.  The declaration answers a string and not a result,
+so bytes that are not one **stop the program**, with a status of their own (94), before anything reads them.  A host that cannot
+promise UTF-8 answers bytes -- a view through a reference, `⎕span` of an address -- and leaves `⎕text` to the program.
+
+**Only a `str` answered as itself crosses.**  Text inside a record, or in a result or an optional a host answers, has no C shape
+this could copy out of without a rule for each, and stays refused (5302).
+
+**Both ways of running a program agree**, because the copy is made in the representation: the function the program calls is
+made a body of the compiler's own around the host's, as for a `str` handed over, and the host's own is a declaration answering
+the two-word record.  The interpreter calls it through libffi with a `struct` of two members as the answer, and a shared object
+through the stub that finds it, as it calls any function answering an `@[abi]` record.
+
+Compare: **Rust**'s FFI, which answers a `(ptr, len)` pair as a `#[repr(C)]` struct and leaves the caller to turn it into a `String`
+with `from_utf8`, a copy and the same check -- this, written by the compiler; **Go**'s cgo `C.GoStringN(p, n)`, which copies `n`
+bytes into a Go string and checks nothing; **JNI**'s `NewStringUTF`, which copies a nul-terminated (modified) UTF-8 C string into a
+Java string the collector owns; **Lua**'s `lua_pushlstring(L, s, len)`, which copies `len` bytes, nuls and all, into a string Lua
+owns, the C side keeping its buffer; **Python**'s C API `PyUnicode_FromStringAndSize(s, n)`, which copies and decodes UTF-8 and
+fails on bytes that are not.  Every one of them copies, for the reason this does: the two sides have two allocators.
 
 ##### Values of the system's convention
 
@@ -6914,7 +6955,7 @@ g(2u64)                                          ※ 6, called as C calls it
 ```
 
 **A named function of the system's convention, used as a value, is one of these** -- `@[cdecl]`, `@[abi]` without a name, an
-external function and a host function that takes no `str` -- and nothing stands between: the function expects to be called that
+external function and a host function that neither takes nor answers a `str` -- and nothing stands between: the function expects to be called that
 way by whatever calls it, this program or something the address is handed to.  **The two conventions are two types and neither
 converts to the other** (4360).  A function of the language's own convention is three words and is called with what it brought in
 first; one of the system's is one word, and its code knows of no environment.  Neither is the other with something dropped, so a
@@ -8958,6 +8999,8 @@ allocation that could not be met are three different things.
 | 90 | a post-condition written in a signature did not hold, which is the **callee's** |
 | 91 | a range whose step was worked out while running and came to nought, which would never end |
 | 92 | a function the host defines was called and the host defines no such symbol |
+| 93 | the host stopped the run from another thread (`Interpreter::stop`), which only the interpreter can be |
+| 94 | a function the host defines answered text that is not well-formed UTF-8 |
 
 **89 and 90 are two numbers because they have two culprits.**  A caller acting on
 a status can tell "I called this wrongly" from "the thing I called is broken",

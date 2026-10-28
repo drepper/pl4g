@@ -117,3 +117,15 @@ ZERO_STEP: Final[int] = FIRST + 12
 #: its data's: it is the program and the host disagreeing about what is there,
 #: which only the first call can find out.
 HOST_SYMBOL_MISSING: Final[int] = FIRST + 13
+
+#: The host asked the interpreter running the program to stop it, from another
+#: thread (`Interpreter::stop`).  Nothing went wrong in the program: it was told
+#: to end, as a process is told by a signal, and a host giving runs a time limit
+#: reads this to know that it was the limit that ended one.
+STOPPED_BY_HOST: Final[int] = FIRST + 14
+
+#: A function the host defines answered text whose bytes are not well-formed
+#: UTF-8.  Every `str` is, and this is where text comes in from outside, so it
+#: is asked here as `⎕text` asks; the program cannot be handed the bytes as a
+#: string, and the declaration says it answers one and not a result.
+HOST_TEXT_NOT_UTF8: Final[int] = FIRST + 15

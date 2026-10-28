@@ -2162,6 +2162,33 @@
       "option": null
     },
     {
+      "number": 4030,
+      "name": "LANG_HOST_TEXT_MADE_ELSEWHERE",
+      "severity": "error",
+      "message": "the text '{name}' answers is copied into ⎕heap, so it cannot be made in '{place}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function the host defines"
+        },
+        {
+          "name": "place",
+          "type": "string",
+          "description": "what its signature names after 'in'"
+        }
+      ],
+      "cause": "A host keeps the bytes of the text it answers, and the program copies them before the call returns into room of its own, which is the heap's -- where every string nobody says otherwise of is made.  The host is handed no arena to copy into, and the image is no place to copy anything to; 'in ⎕heap', or nothing, says where the copy is.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A host function answering `str` answers it in the heap."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4100,
       "name": "LANG_IMPORT_NOT_FOUND",
       "severity": "error",

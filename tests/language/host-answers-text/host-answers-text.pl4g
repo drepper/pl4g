@@ -1,0 +1,74 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none host=host.c
+※ pl4g-test: args -shared
+
+※ **A function the host defines may answer a `str`.**  In C it answers
+※ `struct { const char* text; uint64_t length; }`, two words in two registers
+※ on every one of the three systems, and the program makes its own string of
+※ them before the call returns to it: the bytes are copied into the heap, so
+※ the `str` owns them as every other does and is given back by the same rules.
+※ **The host keeps its bytes** -- they are only read during the call, and
+※ nothing of the host's is freed by the program.
+※
+※ The length says how many bytes there are, so a nul among them is a
+※ character like any other; a null `text` is the empty string, whatever the
+※ length beside it says.  The bytes are asked whether they are UTF-8, as
+※ `⎕text` asks them, every `str` being well formed (host-text-not-utf8).
+※
+※ `host.c` loads this shared object and calls `run`, which calls the host's
+※ functions and checks what they answered -- and calls one often enough that
+※ copies nobody gave back would run the program out of memory under the
+※ tests' limit.
+※
+※ Compare: **Rust**, whose FFI answers a `(ptr, len)` pair a caller turns into
+※ a `String` with `from_utf8`; **Go**'s cgo `C.GoStringN`, which copies `n`
+※ bytes into a Go string; **JNI**'s `NewStringUTF`; **Lua**'s `lua_pushlstring`
+※ and **Python**'s `PyUnicode_FromStringAndSize`, each copying a length's worth
+※ of bytes the C side keeps.
+
+@[host("greeting")]
+fn greeting() → str
+
+@[host("with_nul")]
+fn with_nul() → str
+
+@[host("empty")]
+fn empty() → str
+
+@[host("nothing")]
+fn nothing() → str
+
+※ The shape of a tool an agent calls: a name and a JSON object in, JSON out.
+※ `in ⎕heap` says what saying nothing says.
+@[host("tool")]
+fn tool(name: str, arguments: str) → str in ⎕heap
+
+@[host("big")]
+fn big(n: u64) → str
+
+@[opaque, impure]
+fn bytes_of_big(n: u64) → u64:
+    let made: str = big(n)
+    ⎕drop(#⎕bytes(made))
+
+※ What the host calls; nought where everything arrived, and otherwise a number
+※ saying what did not.
+@[visible, cdecl, impure]
+fn run() → i64:
+    if greeting() ≠ "hello, world":
+        return 1i64
+    let odd: str = with_nul()
+    if odd ≠ "a\u0000b€" ∨ ⎕drop(#⎕bytes(odd)) ≠ 6u64:
+        return 2i64
+    if empty() ≠ "" ∨ nothing() ≠ "":
+        return 3i64
+    let answer: str = tool("read", "{\"path\": \"/etc\"}")
+    if answer ≠ "read({\"path\": \"/etc\"})":
+        return 4i64
+    ※ A megabyte at a time, a thousand times: given back each time, or the
+    ※ program stops for want of memory.
+    let total: mut u64 = 0u64
+    foreach _: u64 = 0u64…1000u64:
+        total ← total + bytes_of_big(1048576u64)
+    if total ≠ 1048576000u64:
+        return 5i64
+    0i64

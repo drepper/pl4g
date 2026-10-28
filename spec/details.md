@@ -1199,6 +1199,20 @@ place (`NAME.host`), and the function the program calls, whose body copies each 
 (`__pl4g_str_c`), calls the declaration and gives the copies back.  It is done in the representation so that the interpreter's call
 into the host and the compiled stub both see only what C sees.
 
+**A `str` the host answers is made out of a record by the same split** (`_hand_over_text`, `Checker::hand_over_text`).  The
+declaration `NAME.host` answers `host_text`, a record of the compiler's own marked `@[abi]` -- `text: ptr<mut u8>`, `length: u64`,
+which is `struct { const char* text; uint64_t length; }` -- one per module in pypl4g, kept under its name with the module's types
+as the textual form's records are, and one for every module in the C++ port, as the arena's record is.  Being `@[abi]` and two
+words, it is answered in two integer registers by `largeanswers`' classification on every architecture, and by libffi's
+description of a `struct` of a pointer and a `uint64_t` in the interpreter: nothing new below the checker.  The body the program
+calls then takes the record apart (`_text_from_host`): a null `text` makes the length nought, by a `select` and no branch; the
+bytes are checked with `__pl4g_str_valid`, `⎕text`'s check, an `assert` stopping the program with status 94 (`HOST_TEXT_NOT_UTF8`)
+where it does not answer the length; room for the length is taken from `⎕heap` and the bytes moved in with `__pl4g_bytes_move`; and
+the `str` is made of the room, the length and `⎕heap`'s address.  The function is marked as answering what the heap made on every
+way out (`answer_from = ("heap", -1)`), as `_settle_answer` marks a body that shows it, so that a call's answer counts as fresh
+from the heap -- the name it is bound to holds room of its own and gives it back where its scope ends -- and `thinanswers` answers
+it without its allocator.  `→ str in ⎕heap` says the same; another place after `in` is refused while collecting (4030).
+
 **A stop in a shared object ends the process it is in**, as it ends a program: the message is written to standard error and the
 process exits with the status, through the system call and not through the C library's `exit`.  What the host had buffered and not
 yet written is lost with it.  Whether a stop there should leave through `exit`, so that the host's own handlers run, is open
@@ -1261,8 +1275,35 @@ stop -- an answer that does not fit, an index past the end, a host symbol not fo
 `exit_group` asked for with `⎕syscall` all end the run alone: the interpreter takes those two calls before they reach the kernel,
 and each of the others unwinds it, and the call that ran the program answers with the status.  `embed-host` holds each of them.
 
+**A run can be stopped from another thread.**  `embed::Interpreter::stop()`, `LoadedInterpreter::stop()` and
+`pl4g_embed_stop(state)` -- the fifth function of the C entry and of the version script, found with `dlsym` as the others are --
+set a `std::atomic<bool>` in the interpreter's state, relaxed, and do nothing else; they may be called from any thread, while
+`run_source` or `run_file` runs on another or while nothing runs.  Each run clears the flag before it compiles, so **a stop is
+for the run in progress**: one made while nothing runs is forgotten by the next, and one made while the next is still being
+compiled stops it once it runs.  The flag reaches the machine as `interp::Options::stop` (through `repl::Settings::stop`), and the
+machine points at a flag nobody sets where none is given, so that asking needs no test of whether there is one.  **It is asked
+where every program passes in finite time**: at every jump whose target block comes at or before the block jumped from -- which
+every cycle of the control flow has one of, a cycle being unable to go forward only, and which the compiled form of the function
+marks on the jump (`Jump::backward`) so that the branch does nothing more -- at every call that goes back, to a function at or
+before the caller in the order the machine numbered the module's functions in, or through a value (`Op::backward`), which every
+cycle of calls has one of by the same argument and which catches a recursion that has no loop, and as a host function returns,
+in `host_call`.  A program whose every jump and every call went forward would make finitely many of either -- each activation
+visits each block once at most, and the calls nest no deeper than there are functions -- so every run that does not end asks,
+though a chain of functions each calling the next several times can put a great many calls between two questions.
+The question at a call is put in the condition of the stack's check, which is there already, so a call pays the load and no
+branch of its own; asking at every call instead cost the runs-agree programs 3.6 % of their cycles, much of it in how GCC laid
+out the interpreter's loop around the extra branch.  A host call in progress is not interrupted: nothing running in C can be,
+and the stop takes effect as it returns, before anything after the call.  Asking is one relaxed load and a branch not taken.
+**What it costs**, counted with `perf stat` against the same tree without it: a `while` loop of 300 million turns runs 3.5 %
+more instructions in 0.1 % more cycles; thirty million calls of an `@[opaque]` function 2.2 % more instructions and no more
+cycles; the 573 programs runs-agree compiled, run through `pl4g-runjson`, 3.2 % more instructions and 1.7 % more cycles (84.3 s
+and 85.8 s).  **A stop ends the run as every other stop does**: the message `pl4g: the host stopped the program` goes to the
+error device, and the run unwinds to its top with status 93 (`STOPPED_BY_HOST`), running no destructor and no `defer`, as an
+overflow or a failed condition runs none.  pypl4g has no embedding interface and no interpreter of its own, so the stop is the
+C++ implementation's alone; the status is in both tables because the numbers are settled in one place.
+
 **The interpreter is also a shared object**, `libpl4g-embed.so`, for a program that loads it with `dlopen` rather than linking
-with the library.  It offers three functions with C's linkage (`src/lib/embed/pl4g-embed.h`): `pl4g_embed_state_new`, which makes a
+with the library.  It offers five functions with C's linkage -- `pl4g_embed_define` and `pl4g_embed_stop` being said of above -- (`src/lib/embed/pl4g-embed.h`): `pl4g_embed_state_new`, which makes a
 state of the interpreter, `pl4g_embed_state_free`, which gives one back, and `pl4g_embed_run_source(state, text, length, name, args, count)`,
 which runs a program held in memory in a state, with descriptors 0, 1 and 2 and the `count` strings at `args` after its own name
 as what its startup function finds in `init.args` (`NULL` and 0 for none; a state keeps nothing of one run's for the next), and
@@ -1280,7 +1321,7 @@ three words, `run(text, name, args)` with `args` a `std::span<const std::string>
 function, found by `dlsym` as the others are, that writes each with `std::println` and keeps it for the check.
 `Interpreter::run_source` and `run_file` take the same span as an optional one, which for that run takes the place of what
 `arguments` said.  **A C++ program has an object for it** (`src/lib/embed/pl4g-embed.hh`, header
-only): `pl4g::embed::LoadedInterpreter` loads the library, finds the three functions and makes a state when it is made -- throwing,
+only): `pl4g::embed::LoadedInterpreter` loads the library, finds the five functions and makes a state when it is made -- throwing,
 with what went wrong, where any of that fails -- and gives the state and the library back when it is destroyed; it can be moved
 and not copied, and `run(text, name)` runs a program in its state.  What it asks and promises is said as contracts, through `PL4G_PRE` and `PL4G_POST`, which
 are `pre` and `post` where the compiler has contracts (`__cpp_contracts`) and nothing where it has not.  GCC 16 has them in C++26

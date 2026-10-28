@@ -1,0 +1,46 @@
+title: Functions the host defines
+
+Part of [[running]].
+
+**`@[host("SYMBOL")]`** on a function with no body names one of the program
+a shared object or the interpreter runs in.  It is found with `dlsym` at the
+first call -- after what the host handed the interpreter by name
+([[running.interpreter]]) -- and kept; status 92 where it is not there.  An
+executable has no host and refuses one (5300).
+
+    @[host("tool")]
+    fn tool(name: str, arguments: str) → str
+
+**What crosses is what C has** (5301, 5302): whole and floating-point
+numbers, `bool`, `char` as a `uint32_t`, references as the address of what
+they name, an `@[abi]` record by reference -- and answered by value, as C
+answers the `struct` -- and text.
+
+**A `str` handed over** is a nul-terminated copy, made in the heap for the
+call and given back after it.
+
+**A `str` answered** comes back from C as
+
+    struct { const char *text; uint64_t length; }
+
+by value, in two registers on every target.  **The host keeps the bytes**:
+the program copies them into its heap before the call returns to it, so they
+need last only until then, and nothing of the host's is freed.  The copy is
+the program's own, given back as any `str` of the heap's is
+([[types.lists]]); `in ⎕heap` may be written, which says the same, and
+nothing else (4030).  The length says how many bytes there are, so a nul
+among them is a character like any other; a null `text` is the empty string,
+the length beside it not looked at.  **The bytes are asked whether they are
+UTF-8**, as `⎕text` asks, every `str` being well formed: bytes that are not
+stop the program, with status 94.  Text inside a record or a result a host
+answers does not cross (5302).
+
+**Both ways of running a program agree**: the interpreter calls the host
+through libffi, and a shared object through a stub that keeps every argument
+register while it asks `dlsym`.  A host function that takes or answers text
+is a function of the language's own convention used as a value, the copies
+being made in a body the compiler writes around the host's.
+
+**A run in the interpreter can be stopped** by the host from another thread
+([[running.interpreter]]): the program ends at its next jump back or call, or
+as the host function it is in returns, with status 93.

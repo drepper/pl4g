@@ -2,14 +2,19 @@
 ※ pl4g-test: args -shared
 ※ pl4g-test: expect-diag 5302 LANG_HOST_RESULT_TYPE
 
-※ What a function the host defines answers with is nothing or a number.  Text
-※ would be memory the host made, and nothing here could say how long it lasts
-※ or who gives it back.
+※ What a function the host defines answers with is nothing, a number, a record
+※ laid out for C, or a `str`, which the program copies out of the host's text
+※ before the call returns.  A list would be memory the host made, laid out as
+※ nothing in C is, and nothing here could say how long it lasts or who gives
+※ it back; and text inside a result is not text the crossing copies, which
+※ copies a `str` answered as itself and nothing holding one.
+
+@[host("words")]
+fn words(name: str) → [u64]
 
 @[host("getenv")]
-fn getenv(name: str) → str
+fn getenv(name: str) → str ? i32
 
 @[visible, cdecl, impure]
 fn run() → i64:
-    let found: str = getenv("HOME")
     0i64

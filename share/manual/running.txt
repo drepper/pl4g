@@ -11,6 +11,8 @@ runs, and the tools around it.
   [[running.foreign]]      -- shared objects, `@[visible]`, `@[cdecl]`,
                               `@[abi]`, functions defined elsewhere and by the
                               host, `⎕syscall`
+  [[running.host]]         -- `@[host]`: what crosses to the host and back,
+                              text the host answers
   [[running.testing]]      -- `@[test]` functions and `pypl4g test`
   [[running.builds]]       -- `@[build]` and `build.pl4g`
   [[running.diagnostics]]  -- warnings, `@[ignore]`, `@[expect]`, system
