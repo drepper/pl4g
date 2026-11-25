@@ -1,6 +1,7 @@
 // JSON as the language server reads and writes it.
 #include "lsp/json.hh"
 
+#include <charconv>
 #include <cmath>
 #include <format>
 
@@ -59,6 +60,15 @@ namespace pl4g::lsp {
       }
       case ::simdjson::dom::element_type::DOUBLE:
         return Json(element.get_double().value_unsafe());
+      case ::simdjson::dom::element_type::BIGINT: {
+        // Only where the parser is asked to keep an integer past 64 bits as
+        // its digits, which this one is not; such a number is the nearest
+        // double, as a UINT64 that fits no int64_t is.
+        auto digits = element.get_bigint().value_unsafe();
+        double n = 0.0;
+        auto _ = std::from_chars(digits.data(), digits.data() + digits.size(), n);
+        return Json(n);
+      }
       case ::simdjson::dom::element_type::STRING:
         return Json(std::string(element.get_string().value_unsafe()));
       case ::simdjson::dom::element_type::BOOL:
