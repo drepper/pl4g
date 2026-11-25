@@ -245,19 +245,22 @@ def test_sections_and_symbols_are_present(built: Built) -> None:
     # architecture has to say in the file because its base is small and
     # everything else is an extension.
     extra = [".riscv.attributes"] if built.arch == "riscv64" else []
-    # AArch64's compiler of the runtime puts its sixteen-byte constants in a
-    # section of their own, and RISC-V's its eight-byte ones -- the words the
-    # hash mixes with.  All three keep the flags each way of opening a file asks
-    # the kernel for as a table of thirty-two bytes, laid out after the rest.
-    constants = {"aarch64": [".pl4grt.rodata.cst16"],
-                 "riscv64": [".pl4grt.rodata.cst8"]}.get(built.arch, [])
+    # The runtime's read-only constants are in the sections its compiler put
+    # them in, in the order it put them there, which is the compiler's to say
+    # and changes with it (these are GCC 16.2's): the words the hash mixes with
+    # and the flags each way of opening a file asks the kernel for are constants
+    # of sixteen bytes everywhere, and RISC-V keeps eight-byte ones apart too.
+    constants = {"x86_64": [".pl4grt.rodata", ".pl4grt.rodata.cst16"],
+                 "aarch64": [".pl4grt.rodata.cst16", ".pl4grt.rodata"],
+                 "riscv64": [".pl4grt.rodata.cst8", ".pl4grt.rodata",
+                             ".pl4grt.rodata.cst16"]}[built.arch]
     # The bill of materials comes before the code because it is read-only and
     # the code is not: sections are grouped by what may be done to them, and a
     # group is one mapping.  Every program imports `std`, whose destructor drains
     # the ring before the process ends -- so the ring is in the data, and the
     # runtime's code and data beside the program's own.
     assert [s.name for s in built.image.sections] == \
-        ["", *constants, ".pl4grt.rodata", ".pl4grt.rodata.cst32", ".sbom", ".sbomstr",
+        ["", *constants, ".sbom", ".sbomstr",
          ".text", ".pl4grt.text", ".data", ".pl4grt.bss", *extra,
          ".shstrtab", ".symtab", ".strtab"]
     start = built.image.symbol("_start")
